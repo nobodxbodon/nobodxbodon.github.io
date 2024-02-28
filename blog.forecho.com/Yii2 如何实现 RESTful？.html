@@ -1,0 +1,62 @@
+<h2>原文：<a href="https://blog.forecho.com/yii2-use-restful.html">Yii2 如何实现 RESTful？</a></h2>
+<hr/>
+<h2>title: "Yii2 如何实现 RESTful？"
+date: 2015-03-22T20:25:00+08:00
+tags: ["yii2", "restful"]
+draft: false
+toc: true</h2>
+<h2>什么是 REST</h2>
+<p>简单的说，REST 指的是一组架构约束条件和原则。满足这些约束条件和原则的应用程序或设计就是 RESTful。</p>
+<h2>为什么要 Restful？</h2>
+<p>主要遵循两个准则：</p>
+<ul>
+<li>不要为了 RESTful 而 RESTful</li>
+<li>在能表达清楚的情况下，简单就是美</li>
+</ul>
+<h2>Yii2 使用 RESTful？</h2>
+<p>其实 Yii2 框架本身就对 RESTful 是友好支持的，具体可以看<a href="http://www.yiiframework.com/doc-2.0/guide-rest-quick-start.html">官方文档</a>，或者去看源码，都是可以的。</p>
+<p><strong>下面分享我写的 <a href="https://github.com/iiYii/yii2-rest-demo">Yii2 RESTful DEMO</a>。</strong></p>
+<p>具体实现可以看我的代码，有不懂的可以留言。下面我重点说一下值得注意的地方：</p>
+<p>&lt;!--more--&gt;</p>
+<h3>Yii2 RESTful 如何实现自定义方法？</h3>
+<p>新建一个 user 控制器，输入以下代码：</p>
+<pre><code>namespace app\controllers;
+
+use yii\rest\ActiveController;
+
+class UserController extends ActiveController
+{
+    public $modelClass = 'app\models\User';
+}
+</code></pre>
+<p>然后你在浏览器里面输入 用 GET 请求 <code>localhost/basic/web/users</code> 这个地址是可以跑的，因为继承的 <code>ActiveController</code> 这个类是有对 user RESTful 表的 基本操作的，包括 GET，POST，PUT，PATCH，DELETE。所以我们要注销系统自带的实现方法，代码如下，添加到控制器中，后者自己新建一个 ActiveController 类。</p>
+<pre><code>public function actions()
+{
+   $actions = parent::actions();
+    // 注销系统自带的实现方法
+    unset($actions['index'], $actions['update'], $actions['create'], $actions['delete'], $actions['view']);
+    return $actions;
+}
+</code></pre>
+<p>然后下面我们就可以写自己的 actionIndex、actionCreate、actionUpdate 和 actionDelete 了。</p>
+<h3>实现用户验证</h3>
+<p>框架其实是提供三种验证方式的，我就说一下最长用的 token 实现验证吧。</p>
+<p>首先你要在控制器中加入下面代码：</p>
+<pre><code>public function behaviors()
+{
+    $behaviors = parent::behaviors();
+    $behaviors['authenticator'] = [
+        'class' =&gt; CompositeAuth::className(),
+        'authMethods' =&gt; [
+            QueryParamAuth::className(),
+        ],
+    ];
+    return $behaviors;
+}
+</code></pre>
+<p>然后你要去修改 user 的 model，具体参照这块代码：<a href="https://github.com/iiYii/yii2-rest-demo/commit/02db1711bcaa42040360d50ffcf771626474f5ad">添加 restful 授权认证</a></p>
+<h2>参考文章</h2>
+<ul>
+<li><a href="http://www.ruanyifeng.com/blog/2011/09/restful.html">理解 RESTful 架构</a></li>
+<li><a href="http://segmentfault.com/blog/cloudmario/1190000000635914">RESTful 实践总结</a></li>
+</ul>

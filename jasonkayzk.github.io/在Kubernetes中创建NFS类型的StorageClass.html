@@ -1,0 +1,155 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%9C%A8Kubernetes%E4%B8%AD%E5%88%9B%E5%BB%BANFS%E7%B1%BB%E5%9E%8B%E7%9A%84StorageClass.html">在Kubernetes中创建NFS类型的StorageClass</a></h2>
+<hr/>
+<h2>title: 在Kubernetes中创建NFS类型的StorageClass
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?77'
+date: 2023-12-15 16:04:31
+categories: Kubernetes
+tags: [Kubernetes, NFS]
+description: 如果要在Kubernetes中部署StatefulSet类型的Pod，需要先创建持久化的StorageClass、PV，从而让PVC能够使用对应的存储；StorageClass常用的类型有：Local(例如：HostPath、EmptyDir等)、NFS、Ceph；在声明NFS类型的StorageClass时需要用到第三方的Provisioner；本文讲解了如何在Kubernetes中创建NFS类型的StorageClass；</h2>
+<p>如果要在Kubernetes中部署StatefulSet类型的Pod，需要先创建持久化的StorageClass、PV，从而让PVC能够使用对应的存储；</p>
+<p>StorageClass常用的类型有：Local(例如：HostPath、EmptyDir等)、NFS、Ceph；</p>
+<p>在声明NFS类型的StorageClass时需要用到第三方的Provisioner；</p>
+<p>本文讲解了如何在Kubernetes中结合 Kuboard 使用 <a href="https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner/">nfs-subdir-external-provisioner</a> 创建NFS类型的StorageClass；</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>在Kubernetes中创建NFS类型的StorageClass</strong></h1>
+<h2><strong>前言</strong></h2>
+<p>本文在：<a href="https://jasonkayzk.github.io/2021/05/16/%E5%9C%A8VMWare%E4%B8%AD%E9%83%A8%E7%BD%B2%E4%BD%A0%E7%9A%84K8S%E9%9B%86%E7%BE%A4/">《在VMWare中部署你的K8S集群》</a> 的基础之上进行！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>安装并配置NFS服务</strong></h2>
+<p>这里开启了另外一台 Ubuntu 来作为 NFS 服务器；</p>
+<p><code>hostname</code> 设置为 <code>ubuntu-4</code>；</p>
+<h3><strong>安装NFS</strong></h3>
+<p>首先，在这台机器上安装并配置 NFS；</p>
+<blockquote>
+<p>参考文章：</p>
+<ul>
+<li>https://www.digitalocean.com/community/tutorials/how-to-set-up-an-nfs-mount-on-ubuntu-22-04#step-7-mounting-the-remote-nfs-directories-at-boot</li>
+</ul>
+</blockquote>
+<p>NFS 服务器上安装 Server：</p>
+<pre><code class="language-shell">sudo apt update
+sudo apt install nfs-kernel-server
+</code></pre>
+<blockquote>
+<p><strong>各个 K8S 节点上也需要安装 nfs 客户端：</strong></p>
+<pre><code class="language-shell">sudo apt update
+sudo apt install nfs-common
+</code></pre>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建挂载点</strong></h3>
+<p>然后在 NFS 服务器上创建挂载点：</p>
+<pre><code class="language-shell">sudo mkdir /var/nfs/general -p
+</code></pre>
+<p>并修改 owner：</p>
+<pre><code class="language-shell">root@ubuntu-4:/var/nfs/general# ls -dl /var/nfs/general
+
+drwxr-xr-x 15 nobody nogroup 4096 Dec 15 07:21 /var/nfs/general
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>配置NFS</strong></h3>
+<p>修改  <code>/etc/exports</code> 添加配置：</p>
+<pre><code class="language-diff"># /var/nfs/general    client_ip(rw,sync,no_subtree_check)
+
++ /var/nfs/general  *(rw,sync,no_subtree_check)
+</code></pre>
+<p>如果配置为 <code>*</code>，则任何 ClientIp 都可以访问这个目录；</p>
+<p>配置含义：</p>
+<ul>
+<li><strong>rw</strong>：Client 可以读写；</li>
+<li><strong>sync</strong>：同步写操作，保证在响应客户端之前数据已经强制写入（提高可靠性，但是降低文件操作效率）；</li>
+<li><strong>no_subtree_check</strong>：关闭文件子树检查，避免NFS服务器在处理每次请求时都检查文件树合法；关闭后可以避免客户端重命名文件产生的问题；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>重启服务</strong></h3>
+<p>配置完成后重启服务：</p>
+<pre><code class="language-shell">sudo systemctl restart nfs-kernel-server
+</code></pre>
+<p>开机自启动：</p>
+<pre><code class="language-shell">sudo systemctl enable nfs-kernel-server
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>测试：在Client节点创建挂载点</strong></h3>
+<p>在 Client 节点创建要挂载的目录：</p>
+<pre><code class="language-shell">sudo mkdir -p /nfs/general
+</code></pre>
+<p>挂载：</p>
+<pre><code class="language-shell">sudo mount nfs_host_ip:/var/nfs/general /nfs/general
+</code></pre>
+<blockquote>
+<p><strong>将 <code>nfs_host_ip</code> 修改为 NFS 服务器 IP 地址；</strong></p>
+</blockquote>
+<p>校验写入：</p>
+<pre><code class="language-shell"># client
+sudo touch /nfs/general/general.test
+</code></pre>
+<p>执行成功，并且在 NFS Server 对应目录中能看到文件即可！</p>
+<p>清理：</p>
+<pre><code class="language-shell"># client
+sudo rm /nfs/general/general.test
+
+sudo umount /nfs/general
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>创建 StorageClass</strong></h2>
+<p>StorageClass是一个存储类，通过创建StorageClass可以动态生成一个存储卷，供 k8s 使用；</p>
+<p><strong>使用 StorageClass 可以根据PVC动态的创建PV，减少管理员手工创建PV的工作；</strong></p>
+<p>StorageClass的定义主要包括名称、后端存储的提供者 (privisioner) 和后端存储的相关参数配置；</p>
+<blockquote>
+<p><strong>注意：StorageClass一旦被创建，就无法修改，如需修改，只能删除重建！</strong></p>
+</blockquote>
+<p>接下来就需要使用 <a href="https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner/">nfs-subdir-external-provisioner</a> Provisioner；</p>
+<p>这个 Provisioner 使用已经配置好的 nfs 服务器，来自动创建持久卷，即自动帮我们创建 PV；</p>
+<p>同时：</p>
+<ul>
+<li><p><strong>自动创建的 PV 以<code>{namespace}-{pvcName}-{pvName}</code> 这样的命名！</strong></p>
+</li>
+<li><p><strong>格式创建在 NFS 服务器上的共享数据目录中；</strong></p>
+</li>
+<li><p><strong>当这个 PV 被回收后会以 <code>archieved-{namespace}-{pvcName}-{pvName}</code> 这样的命名格式存在 NFS 服务器上；</strong></p>
+</li>
+</ul>
+<p>我们可以直接通过 Helm 安装：</p>
+<pre><code class="language-shell">$ helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+
+$ helm install nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+    --set nfs.server=x.x.x.x \
+    --set nfs.path=/exported/path
+</code></pre>
+<blockquote>
+<p><strong>官方文档：</strong></p>
+<ul>
+<li>https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner</li>
+</ul>
+</blockquote>
+<p>或者我们也可以通过 Kuboard 进行配置：</p>
+<p>在集群概览页，点击 <code>Create StorageClass</code>：</p>
+<p><img alt="kuboard-storageclass.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/kuboard-storageclass.png"/></p>
+<p>然后根据需求进行配置即可：</p>
+<p><img alt="kuboard-storageclass-2.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/kuboard-storageclass-2.png"/></p>
+<p>等待部署完成后，可以查看部署成功：</p>
+<pre><code class="language-shell">root@ubuntu-1:~# k get sc -A
+NAME         PROVISIONER      RECLAIMPOLICY   VOLUMEBINDINGMODE   ALLOWVOLUMEEXPANSION   AGE
+my-storage   nfs-my-storage   Delete          Immediate           false                  5h25m
+
+root@ubuntu-1:~# k get pv -A
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                            STORAGECLASS                   REASON   AGE
+nfs-pv-my-storage                          75Gi       RWX            Retain           Bound    kube-system/nfs-pvc-my-storage   nfs-storageclass-provisioner            5h26m
+</code></pre>
+<p>即部署完成；</p>
+<p>下一篇文章将会讲述如何使用我们创建的 StorageClass 部署 StatefulSet：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2023/12/15/%E5%9C%A8Kubernetes%E4%B8%AD%E9%83%A8%E7%BD%B2Zookeeper%E5%92%8CKafka/">《在Kubernetes中部署Zookeeper和Kafka》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>参考文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2021/05/16/%E5%9C%A8VMWare%E4%B8%AD%E9%83%A8%E7%BD%B2%E4%BD%A0%E7%9A%84K8S%E9%9B%86%E7%BE%A4/">《在VMWare中部署你的K8S集群》</a></li>
+<li>https://blog.csdn.net/u011837804/article/details/128692744</li>
+<li>https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner</li>
+<li>https://kuboard.cn/learning/k8s-intermediate/persistent/pv.html#%E6%A6%82%E8%BF%B0</li>
+</ul>
+<p>&lt;br/&gt;</p>

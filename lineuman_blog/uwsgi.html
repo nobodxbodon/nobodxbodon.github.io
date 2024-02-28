@@ -1,0 +1,59 @@
+<h2>原文：<a href="https://lineuman_blog/2017-08-01-uwsgi.html">uwsgi</a></h2>
+<hr/>
+<h2>tags: [wsgi]</h2>
+<p>What is wsgi?</p>
+<p>web server gateway interface</p>
+<p>What is uwsgi?</p>
+<p>uwsgi是一个软件，是WSGI标准的一种实现方式。</p>
+<h2>uwsgi</h2>
+<p>reference:</p>
+<p><a href="http://uwsgi-docs.readthedocs.io/en/latest/WSGIquickstart.html#the-first-wsgi-application">http://uwsgi-docs.readthedocs.io/en/latest/WSGIquickstart.html#the-first-wsgi-application</a></p>
+<h3>install</h3>
+<pre><code> pip install uwsgi
+ which uwsgi
+/usr/bin/uwsgi
+</code></pre>
+<p>install from source code</p>
+<pre><code>git clone https://github.com/unbit/uwsgi.git
+cd uwsgi-master
+python setup.py install
+
+</code></pre>
+<h3>command</h3>
+<p>foobar.py</p>
+<pre><code>def application(env, start_response):
+    start_response('200 OK', [('Content-Type','text/html')])
+    return [b"Hello World"]
+</code></pre>
+<p>cmd</p>
+<pre><code> uwsgi --uid 1001 --http :9090 --wsgi-file foobar.py --master --processes 4 --threads 2 --stats 127.0.0.1:9191
+</code></pre>
+<p>解释说明：</p>
+<p>--uid 1001 已uid为1001的用户运行</p>
+<p>--stats 127.0.0.1:9191  在本地回环接口的9191端口上提供uwgsi状态信息，这里的地址配置要注意</p>
+<p><code>Bind the stats socket to a private address (unless you know what you are doing), otherwise everyone could access it!</code></p>
+<p><code>nc 127.0.0.1 9191</code>可以查看stats信息</p>
+<h3>把uwsgi和nginx结合使用</h3>
+<p>1.nginx中做如下配置</p>
+<pre><code>location / {
+    include uwsgi_params;
+    uwsgi_pass 127.0.0.1:3031;    # 可以理解为把外面的请求转交给127.0.0.1:3031
+}
+</code></pre>
+<ol start="2">
+<li>在本地启动uwsgi程序</li>
+</ol>
+<pre><code># 注意foobar.py是要替换掉的
+uwsgi --socket 127.0.0.1:3031 --wsgi-file foobar.py --master --processes 4 --threads 2 --stats 127.0.0.1:9191
+</code></pre>
+<ol start="3">
+<li>使用django中的wsgi.py</li>
+</ol>
+<pre><code>uwsgi --socket 127.0.0.1:3031 --chdir /Images/cve_pro --wsgi-file /Images/cve_pro/cve_pro/wsgi.py --master --processes 4 --threads 2 --stats 127.0.0.1:9191
+
+</code></pre>
+<h2>性能测试</h2>
+<p>使用wrk进行测试</p>
+<pre><code>wrk -t 6 -c 14000 http://127.0.0.1:81/index
+</code></pre>
+<p>使用top监控进程cpu利用率，发现nginx和uwsgi cpu都有一定上升</p>

@@ -1,0 +1,114 @@
+<h2>原文：<a href="https://claude-ray.github.io/elastic-apm-node-egg.html">elastic-apm-node 扩展篇 —— Egg</a></h2>
+<hr/>
+<h2>title: elastic-apm-node 扩展篇 —— Egg
+date: 2019-07-12 21:18:53
+tags: [Node.js,APM,Elastic-APM,Egg]
+categories: Node.js</h2>
+<h1>前言</h1>
+<p>本篇是为 elastic-apm-node 编写拓展系列的第二篇，主要介绍 egg 框架的定制指南。</p>
+<p>单独拿 egg 出来讲，是因为市面主流的 APM 工具几乎都没有为 egg 提供支持。一方面 egg 底层基于 koa ，并且 egg-router 也是 koa-router 的二次封装，两者相似以致插件可以平稳切换，agent 的补丁方式也基本是一致的。另一方面，agent 代码必须早于 egg 和 egg-router 的加载才能生效，egg-bin、egg-script 等生态决定了编写框架之上的插件很难做到零代码入侵。</p>
+<p>APM agent 作为 npm package 不适合做这样的事，更好的方法是我们利用 egg 工具链的接口，在引入 agent 的代码层处理好 egg 的配置。</p>
+<p>&lt;!--more--&gt;</p>
+<h1>在 egg 前 require</h1>
+<p>我们先考虑如何将 APM agent 早于 egg 执行，解决 patch 此框架主要问题，然后再完成定制化操作。</p>
+<p>好在 egg 是提供了相关方法的，最底层的 API 是 <code>startCluster</code> 方法，可以传入 <code>require</code> 参数指明你要率先执行模块。</p>
+<h2>方案一：修改启动文件</h2>
+<p>假设把 APM 的引入和配置放在了根目录 elastic-apm.js 中，新建一个类似下面这样的 app.js 作为 egg 的启动文件，用最原始的 <code>node app.js</code> 启动服务就好了。</p>
+<pre><code class="language-js">require('egg').startCluster({
+  require: [ require.resolve('./elastic-apm') ],
+});
+</code></pre>
+<blockquote>
+<p>!!! 不推荐：必须放弃 egg-bin 和 egg-scripts 作为启动器，需要自己补上很多操作。</p>
+</blockquote>
+<h2>方案二：修改 package.json</h2>
+<blockquote>
+<p>要求 <code>egg-bin</code> 版本 &gt;= <a href="https://github.com/eggjs/egg-bin/blob/master/History.md#4100--2019-01-04">4.10.0</a></p>
+</blockquote>
+<p>在 <code>package.json</code> 中添加 <code>egg.require</code> 配置，用法来自 <a href="https://github.com/eggjs/egg/issues/2844#issuecomment-409457550">issue 讨论</a>。</p>
+<pre><code class="language-json">{
+  "egg": {
+    "require": [ "./elastic-apm.js" ]
+  },
+  "scripts": {
+    "start": "egg-scripts start"
+  }
+}
+</code></pre>
+<p>这是目前~~最推荐~~的做法，不影响 egg 工具链的正常使用。</p>
+<h4>2019-10-17 更正</h4>
+<blockquote>
+<p>感谢 <a href="https://github.com/wpchou">@wenpin</a> 提示</p>
+</blockquote>
+<p><code>egg.require</code> 配置只是 egg-bin 提供的接口，并在<a href="https://github.com/eggjs/egg-bin#options">文档</a>上明确记录。然而 egg-scripts 目前还没有提供此入口，只能通过 <code>--require</code> 导入，egg-bin 也同样支持，这得益于 egg-cluster 的实现。</p>
+<pre><code class="language-json">{
+  "scripts": {
+    "start": "egg-scripts start --require=@yourscope/elastic-apm"
+  }
+}
+</code></pre>
+<p><code>--require</code> 不能使用相对路径，比起使用绝对路径，通过 npm 包来引入更方便一些。(egg-scripts 的 issues 关闭了，不然问问阻断他们支持 egg.require 的原因...)</p>
+<h1>编写补丁</h1>
+<h2>instrumentation/egg.js</h2>
+<p>仿照 <a href="https://github.com/elastic/apm-agent-nodejs/blob/master/lib/instrumentation/modules/koa.js">instrumentation/koa.js</a>，修改框架 name，注意开启 overwrite 选项，为了覆盖引用 koa 带来的标识。</p>
+<pre><code class="language-js">'use strict'
+
+module.exports = function (egg, agent, { version, enabled }) {
+  if (!enabled) return egg
+  // 注意开启 overwrite，这样才能覆盖 koa 标识
+  agent.setFramework({ name: 'egg', version, overwrite: true })
+  return egg
+}
+</code></pre>
+<h2>instrumentation/egg-router.js</h2>
+<p>唯一需要修改的就是去掉 <a href="https://github.com/elastic/apm-agent-nodejs/blob/master/lib/instrumentation/modules/koa-router.js">instrumentation/koa-router.js</a> 的版本验证。考虑到 egg 引入的 koa 版本都是同时期最新，无须担心 egg 自身版本问题。</p>
+<pre><code class="language-js">'use strict';
+
+const shimmer = require('elastic-apm-node/lib/instrumentation/shimmer');
+
+module.exports = function (Router, agent, { version, enabled }) {
+  if (!enabled) return Router
+
+  agent.logger.debug('shimming koa-router prototype.match function')
+  shimmer.wrap(Router.prototype, 'match', function (orig) {
+    return function (_, method) {
+      var matched = orig.apply(this, arguments)
+
+      if (typeof method !== 'string') {
+        agent.logger.debug('unexpected method type in koa-router prototype.match: %s', typeof method)
+        return matched
+      }
+
+      if (Array.isArray(matched &amp;&amp; matched.pathAndMethod)) {
+        const layer = matched.pathAndMethod.find(function (layer) {
+          return layer &amp;&amp; layer.opts &amp;&amp; layer.opts.end === true
+        })
+
+        var path = layer &amp;&amp; layer.path
+        if (typeof path === 'string') {
+          var name = method + ' ' + path
+          agent._instrumentation.setDefaultTransactionName(name)
+        } else {
+          agent.logger.debug('unexpected path type in koa-router prototype.match: %s', typeof path)
+        }
+      } else {
+        agent.logger.debug('unexpected match result in koa-router prototype.match: %s', typeof matched)
+      }
+
+      return matched
+    }
+  })
+
+  return Router
+}
+</code></pre>
+<h1>添加补丁</h1>
+<p>回到最初的 elastic-apm.js 文件，在其中设置 addPatch，大功告成。</p>
+<pre><code class="language-js">'use strict';
+const apm = require('elastic-apm-node').start({
+  // options
+});
+
+apm.addPatch('egg', require.resolve('./instrumentation/egg'))
+apm.addPatch('@eggjs/router', require.resolve('./instrumentation/egg-router'))
+</code></pre>

@@ -1,0 +1,39 @@
+<h2>原文：<a href="https://ditou.org/20190926.html">【随笔】新开的VPS一般需要先做些什么</a></h2>
+<hr/>
+<h2>title: "【随笔】新开的VPS一般需要先做些什么"
+date: 2019-09-26T00:23:45+08:00
+draft: false
+categories: ["电脑"]
+tags: ["随笔", "kernel内核升级"]
+slug: 7</h2>
+<p>今天需要为博客换一个服务器，原因是<a href="https://www.vultr.com/?ref=7997010">vultr</a>的余额即将耗尽。</p>
+<p>虽然<a href="https://www.vultr.com/?ref=7997010">vultr</a>的服务一直都很稳，但是另一家的余额还有一些不能浪费是吧！（其实就是穷。）等我去用它几个月争取早日把余额用完。</p>
+<p>真正的云VPS虚拟机就是好，开起来很快就完工了，真正是数秒完成，vultr家的每次创建都还需要等一会儿呢。别的先不管，拿到IP第一时间看路由：https://tools.ipip.net/traceroute.php 。完成后看最后面的数字，一般在200以内就是很好的了，当然大家一般都是使用美西线路。不放心的话最好本地还是ping一下IP看看。</p>
+<p>以上是为了验证IP在国内是否可用，为下一步继续配置系统做准备。</p>
+<p>终端(比如xshell)连接到服务器运行<code>uname -r</code> 得到当前的系统版本：</p>
+<pre><code class="language-shell">[root@1078503 ~]# uname -r
+3.10.0-957.21.3.el7.x86_64
+[root@1078503 ~]# 
+</code></pre>
+<p>如果你需要开启并使用BBR加速，就需要升级内核到最新版本；如果你需要使用docker更需要升级。</p>
+<p>最新稳定版内核查看地址：https://www.kernel.org/</p>
+<p>如果能一步就安装最新内核并开启 BBR 那最方便了，我先想到<a href="https://teddysun.com/489.html">秋水逸冰</a>大佬的脚本，跑一下看看：</p>
+<pre><code class="language-shell">wget --no-check-certificate https://github.com/teddysun/across/raw/master/bbr.sh &amp;&amp; chmod +x bbr.sh &amp;&amp; ./bbr.sh
+</code></pre>
+<p>跑完<code>uname -r</code>验证一下：</p>
+<pre><code class="language-shell">[root@1078503 ~]# uname -r
+5.3.1-1.el7.elrepo.x86_64
+[root@1078503 ~]# 
+</code></pre>
+<p>如果你发现不是最新版本可能需要设置<code>grub2-set-default 0</code>，将升级的内核应用到启动项并重启机器验证。如果大佬的脚本你无法跑起来，可以考虑手动将内核库添加到系统，然后手动安装最新的内核。当然你还需要手动安装BBR加速等，这里只是提供思路，一般centos 7系统是可以完美运行的。</p>
+<p>有了最新的系统内核和BBR加速，无论你是要搭梯子还是跑博客服务都会很流畅很科学了😁。我经常遇到IP没有被墙但梯子速度很慢或者没什么速度的情况，这时候我每次检查都是系统版本降级了，升级一下内核就又飞起来了（大多数情况是自己瞎折腾后没有检查造成的）。</p>
+<p>当然，有些功能还需要安装最新版内核 headers ：</p>
+<pre><code class="language-shell">yum --enablerepo=elrepo-kernel -y install kernel-ml-headers
+</code></pre>
+<p>记得有朋友问我为什么你自己搭的梯子速度这么快，这一篇内容就是了。最新的系统内核加上BBR加速能不快吗？😄</p>
+<p>如果只是放个博客其实这就无所谓了。不说了，我要去把我的博客搬到这台服务器上面了，保守估计放六个月的费用应该是够了。如果这期间它稳定我就一直放下去，反正便宜。</p>
+<p>不过，当你看到这篇文章的时候我肯定已经搬完了。😁</p>
+<hr/>
+<p>昨晚说了新开VPS需要做的一些工作。</p>
+<p>隔天上午也就是现在想起来还需要补充一些。我们开的小鸡很容易被恶意扫描，有些频率过高的甚至会严重影响性能。这时候我们就需要采取一些措施，比如更改SSH的默认连接端口，还需要给SSH连接加上管理控制功能用于封禁不太友好的扫描IP。</p>
+<p>其实做这些一个就够了：fail2ban。GitHub里面有大佬编译好的一键修改端口并安装fail2ban的脚本您可以自行搜索选择使用，真的很方便的，可以限制密码尝试次数和封禁IP时间多少小时等。我一般不完全封禁IP，众所周知这些来路的IP大多是VPS服务商的IP段，说不定哪天这个IP就被自己得到了那不就不太方便了吗？哈哈（其实一般这种情况很难出现）。</p>

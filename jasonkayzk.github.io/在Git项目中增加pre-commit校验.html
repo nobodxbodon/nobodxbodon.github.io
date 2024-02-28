@@ -1,0 +1,239 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%9C%A8Git%E9%A1%B9%E7%9B%AE%E4%B8%AD%E5%A2%9E%E5%8A%A0pre-commit%E6%A0%A1%E9%AA%8C.html">在Git项目中增加pre-commit校验</a></h2>
+<hr/>
+<h2>title: 在Git项目中增加pre-commit校验
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?22'
+date: 2021-10-10 15:50:46
+categories: 技术杂谈
+tags: [技术杂谈, Git]
+description: 有些编程语言提供了代码格式化检查等工具，如：Go、Rust等，我们可以在commit之前，对代码进行格式化检查，保证代码规范，而pre-commit正是这样的工具；</h2>
+<p>有些编程语言提供了代码格式化检查等工具，如：Go、Rust等，我们可以在commit之前，对代码进行格式化检查，保证代码规范，而<code>pre-commit</code>正是这样的工具；</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>在Git项目中增加pre-commit校验</strong></h1>
+<h2><strong>pre-commit 概述</strong></h2>
+<blockquote>
+<p><code>pre-commit</code>官方网站：</p>
+<ul>
+<li>https://pre-commit.com/</li>
+</ul>
+</blockquote>
+<p><code>pre-commit</code>支持的功能有：</p>
+<ul>
+<li>只需要提供配置文件地址，自动从中央hooks仓库获取脚本（如果有多个项目，就不需要再每个项目都拷贝一份hooks了）；</li>
+<li>可以定义本地脚本仓库，允许开发人员自定义脚本，且无需修改配置文件：</li>
+<li>每个阶段允许定义多个脚本：<ul>
+<li>多个脚本可以使得功能划分而无需整合到一个臃肿的文件中；</li>
+</ul>
+</li>
+<li>脚本支持多种语言</li>
+</ul>
+<blockquote>
+<p><strong>需要注意的是：<code>pre-commit</code>这个工具不仅仅可以在pre-commit阶段执行，其实可以在git-hooks的任意阶段；</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>安装pre-commit</strong></h2>
+<h3><strong>在系统中安装<code>pre-commit</code></strong></h3>
+<pre><code class="language-bash">brew install pre-commit
+# 或者
+pip install pre-commit --user
+
+# 查看版本
+pre-commit --version
+</code></pre>
+<h3><strong>在项目中安装<code>pre-commit</code></strong></h3>
+<p>除了需要在系统中安装<code>pre-commit</code>，还需要在Git项目中安装：</p>
+<pre><code class="language-bash">cd &lt;git-repo&gt;
+pre-commit install
+
+# 卸载
+pre-commit uninstall
+</code></pre>
+<p>上面的操作将会在项目的<code>.git/hooks</code>下生成一个<code>pre-commit</code>文件（覆盖原pre-commit文件），该hook会根据项目根目录下的<code>.pre-commit-config.yaml </code>执行任务；</p>
+<blockquote>
+<p><strong>如果<code>vim .git/hooks/pre-commit</code>可以看到代码的实现，基本逻辑是利用<code>pre-commit</code>文件去拓展更多的pre-commit；</strong></p>
+</blockquote>
+<p>安装/卸载其他阶段的hook：</p>
+<pre><code class="language-bash">pre-commit install
+pre-commit uninstall
+-t {pre-commit,pre-merge-commit,pre-push,prepare-commit-msg,commit-msg,post-checkout,post-commit,post-merge}
+--hook-type {pre-commit,pre-merge-commit,pre-push,prepare-commit-msg,commit-msg,post-checkout,post-commit,post-merge}
+
+# 如 pre-commit install --hook-type prepare-commit-msg
+</code></pre>
+<h3><strong>常用指令</strong></h3>
+<pre><code class="language-bash"># 手动对所有的文件执行hooks，新增hook的时候可以执行，使得代码均符合规范。直接执行该指令则无需等到pre-commit阶段再触发hooks
+pre-commit run --all-files
+
+# 执行特定hooks
+pre-commit run &lt;hook_id&gt;
+
+# 将所有的hook更新到最新的版本/tag
+pre-commit autoupdate
+
+# 指定更新repo
+pre-commit autoupdate --repo https://github.com/DoneSpeak/gromithooks
+</code></pre>
+<p>更多指令及指令参数请直接访问pre-commit官方网站；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>添加第三方hooks</strong></h2>
+<p>在Git仓库初始化<code>pre-commit</code>：</p>
+<pre><code class="language-bash">cd &lt;git-repo&gt;
+pre-commit install
+touch .pre-commit-config.yaml
+</code></pre>
+<p>如下为一个基本的配置样例：</p>
+<p>.pre-commit-config.yaml</p>
+<pre><code class="language-yaml"># 该config文件为该项目的pre-commit的配置文件，用于指定该项目可以执行的git hooks
+
+# 这是pre-commit的全局配置之一，fail_fast：遇到错误不会向下执行直接退出
+fail_fast: false 
+
+repos:
+# hook所在的仓库
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  # 仓库的版本，可以直接用tag或者分支，但分支是容易发生变化的
+  # 如果使用分支，则会在第一次安装之后不自动更新
+  # 通过 `pre-commit autoupdate`指令可以将tag更新到默认分支的最新tag
+  rev: v4.0.1
+  # 仓库中的hook id
+  hooks:
+  # 定义的hook脚本，在repo的.pre-commit-hooks.yaml中定义
+  - id: check-added-large-files
+  # 移除尾部空格符
+  - id: trailing-whitespace
+    # 传入参数，不处理makedown
+    args: [--markdown-linebreak-ext=md]
+  # 检查是否含有合并冲突符号
+  - id: check-merge-conflict
+  
+- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+  rev: v2.0.0
+  hooks:
+  - id: pretty-format-yaml
+    # https://github.com/macisamuele/language-formatters-pre-commit-hooks/blob/v2.0.0/language_formatters_pre_commit_hooks/pretty_format_yaml.py
+    # hook脚本需要的参数，可以在该hook脚本文件中看到
+    args: [--autofix, --indent, '2']
+</code></pre>
+<p>上面我们引入了两个配置：</p>
+<ul>
+<li>https://github.com/pre-commit/pre-commit-hooks</li>
+<li>https://github.com/macisamuele/language-formatters-pre-commit-hooks</li>
+</ul>
+<p>在<code>run</code>之后，<code>pre-commit</code>会下载指定仓库代码，并安装配置所需要的运行环境；</p>
+<p>配置完成之后可以通过<code>pre-commit run --all-files</code>运行一下添加的hooks；</p>
+<p>下表为<code>.pre-commit-hooks.yaml</code>可选配置项：</p>
+<p>| key word                     | description                                                  |
+| ---------------------------- | ------------------------------------------------------------ |
+| <code>id</code>                         | the id of the hook - used in pre-commit-config.yaml.         |
+| <code>name</code>                       | the name of the hook - shown during hook execution.          |
+| <code>entry</code>                      | the entry point - the executable to run. <code>entry</code> can also contain arguments that will not be overridden such as <code>entry: autopep8 -i</code>. |
+| <code>language</code>                   | the language of the hook - tells pre-commit how to install the hook. |
+| <code>files</code>                      | (optional: default <code>''</code>) the pattern of files to run on.     |
+| <code>exclude</code>                    | (optional: default <code>^$</code>) exclude files that were matched by <code>files</code> |
+| <code>types</code>                      | (optional: default <code>[file]</code>) list of file types to run on (AND). See <a href="https://link.segmentfault.com/?enc=hHlrnN%2BTh2KiT3ZIi%2BaBvg%3D%3D.H27MK4zaK53npMDCPzrJU2AgnJXHXn9mdUDOzALELAvfIkqsJVtspeYAk00me1fXw3HOsLoPKQsnRoaZ%2BOGP0g%3D%3D">Filtering files with types</a>. |
+| <code>types_or</code>                   | (optional: default <code>[]</code>) list of file types to run on (OR). See <a href="https://link.segmentfault.com/?enc=5PKCf6C29VA00f0yZj%2BgNQ%3D%3D.wId2CZ4fQju9G%2BYowPgAelG9Ji4ncJng9LRHE3uNVuswXVM4Lg7ihaANnj0%2Fo5OI9bVFBSu%2BDlyVZ645mhotfA%3D%3D">Filtering files with types</a>. <em>new in 2.9.0</em>. |
+| <code>exclude_types</code>              | (optional: default <code>[]</code>) the pattern of files to exclude.    |
+| <code>always_run</code>                 | (optional: default <code>false</code>) if <code>true</code> this hook will run even if there are no matching files. |
+| <code>verbose</code>                    | (optional) if <code>true</code>, forces the output of the hook to be printed even when the hook passes. <em>new in 1.6.0</em>. |
+| <code>pass_filenames</code>             | (optional: default <code>true</code>) if <code>false</code> no filenames will be passed to the hook. |
+| <code>require_serial</code>             | (optional: default <code>false</code>) if <code>true</code> this hook will execute using a single process instead of in parallel. <em>new in 1.13.0</em>. |
+| <code>description</code>                | (optional: default <code>''</code>) description of the hook. used for metadata purposes only. |
+| <code>language_version</code>           | (optional: default <code>default</code>) see <a href="https://link.segmentfault.com/?enc=vRu6ytkxK%2B56J5QlEkJsOA%3D%3D.ANOtOYU%2B7KQxSjs2gUJfU1HfNVWsoIGk3Un2lKobPE%2FcrtcwxHIT8Vky66Zbep1SDnIjhssvtaWE%2FzOfTpfEQw%3D%3D">Overriding language version</a>. |
+| <code>minimum_pre_commit_version</code> | (optional: default <code>'0'</code>) allows one to indicate a minimum compatible pre-commit version. |
+| <code>args</code>                       | (optional: default <code>[]</code>) list of additional parameters to pass to the hook. |
+| <code>stages</code>                     | (optional: default (all stages)) confines the hook to the <code>commit</code>, <code>merge-commit</code>, <code>push</code>, <code>prepare-commit-msg</code>, <code>commit-msg</code>, <code>post-checkout</code>, <code>post-commit</code>, <code>post-merge</code>, or <code>manual</code> stage. See <a href="https://link.segmentfault.com/?enc=TcQIRjRamLP2RRuc2nxFpw%3D%3D.9agCI5Q%2FVR2H2CyQdcOhJediQPO9oPhyV7hSV6B9rCMlL5Ict0ZwhJlfRWvbu1gD0gFdHirQX3RQIMbgpAvGeZyMge7Xy%2BKso1cntyJsXGo%3D">Confining hooks to run at certain stages</a>. |</p>
+<blockquote>
+<p><strong>关于开发hooks仓库：</strong></p>
+<ul>
+<li><a href="https://segmentfault.com/a/1190000040288064#:~:text=at%20certain%20stages.-,%E5%BC%80%E5%8F%91hooks%E4%BB%93%E5%BA%93,-%E4%B8%8A%E9%9D%A2%E5%B7%B2%E7%BB%8F%E8%AE%B2%E8%A7%A3">开发hooks仓库</a></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>本地hooks</strong></h2>
+<p>pre-commit 也提供了<code>local</code>的hook，允许在<code>entry</code>中配置执行指令或指向本地一个可执行的脚本文件，使用起来和<code>husky</code>类似；</p>
+<ul>
+<li>脚本与代码仓库紧密耦合，并且与代码仓库一起分发；</li>
+<li>Hooks需要的状态只存在于代码仓库的build artifact中(比如应用程序的pylint的virtualenv)；</li>
+<li>linter的官方代码仓库没有提供pre-commit metadata；</li>
+</ul>
+<p>local hooks可以使用支持<code>additional_dependencies</code> 的语言或者 <code>docker_image</code> / <code>fail</code> / <code>pygrep</code> / <code>script</code> / <code>system</code>；</p>
+<blockquote>
+<p><strong>在使用时，需要定义<code>repo: local</code>，即：本地仓库；</strong></p>
+</blockquote>
+<p>例如：</p>
+<pre><code class="language-yaml"># 定义repo为local，表示该repo为本地仓库
+- repo: local
+  hooks:
+  - id: pylint
+    name: pylint
+    entry: pylint
+    language: system
+    types: [python]
+  - id: changelogs-rst
+    name: changelogs must be rst
+    entry: changelog filenames must end in .rst
+    language: fail # fail 是一种用于通过文件名禁止文件的轻语言
+    files: 'changelog/.*(?&lt;!\.rst)$'
+</code></pre>
+<p>上面给hooks定义了两个步骤：</p>
+<ul>
+<li>pylint</li>
+<li>changelogs-rst</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>几配置例子</strong></h2>
+<h3><strong>Rust项目</strong></h3>
+<p>https://github.com/JasonkayZK/rust-learn/blob/main/.pre-commit-config.yaml</p>
+<pre><code class="language-yaml">repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.0.1
+    hooks:
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [ --markdown-linebreak-ext=md ]
+
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --
+        language: rust
+        types: [ rust ]
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>Go项目</strong></h3>
+<p>https://github.com/JasonkayZK/Go_Learn/blob/master/.pre-commit-config.yaml</p>
+<pre><code class="language-yaml">repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.0.1
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [ --markdown-linebreak-ext=md ]
+
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        entry: gofmt -w -s --
+        language: golang
+        types: [ go ]
+      - id: go-imports
+        name: go imports
+        entry: goimports --
+        language: golang
+        types: [ go ]
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>文章参考：</p>
+<ul>
+<li><a href="https://www.homeops.dev/continuous-integration-with-github-actions-and-rust/">Continuous Integration with Github Actions and Rust</a></li>
+<li><a href="https://segmentfault.com/a/1190000040288064">在Git项目中使用pre-commit统一管理hooks</a></li>
+</ul>

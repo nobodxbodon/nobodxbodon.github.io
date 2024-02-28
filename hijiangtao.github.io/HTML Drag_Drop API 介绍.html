@@ -1,0 +1,60 @@
+<h2>原文：<a href="https://hijiangtao.github.io/2020-05-04-Drag-and-Drop-note.html">HTML Drag/Drop API 介绍</a></h2>
+<hr/>
+<h2>title: HTML Drag/Drop API 介绍
+layout: post
+thread: 246
+date: 2020-05-04
+author: Joe Jiang
+categories: Document
+tags: [Drag, Drop, HTML, 拖拽, JavaScript]
+excerpt:</h2>
+<p>HTML 的拖拽接口有 DragEvent, DataTransfer, DataTransferItem 和DataTransferItemList。本文着重介绍前两者。</p>
+<h2>事件与流程</h2>
+<p>一个典型的 drag 操作是这样开始的：用户用鼠标选中一个可拖动的（draggable）元素，移动鼠标到一个可放置的（droppable）元素，然后释放鼠标。 在操作期间，会触发一些事件类型，有一些事件类型可能会被多次触发。这个流程可以分解为三部分：</p>
+<p><strong>1. 选中</strong>：在 HTML5 标准中，为了使元素可拖动，把 draggable 属性设置为 true 即可。其中，文本、图片和链接是默认可以拖放的，draggable 属性默认为 true。而在触发时机上，图片和链接按住鼠标左键选中，就可以拖放，文本只有在被选中的情况下才能拖放。如果显示设置文本的 draggable 属性为 true，按住鼠标左键也可以直接拖放。该属性语法为 <code>&lt;element draggable="true | false | auto" &gt;</code></p>
+<ul>
+<li>true: 可以拖动</li>
+<li>false: 禁止拖动</li>
+<li>auto: 跟随浏览器定义是否可以拖动`</li>
+</ul>
+<p><strong>2. 拖动</strong>：每一个可拖动的元素，都会经历三个过程，即「拖动开始-拖动过程中-拖动结束」，相关事件如下：</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-04-Darg-and-Drop-1.png"/></p>
+<p>dragenter 和 dragover 事件的默认行为是拒绝接受任何被拖放的元素。因此，必须用 <code>e.preventDefault()</code> 阻止浏览器这种默认行为。</p>
+<p><strong>3. 释放</strong>：当元素在目的地区域释放后，会触发目的地对象上的 <code>drop</code> 事件，此时也需要取消浏览器的默认行为。</p>
+<h2>拖动数据</h2>
+<p>除了流程上对应不同事件外，还需要了解 DataTransfer 对象。每一个 DataTransfer 对象代表一个单独的拖动项，每一项有一个 kind 属性，代表数据的 kind（string 或 file），还有一个 type 属性，代表数据项的 type（例如MIME类型）。</p>
+<p><strong>1. 属性</strong>：需要关注的属性包含这几个 dropEffect / effectAllowed / files / types。</p>
+<p><code>dropEffect</code> 属性用于获取 / 设置实际的放置效果，它应该始终设置成 effectAllowed  的可能值之一。</p>
+<ul>
+<li>copy: 复制到新的位置</li>
+<li>move: 移动到新的位置</li>
+<li>link: 建立一个源位置到新位置的链接</li>
+<li>none: 禁止放置（禁止任何操作）</li>
+</ul>
+<p><code>effectAllowed</code> 用来指定拖动时被允许的效果。</p>
+<p><code>files</code> 包含一个在数据传输上所有可用的本地文件列表。如果拖动操作不涉及拖动文件，此属性是一个空列表。</p>
+<p><code>types</code> 保存一个被存储数据的类型列表作为第一项，顺序与被添加数据的顺序一致。如果没有添加数据将返回一个空列表。</p>
+<p><strong>2. 方法</strong>：需要关注的属性包含这几个 setData /getData / clearData / setDragImage。</p>
+<h2>示例</h2>
+<p>下面的例子展示了一个处理程序，从拖动数据中获取事件源元素的 id 然后根据 id 移动源元素到目标元素。</p>
+<pre><code class="language-html">&lt;script&gt;
+function dragstart_handler(ev) {
+ // Add the target element's id to the data transfer object
+ ev.dataTransfer.setData("application/my-app", ev.target.id);
+ ev.dataTransfer.dropEffect = "move";
+}
+function dragover_handler(ev) {
+ ev.preventDefault();
+ ev.dataTransfer.dropEffect = "move"
+}
+function drop_handler(ev) {
+ ev.preventDefault();
+ // Get the id of the target and add the moved element to the target's DOM
+ var data = ev.dataTransfer.getData("application/my-app");
+ ev.target.appendChild(document.getElementById(data));
+}
+&lt;/script&gt;
+
+&lt;p id="p1" draggable="true" ondragstart="dragstart_handler(event)"&gt;This element is draggable.&lt;/p&gt;
+&lt;div id="target" ondrop="drop_handler(event)" ondragover="dragover_handler(event)"&gt;Drop Zone&lt;/div&gt;
+</code></pre>

@@ -1,0 +1,114 @@
+<h2>原文：<a href="https://hijiangtao.github.io/2019-05-30-Rust-learning-notes-with-Rustlings-3.html">Rust学习笔记 - 测试与字符串</a></h2>
+<hr/>
+<h2>title: Rust学习笔记 - 测试与字符串
+layout: post
+thread: 221
+date: 2019-05-30
+author: Joe Jiang
+categories: Document
+tags: [2019, Rust, WebAssembly, 笔记]
+excerpt: Rust 学习笔记，关于测试与字符串操作的内容。</h2>
+<h2>0. 测试</h2>
+<p>在 Rust 中，需要需要使用 <code>#[test]</code> 属性标明哪些函数是测试，以下为一个成功测试和失败测试：</p>
+<pre><code class="language-rust"># fn main() {}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn exploration() {
+        assert_eq!(2 + 2, 4);
+    }
+
+    #[test]
+    fn another() {
+        panic!("Make this test fail");
+    }
+}
+</code></pre>
+<p><code>assert_eq!</code> 和 <code>assert_ne!</code> 两个宏分别比较两个值是相等还是不相等。其他的一些宏还包括 <code>should_panic</code> 等。一个使用 <code>Result&lt;T, E&gt;</code> 编写测试的示例如下：</p>
+<pre><code class="language-rust">#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() -&gt; Result&lt;(), String&gt; {
+        if 2 + 2 == 4 {
+            Ok(())
+        } else {
+            Err(String::from("two plus two does not equal four"))
+        }
+    }
+}
+</code></pre>
+<h2>1. 字符串</h2>
+<p>Rust 的核心语言中只有一种字符串类型： <code>str</code>。<code>String</code> 类型由标准库提供，是可增长的、可变的、有所有权的、UTF-8 编码的字符串类型。</p>
+<h3>新建字符串</h3>
+<pre><code class="language-rust">// 第一种方法
+let data = "initial contents";
+let s = data.to_string();
+
+// 第二种方法
+let s = String::from("initial contents");
+</code></pre>
+<h3>更新字符串</h3>
+<p>利用 + 的示例如下：</p>
+<pre><code class="language-rust">let mut s = String::from("foo");
+s.push_str("bar");
+s.push('l');
+
+let s2 = String::from("world!");
+
+let s3 = s + &amp;s2; // 注意 s 被移动了，不能继续使用，且 + 不能将两个 String 相加
+</code></pre>
+<p>利用 <code>format!</code> 的示例（不会获取任何参数的所有权）如下：</p>
+<pre><code class="language-rust">let s1 = String::from("tic");
+let s2 = String::from("tac");
+let s3 = String::from("toe");
+
+let s = format!("{}-{}-{}", s1, s2, s3);
+</code></pre>
+<h3>索引字符串</h3>
+<p>Rust 字符串不支持索引，可以通过 <code>[]</code> 和一个 <code>range</code> 来创建含特定字节的字符串 slice：</p>
+<pre><code class="language-rust">let hello = "Здравствуйте";
+
+let s = &amp;hello[0..4];
+</code></pre>
+<h3>遍历字符串</h3>
+<p>操作单独 Unicode 标量的示例如下：</p>
+<pre><code class="language-rust">for c in "नमस्ते".chars() {
+    println!("{}", c);
+}
+</code></pre>
+<p>chars 换成 bytes 则可以返回每一个原始字节：</p>
+<pre><code class="language-rust">for c in "नमस्ते".chars() {
+    println!("{}", c);
+}
+</code></pre>
+<h3>关于 <code>str / String / &amp;str / &amp;String</code></h3>
+<p>首先看一下 str 和 String 间的区别：String 是一个可变的、堆上分配的 UTF-8 的字节缓冲区。而 str 是一个不可变的固定长度的字符串，如果是从 String 解引用而来的，则指向堆上，如果是字面值，则指向静态内存。</p>
+<p>&amp;String 是 borrowed String，一个指针类型，可以传递而不放弃所有权。事实上，一个 &amp;String 可以当做是 &amp;str。例如，<code>foo()</code> 可以使用 string slice 或者 borrowed String 类型。</p>
+<pre><code class="language-rust">fn main() {
+    let s = String::from("Hello, Rust!");
+    foo(&amp;s);
+}
+fn foo(s: &amp;str) {
+    println!("{}", s);
+}
+</code></pre>
+<p>String、&amp;String、&amp;str 三者之间的转换示例如下：</p>
+<pre><code class="language-rust">// &amp;str =&gt; String
+let a = "Test";
+let b = a.to_string();
+let b = String::from("Test");
+let b = a.to_owned();
+
+// String =&gt; &amp;str
+let e = &amp;String::from("Hello Rust");
+// 或使用as_str()
+let e_tmp = String::from("Hello Rust");
+let e = e_tmp.as_str();
+// 不能直接用 String::from("Hello Rust").as_str();
+
+// String + &amp;str =&gt; String
+let mut strs = "Hello".to_string();
+strs.push_str(" Rust");
+println!("{}", strs);
+</code></pre>
+<p>只想要一个字符串的只读视图、或者 <code>&amp;str</code> 作为入参，那就首选 <code>&amp;str</code>；如果想拥有所有权、修改字符串那就用 <code>String</code>。</p>

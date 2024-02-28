@@ -1,0 +1,229 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/What-is-object-slicing.html">What is object slicing?</a></h2>
+<hr/>
+<h2>title: What is object slicing?
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?44'
+date: 2022-05-03 17:42:38
+categories: C++
+tags: [C++]
+description: In this passage we will talk about Object Slicing in C++(A very common occurrence in OOP).</h2>
+<p>Source Code:</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/blob/jupyter/oop/object_slicing.ipynb</li>
+</ul>
+<p>In this passage we will talk about Object Slicing in C++(A very common occurrence in OOP).</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>What is object slicing?</strong></h1>
+<p>Before we talk the Object Slicing, let’s see a example first:</p>
+<pre><code class="language-C++">#include &lt;iostream&gt;
+
+class Base {
+public:
+    explicit Base(int mVal) : m_val_(mVal) {}
+
+    [[nodiscard]] virtual const char *get_name() const { return "Base"; }
+
+    [[nodiscard]] int get_m_val() const { return m_val_; }
+
+protected:
+    int m_val_;
+};
+
+class Derived : public Base {
+public:
+    explicit Derived(int mVal) : Base(mVal) {}
+
+    [[nodiscard]] const char *get_name() const override { return "Derived"; }
+};
+
+int main() {
+    Derived derived{5};
+    std::cout &lt;&lt; "derived is a " &lt;&lt; derived.get_name() &lt;&lt; " and has value " &lt;&lt; derived.get_m_val() &lt;&lt; '\n';
+
+    Base &amp;ref{derived};
+    std::cout &lt;&lt; "ref is a " &lt;&lt; ref.get_name() &lt;&lt; " and has value " &lt;&lt; ref.get_m_val() &lt;&lt; '\n';
+
+    Base *ptr{&amp;derived};
+    std::cout &lt;&lt; "ptr is a " &lt;&lt; ptr-&gt;get_name() &lt;&lt; " and has value " &lt;&lt; ptr-&gt;get_m_val() &lt;&lt; '\n';
+
+    return 0;
+}
+</code></pre>
+<p>In the example above, i created a <code>Base</code> class and <code>Derived</code> class (based on <code>Base</code>);</p>
+<p>Then, i created a <code>derived</code> object from <code>Derived</code> class, and two other variable:</p>
+<ul>
+<li><code>derived</code> to <code>Base</code> type reference;</li>
+<li><code>derived</code> to <code>Base</code> type pointer;</li>
+</ul>
+<p>Finally, we call <code>get_name</code> and <code>get_m_val</code> via these three variables. And it is obvious that:</p>
+<ul>
+<li>All <code>get_name</code> returns <code>"Derived"</code>;</li>
+<li>All <code>get_m_val</code> returns <code>5</code>;</li>
+</ul>
+<p>This is because: dual to the inheritance from <code>Base</code>, the variable <code>derived</code> inherits the <code>m_val_</code> from <code>Base</code> .</p>
+<p><strong>And even though we defined <code>ref</code> as <code>&amp;Base</code> and <code>ptr</code> as <code>*Base</code> separately, but finally they all pointed to the variable: <code>derived</code>!</strong></p>
+<p>&lt;br/&gt;</p>
+<p><strong>But this is an exception: <code>Copy Constructor!</code></strong></p>
+<p>In the above example, we created <code>reference</code> and <code>pointer</code> from variable <code>derived</code>;</p>
+<p>But what if we create a new object by <strong>Copy constructor</strong>:</p>
+<pre><code class="language-C++">Base base{derived};
+std::cout &lt;&lt; "base is a " &lt;&lt; base.get_name() &lt;&lt; " and has value " &lt;&lt; base.get_m_val() &lt;&lt; '\n';
+</code></pre>
+<p>The code above will finally print:</p>
+<pre><code class="language-C++">base is a Base and has value 5
+</code></pre>
+<blockquote>
+<p><strong>Remember that:</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>The derived object has a base part and a derived part.</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>When we assign the derived object to the base object, ONLY the base part will be copied, and the derived part will not (Via Copy Constructor).</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>In the above example, the base object receives a copy of the base part of a derived object, but ignores the derived part. The derived part is sliced off.</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>This is so called <code>Object Slicing</code>!</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>Object Slicing in function call</strong></h2>
+<p>In the above example you may think it stupid, because hardly nobody assigns derived classes to base classes.</p>
+<p>But it is most likely when you are doing some function call:</p>
+<pre><code class="language-C++">void printName(const Base base) { // note: base pass by value, not reference
+    std::cout &lt;&lt; "I am a " &lt;&lt; base.get_name() &lt;&lt; '\n';
+}
+
+Derived d{ 5 };
+printName(d);
+</code></pre>
+<p>This code will finally print:</p>
+<pre><code class="language-C++">I am a Base
+</code></pre>
+<p>Dual to we passed value (which will be copied), not reference to the function.</p>
+<p>This can be simply fix that we just need to pass the reference:</p>
+<pre><code class="language-C++">void printName(const Base &amp;base) { // note: base pass by reference
+    std::cout &lt;&lt; "I am a " &lt;&lt; base.get_name() &lt;&lt; '\n';
+}
+</code></pre>
+<p>This will print:</p>
+<pre><code>I am a Derived
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>Object Slicing in Vector(Or Collection)</strong></h2>
+<p>Another area where new programmers run into trouble with object slicing is trying to implement polymorphism with std::vector.</p>
+<p>Consider the following program:</p>
+<pre><code class="language-C++">std::vector&lt;Base&gt; v{};
+v.push_back(Base{ 5 }); // All a Base object into vector
+v.push_back(Derived{ 6 }); // All a Derived object into vector
+for (const auto&amp; element : v)
+  std::cout &lt;&lt; "I am a " &lt;&lt; element.get_name() &lt;&lt; " with value " &lt;&lt; element.get_m_val() &lt;&lt; '\n';
+</code></pre>
+<p>This will print:</p>
+<pre><code>I am a Base with value 5
+I am a Base with value 6
+</code></pre>
+<p><strong>Obviously, because <code>std::vector</code>  is declared as a base type, when <code>Derived(6)</code> is added to vector, it has been sliced!</strong></p>
+<p>&lt;br/&gt;</p>
+<h3><strong>Fix Object Slicing in Vector</strong></h3>
+<p>Unfortunately, we can not just create a reference type <code>std:vector</code> like this:</p>
+<pre><code class="language-C++">std::vector&lt;Base&amp;&gt; v{};
+</code></pre>
+<p>This will not compile:</p>
+<p>&lt;font color="#f00"&gt;<strong>The object of <code>std::vector</code> must be assignable, but the reference cannot be assigned (the reference can be assigned only at initialization)!</strong>&lt;/font&gt;</p>
+<p>One solution to solve this problem is to create a pointer type <code>std::vector</code>:</p>
+<pre><code class="language-C++">std::vector&lt;Base *&gt; v2{};
+
+Base b{5}; // b and d show be initiate explicitly!
+Derived d{6};
+
+v2.push_back(&amp;b);
+v2.push_back(&amp;d);
+
+for (const auto *element: v2)
+  std::cout &lt;&lt; "I am a " &lt;&lt; element-&gt;get_name() &lt;&lt; " with value " &lt;&lt; element-&gt;get_m_val() &lt;&lt; '\n';
+</code></pre>
+<p>This will print:</p>
+<pre><code>I am a Base with value 5
+I am a Derived with value 6
+</code></pre>
+<p>It works!</p>
+<p>But dual to the complexity of the pointer, there are more things we should care of:</p>
+<ul>
+<li><strong>Nullpter is now a legal option and may or may not be appropriate for your use scenario!</strong></li>
+<li><strong>Now you have to operate with the pointer, which may be awkwardly!</strong></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>The Frankenobject</strong></h2>
+<p>In the above examples, we’ve seen cases where slicing lead to the wrong result because the derived class had been sliced off.</p>
+<p>Now let’s take a look at another dangerous case where the derived object still exists!</p>
+<p>Consider the following code:</p>
+<pre><code class="language-C++">Derived dd1{ 5 };
+Derived dd2{ 6 };
+Base &amp;bb{ dd2 };
+
+bb = dd1; // cause problem
+std::cout &lt;&lt; "I am a " &lt;&lt; bb.get_name() &lt;&lt; " with value " &lt;&lt; bb.get_m_val() &lt;&lt; '\n';
+</code></pre>
+<p>The first three lines in the function are pretty straightforward:</p>
+<ul>
+<li>Create two Derived objects, and set a Base reference to the second one.</li>
+</ul>
+<p>The fourth line is where things go astray: <strong>Since bb points at dd2, and we’re assigning dd1 to bb.</strong></p>
+<p><strong>you might think that the result would be that dd1 would get copied into dd2 (it would, if b were a Derived!).</strong></p>
+<p>But b is a Base, and the <code>operator=</code> that C++ provides for classes isn’t virtual by default.</p>
+<p>Consequently, <strong>only the Base portion of d1 is copied into d2.</strong></p>
+<p>As a result, you’ll discover that: <strong>d2 now has the Base portion of d1 and the Derived portion of d2!</strong></p>
+<p>In this particular example, that’s not a problem (because the Derived class has no data of its own).</p>
+<p>But in most cases, you’ll have just created a <code>Franken Object</code>: composed of parts of multiple objects.</p>
+<p>Worse, there’s no easy way to prevent this from happening (other than avoiding assignments like this as much as possible).</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>Google Style Guide</strong></h2>
+<p>A wisable choice to simply avoid this problem is to forbid the <code>Copy &amp; Move Constructor</code> explicitly, if your type do not need them:</p>
+<pre><code class="language-C++">class Base {
+public:
+    explicit Base(int mVal) : m_val_(mVal) {}
+
+    [[nodiscard]] virtual const char *get_name() const { return "Base"; }
+
+    [[nodiscard]] int get_m_val() const { return m_val_; }
+
+    // Base is neither copyable nor movable.
+    Base(const Base&amp;) = delete;
+    Base&amp; operator=(const Base&amp;) = delete;
+
+protected:
+    int m_val_;
+};
+</code></pre>
+<p>By adding these code:</p>
+<pre><code class="language-C++">// Base is neither copyable nor movable.
+Base(const Base&amp;) = delete;
+Base&amp; operator=(const Base&amp;) = delete;
+</code></pre>
+<p>we declared that: Base is neither copyable nor movable!</p>
+<p>Then this program will be not compiled:</p>
+<pre><code class="language-C++">Derived dd1{ 5 };
+Derived dd2{ 6 };
+Base &amp;bb{ dd2 };
+
+bb = dd1; // cause problem
+</code></pre>
+<p>Because Base is neither copyable nor movable now!</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>Conclusion</strong></h2>
+<p>In this passage, first i gave two examples to introduce what is Object Slicing.</p>
+<p>Then, I gave three typical and common mistakes:</p>
+<ul>
+<li>Object Slicing in function call</li>
+<li>Object Slicing in vector</li>
+<li>Object Slicing to cause Franken Object</li>
+</ul>
+<p>And the corresponding solutions.</p>
+<p>Finally, be referred Google Style Guide, a usual principle to avoid this mistake is to forbid the copy and move constructor.</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>Appendix</strong></h1>
+<p>Source Code:</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/blob/jupyter/oop/object_slicing.ipynb</li>
+</ul>
+<p>Reference:</p>
+<ul>
+<li>https://learncppcn.github.io/18-virtual-functions/18.8-object-slicing/</li>
+<li>https://en.wikipedia.org/wiki/Object_slicing</li>
+</ul>
+<p>&lt;br/&gt;</p>

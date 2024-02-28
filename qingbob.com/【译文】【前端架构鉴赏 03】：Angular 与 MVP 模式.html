@@ -1,0 +1,197 @@
+<h2>原文：<a href="https://qingbob.com/2020-07-14-arch_enjoy_model-view-presenter-with-angular.html">【译文】【前端架构鉴赏 03】：Angular 与 MVP 模式</a></h2>
+<hr/>
+<h2>layout: post
+title: 【译文】【前端架构鉴赏 03】：Angular 与 MVP 模式
+modified: 2020-06-30
+tags: [javascript]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>原文：<a href="https://indepth.dev/model-view-presenter-with-angular/">https://indepth.dev/model-view-presenter-with-angular/</a></p>
+<p>随着应用程序的日趋庞大，它变得越来越难以维护。随着可复用模块的重要性逐渐递增应用的复杂性也随之增长。我们都意识到我们应该在它面临难以维护的风险之前做些什么</p>
+<p>设计模式能够拯救它！</p>
+<h2>复杂应用</h2>
+<p>一个复杂应该至少拥有以下某些特征</p>
+<ul>
+<li>组件树中的多个组件展示同一份应用状态</li>
+<li>拥有多个更新应用状态的来源：<ul>
+<li>多个用户同时交互</li>
+<li>后端实时推送状态更新给浏览器</li>
+<li>后台定时任务</li>
+<li>近距离传感器或者其它设备传感器</li>
+</ul>
+</li>
+<li>频繁的更新应用状态</li>
+<li>大量的组件</li>
+<li>代码量大的组件，回想一下之前的<a href="http://www.laputan.org/mud/">大泥球</a>般的 AngularJS controller</li>
+<li>组件内部的高度复杂循环——高度集中的逻辑分支和异步控制流</li>
+</ul>
+<p>但与此同时，我们希望应用是具有可维护的，可测试的，可拓展的和具有良好性能的</p>
+<p>复杂的应用很少拥有所有这些宝贵特征。我们也不能在完成高级功能需求的情况下避免这些所有的特征，但是我们可以通过设计应用来最大化利用它的宝贵特征</p>
+<blockquote>
+<p>译者注：我理解这些特征，但是我不理解为什么作者把这些特征称之为“宝贵特征（valuable traits）”。在我看来这些复杂的行为正是应用变得难以维护的原因之一。我们的设计应用的目标是要保证它的<strong>简单</strong>和<strong>清晰</strong>。我们不应该想法设法的去争取这些特征，而是应该想方设法的避免它们</p>
+</blockquote>
+<h2>分离关注点</h2>
+<p>我们可以将<em>分离关注点（separation of concerns）</em>作为应用的分层基础。我们可以按照系统的关注点组织逻辑，以便独立的关注它们。在所有之上，分离关注点是首要的架构原则。在日常开发中无论何时它都应该改被铭记于心</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/model-view-presenter-with-angular/horizontal_layers.png"/></p>
+<p>我们可以同时将我们的应用横向，纵向的又或者两方向同时划分模块。当纵向划分时，我们按照<em>功能</em>把软件部件（artifacts）分组；当横向划分时，我们按照软件<em>层次</em>分组。在我们的应用中，我们可以将软件产出划分为这些横向层，或者是系统关注点</p>
+<p>| Horizontal layer | Examples                                                     |
+| ---------------- | ------------------------------------------------------------ |
+| Business logic   | Application-specific logic, domain logic, validation rules   |
+| Persistence      | WebStorage, IndexedDB, WebSQL, HTTP, WebSocket, GraphQL, Firebase, Meteor |
+| Messaging        | WebRTC, WebSocket, Push API, Server-Sent Events              |
+| I/O              | Web Bluetooth, WebUSB, NFC, camera, microphone, proximity sensor, ambient light sensor |
+| Presentation     | DOM manipulation, event listeners, formatting                |
+| User interaction | UI behaviour, form validation                                |
+| State management | Application state management, application-specific events    |</p>
+<p>同样的规则也可以应用于我们的 Angular 组件。它们应该只关心<em>表现</em>层和<em>用户交互</em>层。这允许我们将系统的里的不同部分进行解耦</p>
+<p>当然，我们添加额外的抽象层的过程同时给应用添加了非常多的约束，但是最终得到的宝贵特性会让这一切都是值得的。我们只是还原了本该存在的抽象</p>
+<blockquote>
+<p>译者注：再一次吐槽所谓的“宝贵特征”</p>
+</blockquote>
+<h2>MVP（Model-View-Presenter）模式</h2>
+<p>MVP 是一类实现程序界面的软件架构设计模式。借助它能使得类，函数，和难以测试的模块（软件部件）的复杂逻辑减到最小。特别是能使得类似于 Angular 组件的软件部件避免变得复杂。</p>
+<p>像 MVC 模式一样，MVP 将领域模型（domain model）和表现（presentation）进行分离。表现层通过观察者模式（Observer Pattern）对领域的变化做出响应，这在由 Erich Gamma, Richard Helm, Ralph Johnson, and John Vlissides (又称为 “The Gang of Four”) 编写的经典图书 “<a href="https://www.amazon.com/Design-Patterns-Elements-Reusable-Object-Oriented/dp/0201633612">Design Patterns: Elements of Reusable Object-Oriented Software</a>” 中有详细描述</p>
+<p>在<em>观察者模式</em>（Observer Pattern）<em>中，一个</em>对象（subject）<em>维护了一个当状态改变时需要通知的</em>观察者（observers）*列表。这听起来熟悉吗？你已经猜到了，RxJS 就是基于观察者模式</p>
+<blockquote>
+<p>译者注：下面会提到，如何把模型的变化映射到视图上其实还有另一种方式，就是视图提供公开的接口，供 presenter 调用。在我看来这是一种“主动”和“被动”的区别</p>
+</blockquote>
+<p><em>视图</em>（view）*除了负责数据绑定以及把一些组件组合起来以外，它并不包含任何的逻辑或者行为。当用户交互发生时它把控制权委托给 presenter</p>
+<p>presenter 会批处理状态的修改，所以当用户填写表单时最终呈现的是一个大型变更而不是许多零碎的修改，比如只能通过每一个表单的提交来更新应用的状态而不是每一个字段。这使得撤销或者重放状态的变更变得容易。presenter 通过命令更新状态。多亏了 <a href="https://www.martinfowler.com/eaaDev/MediatedSynchronization.html">Observer Synchronization</a> 机制状态的改变才得以反馈到视图上</p>
+<h3>Angular 变种</h3>
+<p>受到原始 MVP 模式的启发以及经过一系列的变化，我们创造了适用于 Angular 平台的软件各类模块，其中关键的界面构成元素就是<em>组件（component）</em></p>
+<p>理想情况下，组件只聚焦展示和用户交互。在现实中，我们制定了严格的规则来确保我们的组件只关心展示应用的部分给用户，以及使得用户能够操纵状态。</p>
+<p>这篇文章介绍的 MVP 变种采用的是 <a href="https://lostechies.com/derekgreer/2008/11/23/model-view-presenter-styles/#the-encapsulated-presenter-style">Encapsulated Presenter 模式</a>。但我们的 presenter 并不会直接引用它的视图。取而代之的是，我们会采用 observables 将 presenter 与 model 和视图连接起来，以便 presenter 能够独立于视图进行测试。</p>
+<p>我们打算使用 <a href="https://www.martinfowler.com/eaaDev/SupervisingPresenter.html">Supervising Controller</a> 方式实现 MVP 。我们的视图（Angular 组件）只需把用户的交互交由它们的 presenter 负责处理。因为 presenter 被它们的视图所封装，数据和事件流也会经过组件。</p>
+<blockquote>
+<p>译者注：所以这里我们明白了视图和 presenter 之间的关系：视图知道 presenter 的存在，并且调用 presenter 的方法；但是 presenter 不知道视图的存在，也不能引用视图实例</p>
+<p>除了有 supervsing controller 的方式以外，还有 passive view 方式来实现。两者的区别就在于前者通过数据绑定的方式来响应模型的变化，后者需要 presenter 调用 passive 的接口来更新视图。Angular 采用的前一种方式。具体的区别可以在这个<a href="https://stackoverflow.com/questions/2056/what-are-mvp-and-mvc-and-what-is-the-difference">stackoverflow 的问题下</a>找到答案。</p>
+</blockquote>
+<p>在组件模型（component model）的帮助下，我们的 presenter 将用户的交互行为转换成组件的特定事件。事件又被转换成会被发送给模型的命令。最终的转换会被接下来会介绍的容器组件来处理</p>
+<p>我们的 presenter 会有一些<a href="https://martinfowler.com/eaaDev/PresentationModel.html">表现层模型（Presentation Model）</a>的特征，比如包含一些用于指示 DOM 元素是否显示的布尔值的表现层逻辑。又例如拥有一个属性用于指示 DOM 元素应该被渲染成的颜色</p>
+<p>我们将视图与 presenter 上的属性相互绑定，将属性所表达的状态原始的展现出来。这使得组件模型和组件模板变得轻薄了许多</p>
+<h2>为 Angular 准备的 MVP 概念</h2>
+<p>为了要将 MVP 模式应用到 Angular 应用里，我们将要介绍 React 社区里常被推崇的概念。我们的组件——在这些文章中——将会被划分为三类</p>
+<ul>
+<li>展现组件（Presentational components）</li>
+<li><a href="https://indepth.dev/container-components-with-angular/">容器组件（Container components）</a></li>
+<li>混合组件（Mixed components）</li>
+</ul>
+<p>React 开发者已经从混合组件中分离展示组件和容器组件很多年了。我们在 Angular 应用中也可以使用相同的概念。接下俩我们还会介绍 presenter 的概念。</p>
+<h3>展示组件</h3>
+<p><em>展示组件</em>是纯粹用于呈现和交互的视图。它们把应用的部分状态展示给用户并且允许用户更改这些状态。</p>
+<p>因为 presenter 的存在，展示组件完全不会感知应用其它部分的存在。它们有处理的用户交互和所需的数据的数据绑定接口</p>
+<p>为了避免对界面进行单元测试，我们需要保证展示组件的复杂度保持在一个绝对的最小值。对于组件模型和组件模板都是如此。</p>
+<h3>容器组件</h3>
+<p><em>容器组件</em>把应用的状态暴露给展示组件。它们通过把组件特定的事件转换成命令和查询传递给非展示组件的方式，将展示组件与应用的其它部分集成在一起</p>
+<p>通常容器组件和纯展示组件的关系是1对1的。容器组件的类属性与纯展示组件的输入属性相匹配，方法与展示组件的事件相对应</p>
+<h3>混合组件</h3>
+<p>如果一个组件既不是一个容器组件也不是纯展现组件，那么它就是<em>混合组件</em>。大部分应用很大可能都包含混合组件。我们称之为混合组件因为它们混合了两种系统关注点——它们包含了多个横向层的逻辑。</p>
+<p>如果你偶遇了一个组件——额外的包含了一组展示的领域对象——能够直接访问设备摄像头，发送 HTTP 请求和使用 WebStorage 缓存应用状态时，请不要感到惊讶</p>
+<p>虽然应用中的逻辑必须存在，但是把它们组织在单一地方会让导致它非常难测试，难以推断，重用起来复杂以及紧耦合</p>
+<h3>Presenters</h3>
+<p>为了得到一个简单的展现组件，行为逻辑和复杂的表现层逻辑被需要被抽离到一个 presenter 中。presenter 没有界面并且通常没有或者极少的包含注入的依赖，便于它容易测试和推断。</p>
+<p>Presenter 几乎不会感知应用的其它部分。通常一个展示组件只会引用一个 presenter</p>
+<h2>MVC 组合</h2>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/model-view-presenter-with-angular/model-view-presenter-triad.png"/></p>
+<p>这三个软件部件组合成了我们所谓的 MVC。模型（model）——由容器组件表示——代表了需要由浏览器展示给用户的应用状态</p>
+<p>视图，由展现组件表示，是一个用于呈现应用状态并且把用户交互转换为组件级别事件轻量用户界面，通常会把控制流转发给 presenter</p>
+<p>presenter 是一个完全不会感知应用其它部分的类的实例</p>
+<h3>数据流</h3>
+<blockquote>
+<p>译者注：以下可能会涉及到 Angular 的语法细节，例如 Observable，事件绑定机制，属性传播机制。可以忽略。主要留意数据的流动方向</p>
+</blockquote>
+<h4>数据在组件树的向下流动</h4>
+<p>让我们把数据和事件是如何在 MVP 中流动的过程可视化出来</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/model-view-presenter-with-angular/data-flow.gif"/></p>
+<p>在上图中，一个服务中的应用状态发生了更改。因为容器组件订阅了服务上的一个 observable 属性所以它感知到了变更的发生</p>
+<p>容器组件把接收到的新值转换为展示组件方便接收的格式。Angular 把新的值和引用赋值给展示组件的用于接收的输入属性</p>
+<p>展示组件把更新后的数据传递给 presenter ，用于重新计算需要在展示组件模板里需要使用的额外属性</p>
+<p>现在数据已经完成了在组件树向下的流动，然后 Angular 把状态渲染和更新在 DOM 上，在列表里展示给用户</p>
+<h4>事件在组件树种的向上流动</h4>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/model-view-presenter-with-angular/event-flow.gif"/></p>
+<p>在上图种用户点击了一个按钮。由于模板中存在事件绑定，Angular 把事件转交由展示组件模型中的事件处理函数处理。</p>
+<p>用户的交互被 presenter 拦截，并且将它转化成特定的数据结构，随后借助 observable 属性将它传播出去。展示组件模型观察到了这次修改，又通过向外传递的属性将这个值传播出去。</p>
+<p>因为模板里绑定事件的缘故， Angular 通过组件特定事件告诉容器组件新的值产生了</p>
+<p>现在事件已经完成了在组件树中的向上游动，容器组件将数据结构转化为参数传递给服务里的一个方法</p>
+<p>接下来一个命令就会改变应用的状态，服务通过 observable 属性触发状态的改变，之后数据又一次像上上图中那样的流动</p>
+<h2>一个改进的 Angular 应用</h2>
+<p>有些人会认为我们的新 UI 架构过于复杂导致了过度设计，但是在现实中我们留下的是许多简单的，模块化的软件片段。模块化的软件架构让我们变得<em>敏捷</em>。不是敏捷流程里的那种敏捷，而是对于<a href="http://instead%20of%20an%20increasing%20pile%20of%20technical%20debt%2C%20we%20are%20proactive%20as%20opposed%20to%20reactive%20when%20handling%20changes%20in%20customer%20requirements.%20it%20is%20very%20difficult%20to%20achieve%20this%20level%20of%20agility%20with%20a%20system%20that%20is%20tightly%20coupled%20and%20hardly%20testable%2C%20taking%20months%20to%20refactor./">变化开销</a>而言</p>
+<blockquote>
+<p>模块化的软件架构让我们变得敏捷</p>
+</blockquote>
+<p>我们追求的是前瞻性的处理用户需求更迭，而不是累积技术债。如果没有好的架构，即使为了避免紧耦合与测试困难历经数月的重构，也难以实现这个级别的敏捷度</p>
+<h3>可维护性</h3>
+<p>尽管最终系统是由许多的动态部分组成，但是每一个部分都非常的简单并且只关注系统的单个功能点。于是我们的到了一个整洁的知道何去何从的系统</p>
+<h3>可测试性</h3>
+<p>因为 Angular 里的相关的软件部件测试起来困难且缓慢，所以我们应该最少化它们的逻辑。当每一个软件部分只关注唯一的系统功能时，它们变得容易被推断。我们也就能非常容易的在自动测试里验证</p>
+<p>界面测试进行起来缓慢且困难，在这一点上 Angular 也不例外。采用 MVC 之后，我们把展现组件里的逻辑最小化，使它们变得不值得测试。取而代之的是我们选择跳过单元测试，依靠我们的开发工具，进行集成测试以及端到端测试来捕获像类型错误，语法错误，未初始化之类的错误</p>
+<h3>可拓展性</h3>
+<p>现在功能之间可以独立开发，即使是处于同一水平层的软件部件也可以独立的测试和开发。我们能很清晰的区分每一部分的逻辑片段分属于哪。</p>
+<p>我们可以在不同层之间独立开发，我们可以区分技术开发和前端视觉开发。一名开发人员善于使用 RxJS 实现 behaviour ，同时另一名开发人员热爱后端集成，还有另一名开发人员喜欢完善设计与使用 CSS 和 HTML 解决可访问性的问题</p>
+<p>因为我们能够独立开发功能，任务可以被分配到不同的团队中。例如一个团队关心产品分类功能，而另一个团队负责电子商务系统里的问题和购物车功能</p>
+<h3>性能</h3>
+<p>恰当的关注点分离带给我们高性能，特别是在展现层中。性能瓶颈能很简单的被追踪和分离出来。</p>
+<p>同时使用 <code>OnPush</code> 变更监测策略后，我们可以最小化 Angular 的变更监测循环对应用性能的影响</p>
+<h2>实战：Tour of heros</h2>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/model-view-presenter-with-angular/tour-of-heros.gif"/></p>
+<p>我们从 Angular.io 的 “<a href="https://angular.io/tutorial">Tour of Heroes” 教程</a>开始。我们从它开始是因为它是被绝大部分 Angular 开发者所知的教程。</p>
+<p>所有教程代码里的组件都是混合组件。因为事实非常明显，它们中没有一个带有输出属性，而且它们中的一些还会修改应用状态。</p>
+<p>在我最近的一些文章中，我们会把 MVP 模式应用到其中的一些组件里，一步步的手写这些代码。我们也会讨论测试 MVP  的正确姿势。</p>
+<p>虽然这些文章只是在讨论 Tour of Heroes 里的组件，我已经把 MVP 应用到整个应用里，并且为容器组件和表现组件添加了测试用例，存放在 <a href="https://github.com/LayZeeDK/ngx-tour-of-heroes-mvp">这个 GitHub repository</a>里</p>
+<h3>知识储备</h3>
+<p>除了在这篇文章里介绍的这些概念之外，我希望能你只需要熟悉一些关键的 Angular 概念。MVP 的概念也会在相关的文章进一步解释。</p>
+<p>我期望你对 Angular 组件有深的理解，比如 <a href="https://angular.io/guide/template-syntax#binding-syntax-an-overview">data binding syntax</a> 和 <a href="https://angular.io/guide/template-syntax#input-and-output-properties">input and output properties</a>。我也假设你有了解  <a href="https://rxjs-dev.firebaseapp.com/">RxJS</a> 的基本知识——对 observable，subjects，operators 和 subscription 有所了解</p>
+<h2>资源</h2>
+<p><a href="https://angular.io/generated/live-examples/toh-pt6/stackblitz.html">Browse the final Tour of Heroes tutorial code on StackBlitz</a>.</p>
+<p><a href="https://angular.io/generated/zips/toh-pt6/toh-pt6.zip">Download the final Tour of Heroes tutorial code</a> (zip archive, 30 KB)</p>
+<p><a href="https://github.com/LayZeeDK/ngx-tour-of-heroes-mvp">Browse the Tour of Heroes—Model-View-Presenter style repository on GitHub</a>.</p>
+<p><a href="https://youtu.be/D_ytOCPQrI0">Watch my talk “Model-View-Presenter with Angular” from ngAarhus May 2018</a></p>
+<p><a href="https://bit.do/mvp-slides">View the slides from my talk “Model-View-Presenter with Angular”</a></p>
+<h2>相关文章</h2>
+<p>想学习 MVP 模式的历史以及它的兄弟模式 MVC 是如何是如何被引入用户端web界面框架中的，请阅读“<a href="https://indepth.dev/the-history-of-model-view-presenter/">The history of Model-View-Presenter</a>”</p>
+<p>你是否已经厌倦了在组件中塞了一堆后端逻辑以及进行状态管理？想学习如何把非展现逻辑提取到容器组件中去，请阅读“<a href="https://indepth.dev/container-components-with-angular/">Container components with Angular</a>”</p>
+<p>想学习如何快速的用单元测试测试容器组件，请阅读“<a href="https://indepth.dev/testing-angular-container-components">Testing Angular container components</a>”</p>
+<p>在文章“<a href="https://indepth.dev/lean-angular-components/">Lean Angular components</a>”中，我们会讨论坚固的组件架构的重要性。MVP 模式封装了一些能够帮助我们实现这个目标的设计模式。</p>
+<h2>声明</h2>
+<p>那张数据流动态图片是由我同样是软件开发者的好朋友 <a href="https://www.linkedin.com/in/mdkayser/">Martin Kayser</a> 制作</p>
+<p>实现高度关注点分离的想法是受到 <a href="https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html">Robert "Uncle Bob" Martin 文章</a> 的启发，这在他编写的图书  “<a href="http://www.informit.com/store/clean-architecture-a-craftsmans-guide-to-software-structure-9780134494166">Clean Architecture: A Craftsman’s Guide to Software Structure and Design</a>” 中也有叙述</p>
+<p>将 MVP 模式应用于 Angular 应用的想法受到 <a href="https://www.linkedin.com/in/davembush/">Dave M. Bush</a> 的 “<a href="https://davembush.github.io/model-view-presenter-angular-and-testing/">Model View Presenter, Angular, and Testing</a>” 两篇文章的启发</p>
+<p>在我的最初研究里，我阅读过 <a href="https://www.linkedin.com/in/roypeled/">Roy Peled</a> 所写的 “<a href="http://www.roypeled.com/an-mvp-guide-to-javascript-model-view-presenter/">An MVP guide to JavaScript — Model-View-Presenter</a>”，他讲解了如何使用原生JavaScript实现 MVP 模式应用</p>
+<h3>编辑</h3>
+<p>我想要感谢你 <a href="https://indepth.dev/author/maxkoretskyi/">Max Koretskyi</a> ，帮助我打造这篇文章。我非常感谢你分享了关于为开发者社区写作的经验。再一次感谢你发表了我的文章，以至于我能把它们和  <a href="https://indepth.dev/angular/">Angular INDEPTH</a> 的读者进行分享</p>
+<h2>同行评审</h2>
+<p>感谢亲爱的评审们，帮助我发布这篇文章，你们的反馈是无价的！</p>
+<ul>
+<li><a href="https://twitter.com/synalx">abaugh</a></li>
+<li><a href="https://www.linkedin.com/in/brian-melgaard-hansen-8b7176153/">Brian Melgaard Hansen</a></li>
+<li><a href="https://medium.com/u/52fa64a71dbc?source=post_page-----3a4dbffe49bb----------------------">Craig Spence</a></li>
+<li><a href="https://www.linkedin.com/in/denisemauldin/">Denise Mauldin</a></li>
+<li><a href="https://github.com/KayHS">Kay Khan</a></li>
+<li><a href="https://twitter.com/ajawadmahmoud">Mahmoud Abduljawad</a></li>
+<li><a href="https://www.linkedin.com/in/mdkayser/">Martin Kayser</a></li>
+<li><a href="https://www.linkedin.com/in/sandra-willford/">Sandra Willford</a></li>
+<li><a href="https://twitter.com/chiangse">Stephen E. Mouritsen Chiang</a></li>
+</ul>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/css-clean-arch">CSS 里的整洁架构</a></li>
+<li><a href="https://www.v2think.com/fe-arch-001-principles">前端架构 101（一）：在谈论它们之前我们需要达成的共识</a></li>
+<li><a href="https://www.v2think.com/fe-arch-002-mvc-solved">前端架构 101（二）： MVC 初探</a></li>
+<li><a href="https://www.v2think.com/fe-arch-003-architecture-principles">前端架构 101（三）：MVC 启示录：模块的职责，作用域和通信</a></li>
+<li><a href="https://www.v2think.com/fe-arch-004-flux-rise">前端架构 101（四）：MVC的不足与Flux的崛起</a></li>
+<li><a href="https://www.v2think.com/fe_arch_005_mvp">前端架构 101（五）：从 Flux 进化到 Model-View-Presenter</a></li>
+<li><a href="https://www.v2think.com/fe_arch_006_clean_architecture">前端架构 101（六）：整洁（Clean Architecture）架构是归宿</a></li>
+<li><a href="https://www.v2think.com/arch-enjoy_angular-architecture-best-practices-zh-cn">【译文】【前端架构鉴赏 01】：Angular 架构模式与最佳实践</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_a-scalable-angular2-architecture-zh-cn">【译文】【前端架构鉴赏 02】：可拓展 Angular 2 架构</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_model-view-presenter-with-angular">【译文】【前端架构鉴赏 03】：Angular 与 MVP 模式</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-specification">微前端说明书</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-aggregation">从美团这篇文章聊聊微前端的聚合问题</a></li>
+<li><a href="https://www.v2think.com/mvc-vs-flux">写给前端看的架构文章(1)：MVC VS Flux</a></li>
+<li><a href="https://www.v2think.com/starting-from-limitations-of-mvc-in-front-end-development">从MVC模式在前端开发中的局限性谈起</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>

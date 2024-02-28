@@ -1,0 +1,659 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/SpringBoot%E9%9B%86%E6%88%90Swagger.html">SpringBoot集成Swagger</a></h2>
+<hr/>
+<h2>title: SpringBoot集成Swagger
+toc: true
+date: 2020-01-02 17:08:51
+cover: https://img.paulzzh.com/touhou/random?12
+categories: Spring
+tags: [Spring Boot, Swagger]
+description:  最近写的项目都用到了Swagger生成文档, 所以本篇总结一下如何在Spring Boot中集成Swagger</h2>
+<p>最近写的项目都用到了Swagger生成文档, 所以本篇总结一下如何在Spring Boot中集成Swagger</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>Spring Boot集成Swagger</h2>
+<p>本文使用Spring Boot + Spring Fox的方法来集成Swagger框架</p>
+<p>具体源码可参考: https://github.com/JasonkayZK/Java_Samples/tree/swagger</p>
+<p>&lt;br/&gt;</p>
+<h3>一. 引入依赖</h3>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;groupId&gt;top.jasonkayzk&lt;/groupId&gt;
+    &lt;artifactId&gt;swagger_demo&lt;/artifactId&gt;
+    &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;packaging&gt;jar&lt;/packaging&gt;
+
+    &lt;name&gt;swagger-demo&lt;/name&gt;
+    &lt;description&gt;Spring Boot集成Swagger案例项目&lt;/description&gt;
+
+    &lt;developers&gt;
+        &lt;developer&gt;
+            &lt;name&gt;Jasonkay&lt;/name&gt;
+            &lt;url&gt;https://github.com/JasonkayZK&lt;/url&gt;
+            &lt;email&gt;jasonkayzk@gmail.com&lt;/email&gt;
+        &lt;/developer&gt;
+    &lt;/developers&gt;
+
+    &lt;properties&gt;
+        &lt;project.build.sourceEncoding&gt;UTF-8&lt;/project.build.sourceEncoding&gt;
+        &lt;project.reporting.outputEncoding&gt;UTF-8&lt;/project.reporting.outputEncoding&gt;
+        &lt;java.version&gt;11&lt;/java.version&gt;
+        &lt;spring.boot.version&gt;2.1.1.RELEASE&lt;/spring.boot.version&gt;
+        &lt;swagger.version&gt;2.9.2&lt;/swagger.version&gt;
+        &lt;lombok.version&gt;1.18.10&lt;/lombok.version&gt;
+    &lt;/properties&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+        &lt;version&gt;2.1.1.RELEASE&lt;/version&gt;
+        &lt;relativePath/&gt; &lt;!-- lookup parent from repository --&gt;
+    &lt;/parent&gt;
+
+    &lt;dependencies&gt;
+        &lt;!-- spring boot web --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- spring boot data jpa --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-data-jpa&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- spring boot test --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- h2 database --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;com.h2database&lt;/groupId&gt;
+            &lt;artifactId&gt;h2&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- swagger2 ui --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;io.springfox&lt;/groupId&gt;
+            &lt;artifactId&gt;springfox-swagger-ui&lt;/artifactId&gt;
+            &lt;version&gt;${swagger.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- swagger2 --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;io.springfox&lt;/groupId&gt;
+            &lt;artifactId&gt;springfox-swagger2&lt;/artifactId&gt;
+            &lt;version&gt;${swagger.version}&lt;/version&gt;
+            &lt;scope&gt;compile&lt;/scope&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- lombok --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
+            &lt;artifactId&gt;lombok&lt;/artifactId&gt;
+            &lt;version&gt;${lombok.version}&lt;/version&gt;
+            &lt;scope&gt;provided&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+    &lt;build&gt;
+        &lt;resources&gt;
+            &lt;resource&gt;
+                &lt;directory&gt;${basedir}/src/main/resources&lt;/directory&gt;
+                &lt;includes&gt;
+                    &lt;include&gt;*.yml&lt;/include&gt;
+                    &lt;include&gt;*.properties&lt;/include&gt;
+                    &lt;include&gt;*.xml&lt;/include&gt;
+                &lt;/includes&gt;
+            &lt;/resource&gt;
+        &lt;/resources&gt;
+
+        &lt;plugins&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+                &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+                &lt;version&gt;3.8.0&lt;/version&gt;
+                &lt;configuration&gt;
+                    &lt;target&gt;${java.version}&lt;/target&gt;
+                    &lt;source&gt;${java.version}&lt;/source&gt;
+                    &lt;encoding&gt;UTF-8&lt;/encoding&gt;
+                &lt;/configuration&gt;
+            &lt;/plugin&gt;
+        &lt;/plugins&gt;
+    &lt;/build&gt;
+
+&lt;/project&gt;
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>说明:</strong></p>
+<p>本示例项目采用的是:</p>
+<ul>
+<li>Java 11</li>
+<li>Spring boot: 2.1.1.RELEASE</li>
+<li>Swagger: 2.9.2</li>
+<li>Lombok: 1.18.10</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>二. 在SpringBoot中配置Swagger</h3>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import springfox.documentation.builders.ApiInfoBuilder;
+import springfox.documentation.builders.PathSelectors;
+import springfox.documentation.builders.RequestHandlerSelectors;
+import springfox.documentation.service.*;
+import springfox.documentation.spi.DocumentationType;
+import springfox.documentation.spi.service.contexts.SecurityContext;
+import springfox.documentation.spring.web.plugins.Docket;
+import springfox.documentation.swagger2.annotations.EnableSwagger2;
+
+import java.util.List;
+
+import static com.google.common.collect.Lists.newArrayList;
+
+/**
+ * A config file for swagger
+ *
+ * @author zk
+ */
+@Configuration
+@EnableSwagger2
+public class SwaggerConfig {
+
+    @Value("${swagger.switch}")
+    private boolean swaggerSwitch;
+
+    @Bean
+    public Docket createRestApi() {
+        return new Docket(DocumentationType.SWAGGER_2)
+            .apiInfo(apiInfo())
+            .select()
+            .apis(RequestHandlerSelectors.basePackage("top.jasonkayzk.swaggerDemo"))
+            .paths(PathSelectors.any())
+            .build()
+            .securitySchemes(securitySchemes())
+            .securityContexts(securityContexts());
+    }
+
+    /**
+     * 项目信息
+     */
+    private ApiInfo apiInfo() {
+        return new ApiInfoBuilder()
+            .title("Swagger demo")
+            .description("A demo for swagger bind with spring boot")
+            .contact(new Contact("Jasonkay", "https://jasonkayzk.github.io/", "jasonkayzk@gmail.com"))
+            .termsOfServiceUrl("https://jasonkayzk.github.io/")
+            .version("1.0")
+            .build();
+    }
+
+    /**
+     * 配置认证模式
+     */
+    private List&lt;ApiKey&gt; securitySchemes() {
+        return newArrayList(new ApiKey("Authorization", "Authorization", "header"));
+    }
+
+    /**
+     * 配置认证上下文
+     */
+    private List&lt;SecurityContext&gt; securityContexts() {
+        return newArrayList(SecurityContext.builder()
+            .securityReferences(defaultAuth())
+            .forPaths(PathSelectors.any())
+            .build());
+    }
+
+    private List&lt;SecurityReference&gt; defaultAuth() {
+        AuthorizationScope authorizationScope = new AuthorizationScope("global", "accessEverything");
+        AuthorizationScope[] authorizationScopes = new AuthorizationScope[1];
+        authorizationScopes[0] = authorizationScope;
+        return newArrayList(new SecurityReference("Authorization", authorizationScopes));
+    }
+
+}
+
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>说明:</strong></p>
+<p><a href="https://github.com/swagger-api/swagger-core/wiki/Annotations-1.5.X#quick-annotation-overview">Swagger官方Wiki 注解</a></p>
+<p><a href="https://blog.csdn.net/u014231523/article/details/76522486">swagger2常用注解说明</a></p>
+<p><a href="https://blog.csdn.net/xupeng874395012/article/details/68946676">swagger注释API详细说明</a></p>
+<p>以上几篇文章已经将Swagger注解的使用方式及作用阐述的非常清楚了。这里只给出代码案例</p>
+<p><code>springfox-swagger2:2.7.0</code>已经支持泛型返回对象</p>
+<p>&lt;font color="#ff0000"&gt;<strong>注意：千万不要在@ApiOperation注解里限定response()，让框架推断类型就行了</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>三. SQL</h3>
+<p>为了方便示例演示, 采用了H2内置数据库进行操作, 具体的SQL语句如下:</p>
+<p>schema.sql</p>
+<pre><code class="language-sql">create table if not exists `user` (
+    `id` int(10) unsigned not null auto_increment,
+    `username` varchar(30) not null,
+    `password` varchar(30) not null,
+    primary key (`id`)
+);
+</code></pre>
+<p>data.sql</p>
+<pre><code class="language-sql">insert into `user`(`id`, `username`, `password`) values (1, 'Jasonkay1', '123456');
+insert into `user`(`id`, `username`, `password`) values (2, 'Jasonkay2', '123456');
+insert into `user`(`id`, `username`, `password`) values (3, 'Jasonkay3', '123456');
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>四. 通用接口层</h3>
+<p>ResponseCode</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.constant;
+
+import static top.jasonkayzk.swaggerDemo.common.ResponseResult.ResponseParam;
+import static top.jasonkayzk.swaggerDemo.common.ResponseResult.ResponseParam.buildParam;
+
+/**
+ * Response Code
+ *
+ * @author zk
+ */
+public enum ResponseCode {
+
+    SUCCESS(buildParam(0, "SUCCESS"));
+
+    public final ResponseParam PARAM;
+
+    ResponseCode(ResponseParam param) {
+        this.PARAM = param;
+    }
+
+    public int getCode() {
+        return this.PARAM.getCode();
+    }
+
+    public String getMsg() {
+        return this.PARAM.getMsg();
+    }
+}
+</code></pre>
+<p>ResponseResult</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.common;
+
+import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+import lombok.Data;
+
+/**
+ * A general response class
+ *
+ * @author zk
+ */
+@Data
+@ApiModel(description = "General response class")
+public class ResponseResult&lt;T&gt; {
+
+    private static final int SUCCESS_CODE = 0;
+
+    private static final String SUCCESS_MESSAGE = "Success";
+
+    @ApiModelProperty(value = "响应码", name = "code", required = true, example = "" + SUCCESS_CODE)
+    private int code;
+
+    @ApiModelProperty(value = "响应消息", name = "msg", required = true, example = SUCCESS_MESSAGE)
+    private String msg;
+
+    @ApiModelProperty(value = "响应数据", name = "data")
+    private T data;
+
+
+    private ResponseResult() {
+        this(SUCCESS_CODE, SUCCESS_MESSAGE);
+    }
+
+    private ResponseResult(int code, String msg) {
+        this(code, msg, null);
+    }
+
+    private ResponseResult(T data) {
+        this(SUCCESS_CODE, SUCCESS_MESSAGE, data);
+    }
+
+    private ResponseResult(int code, String msg, T data) {
+        this.code = code;
+        this.msg = msg;
+        this.data = data;
+    }
+
+    public static &lt;T&gt; ResponseResult&lt;T&gt; success() {
+        return new ResponseResult&lt;&gt;();
+    }
+
+    public static &lt;T&gt; ResponseResult&lt;T&gt; successWithData(T data) {
+        return new ResponseResult&lt;&gt;(data);
+    }
+
+    public static &lt;T&gt; ResponseResult&lt;T&gt; failWithCodeAndMsg(int code, String msg) {
+        return new ResponseResult&lt;&gt;(code, msg, null);
+    }
+
+    public static &lt;T&gt; ResponseResult&lt;T&gt; buildWithParam(ResponseParam param) {
+        return new ResponseResult&lt;&gt;(param.getCode(), param.getMsg(), null);
+    }
+
+    @Data
+    public static class ResponseParam {
+
+        private int code;
+
+        private String msg;
+
+        private ResponseParam(int code, String msg) {
+            this.code = code;
+            this.msg = msg;
+        }
+
+        public static ResponseParam buildParam(int code, String msg) {
+            return new ResponseParam(code, msg);
+        }
+    }
+
+}
+</code></pre>
+<h3>五. MVC层</h3>
+<p>User Model层</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.entity;
+
+import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+import lombok.Data;
+
+import javax.persistence.*;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Null;
+
+/**
+ * @author zk
+ */
+@Data
+@Entity(name = "user")
+@ApiModel(description = "用户Model")
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Null(message = "id必须为空")
+    @ApiModelProperty(value = "User ID", name = "id")
+    private Integer id;
+
+
+    @Column
+    @NotBlank(message = "用户名不能为空")
+    @ApiModelProperty(value = "用户名", name = "username", required = true, example = "Jasonkay")
+    private String username;
+
+    @Column
+    @NotBlank(message = "密码不能为空")
+    @ApiModelProperty(value = "密码", name = "password", required = true, example = "123456")
+    private String password;
+}
+</code></pre>
+<p>UserDao</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.dao;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import top.jasonkayzk.swaggerDemo.entity.User;
+
+/**
+ * 用户仓库
+ *
+ * @author zk
+ */
+@Repository
+public interface UserDao extends JpaRepository&lt;User, Integer&gt; {
+
+}
+</code></pre>
+<p>UserSerivce</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.service;
+
+import top.jasonkayzk.swaggerDemo.entity.User;
+
+/**
+ * 用户Service接口
+ *
+ * @author zk
+ */
+public interface UserService {
+
+    /**
+     * 通过ID获取用户对象
+     *
+     * @param id 用户ID
+     * @return 用户对象
+     */
+    User getById(Integer id);
+
+    /**
+     * 创建用户
+     *
+     * @param user 用户对象
+     * @return 保存后的用户对象
+     */
+    User addUser(User user);
+}
+
+</code></pre>
+<p>UserServiceImpl</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.service.impl;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import top.jasonkayzk.swaggerDemo.dao.UserDao;
+import top.jasonkayzk.swaggerDemo.entity.User;
+import top.jasonkayzk.swaggerDemo.service.UserService;
+
+/**
+ * 用户Service实现类
+ *
+ * @author zk
+ */
+@Service
+public class UserServiceImpl implements UserService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UserServiceImpl.class);
+
+    private final UserDao userDao;
+
+    public UserServiceImpl(UserDao userDao) {
+        this.userDao = userDao;
+    }
+
+    @Override
+    public User getById(Integer id) {
+        User user = userDao.findById(id).orElse(null);
+        LOGGER.debug("ID为：{}，查询用户结果为：{}", id, user);
+        return user;
+    }
+
+    @Override
+    public User addUser(User user) {
+        return userDao.save(user);
+    }
+}
+
+</code></pre>
+<p>UserController</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo.controller;
+
+import io.swagger.annotations.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import top.jasonkayzk.swaggerDemo.common.ResponseResult;
+import top.jasonkayzk.swaggerDemo.entity.User;
+import top.jasonkayzk.swaggerDemo.service.UserService;
+
+/**
+ * 用户控制器
+ *
+ * @author zk
+ */
+@RestController
+@RequestMapping(value = "/user", produces = "application/json")
+// @Deprecated @Api(value = "User", tags = {"User"}, description = "用户相关")
+@Api(value = "User", tags = {"User", "用户相关"})
+public class UserController {
+
+    private final UserService userService;
+
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
+
+    @GetMapping("/{id}")
+    @ApiOperation(value = "使用ID查询用户")
+    @ApiImplicitParams({
+        @ApiImplicitParam(value = "ID", name = "id", dataType = "int",
+            paramType = "path", required = true, defaultValue = "1")
+    })
+    @ApiResponses({
+        @ApiResponse(code = 400, message = "请求参数有误"),
+        @ApiResponse(code = 401, message = "未授权"),
+        @ApiResponse(code = 403, message = "禁止访问"),
+        @ApiResponse(code = 404, message = "请求路径不存在"),
+        @ApiResponse(code = 500, message = "服务器内部错误")
+    })
+    public ResponseResult&lt;User&gt; getById(@PathVariable("id") Integer id) {
+        User user = userService.getById(id);
+        return ResponseResult.successWithData(user);
+    }
+
+    @PostMapping
+    @ApiOperation(value = "创建用户")
+    @ApiResponses({
+        @ApiResponse(code = 400, message = "请求参数有误"),
+        @ApiResponse(code = 401, message = "未授权"),
+        @ApiResponse(code = 403, message = "禁止访问"),
+        @ApiResponse(code = 404, message = "请求路径不存在"),
+        @ApiResponse(code = 500, message = "服务器内部错误")
+    })
+    public ResponseResult&lt;User&gt; addUser(@Validated @RequestBody User user) {
+        User dbUser = userService.addUser(user);
+        return ResponseResult.successWithData(dbUser);
+    }
+
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>六. Spring Boot配置</h3>
+<p>application.yml</p>
+<pre><code class="language-yaml">server:
+    port: 8848
+    address: 127.0.0.1
+
+spring:
+    profiles:
+        active: local # 默认使用local环境
+    http:
+        encoding:
+            charset: UTF-8
+            force: true
+            enabled: true
+    jpa:
+        show-sql: true # 是否打印sql语句
+        hibernate:
+            ddl-auto: none # 是否自动生成DDL
+
+swagger:
+    switch: true
+
+logging:
+    level:
+        root: INFO
+
+### local环境的profile
+---
+spring:
+    profiles: local
+    datasource:
+        platform: h2 # 使用H2数据库
+        schema: classpath:resources/schema.sql # 数据库schema文件位置，DDL
+        data: classpath:resources/data.sql # 数据库数据定义，DML
+        initialization-mode: always # Spring boot 2.x
+
+logging:
+    level:
+        top.jasonkayzk.swaggerDemo: DEBUG
+        org.hibernate: INFO
+        org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+        org.hibernate.type.descriptor.sql.BasicExtractor: TRACE
+</code></pre>
+<p>启动类SwaggerDemoApplication</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+/**
+ * Project start-up class
+ *
+ * @author zk
+ */
+@SpringBootApplication
+public class SwaggerDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SwaggerDemoApplication.class, args);
+    }
+
+}
+
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>七. 测试</h3>
+<p>SwaggerDemoApplicationTests</p>
+<pre><code class="language-java">package top.jasonkayzk.swaggerDemo;
+
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringRunner;
+import top.jasonkayzk.swaggerDemo.entity.User;
+import top.jasonkayzk.swaggerDemo.service.UserService;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class SwaggerDemoApplicationTests {
+
+    @Autowired
+    private UserService userService;
+
+    @Test
+    public void configTest() {}
+
+    @Test
+    public void getUser() {
+        User user = userService.getById(1);
+        Assert.assertEquals("Jasonkay1", user.getUsername());
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>演示界面</h3>
+<p><img alt="swaggerDemo1.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/swaggerDemo1.png"/></p>
+<p><img alt="swaggerDemo2.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/swaggerDemo2.png"/></p>
+<p><img alt="swaggerDemo3.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/swaggerDemo3.png"/></p>
+<p>&lt;br/&gt;</p>
+<p>具体源码可参考: https://github.com/JasonkayZK/Java_Samples/tree/swagger</p>
+<p>&lt;br/&gt;</p>

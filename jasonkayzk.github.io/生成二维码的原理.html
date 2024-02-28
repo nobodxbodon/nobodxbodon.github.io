@@ -1,0 +1,257 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E7%94%9F%E6%88%90%E4%BA%8C%E7%BB%B4%E7%A0%81%E7%9A%84%E5%8E%9F%E7%90%86.html">生成二维码的原理</a></h2>
+<hr/>
+<h2>title: 生成二维码的原理
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?89'
+date: 2020-12-07 20:57:24
+categories: 技术杂谈
+tags: [技术杂谈, 二维码]
+description: 二维码现在已经是日常生活中随处可见的了，本文讲解了二维码的原理，并且最后手把手教你使用JS创建一个二维码；</h2>
+<p>二维码现在已经是日常生活中随处可见的了，本文讲解了二维码的原理，并且最后手把手教你使用JS创建一个二维码；</p>
+<p>本文译自：</p>
+<ul>
+<li><a href="https://www.nayuki.io/page/creating-a-qr-code-step-by-step">Creating a QR Code step by step</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>生成二维码的原理</strong></h2>
+<p>下面是一个JavaScript生成QR Code的demo：</p>
+<p>https://www.nayuki.io/page/creating-a-qr-code-step-by-step</p>
+<p>下面以生成<code>HelloWorld</code>的二维码为例讲述了通过JavaScript是如何实现的；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>0.分析Unicode字符</strong></h3>
+<p><code>HelloWorld</code>包含了10个Unicode字符，每个字符的Unicode如下表：</p>
+<p>| <strong>Index</strong> | <strong>Char</strong> | <strong>CP hex</strong> | <strong>NM</strong> | <strong>AM</strong> | <strong>BM</strong> | <strong>KM</strong> |
+| :-------: | :------: | :--------: | :----: | :----: | :----: | :----: |
+|     0     |    H     |    U+48    |   No   |  Yes   |  Yes   |   No   |
+|     1     |    e     |    U+65    |   No   |   No   |  Yes   |   No   |
+|     2     |    l     |    U+6C    |   No   |   No   |  Yes   |   No   |
+|     3     |    l     |    U+6C    |   No   |   No   |  Yes   |   No   |
+|     4     |    o     |    U+6F    |   No   |   No   |  Yes   |   No   |
+|     5     |    W     |    U+57    |   No   |  Yes   |  Yes   |   No   |
+|     6     |    o     |    U+6F    |   No   |   No   |  Yes   |   No   |
+|     7     |    r     |    U+72    |   No   |   No   |  Yes   |   No   |
+|     8     |    l     |    U+6C    |   No   |   No   |  Yes   |   No   |
+|     9     |    d     |    U+64    |   No   |   No   |  Yes   |   No   |</p>
+<p>在对每个字符进行Encode编码时，要选择对应的编码方式，上面的NM、AM、BM、KM分别表示：</p>
+<ul>
+<li>Numeric：数值编码；</li>
+<li>Alphanumeric：字母数字编码；</li>
+<li>Byte：二进制编码；</li>
+<li>Kanji：汉字编码；</li>
+</ul>
+<p>如下表：</p>
+<p>|   <strong>Mode</strong>   | <strong>Encodable</strong> |
+| :----------: | :-----------: |
+|   Numeric    |      No       |
+| Alphanumeric |      No       |
+|     Byte     |      Yes      |
+|    Kanji     |      No       |</p>
+<p>最后选择各个字符都可以使用的二进制编码进行编码：Byte；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>1.创建数据段</strong></h3>
+<p>将每个字符转换为bit位；</p>
+<p>对于数字和字母数字模式而言，连续字符会被编码组合在一起；</p>
+<p>对于字节模式，字符会产生8、16、24或32位；</p>
+<p>如下表：</p>
+<p>| <strong>Index</strong> | <strong>Char</strong> | <strong>Values (hex)</strong> | <strong>Bits</strong> |
+| :-------: | :------: | :--------------: | :------: |
+|     0     |    H     |        48        | 01001000 |
+|     1     |    e     |        65        | 01100101 |
+|     2     |    l     |        6C        | 01101100 |
+|     3     |    l     |        6C        | 01101100 |
+|     4     |    o     |        6F        | 01101111 |
+|     5     |    W     |        57        | 01010111 |
+|     6     |    o     |        6F        | 01101111 |
+|     7     |    r     |        72        | 01110010 |
+|     8     |    l     |        6C        | 01101100 |
+|     9     |    d     |        64        | 01100100 |</p>
+<p>创建的单个数据段如下：</p>
+<ul>
+<li>模式：字节；</li>
+<li>计数：10字节；</li>
+<li>数据：80位长；</li>
+</ul>
+<blockquote>
+<p>为了简单起见，这个演示程序创建了一个单独的段；</p>
+<p>但也可以对文本进行最佳分割，以最小化总比特长度，见：</p>
+<ul>
+<li><a href="https://www.nayuki.io/page/optimal-text-segmentation-for-qr-codes">segment the text optimally</a></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>2.调整适应二维码版本号的数据段</strong></h3>
+<p>实际的二维码表示每个数据段所需的总位长度，取决于版本：</p>
+<p>|    Range****    | <strong>Num bits</strong> | <strong>Num codewords</strong> |
+| :-------------: | :----------: | :---------------: |
+|  Version 1 ~ 9  |     148      |        19         |
+| Version 10 ~ 26 |     156      |        20         |
+| Version 27 ~ 40 |     156      |        20         |</p>
+<blockquote>
+<p><strong>注：一个<code>codeword</code>被定义为8位，即一个字节(byte)；</strong></p>
+</blockquote>
+<p>每个版本数据段的二维码容量和纠错级别，以及数据格式：</p>
+<p>| <strong>Version</strong> | <strong>ECC L</strong> | <strong>ECC M</strong> | <strong>ECC Q</strong> | <strong>ECC H</strong> |
+| :---------: | :-------: | :-------: | :-------: | :-------: |
+|      1      |    19     |    16     |    13     |     9     |
+|      2      |    34     |    28     |    22     |    16     |
+|      3      |    55     |    44     |    34     |    26     |
+|      4      |    80     |    64     |    48     |    36     |
+|      5      |    108    |    86     |    62     |    46     |
+|      6      |    136    |    108    |    76     |    60     |
+|      7      |     …     |     …     |     …     |     …     |</p>
+<p>我们选择的版本是：1；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>3.连接段、添加填充并生成代码字</strong></h3>
+<p>将各个位字符串串连接在一起：</p>
+<p>|      Item       |                           Bit data                           | Num bits | Sum bits |
+| :-------------: | :----------------------------------------------------------: | :------: | :------: |
+| Segment 0 mode  |                             0100                             |    4     |    4     |
+| Segment 0 count |                           00010001                           |    8     |    12    |
+| Segment 0 data  | 01001000&lt;br /&gt;01100101&lt;br /&gt;01101100&lt;br /&gt;01101100&lt;br /&gt;01101111&lt;br /&gt;00101100&lt;br /&gt;00100000&lt;br /&gt;01110111&lt;br /&gt;01101111&lt;br /&gt;01110010&lt;br /&gt;01101100&lt;br /&gt;01100100&lt;br /&gt;00100001&lt;br /&gt;00100000&lt;br /&gt;00110001&lt;br /&gt;00110010&lt;br /&gt;00110011 |   136    |   148    |
+|   Terminator    |                             0000                             |    4     |   152    |
+|   Bit padding   |                                                              |    0     |   152    |
+|  Byte padding   |                                                              |    0     |   152    |</p>
+<p>注：</p>
+<ul>
+<li>每个段始终是4位；</li>
+<li>总的字符数取决于二维码模式和版本；</li>
+<li>通常情况下，结束符都为4个0，除非数据的字节数已经达到了二维码版本长度（会有更少的0）；</li>
+<li>位填充会在在0~7个0位之间，以填充最后一个字节中所有未使用的位；</li>
+<li>字节填充由交替（十六进制）EC和11组成，直到达到二维码版本要求的容量；</li>
+</ul>
+<p>整个数据位序列：</p>
+<p>010000010010010010110010110110001101100011101001011000101100001000010111101110111011000110001100011000110001100011000110001100011000110000</p>
+<p>若以十六进制显示整个序列，则是：</p>
+<p>41 14 86 56 C6 C6 F2 C2 07 76 F7 26 C6 42 12 03 13 23 30</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>4.拆分块，添加ECC</strong></h3>
+<p>上述整个十六进制被分为了多个块，信息如下：</p>
+<p>| Number of data codewords:       | 19   |
+| ------------------------------- | ---- |
+| Number of blocks:               | 1    |
+| Data codewords per short block: | 19   |
+| Data codewords per long block:  | N/A  |
+| ECC codewords per any block:    | 7    |
+| Number of short blocks:         | 1    |
+| Number of long blocks:          | 0    |</p>
+<p>将数据码字序列（0 ~ 19）拆分为短块和长块；</p>
+<p>然后针对每个块，计算ECC码字（20 ~ 26）并将其附加到块的末尾：</p>
+<p>:</p>
+<p>|      | Block index |
+| ---: | ----------: |
+|      |           0 |
+|    0 |          41 |
+|    1 |          14 |
+|    2 |          86 |
+|    3 |          56 |
+|    4 |          C6 |
+|    5 |          C6 |
+|    6 |          F2 |
+|    7 |          C2 |
+|    8 |          07 |
+|    9 |          76 |
+|   10 |          F7 |
+|   11 |          26 |
+|   12 |          C6 |
+|   13 |          42 |
+|   14 |          12 |
+|   15 |          03 |
+|   16 |          13 |
+|   17 |          23 |
+|   18 |          30 |
+|   19 |             |
+|   20 |          85 |
+|   21 |          A9 |
+|   22 |          5E |
+|   23 |          07 |
+|   24 |          0A |
+|   25 |          36 |
+|   26 |          C9 |</p>
+<blockquote>
+<p><strong>注：此处省略了计算Reed-Solomon纠错码的过程；</strong></p>
+</blockquote>
+<p>结合来自不同块的数据/ECC码字形成的最终码字序列：</p>
+<p>41 14 86 56 C6 C6 F2 C2 07 76 F7 26 C6 42 12 3 13 30 <strong>85 A9 5E 07 0A 36 C9</strong></p>
+<p>对应的Z字扫描：</p>
+<p>0100000100010100100001100101011011000110110001101111001011000010000001110111011011110111001001101100011001000010000100100000001100010011001000110011000010000101101010010101111000000111000010100011011011001001</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>5.绘制固定图案</strong></h3>
+<p>绘制水平和垂直基准线（在第6行和第6列上，从左上角开始，从0开始计算）：</p>
+<p><img alt="qrcode_1.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_1.png"/></p>
+<p>在三个角绘制7×7查找器图案（此时会覆盖一些基准模块）：</p>
+<p><img alt="qrcode_2.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_2.png"/></p>
+<p>在查找器相邻区域绘制临时的格式占位图案：</p>
+<p><img alt="qrcode_3.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_3.png"/></p>
+<p>&lt;br/&gt;</p>
+<h3><strong>6.绘制代码字</strong></h3>
+<p>计算Z字形扫描（从右下角开始）访问所有未填充的模块（跳过部分已经确定的部分）：</p>
+<p><img alt="qrcode_4.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_4.png"/></p>
+<p>根据Z字形扫描顺序和最终码字序列的位值绘制数据/ECC模块：</p>
+<p><img alt="qrcode_5.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_5.png"/></p>
+<p>例如，二进制代码字的字节C5对应二进制为11000101，则生成模块序列：</p>
+<p>黑、黑、白、白、白、黑、白、黑；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>7.添加Mask遮罩</strong></h3>
+<p>有多种Mask的样式，Mask的样式仅影响非确定部分：</p>
+<p><img alt="qrcode_6.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_6.png"/></p>
+<p>将数据、ECC和剩余其他部分和Mask进行异或：</p>
+<p><img alt="qrcode_7.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_7.png"/></p>
+<p>紧靠查找器绘制实际的格式位：</p>
+<p><img alt="qrcode_8.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_8.png"/></p>
+<p>&lt;br/&gt;</p>
+<h3><strong>8.寻找多余的样式</strong></h3>
+<p>水平相同颜色的区域（每个至少5个单位长）：</p>
+<p><img alt="qrcode_9.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_9.png"/></p>
+<p>垂直相同颜色的区域（每个至少5个单位长）：</p>
+<p><img alt="qrcode_10.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_10.png"/></p>
+<p>2×2颜色相同的区域：</p>
+<p><img alt="qrcode_11.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_11.png"/></p>
+<p>水平和查找器相同的样式：</p>
+<p><img alt="qrcode_12.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_12.png"/></p>
+<p>垂直和查找器相同的样式：</p>
+<p><img alt="qrcode_13.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/qrcode_13.png"/></p>
+<blockquote>
+<p>我认为，此步操作是为了避免识别到多个查找器样式；</p>
+</blockquote>
+<p>结果统计：</p>
+<p>| Side length:         | 21      |
+| -------------------- | ------- |
+| Total modules:       | 441     |
+| White modules:       | 217     |
+| Black modules:       | 224     |
+| Proportion black:    | 50.794% |
+| Deviation from half: | 0.794%  |</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>9.计算罚分，选择最佳Mask</strong></h3>
+<p>| Mask | RunP | BoxP | FindP | BalP |  TotalP  |
+| :--: | :--: | :--: | :---: | :--: | :------: |
+|  0   | 205  | 159  |  840  |  0   | <strong>1204</strong> |
+|  1   | 187  | 147  |  800  |  0   | <strong>1134</strong> |
+|  2   | 173  | 111  |  800  |  0   | <strong>1084</strong> |
+|  3   | 167  | 114  |  800  |  0   | <strong>1081</strong> |
+|  4   | 195  | 126  |  800  |  0   | <strong>1121</strong> |
+|  5   | 181  | 159  |  760  |  0   | <strong>1100</strong> |
+|  6   | 183  | 126  |  880  |  0   | <strong>1189</strong> |
+|  7   | 183  | 114  |  840  |  0   | <strong>1137</strong> |</p>
+<p>最低总罚分：Mask 3；</p>
+<p>如何计算罚分：</p>
+<ul>
+<li>RunP：相同颜色的每连续5个点为3分，每连续6个点为4分，每连续7个点为5分，等等；</li>
+<li>BoxP：同色每2×2盒为3分。框可以重叠；</li>
+<li>FindP：每个和扫描器类似的样式(<code>finder-like</code>)图案得40分。可以重叠计分；</li>
+<li>BalP：黑色模块比例在[45%，55%]范围内得0分；在[40%，60%]范围内得10分；在[35%，65%]范围内得20分；在[30%，70%]范围内得30分；以此类推；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2>附录</h2>
+<p>本文译自：</p>
+<ul>
+<li><a href="https://www.nayuki.io/page/creating-a-qr-code-step-by-step">Creating a QR Code step by step</a></li>
+</ul>
+<p>延申阅读：</p>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/QR_code#Design">Wikipedia: QR code - Design</a></li>
+<li><a href="https://www.thonky.com/qr-code-tutorial/">Thonky.com: QR Code Tutorial</a></li>
+<li><a href="https://research.swtch.com/qart">research!rsc (Russ Cox): QArt Codes</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

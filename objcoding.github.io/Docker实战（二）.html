@@ -1,0 +1,144 @@
+<h2>原文：<a href="https://objcoding.github.io/2017-12-07-Docker(2">Docker实战（二）</a>.html)</h2>
+<hr/>
+<h2>layout: post
+title: "Docker实战（二）"
+categories: Docker
+tags: Docker Dockerfile
+author: 张乘辉</h2>
+<ul>
+<li>content
+{:toc}
+制作镜像一般有三种方法，第一种是 run 一个基础容器，在里面下载好我们需要的东西，然后通过 docker commit 命令生成一个新的镜像，第二种方法是基于本地模版导入，第三种就是这篇文章说的基于 Dockerfile 创建。</li>
+</ul>
+<h2>Dockerfile 文件结构</h2>
+<p>Dockerfile 大概可以分为四部分：基础镜像信息、维护者信息、操作指令、容器启动时执行的命令。</p>
+<p>基础镜像信息指定了 Dockerfile 生成的镜像是基于哪个基础镜像的，且第一行必须需要用 FROM 指令指定基础镜像，操作者信息是为了让使用者知道这个镜像的作者的信息，操作指令是在基础镜像的基础中添加一些新的配置和资源，需要用到 Dockerfile 的指令，容器启动时执行的命令是在容器启动完成后立即执行的命令，一般来说，这个容器的任务就是这条执行命令，结构如下所示：</p>
+<pre><code class="language-dockerfile"># 指定基础镜像
+FROM centos
+
+# 维护者信息
+MAINTAINER zhangchenghui zhangchenghui.dev@gmail.com
+
+# 操作指令
+RUN yum update &amp;&amp; yum install tomcat
+COPY xxx/data /data
+VOLUME [ "/data" ]
+
+# 容器启动时执行命令
+CMD ["sh", "/run.sh"]
+</code></pre>
+<h2>指令</h2>
+<h3>FROM</h3>
+<p>这个命令是每个 Dockerfile 必备的，用于指定基础镜像，且必须在第一行，格式为：</p>
+<pre><code class="language-dockerfile">FROM &lt;image id&gt; 或 FROM &lt;image&gt;:&lt;tag&gt;
+</code></pre>
+<p>这个命令我可以理解为相当于是面向对象中的继承吧，这给我们制作镜像带来了很大的便利，不必重复造轮子。</p>
+<h3>RUN</h3>
+<p>每个 run 相当于一次 docker commit，就是说每执行一次 run，都在当前镜像的基础上 commit 一个新的镜像，因此尽量把命令集中用 run 执行一次，免得生成过多的镜像，同时执行多个命令时可以用 &amp;&amp; 连接起来，如果太长了也可以用 \ 换行，格式为：</p>
+<pre><code class="language-dockerfile">RUN &lt;command&gt; 或 RUN [ "sh", "/run.sh" ]
+</code></pre>
+<h3>CMD  &amp;&amp;  ENTRYPOINT</h3>
+<p>CMD 和 ENTRYPOINT 都可以作为容器启动时执行的命令，为什么要将这两个指令放一起讲呢，因为 ENTRYPOINT 可以作为一个入口点，将 CMD 当作参数传递，CMD 格式如下：</p>
+<pre><code class="language-dockerfile"># shell格式
+CMD /usr/local/bin/nginx
+
+# exec格式
+CMD [ "curl", "http://xxx.cn" ]
+</code></pre>
+<p>而 ENTRYPOINT 可以写成：</p>
+<pre><code class="language-dockerfile">ENTRYPOINT "&lt;CMD&gt;"
+</code></pre>
+<p>CMD 的缺点就是命令的参数在 Dockerfile 中固定了，不能灵活添加参数，而 ENTRYPOINT 可以在执行 docker run 指令时灵活地在 ENTRYPOINT 中添加参数，比如：</p>
+<pre><code class="language-dockerfile">CMD [ "curl", "-s", "http://ip.cn" ]
+</code></pre>
+<p>这条执行命令就固定了，运行容器时不能再继续往里面添加参数了，因为如果没有入口点，这时你运行容器：</p>
+<pre><code class="language-dockerfile">docker run &lt;容器名字&gt; -i
+</code></pre>
+<p>docker 根本识别不了这个「 -i 」是什么东东，我们再来看看：</p>
+<pre><code class="language-dockerfile">ENTRYPOINT [ "curl", "-s", "http://ip.cn" ]
+</code></pre>
+<p>这时你再运行，docker 就会在这个入口点添加新的参数。</p>
+<p><em>注：如果 Dockerfile 有多个 ENTRYPOINT入 口点，只有最后一个生效。</em></p>
+<h3>EXPOSE</h3>
+<p>用于向宿主机暴露容器中的端口，格式为 ：</p>
+<pre><code class="language-dockerfile">EXPOSE &lt;port&gt; 
+</code></pre>
+<p>通过该命令，容器内的端口会与宿主机的指定的端口连接，我们通过访问宿主机指定的端口对容器进行访问，当然如果是通过 Docker Swarm 进行容器编排部署的容器，容器内的端口都会统一暴露在夸主机网络代理层中，这个在后面的 Docker Swarm 相关文章会有提及。</p>
+<h3>ENV</h3>
+<p>定位 Dockerfile 中的环境变量，格式为：</p>
+<pre><code class="language-dockerfile">ENV &lt;key&gt; &lt;value&gt;
+</code></pre>
+<p>这个命令作用还是挺大的，因为通过环境变量，我们可以让一份 Dockerfile 文件制作更多的镜像，只需使用不同的环境变量即可。</p>
+<h3>ADD &amp;&amp;  COPY</h3>
+<p>这两个指令可以将 Dockerfile 的相对路径的资源，复制到镜像中，当目标路径不存在会自动创建，格式为：</p>
+<pre><code class="language-dockerfile">ADD &lt;src&gt; &lt;test&gt;
+COPY &lt;src&gt; &lt;test&gt;
+</code></pre>
+<p>两个指令唯一区别是 ADD 可以指定一条 URL 当作资源，而 COPY 只能是 Dockerfile 的相对路径。</p>
+<p>当项目在远程 git 仓库中时，我们就可以在编写 Dockerfile 时利用 ADD 指令主动从 git 仓库中拉取最新代码到容器中：</p>
+<pre><code class="language-dockerfile">ADD https://github.com/zhangchenghuidev/zhangchenghuidev.github.io.git /data
+</code></pre>
+<h3>VOLUME</h3>
+<p>VOLUME 指令可以使容器在启动时自动挂载一个目录或文件到宿主机中，但是这个命令并不能指定宿主机的一个目录，只能随机地挂载 /var/lib/docker/volumes/xxx/_data 其中一个目录，例如在 Dockerfile 中：</p>
+<pre><code class="language-dockerfile">VOLUME [ "/data" ]
+</code></pre>
+<p>我们通过 Docker inspect &lt;容器名称或id&gt; 查看容器信息可看到：</p>
+<p><img alt="dockerfile" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/dockerfile3.png"/></p>
+<p>而我们发现，我们在 Docker run 的 -v 中 是可以挂载宿主机指定的目录。</p>
+<h3>WORKDIR</h3>
+<p>指定当前镜像的工作目录，都知道每个 run 命令都会 commit 一个新镜像，下一个 run 继续在上一个镜像的基础上继续 commit，如果上一个镜像指定了当前目录的话，那么下一次 run，就会基于这个目录去工作了，没有指定默认是根目录。格式如下：</p>
+<pre><code class="language-dockerfile">WORKDIR &lt;工作路径&gt;
+</code></pre>
+<h2>实战</h2>
+<p>创建各类资源：</p>
+<pre><code class="language-bash">cd ~
+mkdir docker
+cd docker
+mkdir sample
+# 将项目复制到sample目录
+cp /usr/local/tomcat/webapps sample
+touch Dockerfile
+</code></pre>
+<p><img alt="dockerfile" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/dockerfile4.png"/></p>
+<p>编写Dockerfile：</p>
+<pre><code class="language-bash">vim Dockerfile
+</code></pre>
+<pre><code class="language-dockerfile">from tomcat
+
+MAINTAINER zhangchenghui zhangchenghui.dev@gamil.com
+
+ENV WORKSPACE /usr/local/tomcat
+
+WORKDIR $WORKSPACE
+
+COPY sample/webapps webapps
+
+Run echo '&lt;h1&gt;hello, docker&lt;/h1&gt;' &gt; webapps/index.html
+
+VOLUME [ "/data" ]
+
+EXPOSE 8080 80
+
+CMD [ "sh", "bin/catalina.sh" ]
+</code></pre>
+<p>从上面指令可看出来，这是在 tomcat 镜像的基础上做的，设定工作目录在 tomcat 根目录下 /usr/local/tomcat，将宿主机 Dockerfile 相对路径下的项目复制到容器 tomcat 的 webapps 下，在 webapps 下创建一个 index.html 文件，并复制内容为 &lt;h1&gt;hello, docker&lt;/h1&gt; ，挂载 /data 目录到宿主机上，对应宿主机的  /var/lib/docker/volumes/xxx/_data 其中一个目录下，开放 8080 80 端口，最后设定在容器启动时执行启动 tomcat 容器的指令。</p>
+<p>启动容器：</p>
+<pre><code class="language-bash">docker build -t myweb:v4 .
+</code></pre>
+<p>这个「 . 」表示当前目录，因为 Dockerfile 就在当前目录下，而且 Dockerfile 中的相对路径也是根据 Dockerfile 的当前目录来确定的。</p>
+<p>构建过程：</p>
+<p><img alt="docker build" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/dockerfile.png"/></p>
+<p>查看列表，刚刚利用 dockerfile 生成的镜像就有了：</p>
+<p><img alt="docker images" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/dockerfile2.png"/></p>
+<p>启动一个容器：</p>
+<pre><code class="language-dockerfile">docker run -d -it -p 8080:8080 bd066935d00a
+</code></pre>
+<p><img alt="dockerfile" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/dockerfile5.png"/></p>
+<p>查看一下容器挂载点，是不是和 Dockerfile 设定的一样：</p>
+<pre><code class="language-dockerfile">docker inspect 609a4f1962dc
+</code></pre>
+<p><img alt="dockerfile" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/dockerfile3.png"/></p>
+<p>进入容器，看项目是不是已经复制到 webapps 目录中：</p>
+<pre><code class="language-dockerfile">docker exec -it 609a4f1962dc /bin/bash
+</code></pre>
+<p><img alt="dockerfile" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/dockerfile6.png"/></p>

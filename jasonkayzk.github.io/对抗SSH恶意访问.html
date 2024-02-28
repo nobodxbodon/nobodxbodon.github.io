@@ -1,0 +1,199 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%AF%B9%E6%8A%97SSH%E6%81%B6%E6%84%8F%E8%AE%BF%E9%97%AE.html">对抗SSH恶意访问</a></h2>
+<hr/>
+<h2>title: 对抗SSH恶意访问
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?99'
+date: 2020-12-08 10:42:28
+categories: Linux
+tags: [Linux, SSH]
+description: 在使用腾讯云或者阿里云时，每次登录都会看到成千上万次的SSH登录失败提示；由于我们的服务器是暴露在公网IP之下的，每天都会被恶意扫描，本文分析了这些恶意扫描，并尽可能给出解决方案；</h2>
+<p>在使用腾讯云或者阿里云时，每次登录都会看到成千上万次的SSH登录失败提示；</p>
+<p>由于我们的服务器是暴露在公网IP之下的，每天都会被恶意扫描，本文分析了这些恶意扫描，并尽可能给出解决方案；</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>对抗SSH恶意访问</h2>
+<p>几乎每次登录的时候都能看到SSH的提示：</p>
+<pre><code class="language-bash">Last failed login: Tue Dec  8 10:44:59 CST 2020 from 54.38.188.231 on ssh:notty
+There were 8729 failed login attempts since the last successful login.
+Last login: Mon Dec  7 11:01:39 2020 from 116.57.96.116
+</code></pre>
+<p>最近偶尔在V2EX上看到了一些关于这个的帖子：</p>
+<ul>
+<li><a href="https://cn.v2ex.com/t/646807">防止 vps 上 ssh 端口被恶意扫描</a></li>
+<li><a href="https://www.v2ex.com/t/191130">服务器无时无刻不被 SSH 爆破</a></li>
+</ul>
+<p>除了选择云厂商提供的收费防护服务之外，我们这些口袋不富裕的人有什么简单的解决方案呢？</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>配置SSH</strong></h3>
+<p>更改SSH配置可以：</p>
+<ul>
+<li>更换SSH端口；</li>
+<li>安装fail2ban：使用 fail2ban 去屏蔽多次尝试密码的 IP；</li>
+<li>禁止root登录；</li>
+<li>使用密码加 Google Authenticator 2步验证进行登录；</li>
+<li>禁止使用密码登录：只使用密钥登录；</li>
+</ul>
+<p>下面一一来讲述：</p>
+<h4><strong>① 更换SSH端口</strong></h4>
+<p>修改ssh端口需要修改ssh配置、修改firewall配置、修改SElinux配置三个文件；</p>
+<p>以下均是使用root权限执行；</p>
+<h5><strong>1.修改<code>/etc/ssh/sshd_config</code>文件</strong></h5>
+<p>使用vi编辑配置文件：</p>
+<pre><code class="language-bash">vi /etc/ssh/sshd_config
+</code></pre>
+<p>进入该文件，找到<code>Port 22</code>这一行，然后在下面添加一行：如<code>Port 43</code>作为新的端口；</p>
+<blockquote>
+<p><strong>注意：在确定可以使用新端口登录前，不要注释<code>Port 22</code>这一行，以免无法登录；</strong></p>
+</blockquote>
+<h5><strong>2.修改firewall配置</strong></h5>
+<pre><code class="language-bash"># firewall添加你选择的ssh端口，--permanent是保存设置，否则下次重启后不生效
+firewall-cmd --zone=public --add-port={port}/tcp --permanent 
+# 若firewall未启动，则先启动
+systemctl start firewalld 
+# 重新加载firewall
+firewall-cmd --reload 
+# 查看端口是否添加成功，yes表示成功，no表示未添加成功
+firewall-cmd --zone=public --query-port={port}/tcp 
+</code></pre>
+<p>将上面的<code>{port}</code>改为你对应的端口即可；</p>
+<h5><strong>3.修改SELinux配置</strong></h5>
+<p>这一步有的云服务器可能是关闭SELinux的，就不需要修改；</p>
+<p>但是默认应该是打开了SELinux的，因此推荐修改；</p>
+<pre><code class="language-bash"># 查看当前SELinux允许的ssh端口
+semanage port -l | grep ssh 
+</code></pre>
+<p>如果显示<code>semanage command not found</code>，则：</p>
+<pre><code class="language-bash">yum provides semanage # 或 yum whatprovides semanage
+yum -y install policycoreutils-python # 安装
+/usr/sbin/sestatus -v # 查看SELinux状态，enabled即为开启状态
+</code></pre>
+<p>若未开启，则<code>vi /etc/selinux/config</code>，将<code>SELINUX=disabled</code>修改为<code>SELINUX=enforcing</code>，需要重启；</p>
+<pre><code class="language-bash">semanage port -a -t ssh_port_t -p tcp {port} # 添加ssh端口
+semanage port -l | grep ssh # 再执行一次查看是否添加成功
+</code></pre>
+<h5><strong>4.重启服务并测试</strong></h5>
+<pre><code class="language-bash">systemctl restart sshd  
+systemctl restart firewalld.service  
+shutdown -r now # 重启机器，最好重启一下
+</code></pre>
+<p>重启后使用新端口进行ssh登录，测试是否添加成功；</p>
+<pre><code class="language-bash">ssh usrname@server -p {port} # 使用-p指定端口
+</code></pre>
+<p>登录成功后<code>vi /etc/ssh/sshd_config</code>将<code>Port 22</code>这一行注释，并继续重启服务以生效；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>② 使用fail2ban去屏蔽多次尝试密码的IP</strong></h4>
+<p>修改默认ssh端口后已经可以防御很多只扫描特定端口的脚本，但是还是有被密码爆破的风险，因此我们安装fail2ban来屏蔽多次尝试密码的坏人；</p>
+<pre><code class="language-bash">yum -y install epel-release # CentOS内置源并未包含fail2ban，需要先安装epel源
+yum -y install fail2ban # 安装fail2ban
+</code></pre>
+<p><code>vi /etc/fail2ban/jail.local</code>来新建fail2ban的配置，复制以下配置作为默认规则：</p>
+<pre><code class="language-bash">[DEFAULT]
+ignoreip = 127.0.0.1/8
+bantime  = 86400
+findtime = 600
+maxretry = 5
+#这里banaction必须用firewallcmd-ipset,这是fiewalll支持的关键，如果是用Iptables请不要这样填写
+banaction = firewallcmd-ipset
+action = %(action_mwl)s
+
+[sshd]
+enabled = true
+filter  = sshd
+port    = {port}
+# 这里的{port}为你修改后的端口，如43
+action = %(action_mwl)s
+logpath = /var/log/secure
+</code></pre>
+<p>上面的配置为十分钟内，如果连续错误超过5次，就ban掉这个IP；</p>
+<p>输入<code>systemctl start fail2ban</code>启动fail2ban；</p>
+<p><code>fail2ban-client status sshd</code>可以显示fail2ban的状态，查看是否有被攻击的记录；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>③ 禁止root用户直接登录</strong></h4>
+<p>前面由于要修改、安装各种服务，因此使用root账户比较方便；</p>
+<p>但在VPS的实际使用中，首先我们要避免被坏人攻陷，直接root登录；其次我们要避免使用root用户执行危险的操作，发生意外，所以我们禁止root用户直接登录，新建一个拥有sudo权限的用户，平时使用其来登录和执行操作，减低风险；</p>
+<pre><code class="language-bash">useradd newone # 新建名为newone的用户
+passwd newone # 设置newone的密码
+</code></pre>
+<blockquote>
+<p><strong>注意！！！下面这步非常重要，否则新用户可能无法登录。</strong></p>
+<p>输入<code>vi /etc/ssh/sshd_config</code>，使用<code>AllowUsers newone</code>添加可以ssh登录的用户；</p>
+<p><code>systemctl restart sshd</code>重启ssh服务；</p>
+</blockquote>
+<p>修改上一步后，保留一个终端窗口，测试新用户是否能成功登录，如果能成功登录，则禁用root用户登录；</p>
+<p><code>vi /etc/ssh/sshd_config</code>修改其中<code>PermitRootLogin yes</code>为<code>PermitRootLogin no</code>。<code>systemctl restart sshd</code>重启ssh服务；</p>
+<p>此时root账户已经无法登录；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>④ 使用密码加 Google Authenticator 2步验证进行登录</strong></h4>
+<p>比较安全的SSH登录方式，一种是禁止密码且只允许密钥登录，只要保证密钥的安全，就能保证登录的安全；而另外一种2步验证的方法了；</p>
+<p>这里我们会用到Google Authentication，其实很多网站/App已经运用到2步验证了；</p>
+<h5><strong>1.安装Google Authenticator</strong></h5>
+<pre><code class="language-bash">yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+yum install google-authenticator
+</code></pre>
+<p>切换到要使用Google Authenticator的用户，然后输入<code>google-authenticator</code>，屏幕会显示一个超大的二维码，你需要使用支持Google Authenticator的软件，扫描该二维码或者输入“secret key”以生成动态的验证码；</p>
+<h5><strong>2.修改配置</strong></h5>
+<p>修改pam配置文件：<code>vi /etc/pam.d/sshd</code>；</p>
+<p>在首行加入<code>auth required pam_google_authenticator.so</code>，这样子在输入密码登录之前，会先要求输入Google Authentication的验证码，如果是希望反过来，则将这行代码写入到pam配置文件的最后则可；</p>
+<p>修改ssh配置文件：<code>vi /etc/ssh/sshd_config</code>；</p>
+<p>将<code>ChallengeResponseAuthentication no</code>修改为<code>ChallengeResponseAuthentication yes</code>；</p>
+<p>检查系统时间：</p>
+<pre><code class="language-bash">#查看下服务器时间
+date
+#如果时区不一样，再使用命令修改为本地时间
+ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+</code></pre>
+<p>最后，在保留一个活动的终端窗口的前提下，重启ssh服务，<code>systemctl restart sshd</code>，然后重新登录该用户测试是否成功（登录失败也有可能是因为终端软件的问题，比如，尝试更换软件）；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>⑤ 使用有密码的SSH密钥进行登录</strong></h4>
+<p>其实，使用密钥进行登录已经算非常安全了，但是为了更加安全，我们还可以给密钥文件添加密码；</p>
+<blockquote>
+<p>建议在自己的常用工作电脑上使用密钥登录服务器，而在其他电脑上则保留使用密码登录的方式；</p>
+</blockquote>
+<p>使用密钥登录，我们会生成非对称加密的一对密钥，分别称之为“私钥”和“公钥”；</p>
+<p>如果公钥加密的信息只有私钥才能解开，那么只要私钥不泄露，通信就是安全的；</p>
+<blockquote>
+<p>不清楚非对称加密是什么？看看阮一峰老师的：</p>
+<ul>
+<li><a href="https://www.ruanyifeng.com/blog/2013/06/rsa_algorithm_part_one.html">RSA算法原理（一）</a></li>
+</ul>
+</blockquote>
+<h5><strong>1.生成密钥对</strong></h5>
+<p>在终端输入<code>ssh-keygen</code>来生成密钥，默认会保存在<code>~/.ssh/id_rsa</code>，可以自定义该文件的地址和名称，例如<code>~/.ssh/remote_server</code>；</p>
+<p>然后会询问是否添加密钥，默认是不设置密码的，这里可以设定密码；</p>
+<p>然后会生成密钥文件，其中你指定的路径就是私钥文件，而<code>.pub</code>结尾的就是公钥文件；</p>
+<p>然后在本地的<code>~/.ssh/config</code>中添加以下代码，用于指定密钥：</p>
+<pre><code class="language-bash">Host RemoteServer # 随意自己起，但是要用到
+HostName 102.133.250.111 # 修改为服务器的地址、域名或IP
+User newone # 指定登录的用户
+PreferredAuthentications publickey
+IdentityFile ~/.ssh/remote_server # 指定私钥的地址
+Port {port} # 默认端口为22，如果你修改了端口，则修改为对应的端口
+</code></pre>
+<h5><strong>2.将公钥存放到目标服务器上</strong></h5>
+<p>打开目标服务器的目标用户的<code>~/.ssh</code>路径，然后将<code>.ssh/remote_server.pub</code>文件的内容复制到<code>~/.ssh/authorized_keys</code>里，如果没有<code>~/.ssh</code>文件夹则参考以下代码，先localhost登录一次；</p>
+<pre><code class="language-bash">$ ssh localhost # 输入密码登录
+The authenticity of host 'localhost (::1)' can't be established.
+ECDSA key fingerprint is SHA256:DYd7538oOsqpIIDTs01C3G4S6PRE7msA91yUgk9Dzxk.
+ECDSA key fingerprint is MD5:88:80:21:03:b2:52:6b:06:ff:c7:3b:d5:2d:47:c9:ad.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added 'localhost' (ECDSA) to the list of known hosts.
+newone@localhost's password: 
+Last login: Sat Dec 14 19:49:07 2019 from localhost
+$ exit
+</code></pre>
+<p>登录过后就会生成<code>~/.ssh</code>文件夹了；</p>
+<blockquote>
+<p>注意<code>~/.ssh</code>目录权限必须为700，<code>~/.ssh/authorized_keys</code>权限必须为600；</p>
+</blockquote>
+<h3>3.修改配置文件</h3>
+<p>输入<code>vi /etc/ssh/sshd_config</code>，将该文件添加以下3行，如果已有则改成一样的：</p>
+<pre><code class="language-bash">RSAAuthentication yes
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+</code></pre>
+<p>然后<code>systemctl restart sshd</code>重启ssh服务；</p>
+<p>在本地使用类似<code>ssh newone@RemoteServer</code>的命令进行登录，如果登录成功则说明设置生效了；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>配置云服务器白名单</strong></h3>
+<p>在云厂商后台管理中配置白名单，只允许自己的IP登录，也可以解决问题；</p>
+<p>&lt;br/&gt;</p>

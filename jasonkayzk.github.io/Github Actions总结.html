@@ -1,0 +1,293 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Github-Actions%E6%80%BB%E7%BB%93.html">Github Actions总结</a></h2>
+<hr/>
+<h2>title: Github Actions总结
+cover: 'https://img.paulzzh.com/touhou/random?86'
+date: 2020-08-28 16:00:13
+categories: [Github]
+tags: [技术杂谈, Github]
+toc: true
+description: GitHub Actions是 GitHub 的持续集成服务,于2018年10月推出。</h2>
+<p><a href="https://github.com/features/actions">GitHub Actions</a> 是 GitHub 的<a href="http://www.ruanyifeng.com/blog/2015/09/continuous-integration.html">持续集成服务</a>，于2018年10月<a href="https://github.blog/changelog/2018-10-16-github-actions-limited-beta/">推出</a>。</p>
+<p>&lt;!--more--&gt;</p>
+<p>&lt;!-- **目录:** --&gt;</p>
+<p>&lt;!-- toc --&gt;</p>
+<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+<h2>Github Actions总结</h2>
+<h3>Github Action VS Travis CI</h3>
+<p>在<code>github</code>推出<code>action</code>之前，<a href="https://travis-ci.org/">Travis CI</a>是一个很好对Github中仓库做自动化的一个工具，其语法也很简单，功能强大，深受用户的青睐。那么<code>action</code>出来后，势必会和<code>travis</code>对比。</p>
+<p>在笔者的实际体验中，觉得<code>action</code>比较吸引我的点：</p>
+<ul>
+<li>支持私有仓库</li>
+<li><code>action</code>对<code>github</code>各个事件的支持更为全面，如果<code>release</code>，<code>pull-request</code>，<code>issue</code>事件等等</li>
+<li><code>github</code>对<code>action</code>编写的支持更为友好，包括在线编辑器和<code>marketplace</code>的共享actions</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>GitHub Actions 是什么？</h3>
+<p>大家知道，持续集成由很多操作组成，比如抓取代码、运行测试、登录远程服务器，发布到第三方服务等等。</p>
+<p>GitHub 把这些操作就称为 actions。</p>
+<p>很多操作在不同项目里面是类似的，完全可以共享。GitHub 注意到了这一点，想出了一个很妙的点子，允许开发者把每个操作写成独立的脚本文件，存放到代码仓库，使得其他开发者可以引用。</p>
+<p><strong>如果你需要某个 action，不必自己写复杂的脚本，直接引用他人写好的 action 即可，整个持续集成过程，就变成了一个 actions 的组合。</strong></p>
+<p>这就是 GitHub Actions 最特别的地方。</p>
+<p>GitHub 做了一个<a href="https://github.com/marketplace?type=actions">官方市场</a>，可以搜索到他人提交的 actions。另外，还有一个 <a href="https://github.com/sdras/awesome-actions">awesome actions</a> 的仓库，也可以找到不少 action。</p>
+<p><img alt="Github Action" src="https://www.wangbase.com/blogimg/asset/201909/bg2019091105.jpg"/></p>
+<p>上面说了，<strong>每个 action 就是一个独立脚本</strong>，因此可以做成代码仓库，<strong>使用<code>userName/repoName</code>的语法引用 action。</strong></p>
+<p>比如，<code>actions/setup-node</code>就表示<code>github.com/actions/setup-node</code>这个<a href="https://github.com/actions/setup-node">仓库</a>，它代表一个 action，作用是安装 Node.js。事实上，GitHub 官方的 actions 都放在 <a href="https://github.com/actions">github.com/actions</a> 里面。</p>
+<p>既然 actions 是代码仓库，当然就有版本的概念，用户可以引用某个具体版本的 action。下面都是合法的 action 引用，用的就是 Git 的指针概念，详见<a href="https://help.github.com/en/articles/about-actions#versioning-your-action">官方文档</a>。</p>
+<pre><code>actions/setup-node@74bc508 # 指向一个 commit
+actions/setup-node@v1.0    # 指向一个标签
+actions/setup-node@master  # 指向一个分支
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>基本概念</h3>
+<p>GitHub Actions 有一些自己的术语。</p>
+<p>（1）<strong>workflow</strong> （工作流程）：持续集成一次运行的过程，就是一个 workflow。</p>
+<p>（2）<strong>job</strong> （任务）：一个 workflow 由一个或多个 jobs 构成，含义是一次持续集成的运行，可以完成多个任务。</p>
+<p>（3）<strong>step</strong>（步骤）：每个 job 由多个 step 构成，一步步完成。</p>
+<p>（4）<strong>action</strong> （动作）：每个 step 可以依次执行一个或多个命令（action）。</p>
+<p>&lt;br/&gt;</p>
+<h3>为项目创建Action</h3>
+<p>如果想在仓库中开始<code>action</code>, 可以手动在<strong>仓库的根目录下新建<code>.github/workflows</code>文件夹，然后新建任意以<code>.yml</code>或者<code>.yaml</code>结尾的多个文件，这些文件都是<code>action</code>的配置文件，相当于travis中的<code>.travis.yml</code></strong></p>
+<p>启动<code>action</code>也可以通过<code>github</code>仓库界面创建（后续查看<code>action</code>记录也是在这），点击<code>Actions</code>选项；</p>
+<p>点击后会进入以下界面，此时我们可以直接使用官方的一些预设的模块，或者使用空模板：</p>
+<p><img alt="Action2" src="https://user-gold-cdn.xitu.io/2020/3/9/170beafb84f175a4?imageView2/0/w/1280/h/960/ignore-error/1"/></p>
+<p>下图就是<code>github</code>官方提供的<code>action</code>编辑器，能提供简单的语法提示和错误检测；右边可以直接搜索<code>Marketplace</code>里面的一下<code>action</code>使用，也可以通过<code>Documentation</code>查看文档。</p>
+<p><img alt="" src="https://user-gold-cdn.xitu.io/2020/3/9/170beb25f3b5af7a?imageView2/0/w/1280/h/960/ignore-error/1"/></p>
+<p>&lt;br/&gt;</p>
+<h3>workflow 文件</h3>
+<p>&lt;font color="#f00"&gt;<strong>GitHub Actions 的配置文件叫做 workflow 文件，存放在代码仓库的<code>.github/workflows</code>目录。</strong>&lt;/font&gt;</p>
+<p>workflow 文件<strong>采用 <a href="http://www.ruanyifeng.com/blog/2016/07/yaml.html">YAML 格式</a></strong>，文件名可以任意取，但是后缀名统一为<code>.yml</code>，比如<code>foo.yml</code>。</p>
+<p>&lt;font color="#f00"&gt;<strong>一个库可以有多个 workflow 文件。GitHub 只要发现<code>.github/workflows</code>目录里面有<code>.yml</code>文件，就会自动运行该文件。</strong>&lt;/font&gt;</p>
+<p>workflow 文件的配置字段非常多，详见<a href="https://help.github.com/en/articles/workflow-syntax-for-github-actions">官方文档</a>。</p>
+<p>下面是一些基本字段：</p>
+<h4>触发条件</h4>
+<p><code>on</code>规定<code>action</code>的触发条件:</p>
+<ul>
+<li>使用web事件触发工作流，并且可以具体指定<code>branches</code>，<code>tags</code>以及文件路径；</li>
+<li>使用<code>cron</code>语法指定时间触发工作流；</li>
+</ul>
+<p>其中web事件可以指定如上述例子的<code>push</code>事件，如果想指定多个事件，格式为：</p>
+<pre><code class="language-yaml">on: [push, pull_request]
+# 或
+on:
+  push:
+  pull_request:
+</code></pre>
+<p><strong>如果不特别指定某一个分支，触发机制会应用到所有分支；</strong></p>
+<p><strong>如果要具体指定到某一个分支，可使用<code>branch</code>选项：</strong></p>
+<pre><code class="language-yaml">on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [other]
+</code></pre>
+<p>触发条件还可以过滤特定的<code>tag</code>或者文件路径，通过使用<code>tags</code>或者<code>paths</code>选项；</p>
+<p>例如：如果想只在v1这个<code>tag</code>被推送时或者是当前推送包含<code>test</code>的文件时，构建操作被触发，可以使用下面配置 ：</p>
+<pre><code class="language-yaml">on:
+  push:
+    tags: [v1]
+    paths: ['test/*']
+</code></pre>
+<p>同时，还可以忽略某些<code>branch</code>, <code>tag</code>或者文件，通过使用<code>branches-ignore</code>，<code>tags-ignore</code>, <code>paths-ignore</code>, 如<code>branches-ignore:[second]</code>，可以排除second分支的更改，它等同于<code>braches:[!second]</code>。</p>
+<p><strong>需要特别注意的是：无法对工作流程中的同一事件同时使用 branches 和 branches-ignore 过滤器。 需要过滤肯定匹配的分支和排除分支时，建议使用 branches 过滤器。 只需要排除分支名称时，建议使用 branches-ignore 过滤器，tags-ignore和paths-ignore也是如此。</strong></p>
+<p>如果希望定时触发工作流，此时<code>schedule</code>就登场了；</p>
+<p>例如：如果希望每10分钟运行一次，配置为：</p>
+<pre><code class="language-yaml">on:
+  schedule:
+    - cron:  '*/10 * * * *'
+</code></pre>
+<p>简单说明<code>cron</code>中每一项的含义：</p>
+<p>第一项是分钟，第二项是小时，第三项是天，第四项是月，第五项是星期几。可使用<a href="https://crontab.guru/">crontab</a>在线配置想要的时间。</p>
+<p>&lt;font color="#f00"&gt;<strong>action中可以运行预定工作流程的最短间隔是每 5 分钟一次</strong>&lt;/font&gt;</p>
+<p>完整事件详见<a href="https://help.github.com/cn/actions/reference/events-that-trigger-workflows#webhook-events">触发工作流程的事件</a>。</p>
+<hr/>
+<h4>jobs</h4>
+<p>工作流默认包含一个或者多个<code>job</code>，每一个<code>job</code>都是一个独立的工作单元；</p>
+<p>job`属性主要包含：</p>
+<ul>
+<li><strong>name</strong>: job显示的名字</li>
+<li><strong>runs-on</strong>: 指定job运行的机器</li>
+<li><strong>steps</strong>: 一个job包含多个step, step是job的最小单元，所有step配置在steps中</li>
+<li><strong>env</strong>: 指定环境变量</li>
+<li><strong>needs</strong>: 指定job的依赖</li>
+</ul>
+<p><strong>① id和name</strong></p>
+<p>其中<code>name</code>和<code>job id</code>可能一开始会让人有点混淆，如：</p>
+<pre><code class="language-yaml">jobs:
+  build:
+    name: Greeting
+</code></pre>
+<p>其中<code>job id</code>指的是<code>build</code>，是在配置文件中可别其他部分引用；</p>
+<p>name指的是<code>Greeting</code>, 他将会显示在<code>action</code>的记录页面中；</p>
+<p><strong>② runs-on</strong></p>
+<p><code>action</code>可使用的机器包括：</p>
+<p>| 虚拟环境             | YAML 工作流程标签              |
+| -------------------- | ------------------------------ |
+| Windows Server 2019  | windows-latest 或 windows-2019 |
+| Ubuntu 18.04         | ubuntu-latest 或 ubuntu-18.04  |
+| Ubuntu 16.04         | ubuntu-16.04                   |
+| macOS Catalina 10.15 | macos-latest or macos-10.15    |</p>
+<p>并且每台机器的配置都是：</p>
+<p>2-core CPU，7 GB RAM 内存，14 GB SSD 硬盘空间。</p>
+<p>可以说是相当良心了。</p>
+<h4>needs</h4>
+<p><strong>当<code>action</code>中有多个<code>job</code>时，默认是并行运行</strong>；</p>
+<p>如果某一个<code>job</code>需要依赖另一个<code>job</code>，可使用<code>needs</code>属性，如：</p>
+<pre><code class="language-yaml">jobs:
+  job1:
+  job2:
+    needs: job1
+</code></pre>
+<p>此时<code>job2</code>会在<code>job1</code>成功完成后才会开始执行</p>
+<h4>steps</h4>
+<p><code>job</code>中所有的操作都在<code>steps</code>中，每个<code>step</code>主要包含<code>id</code>,<code>name</code>, <code>run</code>, <code>uses</code>等属性。</p>
+<p>如：</p>
+<pre><code class="language-yaml">jobs:
+  first_job:
+    steps:
+      - name: first step
+        uses: actions/heroku@master
+      - name: second step
+        run: echo 'finish'
+</code></pre>
+<p><code>run</code>指定具体命令，如果是多条命令，格式为：</p>
+<pre><code class="language-yaml">run: |
+  echo 'first line'
+  echo 'second line'
+</code></pre>
+<p><strong><code>uses</code>用于使用其他用户所发布的<code>action</code></strong>；</p>
+<p>如：<code>actions/heroku@master</code>；</p>
+<p>如果其他<code>action</code>需要参数，使用<code>with</code>传参，如：</p>
+<pre><code class="language-yaml">- name: Setup Node.js for use with actions
+  uses: actions/setup-node@v1.1.0
+  with:
+    version:10.x
+</code></pre>
+<p>可以在<a href="https://github.com/marketplace?type=actions">github action marketplace</a>查看更多好用的action。</p>
+<p>至此就是<code>acion</code>的基础语法，更多细节参见<a href="https://help.github.com/cn/actions/reference/workflow-syntax-for-github-actions">完整语法</a></p>
+<p>&lt;br/&gt;</p>
+<h3>Action进阶用法</h3>
+<h4>为工作流加一个Badge</h4>
+<p>在action的面板中，点击<code>Create status badge</code>就可以复制badge的markdown内容到<code>README.md</code>中；</p>
+<p>之后就可以直接在<code>README.md</code>中看到当前的构建结果：</p>
+<p><img alt="" src="https://user-gold-cdn.xitu.io/2020/3/11/170c7796274a6356?imageView2/0/w/1280/h/960/ignore-error/1"/></p>
+<p>&lt;br/&gt;</p>
+<h3>使用构建矩阵</h3>
+<p>如果我们想在多个系统或者多个语言版本上测试构建，就该构建矩阵发挥作用了。</p>
+<p>例如：我们想在多个<code>node</code>版本下跑测试，可以使用如下配置，<code>action</code>会分别使用<code>10.x</code>和<code>12.x</code>的版本各运行一次<code>job</code></p>
+<pre><code>jobs:
+  build:
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - run: npm ci
+      - run: npm test
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>使用Secrets</h3>
+<p>构建过程可能需要用到<code>ssh</code>或者<code>token</code>等敏感数据，而我们是不希望这些数据直接暴露在仓库中，此时就可以使用<code>secrets</code>：</p>
+<p>在对应项目中选择<code>Settings</code>-&gt; <code>Secrets</code>即可创建<code>secret</code>；</p>
+<p><img alt="" src="https://user-gold-cdn.xitu.io/2020/3/9/170bff282aa37e79?imageView2/0/w/1280/h/960/ignore-error/1"/></p>
+<p>配置文件中的使用方法：</p>
+<pre><code class="language-yaml">steps:
+  - name: use secrets
+    env: 
+      super_secret: ${{ secrets.YourSecrets }}
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong><code>secret name</code>不区别大小写</strong>；&lt;/font&gt;</p>
+<p>所以如果新建<code>secret</code>的的名字是<code>name</code>，使用时<code>secrets.name</code>或者<code>secrets.Name</code>都是ok的；</p>
+<p><strong>并且就算此时直接使用<code>echo</code>打印<code>secret</code>, 控制台也只会打印出*来保护secret！</strong></p>
+<p>&lt;br/&gt;</p>
+<h3>Cache</h3>
+<p>在构建过程中，会安装很多第三方依赖，而这些依赖并不需要每次都重新下载，可以将这些依赖缓存起来，加快构建速度。</p>
+<p>主要使用<a href="https://github.com/actions/cache">action/cache</a>。</p>
+<p>该<code>action</code>主要包含三个属性：</p>
+<ul>
+<li><strong>path: 需要缓存的文件的路径</strong></li>
+<li><strong>key: 对缓存的文件指定的唯一表示</strong></li>
+<li><strong>restore-key: 主要用于没有再找目标key的缓存的backup选项（可选项）</strong></li>
+</ul>
+<p>下面以<code>node</code>项目为例，将<code>node_modules</code>缓存起来。</p>
+<p>这里只列出关键步骤：</p>
+<pre><code class="language-yaml">steps:
+      - name: Cache Node Dependencies
+        id: cache
+        uses: actions/cache@v1
+        with:
+          path: node_modules
+          key: ${{runner.OS}}-npm-caches-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm install
+</code></pre>
+<p>首先使用<code>action/cache</code>指定<code>path</code>和<code>key</code>；</p>
+<p>这里的<code>key</code>包含OS信息和<code>package-lock.json</code>文件的hash值，通常OS是固定下来的；</p>
+<p>而一旦使用了新的第三方库，<code>package-lock.json</code>的hash值就会改变，得到一个新的<code>key</code>；</p>
+<p><code>action/cache</code>会抛出一个<code>cache-hit</code>的输出，如果找到对应<code>key</code>的缓存，值为<code>true</code>。</p>
+<p>在随后的安装步骤中，可以使用<code>if</code>对<code>cache-hit</code>做判断。如果找到缓存就跳过，否则就安装依赖。</p>
+<p>在第一次运行时，cache找不到，执行<code>npm install</code>，在随后的post cache步骤中对<code>node_modules</code>做缓存。</p>
+<p><img alt="" src="https://user-gold-cdn.xitu.io/2020/3/11/170c76700c32b5ba?imageView2/0/w/1280/h/960/ignore-error/1"/></p>
+<p>第二次运行时，找到cache, 则跳过<code>npm install</code>，直接使用缓存：</p>
+<p><img alt="" src="https://user-gold-cdn.xitu.io/2020/3/11/170c7666341548df?imageView2/0/w/1280/h/960/ignore-error/1"/></p>
+<p>&lt;br/&gt;</p>
+<h3>artifact</h3>
+<p>在构建过程中，可能需要输出一些构建产物，并且不同于cache，这些构建产物在<code>action</code>执行完成后，用户还是可以下载查看。</p>
+<p>通常<code>artifact</code>主要有：日志文件，测试结果等等；</p>
+<p>主要使用<a href="https://github.com/actions/upload-artifact">action/upload-artifact</a> 和 <a href="https://github.com/actions/download-artifact">download-artifact</a> 进行构建参悟的相关操作。</p>
+<p>这里以输出<code>jest</code>测试报告为例，jest测试后的测试报告的路径是<code>coverage</code>:</p>
+<pre><code class="language-yaml">steps:
+      - run: npm ci
+      - run: npm test
+
+      - name: Collect Test Coverage File
+        uses: actions/upload-artifact@v1.0.0
+        with:
+          name: coverage-output
+          path: coverage
+</code></pre>
+<p>执行成功后就能在对应action面板看到生成的<code>artifact</code>：</p>
+<p><img alt="" src="https://user-gold-cdn.xitu.io/2020/3/11/170c77672c469f98?imageView2/0/w/1280/h/960/ignore-error/1"/></p>
+<p>&lt;br/&gt;</p>
+<h3>Action限制</h3>
+<p>这里简单列出action的各种使用限制：</p>
+<ul>
+<li>action的最大执行时间是72小时，超过该时间，action会自动失败</li>
+<li>action一小时最大的API请求数量是1000</li>
+<li>action中每个job最大执行时间为6小时，超过该时间，job会自动失败</li>
+<li>action中矩阵最多能构建256个job</li>
+<li>action中多个job默认会并行执行，但对于最大的并行数也是有限制的：</li>
+</ul>
+<p>| GitHub 计划 | 同时运行的作业总数 | MacOS 作业同时运行的最大数量 |
+| ----------- | ------------------ | ---------------------------- |
+| 免费        | 20                 | 5                            |
+| Pro         | 40                 | 5                            |
+| 团队        | 60                 | 5                            |
+| 企业        | 180                | 50                           |</p>
+<p>关于<code>GitHub Actions</code>付费条款详见<a href="https://help.github.com/cn/github/setting-up-and-managing-billing-and-payments-on-github/about-billing-for-github-actions">About billing for GitHub Actions</a>。</p>
+<p>&lt;br/&gt;</p>
+<h3>GitHub Actions相关资源</h3>
+<p>GitHub Actions官方文档：</p>
+<ul>
+<li>https://docs.github.com/en/actions</li>
+</ul>
+<p>GitHub Actions的相关资源有：</p>
+<ul>
+<li>https://github.com/marketplace?type=actions</li>
+<li>https://github.com/actions</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>附录</h3>
+<p>本文摘自：</p>
+<ul>
+<li><a href="http://www.ruanyifeng.com/blog/2019/09/getting-started-with-github-actions.html">GitHub Actions 入门教程</a></li>
+<li><a href="https://juejin.im/post/6844904086953787400">是时候体验一下github action的魅力了</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

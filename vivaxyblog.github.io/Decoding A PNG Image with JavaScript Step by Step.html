@@ -1,0 +1,270 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2019-11-07-decode-a-png-image-with-javascript.html">Decoding A PNG Image with JavaScript Step by Step</a></h2>
+<hr/>
+<h2>layout: post
+title: Decoding A PNG Image with JavaScript Step by Step
+tags: [image, png, javascript, decode, decoder, parser, parse]</h2>
+<p>Decode a PNG means to convert an image from binary data to <code>ImageData</code> with pixels.</p>
+<p>Image binary data can be retrieved from <code>&lt;canvas&gt;</code>, <code>&lt;img&gt;</code>, Object URLs, Image URLs, <code>Blob</code>. See <a href="https://vivaxyblog.github.io/2019/11/06/comprehensive-image-processing-on-browsers.html">Comprehensive Image Processing on Browsers</a> for details.</p>
+<p><code>ImageData</code> is an object with pixel data, width and height.</p>
+<h2>Example Image</h2>
+<p><img alt="Pixels" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2019-11-07-decode-a-png-image-with-javascript/pixels.png"/></p>
+<p>👆This is the example image. It's too small. Let me enlarge it for you.👇</p>
+<p>&lt;img src="/assets/2019-11-07-decode-a-png-image-with-javascript/pixels-large.png" width="100px"&gt;</p>
+<h2>Raw Binary Data</h2>
+<p>Let's read raw image binary data from <code>&lt;input&gt;</code>.</p>
+<pre><code class="language-html">&lt;input type="file" /&gt;
+&lt;script&gt;
+  const input = document.querySelector('input');
+  input.addEventListener('change', async function(e) {
+    const [file] = e.target.files;
+    const arrayBuffer = await file.arrayBuffer();
+    console.log('arrayBuffer', arrayBuffer);
+    // TODO: Let's decode arrayBuffer
+    const imageData = decode(arrayBuffer);
+    console.log('imageData', imageData);
+  });
+&lt;/script&gt;
+</code></pre>
+<p>The output <code>arrayBuffer</code> is:</p>
+<p>&lt;style&gt;
+table {
+  font-size: 12px;
+}
+table tbody tr td {
+  padding: .6rem .4rem;
+}
+&lt;/style&gt;</p>
+<p>|           | 0 ~ 3             | 4 ~ 7                | 8 ~ 11            | 12 ~ 15           |
+| --------- | ----------------- | -------------------- | ----------------- | ----------------- |
+| 0 ~ 15    | <code>137, 80, 78, 71</code> | <code>13, 10, 26, 10</code>     | <code>0, 0, 0, 13</code>     | <code>73, 72, 68, 82</code>  |
+| 16 ~ 31   | <code>0, 0, 0, 2</code>      | <code>0, 0, 0, 2</code>         | <code>2, 3, 0, 0</code>      | <code>0, 15, 216, 229</code> |
+| 32 ~ 47   | <code>183, 0, 0, 0</code>    | <code>1, 115, 82, 71</code>     | <code>66, 1, 217, 201</code> | <code>44, 127, 0, 0</code>   |
+| 48 ~ 63   | <code>0, 9, 112, 72</code>   | <code>89, 115, 0, 0</code>      | <code>11, 19, 0, 0</code>    | <code>11, 19, 1, 0</code>    |
+| 64 ~ 79   | <code>154, 156, 24, 0</code> | <code>0, 0, 12, 80</code>       | <code>76, 84, 69, 255</code> | <code>0, 0, 0, 255</code>    |
+| 80 ~ 95   | <code>0, 0, 0, 255</code>    | <code>255, 255, 255, 251</code> | <code>0, 96, 246, 0</code>   | <code>0, 0, 4, 116</code>    |
+| 96 ~ 111  | <code>82, 78, 83, 255</code> | <code>255, 255, 127, 128</code> | <code>144, 197, 89, 0</code> | <code>0, 0, 12, 73</code>    |
+| 112 ~ 127 | <code>68, 65, 84, 120</code> | <code>156, 99, 16, 96</code>    | <code>216, 0, 0, 0</code>    | <code>228, 0, 193, 39</code> |
+| 128 ~ 143 | <code>168, 232, 87, 0</code> | <code>0, 0, 0, 73</code>        | <code>69, 78, 68, 174</code> | <code>66, 96, 130</code>     |</p>
+<p>Each table cell contains 4 bytes. 1 byte contains 8 bits. 1 bit is a binary value <code>0</code> or <code>1</code>.</p>
+<h2>PNG Signature</h2>
+<p>A PNG image should starts with 8 bytes: <code>0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a</code>.</p>
+<p><code>0x</code> means 16-bit value. <code>0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a</code> to 10-bit value is <code>137, 80, 78, 71, 13, 10, 26, 10</code>.</p>
+<p>| 0 ~ 3                    | 4 ~ 7                    |
+| ------------------------ | ------------------------ |
+| <code>137, 80, 78, 71</code>        | <code>13, 10, 26, 10</code>         |
+| <code>0x89, 0x50, 0x4e, 0x47</code> | <code>0x0d, 0x0a, 0x1a, 0x0a</code> |</p>
+<p>This image satisfies the requirement.</p>
+<h2>Chunks</h2>
+<p>Chunks contain image data. A chunk contains chunk begin, chunk data and chunk end.</p>
+<p>A chunk begins with 2 32-bit value. The first is chunk length, and the other is chunk type.</p>
+<p>Let's begin with a chunk.</p>
+<h2>Chunk Begin 1</h2>
+<p>| 8 ~ 11        | 12 ~ 15          |
+| ------------- | ---------------- |
+| <code>0, 0, 0, 13</code> | <code>73, 72, 68, 82</code> |
+| length        | type             |
+| <code>13</code>          | <code>IHDR</code>           |</p>
+<p>This chunk is <code>IHDR</code> with <code>13</code> bytes.</p>
+<h2>Chunk Data 1 <code>IHDR</code></h2>
+<p><code>IHDR</code> values are listed below.</p>
+<p>| 16 ~ 19      | 20 ~ 23      | 24 ~ 27                                       | 28          |
+| ------------ | ------------ | --------------------------------------------- | ----------- |
+| <code>0, 0, 0, 2</code> | <code>0, 0, 0, 2</code> | <code>2, 3, 0, 0</code>                                  | <code>0</code>         |
+| <code>width</code>      | <code>height</code>     | <code>depth</code>, <code>colorType</code>, <code>compression</code>, <code>filter</code> | <code>interlace</code> |
+| <code>2</code>          | <code>2</code>          | <code>2, 3, 0, 0</code>                                  | <code>0</code>         |</p>
+<ul>
+<li><code>width</code> and <code>height</code> means image width and height.</li>
+<li><code>depth</code> represents how many bits contains in a channel. A image composed of pixels, and a pixel composed of channels, and a channel composed of bits.</li>
+<li><code>colorType</code>. There are 5 color types, <code>0</code> is greyscale, <code>2</code> is RGB triple, <code>3</code> is palette, <code>4</code> is greyscale and alpha, <code>6</code> is RGB triple and alpha. The palette color type supports 1 channel per pixel.</li>
+<li><code>compression</code> represents the compression method. Only <code>0</code> is supported currently. <code>0</code> represents deflate/inflate. Deflate/inflate is a lossless compression method that uses a combination of LZ77 and Huffman coding. It is used widely in <code>7-zip</code>, <code>zlib</code>, <code>gzip</code>.</li>
+<li><code>filter</code> represents the filter method used before compression. Only <code>0</code> is supported currently. Filter method <code>0</code> has 5 filter functions. We will talk about it later.</li>
+<li><code>interlace</code> represents if the image is loaded interlaced. <code>0</code> means without interlaced. <code>1</code> means with interlaced.</li>
+</ul>
+<p>This image is 2 * 2 pixels, has palette color type, 1 channel per pixel and 2 bit per channel. The compression method is deflate/inflate. The filter method is 0. And the image is without interlaced.</p>
+<h2>Chunk End 1</h2>
+<p>| 29 ~ 32             |
+| ------------------- |
+| <code>15, 216, 229, 183</code> |</p>
+<p>Chunk end contains 4 bytes of CRC32 checksum. The decoder should calculate the checksum of the chunk type and the chunk data for each chunk. The calculated checksum should equals the chunk end.</p>
+<h2>Chunk Begin 2</h2>
+<p>| 33 ~ 36      | 37 ~ 40           |
+| ------------ | ----------------- |
+| <code>0, 0, 0, 1</code> | <code>115, 82, 71, 66</code> |
+| length       | type              |
+| <code>1</code>          | <code>sRGB</code>            |</p>
+<p>This chunk is <code>sRGB</code> and has 1 byte chunk data.</p>
+<p>Notice that <code>sRGB</code> starts with lowercase letter <code>s</code>. This means that this chunk is ancillary. Otherwise the chunk is critical like the previous one <code>IHDR</code>.</p>
+<h2>Chunk Data 2 <code>sRGB</code></h2>
+<p>| 41  |
+| --- |
+| <code>1</code> |</p>
+<p>The <code>sRGB</code> chunk value represents the color space of the image.</p>
+<ul>
+<li><code>0</code> for perceptual, like photographs.</li>
+<li><code>1</code> for relative colorimetric, like icons.</li>
+<li><code>2</code> for sturation, like graphs and charts.</li>
+<li><code>3</code> for absolute colorimetric, to show the absolute color of an image.</li>
+</ul>
+<h2>Chunk End 2</h2>
+<p>| 42 ~ 45             |
+| ------------------- |
+| <code>217, 201, 44, 127</code> |</p>
+<p>Check CRC32.</p>
+<h2>Chunk Begin 3</h2>
+<p>| 46 ~ 49      | 50 ~ 53            |
+| ------------ | ------------------ |
+| <code>0, 0, 0, 9</code> | <code>112, 72, 89, 115</code> |
+| length       | type               |
+| <code>9</code>          | <code>pHYs</code>             |</p>
+<p>9 bytes <code>pHYs</code> ancillary chunk.</p>
+<h2>Chunk Data 3 <code>pHYs</code></h2>
+<p>| 54 ~ 57                | 58 ~ 61                | 62             |
+| ---------------------- | ---------------------- | -------------- |
+| <code>0, 0, 11, 19</code>         | <code>0, 0, 11, 19</code>         | <code>1</code>            |
+| X axis pixels per unit | Y axis pixels per unit | Unit specifier |
+| <code>2835</code>                 | <code>2835</code>                 | Metre          |</p>
+<p><code>pHYs</code> chunk represents the physical size of the image. As we can see from the table above, the image is 2835 pixels per metre in width 2835 pixels per metre in height.</p>
+<h2>Chunk End 3</h2>
+<p>| 63 ~ 66           |
+| ----------------- |
+| <code>0, 154, 156, 24</code> |</p>
+<p>Check CRC32.</p>
+<h2>Chunk Begin 4</h2>
+<p>| 67 ~ 70       | 71 ~ 74          |
+| ------------- | ---------------- |
+| <code>0, 0, 0, 12</code> | <code>80, 76, 84, 69</code> |
+| length        | type             |
+| <code>12</code>          | <code>PLTE</code>           |</p>
+<p>12 bytes <code>PLTE</code> critical chunk.</p>
+<h2>Chunk Data 4 <code>PLTE</code></h2>
+<p>| 75 ~ 78        | 79 ~ 82        | 83 ~ 86              |
+| -------------- | -------------- | -------------------- |
+| <code>255, 0, 0, 0</code> | <code>255, 0, 0, 0</code> | <code>255, 255, 255, 255</code> |</p>
+<p>The palette is RGB triple, so the data is decoded as following:</p>
+<h3>Palette</h3>
+<p><code>[[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]]</code></p>
+<h2>Chunk End 4</h2>
+<p>| 87 ~ 90           |
+| ----------------- |
+| <code>251, 0, 96, 246</code> |</p>
+<p>Check CRC32.</p>
+<h2>Chunk Begin 5</h2>
+<p>| 91 ~ 94      | 95 ~ 98           |
+| ------------ | ----------------- |
+| <code>0, 0, 0, 4</code> | <code>116, 82, 78, 83</code> |
+| length       | type              |
+| <code>4</code>          | <code>tRNS</code>            |</p>
+<p>4 bytes <code>tRNS</code> ancillary chunk.</p>
+<h2>Chunk Data 5 <code>tRNS</code></h2>
+<p>| 99 ~ 102             |
+| -------------------- |
+| <code>255, 255, 255, 127</code> |</p>
+<p>The chunk supplies the alpha value for the palette. So the palette transforms to:</p>
+<h3>Palette</h3>
+<p><code>[[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 255, 127]]</code></p>
+<h2>Chunk End 5</h2>
+<p>| 103 ~ 106           |
+| ------------------- |
+| <code>128, 144, 197, 89</code> |</p>
+<p>Check CRC32.</p>
+<h2>Chunk Begin 6</h2>
+<p>| 107 ~ 110     | 111 ~ 114        |
+| ------------- | ---------------- |
+| <code>0, 0, 0, 12</code> | <code>73, 68, 65, 84</code> |
+| length        | type             |
+| <code>12</code>          | <code>IDAT</code>           |</p>
+<p>12 bytes <code>IDAT</code> critical chunk.</p>
+<h2>Chunk Data 6 <code>IDAT</code></h2>
+<p>| 115 ~ 118          | 119 ~ 122       | 123 ~ 126        |
+| ------------------ | --------------- | ---------------- |
+| <code>120, 156, 99, 16</code> | <code>96, 216, 0, 0</code> | <code>0, 228, 0, 193</code> |</p>
+<p>The compression method is applied to the <code>IDAT</code> chunk when encoding. So we decode it with <code>zlib.inflate()</code>. We can use the library <a href="https://github.com/nodeca/pako"><code>pako</code></a> to decode.</p>
+<p>The decoded data is an Uint8Array: <code>0, 16, 0, 176</code>. We will need more information to decode it.</p>
+<p>We will learn about the scanline, a little about the filter, and the logic to bits per pixel.</p>
+<h3>Scanline Introduction</h3>
+<p>A scanline is a row of pixels of an image. If the image height is 2, the <code>IDAT</code> chunk contains 2 scanlines.</p>
+<p>A scanline composed of 1 byte filter function type and pixel data. The pixel data is appended directly to the previous pixel data without any extra space. The scanline should be filled to match 1 byte if the rightmost bit is empty.</p>
+<p>| Filter Function | Pixels...[Fill...]                            |
+| --------------- | --------------------------------------------- |
+| <code>8 bit</code>         | <code>bits per pixel</code> * <code>pixels</code> + <code>useless bits</code> |</p>
+<p>We need to know the bits per pixel to get the length of each scanline.</p>
+<h3>ColorType - Channel - Depth - Bits per pixel</h3>
+<p>| Color Type | Name                | Channel per pixel | Depth          | Bits per pixel |
+| ---------- | ------------------- | ----------------- | -------------- | -------------- |
+| <code>0</code>        | Grayscale           | 1                 | 1, 2, 4, 8, 16 | 1, 2, 4, 8, 16 |
+| <code>2</code>        | Truecolor           | 3                 | 8, 16          | 24, 48         |
+| <code>3</code>        | Palette             | 1                 | 1, 2, 4, 8     | 1, 2, 4, 8     |
+| <code>4</code>        | Grayscale and alpha | 2                 | 8, 16          | 16, 32         |
+| <code>6</code>        | Truecolor and alpha | 4                 | 8, 16          | 32, 64         |</p>
+<p>The color type 3 represents that 1 channel data per pixel. The image depth is 2. So we know that the data contains 2 bits per pixel.</p>
+<p>So the scanline decoded is:</p>
+<h3>Scanline Bits</h3>
+<p>| Rows | Filter Function | Pixels...[Fill...]                                               |
+| ---- | --------------- | ---------------------------------------------------------------- |
+|      | <code>8 bit</code>         | <code>2 depth per pixel * 2 pixels</code> + <code>4 bit useless bits</code> = <code>8 bits</code> |
+| <code>0</code>  | <code>0</code>             | <code>00010000</code> (<code>16</code>)                                                |
+| <code>1</code>  | <code>0</code>             | <code>10110000</code> (<code>176</code>)                                               |</p>
+<h3>Filter functions</h3>
+<p>The filter functions are applied to the pixel data before compression to make the compression more efficient.</p>
+<p>In filter method 0, there are 5 filter functions:</p>
+<p><img alt="Filter Function" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2019-11-07-decode-a-png-image-with-javascript/filter-functions.png"/></p>
+<p>The filter function use A, B, C to predicte X.</p>
+<p>| Type | Filter function | Predicted value                                   |
+| ---- | --------------- | ------------------------------------------------- |
+| 0    | None            | Original value                                    |
+| 1    | Sub             | Byte A (to the left)                              |
+| 2    | Up              | Byte B (above)                                    |
+| 3    | Average         | Mean of bytes A and B, rounded down               |
+| 4    | Paeth           | A, B, or C, whichever is closest to p = A + B − C |</p>
+<p>The filter function 0 means the data is original value. So we can decode previous scanline bits to scanline pixel indexes.</p>
+<h3>Scanline Pixel Indexes</h3>
+<p>| Rows | Pixel index | Pixel index | Fill... |
+| ---- | ----------- | ----------- | ------- |
+| <code>0</code>  | <code>00</code>        | <code>01</code>        | <code>0000</code>  |
+| <code>1</code>  | <code>10</code>        | <code>11</code>        | <code>0000</code>  |</p>
+<p>With previouly decoded pallette <code>[[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 255, 127]]</code>.</p>
+<h3>Scanline Pixels</h3>
+<p>| Rows\Columns | <code>0</code>                | <code>1</code>                    |
+| ------------ | ------------------ | ---------------------- |
+| <code>0</code>          | <code>(255, 0, 0, 255)</code> | <code>(0, 255, 0, 255)</code>     |
+| <code>1</code>          | <code>(0, 0, 255, 255)</code> | <code>(255, 255, 255, 127)</code> |</p>
+<h2>Chunk End 6</h2>
+<p>| 127 ~ 130          |
+| ------------------ |
+| <code>39, 168, 232, 87</code> |</p>
+<p>Check CRC32.</p>
+<h2>Chunk Begin 7</h2>
+<p>| 131 ~ 134    | 135 ~ 138        |
+| ------------ | ---------------- |
+| <code>0, 0, 0, 0</code> | <code>73, 69, 78, 68</code> |
+| <code>0</code>          | <code>IEND</code>           |</p>
+<p>0 byte <code>IEND</code> critical chunk.</p>
+<h2>Chunk Data 7 <code>IEND</code></h2>
+<p>No data.</p>
+<h2>Chunk End 7</h2>
+<p>| 139 ~ 142          |
+| ------------------ |
+| <code>174, 66, 96, 130</code> |</p>
+<p>Check CRC32.</p>
+<p>So the output <code>ImageData</code> is:</p>
+<h2>ImageData</h2>
+<pre><code class="language-js">imageData = {
+  width: 2,
+  height: 2,
+  data: [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 127],
+};
+</code></pre>
+<h2>Conclusion</h2>
+<p>We have successfully decoded the PNG image from raw binary data to <code>ImageData</code>. But we have ignored a lot side logics and details. Some are listed below:</p>
+<ul>
+<li><code>IDAT</code> chunk can be split into multiple chunks. So when we should wait till we meet <code>IEND</code> chunk before we decode the <code>IDAT</code> chunk.</li>
+<li>There are 4 kinds of critical chunk and 14 kinds of ancillary chunk. See <a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html#C.Summary-of-standard-chunks">Summary of standard chunks</a> in <a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Contents.html">PNG Specification</a>.</li>
+<li>Interlacd PNG are encoded in a way that the users feel the the image is loaded faster. But it gives the larger <code>IDAT</code> chunks.</li>
+</ul>
+<p>You can get the source code on <a href="https://github.com/vivaxy/png">GitHub</a>.</p>
+<h2>Reference</h2>
+<ul>
+<li><a href="https://github.com/vivaxy/png">Source Code</a></li>
+<li><a href="http://www.libpng.org/pub/png/spec/1.2/PNG-Contents.html">PNG Specification</a></li>
+<li><a href="https://vivaxyblog.github.io/2018/04/05/how-png-decode-and-encode.html">JavaScript PNG 图片编码和解码</a></li>
+</ul>

@@ -1,0 +1,128 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E8%AE%B0%E5%BD%95%E6%9C%8D%E5%8A%A1%E5%99%A8%E8%BF%81%E7%A7%BBDebian.html">记录服务器迁移Debian</a></h2>
+<hr/>
+<h2>title: 记录服务器迁移Debian
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?88'
+date: 2022-11-13 14:59:35
+categories: 技术杂谈
+tags: [技术杂谈]
+description: 之前服务器用的是 CentOS7，很多东西都已经过时了，用起来很不方便；所以趁着周末有空，重建了整个系统，改用 Debian；同时也把服务器上所有的服务也都容器化了，更方便管理；</h2>
+<p>之前服务器用的是 CentOS7，很多东西都已经过时了，用起来很不方便；</p>
+<p>所以趁着周末有空，重建了整个系统，改用 Debian；</p>
+<p>同时也把服务器上所有的服务也都容器化了，更方便管理；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker-repo</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>记录服务器迁移Debian</strong></h1>
+<h2><strong>备份数据</strong></h2>
+<p>在进行服务器重装系统之前，首先要备份相关的数据；</p>
+<p>对于腾讯云上的 LightHouse 而言，可以很方便、并且无需关机的创建一个镜像；</p>
+<p>同时，还要将一些文件打包：<code>tar -zcv -f bak.tar.gz workspace/</code>；</p>
+<p>并且使用 <code>mongodump</code> 备份数据；</p>
+<p>记录服务 IP、配置等等…；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>重建系统</strong></h2>
+<p>数据都备份之后，可以直接在 LightHouse 上选择重装系统，选择 Debian 11；</p>
+<p>安装完成后，将备份的文件上传，解压缩 <code>tar -zxvf bak.tar.gz -C ./workspace</code>；</p>
+<p>并且使用 <code>mongorestore</code> 恢复数据；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>打包服务</strong></h2>
+<p>关于一些常用的工具，例如：net-tools、docker 的安装这里就不写了；</p>
+<p>这里主要讲一下打包服务；</p>
+<p>在服务器上，主要是使用的 Node 和 Python 写的服务；</p>
+<p>对于 Python 服务打包 Docker 镜像：</p>
+<pre><code class="language-dockerfile">FROM python:3.9-slim-buster
+
+WORKDIR /app
+
+COPY requirements.txt requirements.txt
+RUN pip3 install -r requirements.txt 
+
+COPY main.py main.py
+
+CMD [ "python3", "main.py"]
+</code></pre>
+<p>可以使用上面的 Dockerfile 来安装依赖并启动：</p>
+<pre><code class="language-bash">docker run -d --name app --restart=always app:latest
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>对于 Node 服务也是类似的：</p>
+<pre><code class="language-dockerfile">FROM node:14
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# Install app dependencies
+COPY package*.json ./
+RUN npm install --registry=http://mirrors.cloud.tencent.com/npm/
+
+# Bundle app source
+COPY *.js ./
+
+CMD [ "node", "index.js" ]
+</code></pre>
+<p>启动服务：</p>
+<pre><code class="language-bash">docker run -d --name backend --net host  --restart=always backend:latest
+</code></pre>
+<p><strong>如果是同一台机器同时部署的 mysql、redis 等数据库，如果没有提前创建 Docker 网络，可能会出现 Docker 各个容器之间网络不通的情况；</strong></p>
+<p><strong>一个简单的策略就是：服务容器直接使用 <code>host</code> 类型的网络，此时可以直接使用 <code>127.0.0.1</code> 连接数据库（前提是数据库容器对外暴露了端口！）</strong></p>
+<p>&lt;br/&gt;</p>
+<p>还有一些服务不太好容器化，此时可以使用 <code>supervisor</code> 进行服务监控和管理；</p>
+<p>安装：</p>
+<pre><code class="language-bash">apt install supervisor
+</code></pre>
+<p>在 <code>/etc/supervisor/conf.d</code> 目录下新增 <code>*.conf</code> 配置，例如：</p>
+<p>blog.conf</p>
+<pre><code class="language-ruby">#项目名
+[program:blog]
+#脚本目录
+directory=/opt/bin
+#脚本执行命令
+command=/usr/bin/python /opt/bin/test.py
+
+#supervisor启动的时候是否随着同时启动，默认True
+autostart=true
+#当程序exit的时候，这个program不会自动重启,默认unexpected，设置子进程挂掉后自动重启的情况，有三个选项，false,unexpected和true。如果为false的时候，无论什么情况下，都不会被重新启动，如果为unexpected，只有当进程的退出码不在下面的exitcodes里面定义的
+autorestart=false
+#这个选项是子进程启动多少秒之后，此时状态如果是running，则我们认为启动成功了。默认值为1
+startsecs=1
+
+#脚本运行的用户身份 
+user = test
+
+#日志输出 
+stderr_logfile=/tmp/blog_stderr.log 
+stdout_logfile=/tmp/blog_stdout.log 
+#把stderr重定向到stdout，默认 false
+redirect_stderr = true
+#stdout日志文件大小，默认 50MB
+stdout_logfile_maxbytes = 20MB
+#stdout日志文件备份数
+stdout_logfile_backups = 20
+</code></pre>
+<p>之后：</p>
+<pre><code class="language-bash"># 重新加载
+supervisorctl reload
+
+# 查看状态
+supervisorctl status
+</code></pre>
+<p>开机启动：</p>
+<pre><code class="language-bash">systemctl enable supervisor
+</code></pre>
+<blockquote>
+<p>更详细：</p>
+<ul>
+<li><a href="https://www.jianshu.com/p/0b9054b33db3">Supervisor使用详解</a></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker-repo</li>
+</ul>
+<p>&lt;br/&gt;</p>

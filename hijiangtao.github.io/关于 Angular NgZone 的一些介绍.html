@@ -1,0 +1,100 @@
+<h2>原文：<a href="https://hijiangtao.github.io/2020-01-17-Angular-Zone-Concepts.html">关于 Angular NgZone 的一些介绍</a></h2>
+<hr/>
+<h2>title: 关于 Angular NgZone 的一些介绍
+layout: post
+thread: 240
+date: 2020-01-17
+author: Joe Jiang
+categories: Document
+tags: [Angular, NgZone, RxJS, 前端, 性能优化]
+excerpt: 要不是代码里看到 NgZone，我都不知道什么时候会接触到这个概念。今天来看看 NgZone 这个 API。</h2>
+<h3>1. 从 Angular 的变更检测说起</h3>
+<blockquote>
+<p>An injectable service for executing work inside or outside of the Angular zone. —— <a href="https://angular.io/api/core/NgZone#ngzone">NgZone API</a></p>
+</blockquote>
+<p>要不是代码里看到 NgZone，我都不知道什么时候会接触到这个概念。首先，关于框架的变更检测（Change Detection），我们首先看看 Angular 中有哪些事件会触发框架的变更检测：</p>
+<ol>
+<li><code>Events</code> - 一些事件，例如 <code>click</code>、<code>change</code>、<code>input</code>、<code>submit</code> 等；</li>
+<li><code>XMLHttpRequests</code> - 网络请求；</li>
+<li><code>Timers</code> - <code>setTimeout()</code> 与 <code>setInterval()</code> API 等；</li>
+</ol>
+<p>每次变更检测都意味着额外的计算和资源消耗，如果我们需要对应用进行性能优化，那么首先该从这个概念下手。Angular 引入 Zone.js 以处理变更检测，具体来说，Zone.js 通过对所有常见的异步 API 打上了“补丁” 以追踪所有的异步操作，进而使 Angular 可以决定何时刷新 UI。</p>
+<h3>2. 解答几个问题</h3>
+<p>本文基于可以快速上手 Zone.js 的相关操作，解答几个关键问题。</p>
+<ol>
+<li><strong>什么是 Zone？</strong> Zone 是一种用于拦截和跟踪异步工作的机制。</li>
+<li><strong>什么是 NgZone？</strong> Zone.js 将会对每一个异步操作创建一个 task。一个 task 运行于一个 Zone 中。通常来说， 在 Angular 应用中，每个 task 都会在 "Angular" Zone 中运行，这个 Zone 被称为 NgZone。一个 Angular 应用中只存在一个 Angular Zone，而变更检测只会由 运行于这个 NgZone 中的异步操作触发。</li>
+<li><strong>如何在代码中上手 NgZone？</strong> 先了解 <code>run</code> 与 <code>runOutsideAngular</code> 两个 API 即可。</li>
+</ol>
+<h3>3. 几个应用示例</h3>
+<p>接下来，我们来看看在不同场景下，代码都该怎么写。</p>
+<p>首先，函数 <code>runOutsideAngular</code> 用于确保代码于 NgZone 之外运行，即保证 Angular 的变更检测不会因为相关代码而触发。例如，以下 <code>setInterval</code> 定时器便不会触发变更检测：</p>
+<pre><code class="language-javascript">constructor(private ngZone: NgZone) {
+  this.ngZone.runOutsideAngular(() =&gt; {
+    setInterval(() =&gt; doSomething(), 100)
+  });
+}
+</code></pre>
+<p><code>run</code> 方法的目的与 <code>runOutsideAngular</code> 正好相反：任何写在 run 里的方法，都会进入 Angular Zone 的管辖范围。例如在如下示例中，我们通过 <code>run()</code> 方法使得在 Zone 之外的操作重新又进入了 Zone 的管辖范围。</p>
+<pre><code class="language-javascript">import { Component, NgZone } from '@angular/core';
+    
+@Component({
+  selector: 'my-app',
+  template: `
+  &lt;p&gt;
+    &lt;label&gt;Count: &lt;/label&gt;
+    {{ num }}
+  &lt;/p&gt;  
+  `
+})
+export class AppComponent {
+  num = 0;
+  constructor(private zone: NgZone) {
+    this.zone.runOutsideAngular(() =&gt; {
+      let i = 0;
+      const token = setInterval(() =&gt; {
+        this.zone.run(() =&gt; {
+          this.num = ++i;
+        })
+
+        if (i == 10) {
+          clearInterval(token);
+        }
+      }, 1000);
+    })
+  }
+}
+</code></pre>
+<p>如何做到 Zone 外的操作虽然不会实时触发变更检测，但在特定时机还是通知到 Angular Zone 内呢？或者换句话说，即在 Zone 外创建数据流、Zone 内订阅数据流？</p>
+<p>可以看看下面的 AppComponent 类，我们将过期时间保存在 localStorage 中，一旦时间过期，<code>runOutsideAngular</code> 中的定时器便会通知 Zone 中的 message 更新并同时清除自己。</p>
+<pre><code class="language-javascript">export class AppComponent implements OnInit {
+  notify$ = new Subject();
+
+  ngOnInit() {
+    this.notify$.subscribe(() =&gt; {
+        this.message = 'timeout';
+    })
+  }
+
+  constructor(private zone: NgZone) {
+    localStorage.setItem('expiredDate', addMinutes(new Date(), 1).getTime().toString());
+    this.zone.runOutsideAngular(() =&gt; {
+      const i = setInterval(() =&gt; {
+        const expiredDate = +localStorage.getItem('expiredDate');
+        if (new Date().getTime() - expiredDate &gt; 0) {
+          this.zone.run(() =&gt; {
+            this.notify$.next();
+          })
+          clearInterval(i);
+        };
+      }, 1000)
+    })
+  }
+}
+</code></pre>
+<p>有关 Zone.js 和 RxJS 一起使用的细节，详见 <a href="https://github.com/angular/angular/blob/master/packages/zone.js/NON-STANDARD-APIS.md#usage">Angular 文档</a>；而其他更深入的阅读，可参考如下材料：</p>
+<ul>
+<li><a href="https://blog.thoughtram.io/angular/2017/02/21/using-zones-in-angular-for-better-performance.html">https://blog.thoughtram.io/angular/2017/02/21/using-zones-in-angular-for-better-performance.html</a></li>
+<li><a href="https://blog.thoughtram.io/angular/2016/02/01/zones-in-angular-2.html">https://blog.thoughtram.io/angular/2016/02/01/zones-in-angular-2.html</a></li>
+<li><a href="https://blog.thoughtram.io/angular/2016/01/22/understanding-zones.html">https://blog.thoughtram.io/angular/2016/01/22/understanding-zones.html</a></li>
+</ul>

@@ -1,0 +1,90 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2015-05-21-how-to-write-html-template-elegently-in-javascript-file.html">如何在 JavaScript 中优雅地写 HTML 模板</a></h2>
+<hr/>
+<h2>layout: post
+title: 如何在 JavaScript 中优雅地写 HTML 模板
+tags: [JavaScript, Template]</h2>
+<p>注释形式写在 JavaScript 中，然后用 <code>Function.prototype.toString</code> 方法拿到。</p>
+<pre><code class="language-js">var compile = function (functionObject) {
+    return functionObject.toString().match(/\/\*([\s\S]*?)\*\//)[1];
+};
+
+var html = compile(function () {/*
+ &lt;div&gt;
+     &lt;h2&gt;title&lt;/h2&gt;
+     &lt;div class="content"&gt;content&lt;/div&gt;
+ &lt;/div&gt;
+ */
+});
+</code></pre>
+<p>作为模板，当然还需要关键词的替换功能。接下来实现它！</p>
+<p>参考 ES6 中的 Template String：</p>
+<pre><code class="language-js">`
+ &lt;div&gt;
+     &lt;h2&gt;${title}&lt;/h2&gt;
+     &lt;div class="content"&gt;${content}&lt;/div&gt;
+ &lt;/div&gt;
+`
+</code></pre>
+<p>只需要替换符合 <code>/\$\{\w.+\}/g</code> 这个正则的文本即可。</p>
+<p>用 Replace 方法：</p>
+<pre><code class="language-js">.replace(/\$\{\w.+\}/g, function (variable) {
+    return otherValue;
+});
+</code></pre>
+<p>去掉 <code>${</code>和<code>}</code>，然后返回实际值即可。</p>
+<pre><code class="language-js">var compile = function (functionObject) {
+    return function (it) {
+        return functionObject.toString().match(/\/\*([\s\S]*?)\*\//)[1].replace(/\$\{\w.+\}/g, function (variable) {
+            return it[variable];
+        });
+    }
+};
+</code></pre>
+<p>测试下：</p>
+<pre><code class="language-js">var toHtml1 = compile(function () {/*
+ &lt;div&gt;
+     &lt;h2&gt;${title}&lt;/h2&gt;
+     &lt;div class="content"&gt;${content}&lt;/div&gt;
+ &lt;/div&gt;
+ */
+});
+var test2 = {
+    title: 'title string 2',
+    content: 'content string 2'
+};
+document.body.innerHTML += toHtml1(test2);
+</code></pre>
+<p>那么如果变量是这样的呢 <code>&lt;h2&gt;${data.title}&lt;/h2&gt;</code>？</p>
+<p>只需要用 <code>.</code> 分割字符串，然后逐步拿到值就行了：</p>
+<pre><code class="language-js">var value = it;
+variable = variable.replace('${', '').replace('}', '');
+variable.split('.').forEach(function (section) {
+    value = value[section];
+});
+return value;
+</code></pre>
+<p>测试下：</p>
+<pre><code class="language-js">var test3 = {
+    data: {
+        title: 'title string 3',
+        content: 'content string 3'
+    }
+};
+var toHtml3 = compile(function () {/*
+ &lt;div&gt;
+ &lt;h2&gt;${data.title}&lt;/h2&gt;
+ &lt;div class="content"&gt;${data.content}&lt;/div&gt;
+ &lt;/div&gt;
+ */
+});
+toHtml3(test3);
+</code></pre>
+<pre><code>"
+&lt;div&gt;
+&lt;h2&gt;title string 3&lt;/h2&gt;
+&lt;div class="content"&gt;content string 3&lt;/div&gt;
+&lt;/div&gt;
+"
+</code></pre>
+<p>See example <a href="https://vivaxy.github.io/samples/javascript/template-engine/">here</a>.</p>
+<p>另：已经有人造了轮子：<a href="https://github.com/sindresorhus/multiline">multiline</a></p>

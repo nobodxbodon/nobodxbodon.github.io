@@ -1,0 +1,123 @@
+<h2>原文：<a href="https://www.barretlee.com/2012-09-18-%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E4%B8%80%E4%B8%AA%E6%94%AF%E6%8C%81%E6%96%B9%E6%B3%95%E9%93%BE%E5%BC%8F%E8%B0%83%E7%94%A8%E7%9A%84JavaScript%E5%BA%93.html">如何设计一个支持方法链式调用的JavaScript库</a></h2>
+<hr/>
+<p>title: 如何设计一个支持方法链式调用的JavaScript库
+categories:</p>
+<ul>
+<li>JavaScript</li>
+<li>杂物间
+tags:</li>
+<li>tech</li>
+<li>cnblogs
+warning: true
+date: 2012-09-18 09:37:00
+fromUrl: http://www.cnblogs.com/hustskyking/archive/2012/09/18/3049801.html
+from: 博客园</li>
+</ul>
+<hr/>
+<p>&lt;p&gt;&lt;strong&gt;本文从ITeye导入&lt;/strong&gt;&lt;/p&gt;</p>
+<p>&lt;p&gt;可以先了解下&amp;nbsp;&lt;a class="titlelink" href="http://www.cnblogs.com/hustskyking/archive/2012/09/18/3049802.html"&gt;javascript链式调用的实现方式&lt;/a&gt;&lt;/p&gt;</p>
+<pre><code>//设计一个支持方法链式调用的JavaScript库
+
+/*
+    常见于大多数JavaScript库中的特性
+ &amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;
+       特性          |                       说明
+ &amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;
+       事件          |   添加和删除事件监听器，对时间对象进行规范内化处理
+       DOM          |   类名管理，样式管理
+       Ajax         |   多XMLHttpRequest进行规范化处理
+ &amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;&amp;mdash;
+
+    注：可以对私有的_$构造函数进行扩充
+*/
+Function.prototype.method = function(name, fn){
+    this.prototype[name] = fn;
+    return this;
+};
+
+(function(){
+
+    function _$(els){
+        this.element = [];
+        for(var i = 0, len = els.length; i &lt; len; i++){
+            var element = els[i];
+            if(typeof element === 'string'){
+                element = document.getElementById(element);
+            }
+            this.element.push(element);
+        }
+        return this;
+    }
+
+    /*
+        Events
+            * addEvent
+    */
+
+    _$.method('addEvent', function(type, fn){
+            var add = function(el){
+            if(window.addEventListener){
+                el.addEventListener(type, fn, false);
+            }else if(window.attachEvent){
+                el.attachEvent('on' + type, fn);
+            }
+            this.each(function(el){
+                add(el);
+            });
+        }).
+
+    /*
+        otherFun
+            * each
+            * setStyle
+            * show
+    */
+
+        method('otherFun', function(fn){
+            for(var i = 0, len = this.element.length; i &lt; len; i++){
+                fn.call(this, this.element[i]);
+            }
+            return this;
+        }).
+        method('setStyle', function(prop, val){
+            this.each(function(el){
+                el.style[prop] = val;
+            });
+            return this;
+        }).
+        method('show', function(){
+            var that = this;
+            this.each(function(el){
+                that.setStyle('display', 'none');
+            });
+            return this;
+        });
+
+    window.installHelper = function(scope, interface){
+        scope[interface] = function(){
+            return new _$(arguments);
+        };
+    };
+})();
+
+/*
+    //处理库中$的冲突问题
+
+    用户可能会这样使用：
+    installHelper(window, "$");
+
+    $('example').show();
+
+    也可以将功能添加到实现定义好的命名空间对象中：
+    window.com = window.com || {};
+    com.example = com.example || {};
+    com.example.util = com.example.util || {};
+
+    installHelper(com.example.util, '$');
+    (function(){
+        var get = com.example.util.get;
+        get('example').show();
+    })();
+*/
+
+</code></pre>

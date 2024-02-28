@@ -1,0 +1,206 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Java%E9%9B%86%E5%90%88%E5%85%AD-Stack.html">Java集合六-Stack</a></h2>
+<hr/>
+<h2>title: Java集合六-Stack
+toc: true
+date: 2019-11-27 10:05:10
+cover: https://img.paulzzh.com/touhou/random?11
+categories: Java源码
+tags: [Java基础, 面试总结, 集合]
+description: 本篇总结了Java中的Stack</h2>
+<p>学完<a href="https://jasonkayzk.github.io/2019/11/26/Java%E9%9B%86%E5%90%88%E4%BA%94-Vector/">Vector</a>了之后，接下来我们开始学习Stack。Stack很简单，它继承于Vector。学习方式还是和之前一样，先对Stack有个整体认识，然后再学习它的源码；最后再通过实例来学会使用它。内容包括：</p>
+<ul>
+<li>Stack介绍</li>
+<li>Stack源码解析(基于JDK11.0.4)</li>
+<li>Stack示例</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>一. Stack介绍</h2>
+<p><strong>Stack简介</strong></p>
+<p>Stack是栈, 它的特性是：<strong>先进后出</strong>(FILO, First In Last Out)</p>
+<ul>
+<li><p><strong>Stack是继承于<a href="https://jasonkayzk.github.io/2019/11/26/Java%E9%9B%86%E5%90%88%E4%BA%94-Vector/">Vector</a>(矢量队列)的</strong>, 由于Vector是通过数组实现的，这就意味着，<strong>Stack也是通过数组实现的, 而非链表</strong></p>
+</li>
+<li><p>并且Stack也是使用synchronized实现同步的</p>
+</li>
+</ul>
+<p>显然, 我们<strong>也可以将LinkedList当作栈</strong>来使用</p>
+<p>&lt;br/&gt;</p>
+<p><strong>Stack的继承关系</strong></p>
+<pre><code class="language-java">java.lang.Object
+↳     java.util.AbstractCollection&lt;E&gt;
+   ↳     java.util.AbstractList&lt;E&gt;
+       ↳     java.util.Vector&lt;E&gt;
+           ↳     java.util.Stack&lt;E&gt;
+
+public class Stack&lt;E&gt; extends Vector&lt;E&gt; {}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>Stack和Collection的关系如下图:</strong></p>
+<p><img alt="Stack和Collection的关系.jpg" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/Stack%E5%92%8CCollection%E7%9A%84%E5%85%B3%E7%B3%BB.jpg"/></p>
+<p>&lt;br/&gt;</p>
+<p><strong>Stack的构造方法</strong></p>
+<p>Stack<strong>只有一个默认构造方法</strong>，如下：</p>
+<pre><code class="language-java">public Stack() {}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>Stack的API</strong></p>
+<p>Stack是栈，它<strong>常用的API</strong>如下：</p>
+<pre><code class="language-java">             boolean       empty()
+synchronized E             peek()
+synchronized E             pop()
+             E             push(E object)
+synchronized int           search(Object o)
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>注意:</strong> 由于Stack和继承于Vector，因此<strong>它也包含Vector中的全部API</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2>二. Stack源码解析(基于JDK11.0.4)</h2>
+<p>Stack的源码非常简单，下面我们对它进行学习:</p>
+<pre><code class="language-java">public class Stack&lt;E&gt; extends Vector&lt;E&gt; {
+    
+    // 构造方法
+    public Stack() {}
+
+    // push方法：将元素存入栈顶
+    public E push(E item) {
+        // 将元素存入栈顶
+        // addElement()的实现在Vector.java中
+        addElement(item);
+
+        return item;
+    }
+
+    // pop方法：返回栈顶元素，并将其从栈中删除
+    public synchronized E pop() {
+        E       obj;
+        int     len = size();
+
+        obj = peek();
+        // 删除栈顶元素，removeElementAt()的实现在Vector.java中
+        removeElementAt(len - 1);
+
+        return obj;
+    }
+
+    // peek方法：返回栈顶元素，不执行删除操作
+    public synchronized E peek() {
+        int     len = size();
+
+        if (len == 0)
+            throw new EmptyStackException();
+        // 返回栈顶元素，elementAt()具体实现在Vector.java中
+        return elementAt(len - 1);
+    }
+
+    // 栈是否为空
+    public boolean empty() {
+        return size() == 0;
+    }
+
+    // 查找元素o(使用equals()方法)在栈中的位置：由栈底向栈顶方向查找
+    public synchronized int search(Object o) {
+        // 获取元素索引，elementAt()具体实现在Vector.java中
+        int i = lastIndexOf(o);
+
+        if (i &gt;= 0) {
+            return size() - i;
+        }
+        return -1;
+    }
+
+    // 版本ID, 这个用于版本升级控制
+    private static final long serialVersionUID = 1224463164541339165L;
+}
+
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>总结:</strong></p>
+<p><strong>① Stack实际上是通过数组去实现的</strong></p>
+<ul>
+<li><p>执行<strong>push</strong>时(即，<strong>将元素推入栈中</strong>)，是通过将元素追加的数组的末尾中</p>
+</li>
+<li><p>执行<strong>peek</strong>时(即，<strong>取出栈顶元素，不执行删除</strong>)，是返回数组末尾的元素</p>
+</li>
+<li><p>执行<strong>pop</strong>时(即，<strong>取出栈顶元素，并将该元素从栈中删除</strong>)，是取出数组末尾的元素，然后将该元素从数组中删除</p>
+</li>
+</ul>
+<p><strong>② Stack继承于Vector，意味着Vector拥有的属性和功能，Stack都拥有</strong></p>
+<p><strong>③</strong> Stack继承于Vector，也意味着<strong>Stack也是通过synchronized这种低效的方式实现多线程同步</strong>的</p>
+<p>Vector都已经被淘汰了, 他的儿子当然也被淘汰了</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2>三. Stack示例</h2>
+<p>下面我们通过实例学习如何使用Stack</p>
+<pre><code class="language-java">/**
+ * @desc Stack的测试程序。测试常用API的用法
+ *
+ * @author zk
+ */
+public class StackTest {
+
+    public static void main(String[] args) {
+        Stack stack = new Stack();
+        // 将1,2,3,4,5添加到栈中
+        for(int i=1; i&lt;6; i++) {
+            stack.push(String.valueOf(i));
+        }
+
+        // 遍历并打印出该栈
+        iteratorThroughRandomAccess(stack) ;
+
+        // 查找“2”在栈中的位置，并输出
+        int pos = stack.search("2");
+        System.out.println("the postion of 2 is:"+pos);
+
+        // pup栈顶元素之后，遍历栈
+        stack.pop();
+        iteratorThroughRandomAccess(stack) ;
+
+        // peek栈顶元素之后，遍历栈
+        String val = (String)stack.peek();
+        System.out.println("peek:"+val);
+        iteratorThroughRandomAccess(stack) ;
+
+        // 通过Iterator去遍历Stack
+        iteratorThroughIterator(stack) ;
+    }
+
+    /**
+     * 通过快速访问遍历Stack
+     */
+    public static void iteratorThroughRandomAccess(List list) {
+        String val = null;
+        for (int i=0; i&lt;list.size(); i++) {
+            val = (String)list.get(i);
+            System.out.print(val+" ");
+        }
+        System.out.println();
+    }
+
+    /**
+     * 通过迭代器遍历Stack
+     */
+    public static void iteratorThroughIterator(List list) {
+
+        String val = null;
+        for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+            val = (String)iter.next();
+            System.out.print(val+" ");
+        }
+        System.out.println();
+    }
+}
+
+------- Output -------
+1 2 3 4 5 
+the postion of 2 is:4
+1 2 3 4 
+peek:4
+1 2 3 4 
+1 2 3 4
+</code></pre>
+<p>&lt;br/&gt;</p>

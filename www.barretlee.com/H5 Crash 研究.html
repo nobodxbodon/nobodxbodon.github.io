@@ -1,0 +1,237 @@
+<h2>原文：<a href="https://www.barretlee.com/2016-05-30-h5-crash-research.html">H5 Crash 研究</a></h2>
+<hr/>
+<p>title: H5 Crash 研究
+description: 我们知道，支撑页面在 webview 上良好运转的前提是具备一个高效并且稳定的 webview 容器，而容器的高效稳定不仅仅由容器提供方来保障，也需要容器使用者遵守一些基本准则，否则就有可能出现页面 Crash 的情况，这些准则是什么？什么样的上层代码会引起容器异常退出？这是本文需要阐述的内容
+warning: true
+mark: hot
+categories:</p>
+<ul>
+<li>无线技术</li>
+<li>前端杂烩
+tags:</li>
+<li>H5</li>
+<li>无线</li>
+<li>Crash
+date: 2016-05-30 00:30:12</li>
+</ul>
+<hr/>
+<p>我们知道，支撑页面在 webview 上良好运转的前提是具备一个高效并且稳定的 webview 容器，而容器的高效稳定不仅仅由容器提供方来保障，也需要容器使用者遵守一些基本准则，否则就有可能出现页面 Crash 的情况，这些准则是什么？什么样的上层代码会引起容器异常退出？这是本文需要阐述的内容。</p>
+<p>&lt;!--more--&gt;</p>
+<h3>H5 Crash 问题概况</h3>
+<p>下图是 H5 Crash 的大致流程图：</p>
+<p><img alt="H5 Crash 流程图" src="/media/wwww/share/study/聚聚/源数据/博客聚合/www.barretlee.com../blogimgs/2016/05/30/TB1FCOOKXXXXXccXXXXXXXXXXXX-676-667.png"/>&lt;!--&lt;source src="https://img.alicdn.com/tfs/TB1FCOOKXXXXXccXXXXXXXXXXXX-676-667.png"&gt;--&gt;</p>
+<p>由于前端没办法捕捉到页面 Crash 的状态和堆栈，但是 H5 页面上发生的错误会传递到 Java 和更底层的 Native 直到容器异常退出，在退出的那一刻，容器会将堆栈写入到日志中，当下次打开容器时（也可能是定时上报）就会上报这些堆栈信息。</p>
+<h3>H5 Crash 原因初探</h3>
+<p>测试代码 <a href="//github.com/barretlee/h5crash.git">仓库地址</a>：</p>
+<pre><code class="language-bash">git clone //github.com/barretlee/h5crash.git;
+cd demo;
+</code></pre>
+<p><strong>注意：</strong> 代码需要在 Webview 容器中测试，PC 浏览器下不会出现异常。</p>
+<p>H5 Crash 的原因不太明显，但是从经验上判断和摸索，大致归类为以下三种：</p>
+<p><strong>1. 内存问题</strong></p>
+<ul>
+<li>测试方法：使用闭包，不断增加内存量，看看增加到哪个区间大小， webview 容器会出现异常</li>
+<li>测试地址：<a href="http://rawgit.com/barretlee/h5crash/master/demo/crash-memory.html">http://rawgit.com/barretlee/h5crash/master/demo/crash-memory.html</a>（微信、微博或者其他客户端打开该页面的用户，可以点进去测试下，选择 100M 内存，不出意外，你的客户端会闪退。）</li>
+</ul>
+<pre><code class="language-html">&lt;script&gt;
+var Closure = function() {
+  var _cache = [];
+  var cache = 0;
+  var add = function(size) {
+    cache += size;
+    size = size * 1024 * 1024;
+    _cache.push(new Array(size).join('x'));
+    refresh();
+  };
+  var refresh = function() {
+    r.innerHTML = '内存消耗： ' + cache + 'M';
+  };
+  return {
+    cache: cache + 'M',
+    add: add,
+    refresh: refresh
+  }
+};
+var closure = Closure();
+&lt;/script&gt;
+
+&lt;button onclick="closure.add(1)"&gt;增加 1M 内存消耗&lt;/button&gt;
+&lt;button onclick="closure.add(10)"&gt;增加 10M 内存消耗&lt;/button&gt;
+&lt;button onclick="closure.add(20)"&gt;增加 20M 内存消耗&lt;/button&gt;
+&lt;button onclick="closure.add(50)"&gt;增加 50M 内存消耗&lt;/button&gt;
+&lt;button onclick="closure.add(100)"&gt;增加 100M 内存消耗&lt;/button&gt;
+
+&lt;div id="r"&gt;内存消耗：0 M&lt;/div&gt;
+</code></pre>
+<ul>
+<li>存在的干扰：这种测试存在比较多的干扰，比如设备类型、系统类型（iOS/Android)、和设备内存运行状态等。</li>
+</ul>
+<p><strong>2. Layers 数问题</strong></p>
+<p>Layers 数的获取比较麻烦，Chrome Driver 没有提供该数据的接口，目前也没有比较好的办法拿到这个数据。</p>
+<ul>
+<li>测试方法：通过不同的方式创建层，观察页面的 Crash 情况</li>
+<li>测试地址：<a href="http://rawgit.com/barretlee/h5crash/master/demo/crash-layer.html">http://rawgit.com/barretlee/h5crash/master/demo/crash-layer.html</a></li>
+</ul>
+<pre><code class="language-html">&lt;style&gt;.transform {
+  transform: translateZ(0);
+}
+.animation {
+  width:100px;
+  height:100px;
+  background:red;
+  position:relative;
+  animation:move 5s infinite;
+}
+
+@keyframes move {
+  from {left:0px;}
+  to {left:200px;}
+}
+&lt;/style&gt;
+&lt;script&gt;
+var Layer = function() {
+  function getType() {
+    return document.querySelector('input:checked').value;
+  };
+  return {
+    createOne: function(index) {
+      var div = document.createElement('div');
+      div.appendChild(document.createTextNode(index));
+      switch(getType()) {
+        case 'opacity':
+          div.style.cssText = "opacity:" + (index / 1000);
+          break;
+        case  'transform':
+          div.className = 'transform';
+          break;
+        case  'animation':
+          div.className = 'animation';
+          break;
+        case  'zindex':
+          div.style.cssText = "position:relative; z-index:" + index;
+          break;
+      }
+      document.body.appendChild(div);
+    },
+    create: function(num) {
+      [].slice.call(document.querySelectorAll('div')).forEach(function(item) {
+        item.parentNode &amp;&amp; item.parentNode.removeChild(item);
+      });
+      while(num--) {
+        this.createOne(num);
+      }
+    }
+  }
+};
+var layer = Layer();
+&lt;/script&gt;
+
+&lt;strong&gt;层类型: &lt;/strong&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" checked name="type" value="opacity"&gt; &lt;span&gt;通过 opacity 创建层&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" name="type" value="transform"&gt; &lt;span&gt;通过 transforms 创建层&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" name="type" value="animation"&gt; &lt;span&gt;通过 animation 创建层&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" name="type" value="zindex"&gt; &lt;span&gt;通过绝对定位分层&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;button onclick="layer.create(1)"&gt;创建 1 个层&lt;/button&gt;
+&lt;button onclick="layer.create(10)"&gt;创建 10 个层&lt;/button&gt;
+&lt;button onclick="layer.create(20)"&gt;创建 20 个层&lt;/button&gt;
+&lt;button onclick="layer.create(50)"&gt;创建 50 个层&lt;/button&gt;
+&lt;button onclick="layer.create(100)"&gt;创建 100 个层&lt;/button&gt;
+&lt;button onclick="layer.create(200)"&gt;创建 200 个层&lt;/button&gt;
+&lt;button onclick="layer.create(500)"&gt;创建 500 个层&lt;/button&gt;
+&lt;button onclick="layer.create(1000)"&gt;创建 1000 个层&lt;/button&gt;
+&lt;button onclick="layer.create(2000)"&gt;创建 2000 个层&lt;/button&gt;
+&lt;button onclick="layer.create(5000)"&gt;创建 5000 个层&lt;/button&gt;
+&lt;button onclick="layer.create(10000)"&gt;创建 10000 个层&lt;/button&gt;
+</code></pre>
+<ul>
+<li>实际上，创建多个层，也是对内存的巨大消耗，页面 Crash 可能还是因为内存消耗过大</li>
+</ul>
+<p><strong>3. 并发过多问题</strong></p>
+<ul>
+<li>测试方法：尝试并发发出多种不同的请求（Fetch请求、XHR 请求、Script/CSS 资源请求），观察页面 Crash 情况</li>
+<li>测试地址：<a href="http://rawgit.com/barretlee/h5crash/master/demo/crash-request.html">http://rawgit.com/barretlee/h5crash/master/demo/crash-request.html</a></li>
+</ul>
+<pre><code class="language-html">&lt;script&gt;
+var Request = function() {
+  function getType() {
+    return document.querySelector('input:checked').value;
+  };
+  function getResource() {
+    var type = getType();
+    var resource = {
+      fetch: '/',
+      xhr: '/',
+      script: '//g.alicdn.com/sd/data_sufei/1.5.1/aplus/index.js',
+      css: '//g.alicdn.com/kg/global-util/1.0.3/index-min.css'
+    };
+    return resource[type];
+  };
+  return {
+    emitOne: function() {
+      var url = getResource() + "?_t=" + (new Date * 1 + Math.random());
+      switch(getType()) {
+        case 'fetch':
+          return fetch('/');
+        case 'xhr':
+          with(new XMLHttpRequest) {
+            open('GET', url);
+            send();
+          }
+          return;
+        case 'script':
+          var s = document.createElement('script');
+          s.src = url;
+          document.body.appendChild(s);
+          return;
+        case 'css':
+          var s = document.createElement('link');
+          s.href = url;
+          document.body.appendChild(s);
+      }
+    },
+    emit: function(num) {
+      [].slice.call(document.querySelectorAll('script,link')).forEach(function(item) {
+        item.parentNode &amp;&amp; item.parentNode.removeChild(item);
+      });
+      while(num--) {
+        this.emitOne();
+      }
+    }
+  }
+};
+var request = Request();
+&lt;/script&gt;
+
+&lt;strong&gt;请求类型: &lt;/strong&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" checked name="type" value="fetch"&gt; &lt;span&gt;使用 Fetch 发送请求&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" name="type" value="xhr"&gt; &lt;span&gt;使用 XHR 发送请求&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" name="type" value="script"&gt; &lt;span&gt;并发请求脚本资源&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;label&gt;&lt;input type="radio" name="type" value="css"&gt; &lt;span&gt;并发请求样式资源&lt;/span&gt;&lt;/label&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;button onclick="request.emit(1)"&gt;并发 1 个请求&lt;/button&gt;
+&lt;button onclick="request.emit(10)"&gt;并发 10 个请求&lt;/button&gt;
+&lt;button onclick="request.emit(20)"&gt;并发 20 个请求&lt;/button&gt;
+&lt;button onclick="request.emit(50)"&gt;并发 50 个请求&lt;/button&gt;
+&lt;button onclick="request.emit(100)"&gt;并发 100 个请求&lt;/button&gt;
+&lt;button onclick="request.emit(500)"&gt;并发 500 个请求&lt;/button&gt;
+&lt;button onclick="request.emit(1000)"&gt;并发 1000 个请求&lt;/button&gt;
+</code></pre>
+<ul>
+<li>存在的干扰：设备的种类、设备的 CPU 使用情况和网络状况等。</li>
+</ul>
+<h3>H5 Crash 测试结果</h3>
+<p><strong>测试结果：</strong></p>
+<ul>
+<li>通过 opacity、animation、positon 等方式创建层，即便是 1w 个，页面也没有明显变化；但是使用 transform 创建 2k~5k 个层，页面会卡顿几秒后立即闪退；</li>
+<li>内存是条红线，测试发现，一次性消耗 20M 的内存，会导致客户端立即闪退；</li>
+<li>并发请求也是存在响应问题的，Fetch API 和 CSS Resource 并发 1k 请求没有出现问题，但是 XHR 和 Script Resource 请求，问题特别明显，虽然没有导致页面闪退，但是页面已经进入了假死状态。</li>
+</ul>
+<p>以上临界值还可以继续精确。</p>
+<h3>小结</h3>
+<p>本文主要是对 H5 Crash 做了一个预研，测试可能存在诸多误差，测试方法也需要改进，不过沿着这些的思路考究会比较容易找到结论。</p>
+<p>后续会给出比较有意义的边界数据以及探测工具。</p>

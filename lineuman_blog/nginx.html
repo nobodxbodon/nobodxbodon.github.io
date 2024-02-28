@@ -1,0 +1,131 @@
+<h2>原文：<a href="https://lineuman_blog/2017-08-01-nginx.html">nginx</a></h2>
+<hr/>
+<h2>tags: [nginx]</h2>
+<p>reference</p>
+<p><a href="https://www.nginx.com/resources/admin-guide/installing-nginx-open-source/">https://www.nginx.com/resources/admin-guide/installing-nginx-open-source/</a></p>
+<h2>install from source code</h2>
+<p>所需要的额外的库</p>
+<p>yum install gcc</p>
+<p>yum install make</p>
+<p>yum install pcre-static</p>
+<p>yum install zlib-static</p>
+<pre><code>tar -xvf nginx-1.10.3.tar
+cd nginx-1.10.3
+./configure
+
+显示如下
+Configuration summary
+  + using system PCRE library
+  + OpenSSL library is not used
+  + using builtin md5 code
+  + sha1 library is not found
+  + using system zlib library
+
+  nginx path prefix: "/usr/local/nginx"
+  nginx binary file: "/usr/local/nginx/sbin/nginx"
+  nginx modules path: "/usr/local/nginx/modules"
+  nginx configuration prefix: "/usr/local/nginx/conf"
+  nginx configuration file: "/usr/local/nginx/conf/nginx.conf"
+  nginx pid file: "/usr/local/nginx/logs/nginx.pid"
+  nginx error log file: "/usr/local/nginx/logs/error.log"
+  nginx http access log file: "/usr/local/nginx/logs/access.log"
+  nginx http client request body temporary files: "client_body_temp"
+  nginx http proxy temporary files: "proxy_temp"
+  nginx http fastcgi temporary files: "fastcgi_temp"
+  nginx http uwsgi temporary files: "uwsgi_temp"
+  nginx http scgi temporary files: "scgi_temp"
+
+
+make
+make install
+</code></pre>
+<h2>配置</h2>
+<ol>
+<li>将nginx所在路径加入环境变量</li>
+</ol>
+<p>echo "export PATH=$PATH:/usr/local/nginx/sbin"&gt;&gt;/etc/profile</p>
+<ol start="2">
+<li><p>使用nginx -c /usr/local/nginx/conf/nginx.con启动进程</p>
+</li>
+<li><p>如何配置nginx服务和开机自启？</p>
+</li>
+</ol>
+<ul>
+<li>添加nginx.service服务</li>
+</ul>
+<p>在/usr/lib/systemd/system目录下添加nginx.service</p>
+<pre><code>[Unit]
+Description=The NGINX HTTP and reverse proxy server
+After=syslog.target network.target remote-fs.target nss-lookup.target
+
+[Service]
+Type=forking
+PIDFile=/usr/local/nginx/logs/nginx.pid
+ExecStartPre=/usr/local/nginx/sbin/nginx -t
+ExecStart=/usr/local/nginx/sbin/nginx -c /usr/local/nginx/conf/nginx.conf
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<ol start="4">
+<li>配置开启基础认证</li>
+</ol>
+<p>注意基础认证使用base64进行编码</p>
+<p>抓包方法<code>tcpdump  -XvvennSs 0 -i eth0 tcp[20:2]=0x4745 or tcp[20:2]=0x4854</code>抓取http报文</p>
+<pre><code>htpasswd -bcm /home/p root root
+auth_basic "hello";
+auth_basic_user_file /home/p;
+
+</code></pre>
+<ol start="5">
+<li>配置开机自启</li>
+</ol>
+<p>systemctl enable nginx.service</p>
+<p>reference</p>
+<p><a href="https://www.nginx.com/resources/wiki/start/topics/examples/systemd/">https://www.nginx.com/resources/wiki/start/topics/examples/systemd/</a></p>
+<p><a href="https://www.linode.com/docs/web-servers/nginx/how-to-configure-nginx">https://www.linode.com/docs/web-servers/nginx/how-to-configure-nginx</a></p>
+<ol start="6">
+<li>如何监听多个端口，或者说如何在一台主机上启动多个服务？</li>
+</ol>
+<p>配置多个server,不同的server监听不同的端口就可以了。</p>
+<ol start="7">
+<li>配置https</li>
+</ol>
+<p>安装openssl-devel,</p>
+<p><code>yum install openssl-devel</code></p>
+<p>nginx编译时使用ssl模块</p>
+<p><code>./configure  --with-http_stub_status_module --with-http_ssl_module</code></p>
+<p>conf中开启监听443端口，并添加证书</p>
+<h2>遇到的问题</h2>
+<p>nginx: [emerg] bind() to 0.0.0.0:80 failed (98: Address already in use)</p>
+<p>定位分析：</p>
+<p>已经有程序占用了80端口，导致该端口对nginx不可用</p>
+<p>我使用nginx -c /usr/local/nginx/conf/nginx.conf启动nginx进程,然后去访问服务器发现报403错误。</p>
+<p>定位分析：</p>
+<p>查看相关文件</p>
+<p>ps -ef|grep nginx</p>
+<pre><code>root     240585      1  0 18:19 ?        00:00:00 nginx: master process nginx -c /usr/local/nginx/conf/nginx.conf
+nobody   240587 240585  0 18:19 ?        00:00:00 nginx: worker process
+</code></pre>
+<p>cat /usr/local/nginx/conf/nginx.conf</p>
+<pre><code>#user  nobody;
+worker_processes  1;
+
+</code></pre>
+<p>cat /usr/local/nginx/logs/error.log</p>
+<pre><code>2017/08/01 19:05:22 [error] 48166#0: *4 open() "/usr/local/nginx/html/50x.html" failed (13: Permission denied), client: 10.10.10.10, server: loc        alhost, request: "GET /50x.html HTTP/1.1", host: "9.9.9.9"
+</code></pre>
+<p>403 Forbidden</p>
+<p>可能是权限问题</p>
+<ol>
+<li>已nobody用户运行的程序的权限不足以访问系统中的文件，所以重新配置nginx，以普通用户的方式运行
+解决方法修改nginx.conf,重新载入nginx -s reload</li>
+<li>配置服务器的根目录权限为普通用户可读chmod 744 /usr/local/nginx/conf/nginx.conf</li>
+</ol>
+<h2>安全相关配置</h2>
+<pre><code># 不显示nginx版本信息
+server_tokens off;
+</code></pre>

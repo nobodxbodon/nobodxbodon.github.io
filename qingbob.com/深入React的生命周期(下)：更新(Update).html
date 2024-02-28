@@ -1,0 +1,199 @@
+<h2>原文：<a href="https://qingbob.com/2017-11-05-dig-into-react-lifecircle-02.html">深入React的生命周期(下)：更新(Update)</a></h2>
+<hr/>
+<h2>layout: post
+title: 深入React的生命周期(下)：更新(Update)
+modified: 2017-11-05
+tags: [javascript, React]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<h2>更新阶段</h2>
+<ul>
+<li><code>componentWillReceiveProps()</code></li>
+<li><code>shouldComponentUpdate()</code></li>
+<li><code>componentWillUpdate()</code></li>
+<li><code>render()</code></li>
+<li><code>componentDidUpdate()</code></li>
+</ul>
+<p>更新阶段会在三种情况下触发：</p>
+<ul>
+<li><p>更改<code>props</code>：一个组件并不能主动更改它拥有的<code>props</code>属性，它的<code>props</code>属性是由它的父组件传递给它的。强制对<code>props</code>进行重新赋值会导致程序报错。</p>
+</li>
+<li><p>更改<code>state</code>：<code>state</code>的更改是通过<code>setState</code>接口实现的。同时设计<code>state</code>是需要技巧的，哪些状态可以放在里面，哪些不可以；什么样的组件可以有<code>state</code>，哪些不可以有；这些都需要遵循一定原则的。这个话题有机会可以单独拎出来说</p>
+</li>
+<li><p>调用<code>forceUpdate</code>方法：这个我们在上一阶段已经提到了，强制组件进行更新。</p>
+</li>
+</ul>
+<h3><code>setState</code>是异步的</h3>
+<p>组件的更新原因很大一部分是因为调用<code>setState</code>接口更新<code>state</code>所致，我们常常以同步的方式调用<code>setState</code>，但实际上<code>setState</code>方法是异步的。比如下面的这段代码：</p>
+<pre><code class="language-javascript">onClick() {
+  this.setState({
+    count: 1,
+  });
+  console.log(this.state.count)
+}
+</code></pre>
+<p>在一个组件的点击事件处理函数中，我们更新了<code>state</code>中的<code>count</code>，然后立即尝试去读取最新的<code>count</code>。事实是你读取的结果不是<code>1</code>，二应该是之前的值。</p>
+<p>更致命的错误是类似这样在同一个块级中连续调用<code>setState</code>的代码</p>
+<pre><code class="language-javascript">this.setState({ ...this.state, foo: 42 });
+this.setState({ ...this.state, isBar: true });
+</code></pre>
+<p>在这种情况下，第一次设置的<code>foo</code>值会被第二次的设置覆盖而还原</p>
+<h3><code>componentWillReceiveProps(nextProps)</code></h3>
+<p>当传递给组件的<code>props</code>发生改变时，组件的<code>componentWillReceiveProps</code>即会被触发调用，方法传递的参数的是发更更改的之后的<code>props</code>值（通常我们命名为<code>nextProps</code>）。在这个方法里，你可以通过<code>this.props</code>访问当前的属性值，可以通过<code>nextProps</code>访问即将更新的属性值，或者将它们进行对比，或者将它们进行计算，最终确定你需要更新的状态（<code>state</code>）并最终调用<code>setState</code>方法对状态进行更新。在这个钩子函数中调用<code>setState</code>方法并不会触发再一次渲染。</p>
+<p>非常有意思的是，虽然<code>props</code>的更改会引起<code>componentWillReceiveProps</code>的调用；但<code>componentWillReceiveProps</code>的调用并不意味着<code>props</code>真的发生了变化。这可不是我说的，Facebook官方花了一整篇文章说这件事：<a href="https://reactjs.org/blog/2016/01/08/A-implies-B-does-not-imply-B-implies-A.html">(A =&gt; B) !=&gt; (B =&gt; A)</a>。比如看下面这个组件：</p>
+<pre><code class="language-javascript">class App extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      number: 1,
+    }
+    this.onClick = this.onClick.bind(this);
+  }
+  onClick() {
+    this.setState({
+      number: 1,
+    })
+  }
+  render() {
+    return (
+      &lt;MyButton onClick={this.onClick} data-number={this.state.number} /&gt;
+    );
+  }
+}
+</code></pre>
+<p>每一次点击事件都会重新使用<code>setState</code>接口对<code>state</code>进行更新，但每次更新的值都是相同的，即<code>number:1</code>。并且把当前组件的状态以属性的形式传递给<code>&lt;MyButton /&gt;</code>。问题来了，那么当我每次点击按钮时，按钮<code>MyButton</code>的<code>componentWillReceiveProps</code>都会被调用吗？</p>
+<p>会，即使每次更新的值都是一样的。</p>
+<p>之所以出现这样的情况原因其实非常简单，因为React并不知道传入的属性是否发生了更改。而为什么React不尝试去做一个是否相等的判断呢？</p>
+<p>因为办不到，新传入的属性和旧属性可能引用的是同一块内存区域（引用类型），所以单纯的用<code>===</code>判断是否相等并不准确。可行的解决办法之一就是对数据进行深度拷贝然后进行比较，但是这对大型数据结构来说性能太差，还能会碰上循环引用的问题。</p>
+<p>所以React将这个变化通过钩子函数暴露出来，千万不要以为当<code>componentWillReceiveProps</code>被调用就意味着<code>props</code>发生了更改，如果需要在变化时做一些事情，务必要手动的进行比较。</p>
+<h3><code>shouldComponentUpdate()</code></h3>
+<p><code>shouldComponentUpdate</code>很重要，它可以决定是否继续当前的生命周期。默认情况该函数返回<code>true</code>即继续当前的生命周期；也可以返回<code>false</code>终止当前的生命周期，阻止进一步的<code>render</code>与接下来的步骤。</p>
+<p>我们上面刚刚说过，React并不会对<code>props</code>进行深度比较，这对<code>state</code>也同样适用。所以即使<code>props</code>与<code>state</code>并未发生了更改，<code>shouldComponentUpdate</code>也会被再次调用，包括接下来的步骤<code>componentWillUpdate</code>、<code>render</code>、<code>componentDidUpdate</code>也都会再次运行一次。这很明显会给性能造成不小的伤害。</p>
+<p>传递给<code>shouldComponentUpdate</code>的参数包括即将改变的<code>props</code>和<code>state</code>，形参的名称是<code>nextProps</code>和<code>nextState</code>，在这个函数里你同时又能通过<code>this</code>关键字访问到当前的<code>state</code>和<code>props</code>，所以你在这里你是“全知”的，可以完全按照你自己的业务逻辑判断是否<code>state</code>与<code>props</code>是否发生了更改，并且决定是否要继续接下来的步骤。<code>shouldComponentUpdate</code>也就通常我们在优化React性能时的第一步。这一步的优化不仅仅是优化组件自身的流程，同时也能节省去子组件的重新渲染的代价 。</p>
+<p>当然如果你对判断<code>props</code>是否发生改变的检测逻辑要求比较简单的话，比如只是浅度（shallow）的判断（即判断对象的引用是否发生了更改）对象是否发生了更改，那么可以利用<code>PureRenderMixin</code>：</p>
+<pre><code class="language-javascript">import PureRenderMixin from 'react-addons-pure-render-mixin'; // ES6
+const createReactClass = require('create-react-class');
+
+createReactClass({
+  mixins: [PureRenderMixin],
+
+  render: function() {
+    return &lt;div className={this.props.className}&gt;foo&lt;/div&gt;;
+  }
+});
+</code></pre>
+<p><code>minins</code>是React支持的一种允许多个组件共用代码的一种机制。<code>PureRenderMixin</code>插件的工作非常简单，它为你重写了<code>shouldComponentUpdate</code>函数，并对对象进行了浅度对比，具体代码可以从<a href="https://github.com/facebook/react/blob/15-stable/src/addons/shallowCompare.js">这里</a>和<a href="https://github.com/moroshko/shallow-equal">这里</a>找到。</p>
+<p>在ES6中你也可以通过直接继承<code>React.PureComponent</code>而不是<code>React.Component</code>来实现这个功能。用React官方的原话说就是</p>
+<blockquote>
+<p><code>React.PureComponent</code> is exactly like <code>React.Component</code>, but implements <code>shouldComponentUpdate()</code> with a shallow prop and state comparison.</p>
+</blockquote>
+<p><strong>Pure</strong></p>
+<p>我们再次强调，<code>PureComponent</code>为你实现的只是对引用是否发生了更改的判断，甚至可以说它只是简单的用<code>===</code>进行的判断，所以这也是我们称之为<strong>pure</strong>的原因。为了具体说明问题，我们举一个实际的例子</p>
+<pre><code class="language-javascript">/* MyButton.js: */
+import React from 'react';
+
+class MyButton extends React.PureComponent {
+  constructor(props) {
+    super(props);
+  }
+  render() {
+    console.log('render');
+    return &lt;button onClick={this.props.onClick}&gt;My Button&lt;/button&gt;
+  }
+}
+export default MyButton;
+
+/* App.js: */
+import React from 'react';
+import MyButton from './Button.js';
+
+class App extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      arr: [1],
+    }
+    this.onClick = this.onClick.bind(this);
+  }
+  onClick() {
+    this.setState({
+      arr: [...this.state.arr, 2],
+    });
+  }
+  render() {
+    return (
+      &lt;MyButton onClick={this.onClick} data-arr={this.state.arr} /&gt;
+    );
+  }
+}
+
+export default App;
+</code></pre>
+<p>在上面的这个例子中，每一次点击都会修改<code>state</code>中的<code>arr</code>变量，<code>arr</code>变量的引用和值都发生了更改。重点是<code>MyButton</code>组件继承的是<code>React.PureComponent</code>。那么每一次点击时，<code>MyButton</code>中的log信息都会被打印出来，即每次都会重新出发<code>render</code></p>
+<p>如果我们把<code>onClick</code>方法做一些修改：</p>
+<pre><code class="language-javascript">onClick() {
+  const arr = this.state.arr;
+  arr.push(2);
+  this.setState({
+    arr: arr,
+  })
+}
+</code></pre>
+<p>这个方法同样使得<code>arr</code>变量发生了变化，但是仅仅是值而不是引用，此时当再一次点击按钮（<code>MyButton</code>）时，<code>MyButton</code>都不会再次进行渲染了。也就是说<code>PureComponent</code>提前为我们进行了shallow comparison.</p>
+<p>使用这种只修改引用，不修改数据内容的immutable data也常常作为优化React的一个手段之一。<a href="http://facebook.github.io/immutable-js/">immutable.js</a>就能为我们实现这个需求，每一次修改数据时你得到的其实是新的数据引用，而不会修改到原有的数据。同时Redux中的reducer想达到的效果其实也相似，<code>reducer</code>的重点是它的纯洁性（pure），在执行时不会造成副作用，即避免对传入数据引用的修改，同时也方便比较出组件状态的更新。</p>
+<h3><code>componentWillUpdate()</code></h3>
+<p><code>componentWillUpdate</code>方法和<code>componentWillMount</code>方法很相似，都是在即将发生渲染前触发，在这里你能够拿到<code>nextProps</code>和<code>nextState</code>，同时也能访问到当前即将过期的<code>props</code>和<code>state</code>。如果有需要的话你可以把它们暂存起来便于以后使用。</p>
+<p>与<code>componentWillMount</code>不同的是，在这个方法中你不可以使用<code>setState</code>，否则会立即触发另一轮的渲染并且又再一次调用<code>componentWillUpdate</code>，陷入无限循环中。</p>
+<h3><code>componentDidUpdate()</code></h3>
+<p>和Mount阶段类似，当组件进入<code>componentDidUpdate</code>阶段时意味着最新的原生DOM已经渲染完成并且可以通过<code>refs</code>进行访问。该函数会传入两个参数，分别是<code>prevProps</code>和<code>prevState</code>，顾名思义是之前的状态。你仍然可以通过<code>this</code>关键字访问当前的状态，因为可以访问原生DOM的关系，在这里也适用于做一些第三方需要操纵类库的操作。</p>
+<p>update阶段各个钩子函数的调用顺序也与mount阶段相似，尤其是<code>componentDidUpdate</code>，子组件的该钩子函数优先于父组件调用</p>
+<p>因为可以访问DOM的缘故，我们有可能需要在这个钩子函数里获取实际的元素样式，并且写入<code>state</code>中，比如你的代码可能会长这样：</p>
+<pre><code class="language-javascript">componentDidUpdate(prevProps, prevState) {
+// BAD: DO NOT DO THIS!!!
+  let height = ReactDOM.findDOMNode(this).offsetHeight;
+  this.setState({ internalHeight: height });
+}
+</code></pre>
+<p>如果默认情况下你的<code>shouldComponentUpdate()</code>函数总是返回<code>true</code>的话，那么这样在<code>componentDidUpdate</code>里更新<code>state</code>的代码又会把我们带入无限<code>render</code>的循环中。如果你必须要这么做，那么至少应该把上一次的结果缓存起来，有条件的更新<code>state</code>:</p>
+<pre><code class="language-javascript">componentDidUpdate(prevProps, prevState) {
+  // One possible fix...
+  let height = ReactDOM.findDOMNode(this).offsetHeight;
+  if (this.state.height !== height ) {
+    this.setState({ internalHeight: height });
+  }
+}
+</code></pre>
+<h2>死亡阶段</h2>
+<h3><code>componentWillUnmount()</code></h3>
+<p>当组件需要从DOM中移除时，即会触发这个钩子函数。这里没有太多需要注意的地方，在这个函数中通常会做一些“清洁”相关的工作</p>
+<ol>
+<li>将已经发送的网络请求都取消掉</li>
+<li>移除组件上DOM的Event Listener</li>
+</ol>
+<h2>总结</h2>
+<p>最后再次强调，本文是开源图书<a href="https://www.gitbook.com/book/developmentarc/react-indepth/details">React In-depth: An exploration of UI development</a>的归纳。基本上想了解生命周期看这一本书就够了，看完也无敌了。希望这篇中文简约版也会对你有帮助。</p>
+<h2>参考文章集合</h2>
+<p><a href="https://www.site2share.com/folder/20020526">https://www.site2share.com/folder/20020526</a></p>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/understand-react-01">面试系列之二：你真的了解React吗（上）如何设计组件以及重要的生命周期</a></li>
+<li><a href="https://www.v2think.com/understand-react-02">面试系列之三：你真的了解React吗（中）组件间的通信以及React优化</a></li>
+<li><a href="https://www.v2think.com/understand-react-03">面试系列之四：你真的了解React吗（下）Flux与Vuex的差异以及Webpack</a></li>
+<li><a href="https://www.v2think.com/create-app-user-guide">从React脚手架工具学习React项目的最佳实践（上）：前端基础配置</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-01">深入React的生命周期(上)：出生(Mount)</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-02">深入React的生命周期(下)：更新(Update)</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-01">深入理解 Webpack 打包分块（上）</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-02">深入理解 Webpack 打包分块（下）</a></li>
+<li><a href="https://www.v2think.com/webpack-tutorial">Webpack 速成</a></li>
+<li><a href="https://www.v2think.com/tips-for-building-mobx-app">构建大型 Mobx 应用的几个建议</a></li>
+<li><a href="https://www.v2think.com/five-tips-for-redux-large-applications">【译文】给构建大型 redux 应用的五个建议</a></li>
+<li><a href="https://www.v2think.com/redux-performance-01-basic">React + Redux 性能优化（一）：理论篇</a></li>
+<li><a href="https://www.v2think.com/redux-performance-02-immutablejs">React + Redux 性能优化（二）工具篇： Immutablejs</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>
+<p>​</p>

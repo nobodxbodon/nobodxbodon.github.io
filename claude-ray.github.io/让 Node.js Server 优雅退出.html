@@ -1,0 +1,84 @@
+<h2>原文：<a href="https://claude-ray.github.io/node-graceful-server.html">让 Node.js Server 优雅退出</a></h2>
+<hr/>
+<h2>title: 让 Node.js Server 优雅退出
+date: 2019-05-23 15:12:28
+tag: [Node.js,graceful-server,pm2]
+categories: Node.js</h2>
+<h2>前言</h2>
+<p>服务进程登场时往往“蓄势而发”，犹抱琵琶半遮面，真正的服务端口跑起来之前做了太多准备工作，然而落幕工作常被人草草了之。</p>
+<p>如何让进程自然结束，这本是 hello world 级的基础内容，却有很多项目忽视了这一步的必要性以及重要性。</p>
+<p>目前使用 PM2 作为进程管理的项目仍占多数，有相关意识的朋友使用 <code>pm2 reload</code> 让进程“平滑”重启，但这就不需要额外的代码处理了吗？</p>
+<p>举个例子，未捕获的异常导致服务强行退出时，是不是有可能进程尚未记录异常日志、请求执行到了一半、甚至中断了更复杂的业务工作？PM2 只能截住新的请求，旧的请求是否彻底执行完毕，仍需要业务自己判断。</p>
+<p>下面我们先抛开 PM2 ，聊聊基本的进程退出需要哪些工作。首先我们从未捕获的异常说起。</p>
+<p>&lt;!--more--&gt;</p>
+<h2>uncaughtException</h2>
+<p>在进程退场前做好日志记录工作，算是基本需求之一。</p>
+<blockquote>
+<p>预先约定，本篇示例代码中出现的 <code>logger</code> 均为 log4js 或 console 等日志模块的伪代码。</p>
+</blockquote>
+<p>默认情况下，控制台打印 <code>Uncaught exception xxx</code> 之后直接退出。如果是用 log4js 记录日志到文件或推送远程日志库，不好意思，很可能发现记录中什么错误信息都没留下。</p>
+<h3>server.close() 是核心</h3>
+<p>优雅退出的核心方法是调用 <a href="https://nodejs.org/api/net.html#net_server_close_callback">server.close([callback])</a>，用于停止 server 接受建立新的连接，并保持已经存在的连接。当所有的连接关闭同时 server 响应 'close' 事件时，server 才会最终关闭，并调用回调函数（可选的）。另外, 如果服务器在未开启状态下执行 close，将会抛出 error 作为回调函数的唯一参数。</p>
+<p>在 close 回调函数里可确保没有未结束的请求，也就能放心结束进程。网上随处可见的最基本的处理版本如下：</p>
+<pre><code class="language-js">process.on('uncaughtException', async err =&gt; {
+  logger.error(`Uncaught exception:`, err)
+  server.close(() =&gt; {
+    logger.info('Server is closed')
+    process.exit(1)
+  })
+})
+</code></pre>
+<h3>确保 close 成功</h3>
+<p>然而这离我们的目标还有段距离，代码运行一段时间就会遇到问题，异常记录是有了，server 迟迟没有退出的迹象。因为有很多 http 请求是 keep-alive 的，只要这些连接释放不掉，server 就无法 close，同时会有源源不断的新请求进来。</p>
+<p>这也是为什么有人采用 setTimeout 计时强制关闭超时的 server.close。然而 setTimeout 方式治标不治本，既然阻塞退出的根源是 keep-alive 没能立刻关闭，就通过 <a href="https://nodejs.org/api/http.html#http_server_keepalivetimeout">server.keepAliveTimeout</a> (新增于v8.0.0) 缩短其持续的时间吧。</p>
+<p>另外，我们为了把可能的错误都收集起来，server.close 的异常也放到在日志中去。</p>
+<blockquote>
+<p>事实上，Node.js 只会在这里抛出一种错误 <code>ERR_SERVER_NOT_RUNNING</code>，<a href="https://github.com/nodejs/node/blob/master/lib/net.js#L1517">源码</a>为证，所以这里日志没太多必要，下一小节会加深这个想法。</p>
+</blockquote>
+<pre><code class="language-js">process.on('uncaughtException', async err =&gt; {
+  logger.fatal(`Uncaught exception:`, err)
+  server.keepAliveTimeout = 1
+  server.close(e =&gt; {
+    if (e) {
+      logger.error('Error while server is closing', e)
+    }
+    logger.info('Server is closed')
+    process.exit(1)
+  })
+
+  setTimeout(() =&gt; {
+    logger.warn('Server close timeout! Process exit 1')
+    process.exit(1)
+  }, 10000)
+})
+</code></pre>
+<p>上面的代码依然保留了 setTimeout 的退出方式，避免有时候真的出现特殊异常。</p>
+<h3>close 其他连接</h3>
+<p>接下来介绍一种会导致关闭失败的情况：该 server 被用来建立了 websocket 连接。</p>
+<pre><code class="language-js">const io = require('socket.io')(server);
+</code></pre>
+<p>如果不显示执行 socket server 的 close 方法，仍然被认为有连接未被释放。因此，不得不再加上 socket 的处理，当然你也可以考虑其他方式断开 socket 连接。</p>
+<pre><code class="language-js">io.sockets.server.close()
+</code></pre>
+<p>需要提醒的是，像上面这样 http 和 websocket 共用端口，直接关闭 websocket 意味着将对同一个 server 调用两次 close 方法，可能导致 http 服务的 close 回调抛错，还记得该回调函数只会抛出的一种错误吗？Bingo! 也许 close 回调中的错误真的没有记录的必要了。</p>
+<p>好吧，进程终于可以正常退出了，这就完了吗？当然没有！</p>
+<p>如果程序中还保持着 mysql，redis 等等服务的连接，或者有异步的操作的话，继续等这些连接关闭、任务执行完毕吧。</p>
+<h2>unhandledRejection</h2>
+<p>再提一下 unhandledRejection，尽管目前 Node.js 不会因此而主动退出进程，但将来会。</p>
+<blockquote>
+<p>In the future, promise rejections that are not handled will terminate the Node.js process with a non-zero exit code</p>
+</blockquote>
+<p>业务最好做一下适当把控，最起码，监听这个事件是有助于自定义的日志记录。之前的 uncaughtException 也同样适用。</p>
+<pre><code class="language-js">process.on('unhandledRejection', async err =&gt; {
+  logger.error(`Unhandle Promise rejection:`, err)
+})
+</code></pre>
+<h2>SIGINT</h2>
+<p>说完了异常退出，别忘了正常退出，最常见的事件是 <code>SIGINT</code>，使用 PM2 停止或重启进程时就会触发。</p>
+<p>但处理起来保持和 uncaughtException 一致就好了，除了这里的 exit code 应该是 0。</p>
+<h2>PM2 Graceful Shutdown</h2>
+<p>有工具自然要好好利用，但 PM2 不止有 reload。</p>
+<p>写到这里，笔者犯懒了，文档链接先放这，有时间再考虑搬运，请按需自取 XD</p>
+<p>https://pm2.io/doc/en/runtime/best-practices/graceful-shutdown/</p>
+<h2>小结</h2>
+<p>综上，进程退场要做的事情其实并不少，日志的记录方式依赖于实际技术栈，不太容易封装成通用的库，一般得结合自身框架定制。</p>

@@ -1,0 +1,201 @@
+<h2>原文：<a href="https://qingbob.com/2017-11-05-dig-into-react-lifecircle-01.html">深入React的生命周期(上)：出生(Mount)</a></h2>
+<hr/>
+<h2>layout: post
+title: 深入React的生命周期(上)：出生(Mount)
+modified: 2017-11-05
+tags: [javascript, React]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<h2>前言</h2>
+<p>本文是对开源图书<a href="https://www.gitbook.com/book/developmentarc/react-indepth/details">React In-depth: An exploration of UI development</a>的归纳和增强。同时也融入了自己在开发中的一些心得。</p>
+<p>你或许会问，阅读完这篇文章之后，对工作中开发React相关的项目有帮助吗？实话实说帮助不会太大。这篇文章不会教你使用一项新技术，不会帮助你提高编程技巧，而是完善你的React知识体系，例如区分某些概念，明白一些最佳实践是怎么来的等等。如果硬是要从功利的角度来考虑这些知识带来的价值，那么会是对你的面试非常有帮助，这篇文章里知识点在面试时常常会被问到，为什么我知道，因为我吃过它们的亏。</p>
+<p>React组件的生命周期划分为出生（mount），更新（update）和死亡（unmount），然而我们怎么知道组件进入到了哪个阶段？只能通过React组件暴露给我们的钩子（hook）函数来知晓。什么是钩子函数，就是在特定阶段执行的函数，比如<code>constructor</code>只会在组件出生阶段被调用一次，这就算是一个“钩子”。反过来说，当某个钩子函数被调用时，也就意味着它进入了某个生命阶段，所以你可以在钩子函数里添加一些代码逻辑在用于在特定的阶段执行。当然这不是绝对的，比如<code>render</code>函数既会在出生阶段执行，也会在更新阶段执行。顺便多说一句，“钩子”在编程中也算是一类设计模式，比如github的<a href="https://developer.github.com/webhooks/">Webhooks</a>。顾名思义它也是钩子，你能够通过Webhook订阅github上的事件，当事件发生时，github就会像你的服务发送POST请求。利用这个特性，你可以监听master分支有没有新的合并事件发生，如果你的服务收到了该事件的消息，那么你就可以例子执行部署工作。</p>
+<p>我们按照阶段的时间顺序对每一个钩子函数进行讲解。</p>
+<h2>出生</h2>
+<ul>
+<li><code>constructor</code></li>
+<li><code>getDefaultProps()</code> (React.createClass) or<code> MyComponent.defaultProps</code> (ES6 class)</li>
+<li><code>getInitialState()</code> (React.createClass) or <code>this.state = ...</code> (ES6 constructor)</li>
+<li><code>componentWillMount()</code></li>
+<li><code>render()</code></li>
+<li><code>componentDidMount()</code></li>
+</ul>
+<p>首先我们要引入一个概念：组件（Component）。组件非常好理解，就是可以复用的模板。例如通过按钮组件（模板）我们可以实例化出多个相似的按钮出来。这和代码中类（Class）的概念是相同的。并且在ES6代码中定义组件时也是通过类来实现的：</p>
+<pre><code class="language-javascript">import React from 'react';
+
+class MyButton extends React.Component {
+  constructor(props) {
+    super(props);
+  }
+  render() {
+    return (
+      &lt;button&gt;My Button&lt;/button&gt;
+    )
+  }
+}
+</code></pre>
+<p>也可以通过ES2015的语法接口<code>React.createClass</code>来定义组件：</p>
+<pre><code class="language-javascript">const MyButton = React.createClass({
+  render: function() {
+    return (
+      &lt;button&gt;My Button&lt;/button&gt;      
+    );
+  }
+});
+</code></pre>
+<p>如果你的babel配置文件<code>.babelrc</code>中<code>presets</code>指定了<code>es2015</code>，那么在编译之后的文件中，你会发现<code>class MyButton extends React.Component</code>语句编译之后的结果就是<code>React.createClass</code>。</p>
+<p>注意到当我们在使用<code>class</code>定义组件时，继承（<code>extends</code>）了<code>React.Component</code>类。但实际上这并不是必须的。比如你完全可以写成纯函数的形式：</p>
+<pre><code class="language-javascript">const MyButton = () =&gt; {
+  return &lt;h1&gt;My Button&lt;/h1&gt;
+}
+</code></pre>
+<p>这就是无状态（stateless）组件，顾名思义它是没有自己独立状态的，这个概念被用于React的设计模式：High Order Component和Container Component中。具体可以参考我的另一篇文章<a href="https://zhuanlan.zhihu.com/p/27828866">面试系列之三：你真的了解React吗（中）组件间的通信以及React优化</a>。</p>
+<p>它的局限也很明显，因为没有继承<code>React.Component</code>的缘故，你无法获得各种生命周期函数，也无法访问状态（<code>state</code>），但是仍然能够访问传入的属性（<code>props</code>）,它们是作为函数的参数传入的。</p>
+<p>定义组件时并不会触发任何的生命周期函数，组件自己也并不会存在生命周期这一说，真正的生命周期开始于组件被渲染至页面中。</p>
+<p>让我们看一段最简单的代码：</p>
+<pre><code class="language-javascript">import React from 'react';
+import ReactDOM from 'react-dom';
+
+class MyComponent extends React.Component {
+  render() {
+    return &lt;div&gt;Hello World!&lt;/div&gt;;
+  }
+};
+
+ReactDOM.render(&lt;MyComponent /&gt;, document.getElementById('mount-point'));
+</code></pre>
+<p>在这段代码中，<code>MyComponnet</code>组件通过<code>ReactDOM.render</code>函数被渲染至页面中。如果你在<code>MyComponent</code>组件的各个生命周期函数中添加日志的话，会看到日志依次在控制台输出。</p>
+<p>为了说明一些问题，我们尝试对代码做一些修改：</p>
+<pre><code class="language-javascript">import MyButton from './Button';
+class MyComponent extends React.Component {
+  render() {
+    const button = &lt;MyButton /&gt;
+    return &lt;div&gt;Hello World!&lt;/div&gt;;
+  }
+};
+</code></pre>
+<p>在组件的<code>render</code>函数中，我们使用到了另一个组件<code>MyButton</code>，但是它并没有出现在最终返回的DOM结构中。问题来了，当<code>MyComponnet</code>组件渲染至页面上时，<code>Mybutton</code>组件的生命周期函数会开始调用吗？<code>&lt;MyButton /&gt;</code>究竟代表了什么？</p>
+<p>我们先回答第二个问题。<code>&lt;MyButton /&gt;</code>看上去确实有些奇怪，但是别忘了它是JSX语法。如果你去看babel编译之后的代码就会发现，其实它把<code>&lt;MyButton /&gt;</code>转化为函数调用：<code>React.createElement(MyButton, null)</code>。也就是说<code>&lt;XXX /&gt;</code>语法，实际上返回的是一个XXX类型的React元素（Element）。React元素说白了就是一个纯粹的object对象，基本由<code>key</code>（id）, <code>props</code>（属性）, <code>ref</code>, <code>type</code>（元素类型）四个属性组成（<code>children</code>属性包含在<code>props</code>中）。为什么要用“纯粹”这个形容词，是因为虽然它和组件有关，但是它并不包含组件的方法，此时此刻，它仅仅是一个包含若干属性的对象。如果你觉得这一切看上去都无比熟悉的话，那么你猜对了，元素代表的其实是虚拟DOM（Virtual DOM）上的节点，是对你在页面上看到的每一个DOM节点的描述。</p>
+<p>那么我们可以回答第一个问题了，仅仅是生成一个React元素是不会触发生命周期函数调用的。</p>
+<p>当我们把React元素传递给<code>ReactDOM.render</code>方法，并且告诉它具体在页面上渲染元素的位置之后，它会给我们返回组件的实例（Instance）。在JS语法中，我们通过<code>new</code>关键字初始化一个类的实例，而在React中，我们通过<code>ReactDOM.render</code>方法来初始化一个组件的实例。但一般情况下我们不会用到这个实例，不过你也可以保留它的引用赋值给一个变量，当测试组件的时候可以派上用场</p>
+<h3>Default Porps &amp; Default State</h3>
+<p>如果被问起<code>constructor</code>之后的下一个生命周期函数是什么，绝大部分人会回答<code>componentWillMount</code>。准确来说应该是<code>getDefaultProps</code>和<code>getInitialState</code>。</p>
+<p>而为什么大部分人对这两个函数陌生，是因为这两个函数只是在ES2015语法中创建组件时暴露出来，在ES6语法中我们通过两个赋值语句实现了同样的效果。</p>
+<p>比如添加默认属性的<code>getDefaultProps</code>函数在ES6中是通过给组件类添加静态字段<code>defaultProps</code>实现的：</p>
+<pre><code class="language-javascript">class MyComponent extends React.Component() {
+  //...
+}
+MyComponent.defaultProps = { age: 'unknown' }
+</code></pre>
+<p>在实际计算属性的过程中，将传入属性与默认属性进行合并成为最终使用的属性，用伪代码写的意思就是</p>
+<pre><code class="language-javascript">this.props = Object.assign(defaultProps, passedProps);
+</code></pre>
+<p>注意知识点要来了，看下面这个组件:</p>
+<pre><code class="language-javascript">class App extends React.Component {
+  constructor(props) {
+    super(props);
+  }
+  render() {
+    return &lt;div&gt;{this.props.name}&lt;/div&gt;
+  }
+}
+App.defaultProps = { name: 'default' };
+</code></pre>
+<p>我给这个组件设置了一个默认属性<code>name</code>，值为<code>default</code>。那么在</p>
+<ol>
+<li><code>&lt;App name={null} /&gt;</code></li>
+<li><code>&lt;App name={undefined} /&gt;</code>
+这两种情况下，<code>this.props.name</code>值会是什么？也就是最终输出会是什么？</li>
+</ol>
+<p>正确答案是如果给<code>name</code>传入的值是<code>null</code>，那么最终页面上的输出是空，也就是<code>null</code>会生效；如果传入的是<code>undefined</code>，那么React认为这个值是<code>undefined</code>货真价实的未定义，则会使用默认值，最终页面上的输出是<code>default</code></p>
+<p>而获取默认状态的函数<code>getInitialState</code>在ES6中是通过给<code>this.state</code>赋值实现的</p>
+<pre><code class="language-javascript">class Person extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { count: 0 };
+  }
+  //...
+}
+</code></pre>
+<h3><code>componentWillMount()</code></h3>
+<p><code>componentWillMount</code>函数在第一次<code>render</code>之前被调用，并且只会被调用一次。当组件进入到这个生命周期中时，所有的<code>state</code>和<code>props</code>已经配置完毕，我们可以通过<code>this.props</code>和<code>this.state</code>访问它们，也可以通过<code>setState</code>重新设置状态。总之推荐在这个生命周期函数里进行状态初始化的处理，为下一步<code>render</code>做准备</p>
+<h3><code>render()</code></h3>
+<p>当一切配置都就绪之后，就能够正式开始渲染组件了。<code>render</code>函数和其他的钩子函数不同，它会同时在出生和更新阶段被调用。在出生阶段被调用一次，但是在更新阶段会被调用多次。</p>
+<p>无论是编写哪个阶段的<code>render</code>函数，请牢记一点：保证它的“纯粹”（pure）。怎样才算纯粹？最基本的一点是不要尝试在render里改变组件的状态。因为通过<code>setState</code>引发的状态改变会导致再一次调用render函数进行渲染，而又继续改变状态又继续渲染，导致无限循环下去。如果你这么做了你会在开发模式下收到警告：</p>
+<blockquote>
+<p>Warning: Cannot update during an existing state transition (such as within <code>render</code> or another component's constructor). Render methods should be a pure function of props and state; constructor side-effects are an anti-pattern, but can be moved to <code>componentWillMount</code>.</p>
+</blockquote>
+<p>另一个需要注意的地方是，你也不应该在<code>render</code>中通过<code>ReactDOM.findDOMNode</code>方法访问原生的DOM元素（原生相对于虚拟DOM而言）。因为这么做存在两个风险：</p>
+<ol>
+<li>此时虚拟元素还没有被渲染到页面上，所以你访问的元素并不存在</li>
+<li>因为当前的<code>render</code>即将执行完毕返回新的DOM结构，你访问到的可能是旧的数据。</li>
+</ol>
+<p>并且如果你真的这么做了，那么你会得到警告：</p>
+<blockquote>
+<p>Warning: App is accessing findDOMNode inside its render(). render() should be a pure function of props and state. It should never access something that requires stale data from the previous render, such as refs. Move this logic to componentDidMount and componentDidUpdate instead.</p>
+</blockquote>
+<h3><code>componentDidMount()</code></h3>
+<p>当这个函数被调用时，就意味着可以访问组件的原生DOM了。如果你有经验的话，此时不仅仅能够访问当前组件的DOM，还能够访问当前组件孩子组件的原生DOM元素。</p>
+<p>你可能会觉得所有这一切应当。</p>
+<p>在之前讲解每个周期函数时，都只考虑单个组件的情况。但是当组件包含孩子组件时，孩子组件的钩子函数的调用顺序就需要留意了。</p>
+<p>比如有下面这样的树状结构的组件</p>
+<p><img alt="react element tree" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com./images/react-element-tree.png"/></p>
+<p>在出生阶段时<code>componentWillMount</code>和<code>render</code>的调用顺序是</p>
+<pre><code>A -&gt; A.0 -&gt; A.0.0 -&gt; A.0.1 -&gt; A.1 -&gt; A.2.
+</code></pre>
+<p>这很容易理解，因为当你想渲染父组件时，务必也要立即开始渲染子组件。所以子组件的生命周期开始于父组件之后。</p>
+<p>而<code>componentDidMount</code>的调用顺序是</p>
+<pre><code> A.2 -&gt; A.1 -&gt; A.0.1 -&gt; A.0.0 -&gt; A.0 -&gt; A
+</code></pre>
+<p><code>componentDidMount</code>的调用顺序正好是<code>render</code>的反向。这其实也很好理解。如果父组件想要渲染完毕，那么首先它的子组件需要提前渲染完毕，也所以子组件的<code>componentDidMount</code>在父组件之前调用。</p>
+<p>正因为我们能在这个函数中访问原生DOM，所以在这个函数中通常会做一些第三方类库初始化的工具，包括异步加载数据。比如说对<code>c3.js</code>的初始化</p>
+<pre><code class="language-javascript">import React from 'react';
+import ReactDOM from 'react-dom';
+import c3 from 'c3';
+
+export default class Chart extends React.Component {
+
+  componentDidMount() {
+    this.chart = c3.generate({
+      bindto: ReactDOM.findDOMNode(this.refs.chart),
+      data: {
+        columns: [
+          ['data1', 30, 200, 100, 400, 150, 250],
+          ['data2', 50, 20, 10, 40, 15, 25]
+        ]
+      }
+    });
+  }
+
+  render() {
+    return (
+      &lt;div ref="chart"&gt;&lt;/div&gt;
+    );
+  }
+}
+</code></pre>
+<p>因为能够访问原生DOM的缘故，你可能会在<code>componentDidMount</code>函数中重新对元素的样式进行计算，调整然后生效。因此立即需要对DOM进行重新渲染，此时会使用到<code>forceUpdate</code>方法</p>
+<h2>参考文章集合</h2>
+<p><a href="https://www.site2share.com/folder/20020525">https://www.site2share.com/folder/20020525</a></p>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/understand-react-01">面试系列之二：你真的了解React吗（上）如何设计组件以及重要的生命周期</a></li>
+<li><a href="https://www.v2think.com/understand-react-02">面试系列之三：你真的了解React吗（中）组件间的通信以及React优化</a></li>
+<li><a href="https://www.v2think.com/understand-react-03">面试系列之四：你真的了解React吗（下）Flux与Vuex的差异以及Webpack</a></li>
+<li><a href="https://www.v2think.com/create-app-user-guide">从React脚手架工具学习React项目的最佳实践（上）：前端基础配置</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-01">深入React的生命周期(上)：出生(Mount)</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-02">深入React的生命周期(下)：更新(Update)</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-01">深入理解 Webpack 打包分块（上）</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-02">深入理解 Webpack 打包分块（下）</a></li>
+<li><a href="https://www.v2think.com/webpack-tutorial">Webpack 速成</a></li>
+<li><a href="https://www.v2think.com/tips-for-building-mobx-app">构建大型 Mobx 应用的几个建议</a></li>
+<li><a href="https://www.v2think.com/five-tips-for-redux-large-applications">【译文】给构建大型 redux 应用的五个建议</a></li>
+<li><a href="https://www.v2think.com/redux-performance-01-basic">React + Redux 性能优化（一）：理论篇</a></li>
+<li><a href="https://www.v2think.com/redux-performance-02-immutablejs">React + Redux 性能优化（二）工具篇： Immutablejs</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>

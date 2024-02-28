@@ -1,0 +1,137 @@
+<h2>原文：<a href="https://qingbob.com/2017-02-13-design-philosophy-behind-flux-and-redux-CB-EB-ESB.html">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></h2>
+<hr/>
+<h2>layout: post
+title: Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus
+modified: 2017-02-13
+tags: [Javascript, Flux, Redux]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>在阅读本文之前你首先要对前端的Flux架构和Redux架构有所了解（或者可以通过<a href="https://zhuanlan.zhihu.com/p/21324696">这篇文章</a>对Flux进行扫盲），因为本文就是介绍Flux架构和Redux架构背后的设计思想。</p>
+<p>Bus在这篇文章里不是公交车的意思，在计算机领域中应该把它翻译为“总线”。就算是公交车，今天我也不是老司机。</p>
+<h2>Command Bus</h2>
+<p>如果你是一名PHP开发者，一定对Command Bus不陌生。因为在目前我查阅到的资料当中，对Command Bus描述大多的都存在于PHP相关的编程文章当中，例如著名的Laravel框架已经集成了Command Bus。</p>
+<p>第一个问题是，什么是Command（以下我们会用中文“指令”代替）？</p>
+<p>指令代表的是用户的操作意图，指令的作用是将用户意图与它相关的实现技术隔离开。指令传递的只是一段信息，它的数据结构可以只是一个对象。比如我们定义一个登陆指令：</p>
+<p>{% highlight javascript %}
+class LoginCommand
+{
+constructor(name, password) {
+this.name = name;
+this.password = password;
+}
+}</p>
+<p>let loginCommand = new LoginCommand('liguangyi', '123456');
+{% endhighlight %}</p>
+<p>这个登陆指令只说了三件事：1.我要登陆，2.用户名是wang，3.密码是123456 。它并没有包含任何有关登陆调用方法，登陆函数等技术信息。</p>
+<p>很明显，系统中除了发出指令的一方，还需要接受并且处理指令的一方，这个接收方就是我们的主人公command bus，command bus有一个handle函数用于处理指令。所以，发出指令到接收指令的处理流程应该是：</p>
+<p>{% highlight javascript %}
+let loginCommand = new LoginCommand('liguangyi', '123456');
+commandBus.handle(loginCommand);
+{% endhighlight %}</p>
+<p>注意command bus与command是一一对应的关系，而非所有的command都交由单一的command bus处理。</p>
+<p>为了更准确的说明，不如我们为这段代码补充一些上下文，假设当前代码运行在一个MVC架构的程序中，这个MVC框架我们借用Node.js的Kraken。很明显的是这段代码属于controller部分，因为它用于转发用户的请求。那么改写之后的具体的代码是：</p>
+<p>{% highlight javascript %}
+module.exports.loginController = function (req, res, next) {
+let loginCommand = new LoginCommand(
+req.body.username,
+req.body.password
+);
+this.commandBus.handle(loginCommand);
+};
+{% endhighlight %}</p>
+<p>然而commandBus.handle究竟做了哪些事情，这也很容易推敲出来，最简单的情境是，首先对用户的输入进行验证，验证通过之后进行登录操作，代码的编写方式大致如此：</p>
+<p>{% highlight javascript %}
+module.exports.loginController = function (req, res, next) {
+UserModel.validate(req.body.username, req.body.password);
+UserModel.login(req.body.username, req.body.password);
+};
+{% endhighlight %}</p>
+<h3>Command Bus，或者说这种模式带来什么好处？</h3>
+<p>从以上代码我们能总结出以下几点Command Bus带来的优势：</p>
+<ol>
+<li>职责划分更加明确</li>
+</ol>
+<p>在上面举例的传统代码方式中，<code>loginController</code> 是包含登录逻辑的。而通常在设计中我们推崇的是fat model, skinny controller，也就是业务逻辑尽可能的封装在Model层中，Controller只负责转发来自View的请求。如果你对MVC有所了解的话，View与Controller是一一对应的关系，有点勉强的说，这样的对应实际上把业务职责嫁接给了View层，或者说是污染了View层。因为仔细想想，登录这件事和用户操作界面一点关系都没有，登陆逻辑既能发生在网页上，也能存在于WebForm或者是命令行中。</p>
+<p>显而易见的是如果使用command bus的方式对业务进行封装，Controller就变得更纯粹了一些，当然如果想修改登录逻辑时，我们不必去打扰View，不必去Controller里查找，而是去command bus里修改就可以了。</p>
+<ol start="2">
+<li>复用性更好</li>
+</ol>
+<p>当我们把command抽象为一个类时，就意味着这个类可以任意处复用，command可以在任意处创建。发出登录指令这件事不仅限于网页的Controller中，可以来自命令行，也可以来自API，只要是能创建command实例的地方都行。</p>
+<p>同理，对于command bus来说，代码也可以在多处复用。但更重要的是command bus无需再关心它外面的世界，它不用关心自己身在何处，也不用关心传递的指令来自何处。</p>
+<p>最后，这样的封装对于写单元测试也是极大的便利。</p>
+<p>关于Command Bus我们就谈到这里，更多有关Command Bus的实现就不说了，有兴趣的同学可以参考文章最后的参考文献。</p>
+<h2>Event Bus</h2>
+<p>Event Bus机制很好理解，它就是普通事件机制（设计模式中观察者模式）的升级版：</p>
+<ul>
+<li>事件机制由事件的发布者、订阅者和事件本身组成；</li>
+<li>发布者发布事件，订阅者订阅感兴趣的事件；</li>
+<li>一个事件可以拥有多个订阅者，一个订阅者可以订阅多个事件。</li>
+<li>一旦发布者发布了某个事件，订阅该事件的订阅者就会得到通知，并且执行有关该事件的回调函数。</li>
+</ul>
+<p>前端开发者对事件一定不陌生，例如 <code>document.addEventListener("click", clickHandler)</code>，表示我们订阅了doucment上的点击click事件，如果该事件发生，调用clickHandler回调函数；或者以Node.js为例，<code>process.on("message", messageHandler)</code>，表示当前子进程在等待父进程传递来的消息，一旦有消息传到，就会触发message事件，调用messageHandler函数处理消息。</p>
+<p>如果说在浏览器或者Node.js中使用事件是迫于浏览器（引擎）决定的——因为前端程序天生就是EOA（Event-driven Architecture）架构。那么在Java平台使用Event Bus则是完全处于自愿，为了解决通信问题。</p>
+<p>Event Bus的升级之处在于，把事件机制上升到了一个全局的、系统级别的高度，让事件成为不同组件或者服务（可以由不同语言编写）之间通信的必要渠道。任何一方都可以是事件的发布者也可以是订阅者。实现一个Event Bus非常简单：</p>
+<p>{% highlight javascript %}
+let EventBus = {
+publish: function (eventName, eventInfo) {}, // 也可以取名fire/trigger
+subscribe: function (eventName, eventHandler) {} // 可以取名 on/listen
+// unsubscribe // 取消订阅
+// subscribeOnce // 只订阅一次
+}
+{% endhighlight %}</p>
+<p>如此以来，任何服务或者组件都能通过<code>EventBus.publish</code>发布事件，通过<code>EventBus.subscribe</code>订阅事件。</p>
+<p>我们对事件机制如此的熟悉，但却很少去想事件机制带来的益处 简单总结几点如下：</p>
+<ol>
+<li>解耦。拥有事件之后，组件或者服务之间不必产生直接引用，免去了依赖。这使得不同部分之间更加独立，维护起来更加方便。</li>
+<li>事件甚至能解决不同机器之间的通信问题。事件的实现既可以是基于本地也可以是基于网络的，但使用事件的两方都不用关心实现细节，基于EventBus提供的接口编程即可。这里我们可以参考Socket.IO编程</li>
+</ol>
+<p>当然EventBus的缺点也很明显：</p>
+<ol>
+<li>单点故障(Single point of failure)，一旦EventBus服务自己出现问题，这个系统都岌岌可危</li>
+<li>对基于事件机制的系统进行调试和测试永远都是个难题，相信如果你有调试过Node.js代码的话一定深有感触</li>
+</ol>
+<h2>Command Bus VS Event Bus</h2>
+<p>Command Bus和Event Bus其实有点像，有时候会让人产生混淆，它们给人的感觉都是，一方发出请求，另一方用Handler处理请求。</p>
+<p>但是首先在定义概念上，两者就有很大的不同：</p>
+<ul>
+<li>Command是指令，指示去即将完成一件事，比如“为我预订一个房间”</li>
+<li>Event是通知，告诉你已经发生了什么，比如“房间已经预订好了”。并且Event是不可改变(immutable)的，发生了就是发生了</li>
+</ul>
+<p>从技术上来说：</p>
+<ul>
+<li>Command是显示的调用，调用结果可以预见，并且接收者唯一，即对应的Commnd Bus</li>
+<li>Event发布是无目的的，调用结果不可预见，订阅事件方可以多人</li>
+</ul>
+<p>当了解完毕Command Bus和Event Bus之后，回过头看Flux和Redux，是否觉得有似曾相识之处？在个人看来，单独审视action的话看上去它像command，因为它有着明确的业务目的；而action-dispatch的配置更像是事件架构，通常我们在实现Flux架构时，也会采用事件相关的类库来实现这一机制。所以还是仁者见仁智者见智吧。</p>
+<h2>(Enterprise) Service Bus</h2>
+<p>ESB与Command Bus和Event Bus没有太大关系，但因为同属Bus，在这里还是普及一下</p>
+<p>ESB是SOA(Service-oriented Architecture)架构的一部分，在其中它扮演着中间件(middleware)的角色。如果你对什么是SOA和middleware还没有任何概念的话没有关系，在之后的文章中我会再把本文中涉及的EDA、SOA、middleware都梳理一遍。在这里你只需要理解：ESB只服务于特定的架构系统中。</p>
+<p>ESB的作用是为不同应用和服务提供相互间的通信功能。这好像是句不痛不痒的话，毕竟Command Bus和Event Bus也是干这个的。但ESB比他们更抽象、更庞大。你可以把ESB想象成SOA系统中的互联网，来自不同语言、不同协议编写的服务和应用，都能接入这个网络中，每个角色既接受并处理请求，同时也发出请求。</p>
+<p>可以想象从技术层面上来说，ESB就更复杂了，如上所说除了基本的消息转发，还包括协议转换，日志记录，还有背负安全职责等。</p>
+<p><img alt="ESB" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/design-philosophy-behind-flux-and-redux/entservbus.gif"/></p>
+<p>所以直观上看，你会对这个东西又爱又恨，爱它是因为它功能丰富，为你解决了一大堆问题。恨它是因为可以预见维护和开发这样一个中间件是成本高昂的。</p>
+<p>参考文章合集</p>
+<p><a href="https://www.site2share.com/folder/20020514">https://www.site2share.com/folder/20020514</a></p>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/css-clean-arch">CSS 里的整洁架构</a></li>
+<li><a href="https://www.v2think.com/fe-arch-001-principles">前端架构 101（一）：在谈论它们之前我们需要达成的共识</a></li>
+<li><a href="https://www.v2think.com/fe-arch-002-mvc-solved">前端架构 101（二）： MVC 初探</a></li>
+<li><a href="https://www.v2think.com/fe-arch-003-architecture-principles">前端架构 101（三）：MVC 启示录：模块的职责，作用域和通信</a></li>
+<li><a href="https://www.v2think.com/fe-arch-004-flux-rise">前端架构 101（四）：MVC的不足与Flux的崛起</a></li>
+<li><a href="https://www.v2think.com/fe_arch_005_mvp">前端架构 101（五）：从 Flux 进化到 Model-View-Presenter</a></li>
+<li><a href="https://www.v2think.com/fe_arch_006_clean_architecture">前端架构 101（六）：整洁（Clean Architecture）架构是归宿</a></li>
+<li><a href="https://www.v2think.com/arch-enjoy_angular-architecture-best-practices-zh-cn">【译文】【前端架构鉴赏 01】：Angular 架构模式与最佳实践</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_a-scalable-angular2-architecture-zh-cn">【译文】【前端架构鉴赏 02】：可拓展 Angular 2 架构</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_model-view-presenter-with-angular">【译文】【前端架构鉴赏 03】：Angular 与 MVP 模式</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-specification">微前端说明书</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-aggregation">从美团这篇文章聊聊微前端的聚合问题</a></li>
+<li><a href="https://www.v2think.com/mvc-vs-flux">写给前端看的架构文章(1)：MVC VS Flux</a></li>
+<li><a href="https://www.v2think.com/starting-from-limitations-of-mvc-in-front-end-development">从MVC模式在前端开发中的局限性谈起</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>

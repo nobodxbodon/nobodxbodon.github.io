@@ -1,0 +1,85 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Rust%E4%BB%8Epanic%E4%B8%AD%E6%81%A2%E5%A4%8D.html">Rust从panic中恢复</a></h2>
+<hr/>
+<h2>title: Rust从panic中恢复
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?22'
+date: 2022-11-17 13:49:07
+categories: Rust
+tags: [Rust]
+description: 在Go中我们知道，如果程序在运行时发生了panic，如果不使用 recover 恢复，则程序会直接退出；同样的，在Rust中发生数组越界、unwrap 错误等都会panic；通常情况下，发生panic之后，rust会中断程序执行并退出；但是我们也可以指定panic为unwind来展开调用栈，而非中断执行并退出程序；</h2>
+<p>在Go中我们知道，如果程序在运行时发生了panic，如果不使用 recover 恢复，则程序会直接退出；</p>
+<p>同样的，在Rust中发生数组越界、unwrap 错误等都会panic；</p>
+<p>通常情况下，发生panic之后，rust会中断程序执行并退出；</p>
+<p>但是我们也可以指定panic为unwind来展开调用栈，而非中断执行并退出程序；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/recover</li>
+</ul>
+<p>参考：</p>
+<ul>
+<li>https://doc.rust-lang.org/edition-guide/rust-2018/error-handling-and-panics/aborting-on-panic.html</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Rust从panic中恢复</strong></h1>
+<p>Rust 中可以通过在 <code>Cargo.toml</code> 中的 <code>profile</code> 中增加 panic 相应的配置来修改 panic 的行为；</p>
+<p>例如：</p>
+<ul>
+<li><strong>默认情况下 panic 时，进程会打印当前出错的位置，然后退出；</strong></li>
+<li><strong>panic = "unwind"，允许抓取异常；</strong></li>
+<li><strong>panic = "abort"，出错 panic 时，直接 SigAbort 退出进程；</strong></li>
+</ul>
+<p>下面是配置：</p>
+<pre><code class="language-toml">[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "abort"
+</code></pre>
+<p>测试的代码如下：</p>
+<pre><code class="language-rust">extern crate core;
+
+use std::panic;
+
+fn main() {
+    let res = panic::catch_unwind(|| {
+        println!("not panic");
+    });
+    assert!(res.is_ok());
+
+    let res = panic::catch_unwind(|| {
+        panic!("panicked!");
+    });
+    assert!(res.is_err());
+
+    println!("End of main()");
+}
+</code></pre>
+<p>此时，在 dev 模式下：</p>
+<pre><code class="language-bash">$ cargo run
+
+not panic
+thread 'main' panicked at 'panicked!', src\main.rs:12:9
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+End of main()
+</code></pre>
+<p>程序打印：<code>End of main()</code>，并正常退出；</p>
+<p>如果在 release 模式下：</p>
+<pre><code class="language-bash">$ cargo run --release
+not panic
+thread 'main' panicked at 'panicked!', src\main.rs:12:9
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: process didn't exit successfully: `target\release\rust-learn.exe` (exit code: 0xc0000409, STATUS_STACK_BUFFER_OVERRUN)
+</code></pre>
+<p>则会直接退出执行，不会打印最后的输出！</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/recover</li>
+</ul>
+<p>参考：</p>
+<ul>
+<li>https://doc.rust-lang.org/edition-guide/rust-2018/error-handling-and-panics/aborting-on-panic.html</li>
+</ul>
+<p>&lt;br/&gt;</p>

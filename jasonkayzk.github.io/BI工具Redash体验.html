@@ -1,0 +1,170 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/BI%E5%B7%A5%E5%85%B7Redash%E4%BD%93%E9%AA%8C.html">BI工具Redash体验</a></h2>
+<hr/>
+<h2>title: BI工具Redash体验
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?22'
+date: 2021-08-15 15:23:05
+categories: Redash
+tags: [Redash, Docker]
+description: 最近忙着加班，忙里偷闲=体验了一下BI工具Redash；一如既往的，采用Docker配合compose一键部署体验；</h2>
+<p>最近忙着加班，忙里偷闲=体验了一下BI工具Redash；一如既往的，采用Docker配合compose一键部署体验；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker_repo/tree/redash-single</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>BI工具Redash体验</strong></h1>
+<h2>前言-什么是BI</h2>
+<blockquote>
+<p>BI即商业智能（Business Intelligence），它是一套完整的解决方案，用来将企业中现有的数据进行有效的<a href="https://baike.baidu.com/item/%E6%95%B4%E5%90%88/33302">整合</a>，快速准确的提供报表并提出决策依据，帮助企业做出明智的业务经营决策；</p>
+<p>商业智能的概念最早在1996年提出，当时将商业智能定义为一类由<a href="https://baike.baidu.com/item/%E6%95%B0%E6%8D%AE%E4%BB%93%E5%BA%93/381916">数据仓库</a>（或<a href="https://baike.baidu.com/item/%E6%95%B0%E6%8D%AE%E9%9B%86%E5%B8%82/607135">数据集市</a>）、查询报表、数据分析、<a href="https://baike.baidu.com/item/%E6%95%B0%E6%8D%AE%E6%8C%96%E6%8E%98/216477">数据挖掘</a>、数据备份和恢复等部分组成的、以帮助企业决策为目的技术及其应用；</p>
+</blockquote>
+<p>那么话不多说，直接进入安装步骤；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>使用Docker部署Redash</strong></h2>
+<p>首先创建docker-compose文件：</p>
+<p><a href="https://github.com/JasonkayZK/docker_repo/blob/redash-single/docker-compose.yml">docker-compose.yml</a></p>
+<pre><code class="language-yaml">version: '3.6'
+services:
+  server:
+    image: redash/redash:8.0.2.b37747
+    command: server
+    depends_on:
+      - redash_postgres
+      - redash_redis
+    ports:
+      - "15000:5000"
+    networks:
+      - redash
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redash_redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres:123456@redash_postgres/postgres"
+      REDASH_COOKIE_SECRET: "123456"
+      REDASH_WEB_WORKERS: 4
+
+  worker:
+    image: redash/redash:8.0.2.b37747
+    command: scheduler
+    networks:
+      - redash
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      PYTHONUNBUFFERED: 0
+      REDASH_LOG_LEVEL: "INFO"
+      REDASH_REDIS_URL: "redis://redash_redis:6379/0"
+      REDASH_DATABASE_URL: "postgresql://postgres:123456@redash_postgres/postgres"
+      QUEUES: "queries,scheduled_queries,celery"
+      REDASH_COOKIE_SECRET: "123456"
+      WORKERS_COUNT: 2
+
+  redash_redis:
+    image: redis:6.2.4
+    networks:
+      - redash
+    deploy:
+      mode: replicated
+      replicas: 1
+  redash_postgres:
+    image: postgres:13.3
+    networks:
+      - redash
+    environment:
+      POSTGRES_PASSWORD: 123456
+    deploy:
+      mode: replicated
+      replicas: 1
+
+networks:
+  redash:
+    name: redash
+</code></pre>
+<p>需要注意的是：</p>
+<ul>
+<li><strong>Redash依赖Redis和Postgres两个数据库，因此在服务中声明了<code>redash_redis</code>和<code>redash_postgres</code>；</strong></li>
+<li><strong>为了防止网络冲突，将所有的服务都声明在了同一个网络<code>redash</code>下；</strong></li>
+<li><strong>对于Redash服务而言：在<code>worker</code>中声明了数据库的相关配置，并在server服务中启动了服务；</strong></li>
+<li><strong>Redash服务的端口映射为<code>15000:5000</code>，稍后我们会通过15000端口访问它；</strong></li>
+</ul>
+<p>启动Redash服务分为两个步骤：</p>
+<ul>
+<li>① 创建数据库；</li>
+<li>② 启动服务；</li>
+</ul>
+<p>下面一一来看；</p>
+<h3><strong>① 创建数据库</strong></h3>
+<p>直接使用下面的命令启动<code>server</code>服务，并执行<code>create_db</code>命令即可创建并初始化数据库：</p>
+<pre><code class="language-bash">docker-compose -f docker-compose.yml run --rm server create_db
+</code></pre>
+<h3><strong>② 启动服务；</strong></h3>
+<p>使用下面的命令可以一键部署Redash：</p>
+<pre><code class="language-bash">docker-compose -f docker-compose.yml up -d
+</code></pre>
+<p>成功执行命令后可以看到相关服务已经启动：</p>
+<pre><code class="language-bash">[root@VM-234-202-centos ~]# docker ps -a
+CONTAINER ID   IMAGE                        COMMAND                  CREATED       STATUS       PORTS                                                    NAMES
+1ed3c3eecd3a   redash/redash:8.0.2.b37747   "/app/bin/docker-ent…"   6 days ago    Up 6 days    0.0.0.0:15000-&gt;5000/tcp, :::15000-&gt;5000/tcp              redash_server_1
+140940d1edef   redash/redash:8.0.2.b37747   "/app/bin/docker-ent…"   6 days ago    Up 6 days    5000/tcp                                                 redash_worker_1
+00026cfcf3f5   postgres:13.3                "docker-entrypoint.s…"   6 days ago    Up 6 days    5432/tcp                                                 redash_redash_postgres_1
+7aff1d272160   redis:6.2.4                  "docker-entrypoint.s…"   6 days ago    Up 6 days    6379/tcp                                                 redash_redash_redis_1
+965c7b4ac3a0   postgres:13.3                "docker-entrypoint.s…"   6 days ago    Up 6 days    0.0.0.0:15432-&gt;5432/tcp, :::15432-&gt;5432/tcp              mypostgres
+202a5385247f   redis:6.2.4                  "docker-entrypoint.s…"   5 weeks ago   Up 5 weeks   0.0.0.0:16379-&gt;6379/tcp, :::16379-&gt;6379/tcp              redis
+61feb34256e4   mysql:8.0.25                 "docker-entrypoint.s…"   5 weeks ago   Up 5 weeks   33060/tcp, 0.0.0.0:13306-&gt;3306/tcp, :::13306-&gt;3306/tcp   mysql
+e4e3e50b4da7   portainer/portainer-ce       "/portainer"             5 weeks ago   Up 5 weeks   8000/tcp, 0.0.0.0:19000-&gt;9000/tcp, :::19000-&gt;9000/tcp    portainer
+</code></pre>
+<p>通过Portainer也可以查看：</p>
+<p><img alt="redash_0.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/redash_0.png"/></p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注意到，因为我们声明了Redash在独立的redash网络中，因此我们的Redash服务不会影响到我们之前的MySQL、Redis等服务！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>Redash相关操作</strong></h2>
+<p>首次启动Redash后，需要进行一些用户名、密码等基本配置；</p>
+<p>然后就可以进入主页面了！</p>
+<p><img alt="redash_1.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/redash_1.png"/></p>
+<h3><strong>添加数据源</strong></h3>
+<p>点击设置，可以添加对应的数据源：</p>
+<p><img alt="redash_2.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/redash_2.png"/></p>
+<p>上面是我添加的我在腾讯云服务器上部署的MongoDB的数据源；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>增加查询</strong></h3>
+<p>点击Queries，可以创建数据查询；</p>
+<p>在这里，我创建了两个查询，主要是关于我博客的点赞数统计，和点赞类型统计；</p>
+<p>关于点赞数的统计结果查询如下：</p>
+<p><img alt="redash_3.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/redash_3.png"/></p>
+<p>执行后，可以看到下方的查询结果；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建查询图表</strong></h3>
+<p>随后我们还可以创建相关的面板：点击右侧的<code>+ New Visualization</code>，创建图表；</p>
+<p>可以看到创建完成后的图表结果如下：</p>
+<p><img alt="redash_4.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/redash_4.png"/></p>
+<p>可以看到，创建图表还是相当方便的！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建表盘(Dashboard)</strong></h3>
+<p>最后，点击Create，选择Dashboard，输入表盘名称即可创建表盘；</p>
+<p>在表盘中点击Edit，然后点击<code>Add Widget</code>即可添加对应表盘；</p>
+<p>例如：</p>
+<p><img alt="redash_5.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/redash_5.png"/></p>
+<p>同时可以一键同步所有数据</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>后记</strong></h2>
+<p>除了上面的一些基本功能和丰富的数据源等优点之外，Redash还提供了发送日报邮件等功能；</p>
+<p>有兴趣的童鞋可以深入学习~</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker_repo/tree/redash-single</li>
+</ul>
+<p>文章参考：</p>
+<ul>
+<li>https://www.jianshu.com/p/6af73fcf5589</li>
+</ul>
+<p>&lt;br/&gt;</p>

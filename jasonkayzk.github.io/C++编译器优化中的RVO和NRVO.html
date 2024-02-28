@@ -1,0 +1,455 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/C++%E7%BC%96%E8%AF%91%E5%99%A8%E4%BC%98%E5%8C%96%E4%B8%AD%E7%9A%84RVO%E5%92%8CNRVO.html">C++编译器优化中的RVO和NRVO</a></h2>
+<hr/>
+<h2>title: C++编译器优化中的RVO和NRVO
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?11'
+date: 2022-05-11 09:49:54
+categories: C++
+tags: [C++, 编译优化]
+description: 在前面的文章《深入理解C++中的move和forward》中，我们提到了为了避免对数据进行复制，在C++11中增加了move语义；本文继续这个话题，来聊聊关于编译器优化中的RVO；</h2>
+<p>在前面的文章《深入理解C++中的move和forward》中，我们提到了为了避免对数据进行复制，在C++11中增加了move语义；</p>
+<p>本文继续这个话题，来聊聊关于编译器优化中的RVO；</p>
+<p>关于前一篇文章：</p>
+<ul>
+<li><a href="/2022/05/08/%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3C++%E4%B8%AD%E7%9A%84move%E5%92%8Cforward/">深入理解C++中的move和forward</a></li>
+</ul>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/rvo</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>C++编译器优化中的RVO和NRVO</strong></h1>
+<h2><strong>简述</strong></h2>
+<p>RVO 即 <code>“Return Value Optimization”</code>，是一种编译器优化技术，通过该技术编译器可以<strong>减少函数返回时生成临时值（对象）的个数，从某种程度上可以提高程序的运行效率，对需要分配大量内存的类对象其值复制过程十分友好；</strong></p>
+<p>NRVO 全称为 <code>“Named Return Value Optimization”</code>，该优化的大致流程与 RVO 类似；</p>
+<p>只是单纯这么说显得比较空洞，下面来看一个具体的例子；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>一个RVO优化的例子</strong></h2>
+<p>来看下面这个例子：</p>
+<p>rvo.cc</p>
+<pre><code class="language-c++">#include &lt;iostream&gt;
+
+class A {
+public:
+    A() {
+        std::cout &lt;&lt; "[C] constructor fired." &lt;&lt; std::endl;
+    }
+
+    A(const A &amp;a) {
+        std::cout &lt;&lt; "[C] copying constructor fired." &lt;&lt; std::endl;
+    }
+
+    A(A &amp;&amp;a) noexcept {
+        std::cout &lt;&lt; "[C] moving copying constructor fired." &lt;&lt; std::endl;
+    }
+
+    ~A() {
+        std::cout &lt;&lt; "[C] destructor fired." &lt;&lt; std::endl;
+    }
+};
+
+A getTempA() {
+    return A{};
+}
+
+int main(int argc, char **argv) {
+    auto x = getTempA();
+
+    return 0;
+}
+</code></pre>
+<p>我们声明了一个类 A，并重载了它的：</p>
+<ul>
+<li>构造函数；</li>
+<li>复制构造函数；</li>
+<li>移动构造函数；</li>
+<li>析构函数；</li>
+</ul>
+<p>在 main 函数中，我们调用 <code>getTempA()</code>，返回一个类A的对象；</p>
+<p>我们首先使用下面的命令编译并执行代码：</p>
+<pre><code class="language-bash"># Use RVO
+g++ rvo.cc -o rvo --std=c++11 &amp;&amp; ./rvo
+</code></pre>
+<p>输出如下所示：</p>
+<pre><code># [C] constructor fired.
+# [C] destructor fired.
+</code></pre>
+<p>可以看到：<strong>这里一共只执行了一次构造函数和一次析构函数，对于临时对象的拷贝构造过程并没有被进行！</strong></p>
+<p><strong>这是因为：在正常情况下，编译器一般会默认启用 RVO 优化；</strong></p>
+<p>接下来使用下面命令重新编译并执行上述代码：</p>
+<pre><code class="language-bash"># No RVO
+g++ rvo.cc -o rvo --std=c++11 -fno-elide-constructors &amp;&amp; ./rvo
+</code></pre>
+<p>这里我们关闭了 RVO 优化，对应使用的编译器参数是 <strong>“-fno-elide-constructors”</strong>：</p>
+<pre><code class="language-bash"># No RVO
+g++ rvo.cc -o rvo --std=c++11 -fno-elide-constructors &amp;&amp; ./rvo
+</code></pre>
+<blockquote>
+<p><strong>不仅仅是 g++ 编译器，对于其他主流编译器（比如，clang等）都是类似的！</strong></p>
+</blockquote>
+<p>输出如下所示：</p>
+<pre><code>[C] constructor fired.
+[C] moving copying constructor fired.
+[C] destructor fired.
+[C] moving copying constructor fired.
+[C] destructor fired.
+[C] destructor fired.
+</code></pre>
+<p>可以看到，这里一共执行了两次移动构造的过程，分别发生于：</p>
+<ul>
+<li>函数 <code>“getTempA”</code> 的返回值移动构造给临时值对象；</li>
+<li>以及，临时值对象移动构造给变量 “x” 这两个时刻；</li>
+</ul>
+<p><strong>实际上，RVO 以及 NRVO 两种优化技术又被统称为 <code>“copy_elision（复制消除）”</code> 优化；</strong></p>
+<p>C++11 标准中规定，在以下两种场景下要求，&lt;font color="#f00"&gt;<strong>编译器省略类对象的复制和移动构造，即使复制/移动构造函数和析构函数拥有可观察副作用！而直接将对象构造到它们本来要复制/移动到的存储中；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>只要语言确保不发生复制/移动操作，复制/移动构造函数就不必存在或可访问！</strong>&lt;/font&gt;</p>
+<p>这两种场景分别是：</p>
+<ul>
+<li>&lt;font color="#f00"&gt;<strong>在 <code>“return”</code> 语句中，当操作数为与函数返回类型为同一类类型的纯右值时；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;<strong>在变量的初始化中，当初始化器表达式为与变量类型为同一类类型的纯右值时：</strong>&lt;/font&gt;</li>
+</ul>
+<p>场景一即为我们之前示例代码中的场景；</p>
+<p>下面展示第二种场景；</p>
+<p>实际上，我们只需要修改 main 函数中变量 x 的初始化表达式即可：</p>
+<pre><code class="language-diff">int main(int argc, char **argv) {
+--    auto x = getTempA();
+++    auto x = A(A(A(getTempA())));
+
+    return 0;
+}
+</code></pre>
+<p>当编译器开启 RVO 优化时，程序同样只调用了一次构造函数和一次析构函数，此时输出为：</p>
+<pre><code>[C] constructor fired.
+[C] destructor fired.
+</code></pre>
+<p>当关闭了 RVO 优化时的输出则如下所示：</p>
+<pre><code>[C] constructor fired.
+[C] moving copying constructor fired.
+[C] destructor fired.
+[C] moving copying constructor fired.
+[C] moving copying constructor fired.
+[C] moving copying constructor fired.
+[C] moving copying constructor fired.
+[C] destructor fired.
+[C] destructor fired.
+[C] destructor fired.
+[C] destructor fired.
+[C] destructor fired.
+</code></pre>
+<p>可以看到，移动构造和析构函数被疯狂的调用；</p>
+<p>这时产生的五次拷贝构造过程分别是：</p>
+<ol>
+<li>函数 “getTempA” 返回值拷贝构造给临时值对象；</li>
+<li>临时值对象作为引用参数被类 A 的拷贝构造函数调用，生成一个 A 的临时值对象；</li>
+<li>临时值对象作为引用参数被类 A 的拷贝构造函数调用，生成一个 A 的临时值对象；</li>
+<li>临时值对象作为引用参数被类 A 的拷贝构造函数调用，生成一个 A 的临时值对象；</li>
+<li>临时值对象最后拷贝构造给变量 “x”；</li>
+</ol>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>需要注意的是：RVO（和下面的NRVO）可能导致优化和非优化程序之间的不同行为！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>毕竟某些代码被优化掉了，因此应当尽量避免在这些被优化的构造函数中增加tricky的逻辑！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>再来看看NRVO优化</strong></h2>
+<p>NRVO 与 RVO 的不同之处在于：<strong>函数返回的临时值是否是具名的；</strong></p>
+<p>更加官方的定义为：</p>
+<p><strong>当操作数是拥有自动存储期的非 <code>volatile</code> 对象的字段，并且非函数形参或 catch 子句形参，且其具有与函数返回类型相同的类型时，此时仍然可以避免对象复制；同时，这种复制消除的变体被称为 NRVO；</strong></p>
+<p>同样的，来看下面这个例子：</p>
+<p>nrvo.cc</p>
+<pre><code class="language-c++">#include &lt;iostream&gt;
+
+class RVO {
+public:
+
+    RVO() { printf("I am in constructor\n"); }
+
+    RVO(const RVO &amp;c_RVO) { printf("I am in copy constructor\n"); }
+
+    ~RVO() { printf("I am in destructor\n"); }
+
+    int mem_var{};
+};
+
+RVO MyMethod(int i) {
+    RVO rvo;
+    rvo.mem_var = i;
+    return (rvo);
+}
+
+int main() {
+    RVO rvo;
+    rvo = MyMethod(5);
+}
+</code></pre>
+<p>上面的代码在没有进行 NRVO 的情况下输出为：</p>
+<pre><code class="language-bash">I am in constructor
+I am in constructor
+I am in copy constructor
+I am in destructor
+I am in destructor
+I am in destructor
+</code></pre>
+<p>使用 NRVO 优化后的输出将是：</p>
+<pre><code class="language-bash">I am in constructor
+I am in constructor
+I am in destructor
+I am in destructor
+</code></pre>
+<p>下面来分析 NRVO 到底做了什么；</p>
+<p>当我们未开启 NRVO 时，上面 <code>MyMethod</code> 函数会执行类似于下面的代码：</p>
+<pre><code class="language-c++">RVO&amp;&amp; MyMethod(int i) {
+    RVO rvo = RVO();
+    rvo.mem_var = i;
+  	_rvo = RVO(&amp;rvo);
+    return _rvo;
+ 	  rvo.~RVO()
+}
+</code></pre>
+<p>从上面的代码可以看出，有一些优化的机会；</p>
+<p>其基本思想是消除基于栈的临时值并使用隐藏的参数；因此，这将消除基于栈的值的拷贝构造函数和析构函数；</p>
+<p>当开启了 NRVO 后，代码如下：</p>
+<pre><code class="language-c++">RVO&amp;&amp; MyMethod(int i) {
+    RVO rvo = RVO();
+    rvo.mem_var = i;
+    return rvo;
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>一个更复杂的例子</strong></h3>
+<p>下面给出了一个更复杂的例子：</p>
+<p>nrvo_2.cc</p>
+<pre><code class="language-c++">#include &lt;iostream&gt;
+
+class A {
+public:
+    A() {
+        printf("A: I am in constructor\n");
+        i = 1;
+    }
+
+    ~A() {
+        printf("A: I am in destructor\n");
+        i = 0;
+    }
+
+    A(const A &amp;a) {
+        printf("A: I am in copy constructor\n");
+        i = a.i;
+    }
+
+    int i, x{}, w{};
+};
+
+class B {
+public:
+    A a;
+
+    B() { printf("B: I am in constructor\n"); }
+
+    ~B() { printf("B: I am in destructor\n"); }
+
+    B(const B &amp;b) { printf("B: I am in copy constructor\n"); }
+};
+
+A MyMethod() {
+    B *b = new B();
+    A a = b-&gt;a;
+    delete b;
+    return (a);
+}
+
+int main() {
+    A a;
+    a = MyMethod();
+}
+</code></pre>
+<p>无 NRVO 时输出如下：</p>
+<pre><code>A: I am in constructor
+A: I am in constructor
+B: I am in constructor
+A: I am in copy constructor
+B: I am in destructor
+A: I am in destructor
+A: I am in copy constructor
+A: I am in destructor
+A: I am in destructor
+A: I am in destructor
+</code></pre>
+<p>当 NRVO 启动时，输出是：</p>
+<pre><code>A: I am in constructor
+A: I am in constructor
+B: I am in constructor
+A: I am in copy constructor
+B: I am in destructor
+A: I am in destructor
+A: I am in destructor
+A: I am in destructor
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>优化限制</strong></h3>
+<p>根据之前所述，在某些情况下即使我们启用了 NRVO 优化，优化也不会真正启动；</p>
+<h4><strong>异常示例</strong></h4>
+<p>在遇到异常时，隐藏的参数必须在它正在替换的临时范围内被破坏；</p>
+<p>nrvo_with_exception.cc</p>
+<pre><code class="language-c++">#include &lt;cstdio&gt;
+
+class RVO {
+public:
+
+    RVO() { printf("I am in constructor\n"); }
+
+    RVO(const RVO &amp;c_RVO) { printf("I am in copy constructor\n"); }
+
+    ~RVO() { printf("I am in destructor\n"); }
+
+    int mem_var{};
+};
+
+
+RVO MyMethod(int i) {
+    RVO rvo;
+    rvo.mem_var = i;
+    throw "I am throwing an exception!";
+    return (rvo);
+}
+
+int main() {
+    RVO rvo;
+    try {
+        rvo = MyMethod(5);
+    }
+    catch (const char *str) {
+        printf("I caught the exception\n");
+    }
+
+    return 0;
+}
+</code></pre>
+<p>如果没有NRVO，输出是：</p>
+<pre><code>I am in constructor
+I am in constructor
+I am in destructor
+I caught the exception
+I am in destructor
+</code></pre>
+<p>如果“抛出异常代码”被注释掉，输出将是：</p>
+<pre><code>I am in constructor
+I am in constructor
+I am in copy constructor
+I am in destructor
+I am in destructor
+I am in destructor
+</code></pre>
+<p>现在，如果“抛出异常代码”被注释掉，并且开启了NRVO，输出将如下所示：</p>
+<pre><code>I am in constructor
+I am in constructor
+I am in destructor
+I am in destructor
+</code></pre>
+<p>也就是说在没有NRVO的情况下，会表现出相同的行为；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>不同的命名对象示例</strong></h4>
+<p><strong>若要使用 NRVO，要求所有退出路径必须返回同一个命名对象！</strong></p>
+<p>来看下面的代码：</p>
+<pre><code class="language-c++">#include &lt;cstdio&gt;
+
+class RVO {
+public:
+
+    RVO() { printf("I am in constructor\n"); }
+
+    RVO(const RVO &amp;c_RVO) { printf("I am in copy constructor\n"); }
+
+    int mem_var{};
+};
+
+RVO MyMethod(int i) {
+    RVO rvo;
+    rvo.mem_var = i;
+    if (rvo.mem_var == 10)
+        return (RVO());
+    return (rvo);
+}
+
+int main() {
+    RVO rvo;
+    rvo = MyMethod(5);
+}
+</code></pre>
+<p>无论是否启用 NRVO 结果都是相同的：</p>
+<pre><code>I am in constructor
+I am in constructor
+I am in copy constructor
+</code></pre>
+<p>这是因为并非所有返回都返回相同的对象；</p>
+<p>如果将上面的示例更改为直接返回 rvo 对象，则在返回时，优化将消除复制构造函数：</p>
+<pre><code class="language-diff">RVO MyMethod(int i) {
+    RVO rvo;
+    rvo.mem_var = i;
+    if (rvo.mem_var == 10)
+--        return (RVO());
+++        return rvo;
+    return rvo;
+}
+</code></pre>
+<p>此时输出为：</p>
+<pre><code class="language-c++">I am in constructor
+I am in constructor
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>优化副作用</strong></h2>
+<p>前面提到，由于我们在编译优化时，会将构造函数直接优化掉，因此：</p>
+<p>&lt;font color="#f00"&gt;<strong>如果在构造函数中存在一些逻辑，则会直接被优化掉！</strong>&lt;/font&gt;</p>
+<p>以下面的代码为例：</p>
+<p>nrvo_side_effects.cc</p>
+<pre><code class="language-c++">#include &lt;cstdio&gt;
+
+int NumConsCalls = 0;
+int NumCpyConsCalls = 0;
+
+class RVO {
+public:
+    RVO() { NumConsCalls++; }
+
+    RVO(const RVO &amp;c_RVO) { NumCpyConsCalls++; }
+};
+
+RVO MyMethod() {
+    RVO rvo;
+    return (rvo);
+}
+
+int main() {
+    RVO rvo;
+    rvo = MyMethod();
+    int Division = NumConsCalls / NumCpyConsCalls;
+    printf("Constructor calls / Copy constructor calls = %d\n", Division);
+
+    return 0;
+}
+</code></pre>
+<p>当编译未启用优化时，代码如我们所期望的，“构造函数”被调用两次，“拷贝构造函数”被调用一次；</p>
+<p>因此输出结果为：</p>
+<pre><code>Constructor calls / Copy constructor calls = 2
+</code></pre>
+<p>但是，如果上面的代码启用 NRVO，则“拷贝构造函数”调用将被删除；</p>
+<p>因此，此时 NumCpyConsCalls 为零，将导致异常：</p>
+<pre><code>Constructor calls / Copy constructor calls = 0
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h1><strong>Appendix</strong></h1>
+<p>关于前一篇文章：</p>
+<ul>
+<li><a href="/2022/05/08/%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3C++%E4%B8%AD%E7%9A%84move%E5%92%8Cforward/">深入理解C++中的move和forward</a></li>
+</ul>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/rvo</li>
+</ul>
+<p>文章参考：</p>
+<ul>
+<li>https://www.yhspy.com/2019/09/01/C-%E7%BC%96%E8%AF%91%E5%99%A8%E4%BC%98%E5%8C%96%E4%B9%8B-RVO-%E4%B8%8E-NRVO/</li>
+<li>https://docs.microsoft.com/en-us/previous-versions/ms36405</li>
+</ul>
+<p>&lt;br/&gt;</p>

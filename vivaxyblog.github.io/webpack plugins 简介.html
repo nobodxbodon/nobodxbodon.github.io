@@ -1,0 +1,117 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2017-01-31-webpack-plugins.html">webpack plugins 简介</a></h2>
+<hr/>
+<h2>layout: post
+title: webpack plugins 简介
+tags: [tools]</h2>
+<p>webpack 通过 plugins 实现各种功能。常见的 plugins 如下：</p>
+<ul>
+<li>webpack.DefinePlugin 定义环境变量</li>
+<li>webpack.EnvironmentPlugin 定义环境变量</li>
+<li>webpack.optimize.CommonsChunkPlugin 共用 js 打包</li>
+<li><a href="https://github.com/jantimon/html-webpack-plugin">html-webpack-plugin</a> 使用模版生成 html 文件</li>
+<li><a href="https://github.com/chrisbateman/webpack-visualizer">webpack-visualizer-plugin</a> 输出依赖文件分析图表</li>
+<li>webpack.HotModuleReplacementPlugin 代码热更新，用于调试模式</li>
+<li>webpack.optimize.OccurrenceOrderPlugin 调整模块的打包顺序，用到次数更多的会出现在文件的前面</li>
+<li>webpack.NoErrorsPlugin 构建过程中有报错，不认为构建完成</li>
+<li>webpack.ProgressPlugin 输出构建进度</li>
+<li>webpack.BannerPlugin 在文件头添加注释</li>
+<li>webpack.optimize.UglifyJsPlugin 压缩 js</li>
+<li>webpack.optimize.DedupePlugin 去除重复依赖</li>
+<li><a href="https://github.com/webpack-contrib/extract-text-webpack-plugin">extract-text-webpack-plugin</a> 从 js 中提取出样式文件，单独打包成 css 文件</li>
+</ul>
+<h3>webpack.DefinePlugin</h3>
+<p>这个插件可以把命令行的环境变量带到浏览器端。react 认为 <code>NODE_ENV=production</code> 是生产环境，类似的我们可以定义不同环境的 <code>NODE_ENV</code>，在浏览器代码中通过 <code>process.env.NODE_ENV</code> 变量拿到值。</p>
+<pre><code class="language-js">const webpack = require('webpack');
+const NODE_ENV = process.env.NODE_ENV; // 从命令行环境获取 NODE_ENV 参数
+module.exports = {
+    plugins: [
+        new webpack.DefinePlugin({
+            'process.env': {
+                'NODE_ENV': JSON.stringify(NODE_ENV)
+            } // 定义浏览器中的替换的变量为 `process.env.NODE_ENV`
+        })
+    ]
+}
+</code></pre>
+<p>在代码中可以使用 <code>process.env.NODE_ENV</code> 获取对应的值。</p>
+<h3>webpack.EnvironmentPlugin</h3>
+<p>webpack.DefinePlugin 上面提到的功能可以被 webpack.EnvironmentPlugin 替代掉。</p>
+<pre><code class="language-js">const webpack = require('webpack');
+module.exports = {
+    plugins: [
+        new webpack.EnvironmentPlugin([
+            'NODE_ENV'
+        ])
+    ]
+}
+</code></pre>
+<p>效果同上。</p>
+<h3>webpack.optimize.CommonsChunkPlugin</h3>
+<p>可以提取多个 entry 中共用的内容，打包到一个共用 js 文件中去，多个页面可以都引用这个文件，以利用浏览器缓存，减少下载体积。</p>
+<pre><code class="language-js">const webpack = require('webpack');
+module.exports = {
+    plugins: [
+        new webpack.optimize.CommonsChunkPlugin({
+            names: ['common'],
+            filename: 'js/[name].js',
+            minChunks: 2
+        })
+    ]
+}
+</code></pre>
+<p>上面的配置会把用到 2 次及以上（在 minChunks 中定义）的内容放到 <code>js/common.js</code> 中。配合 <code>HtmlWebpackPlugin</code> 可以自动填充到 html 中。</p>
+<p>names 可以传多个文件名，wepback 会把共用部分再拆分出来。</p>
+<h3>html-webpack-plugin</h3>
+<pre><code class="language-js">const HtmlWebpackPlugin = require('html-webpack-plugin');
+module.exports = {
+    plugins: [
+        new HtmlWebpackPlugin({
+            template: 'src/html/index.html', // ${SOURCE_PATH}/${HTML_FOLDER}/${htmlTemplateName}.html
+            filename: 'html/index.html', // ${HTML_FOLDER}/${entryName}.html
+            hash: true,
+            inject: 'body',
+            chunksSortMode: 'none',
+            chunks: [
+                'common',
+                'index'
+            ]
+        })
+    ]
+}
+</code></pre>
+<p>这个插件可以根据 html 模版生成 html 文件。结合上面的 CommonsChunkPlugin 可以动态决定最后编译出来的 html 中引用哪些 js 或者 css 文件。</p>
+<ul>
+<li><code>template</code>: 选用的模版文件</li>
+<li><code>filename</code>: 最终生成的 html 文件名称，其中可以带上路径名</li>
+<li><code>hash</code>: 是否在文件后添加 hash，用于禁用缓存</li>
+<li><code>inject</code>: 文件插入的位置。可以选择在 <code>body</code> 还是 <code>head</code> 中</li>
+<li><code>chunks</code>: 文件中插入的 entry 名称，注意必须在 entry 中有对应的申明，或者是使用 CommonsChunkPlugin 提取出来的 chunk</li>
+<li><code>chunksSortMode</code>: 默认地，插件会根据规则重新调整 chunks 的顺序。<code>none</code> 表示排序依据 webpack 提供的规则</li>
+</ul>
+<p>利用这个插件，我们可以实现项目下统一的模版定义，而不再需要每个入口 entry 都写一个 html 去引用，而是动态根据 entry 名称去生成 html。</p>
+<h3>webpack-visualizer-plugin</h3>
+<pre><code class="language-js">const Visualizer = require('webpack-visualizer-plugin');
+module.exports = {
+    plugins: [
+        new Visualizer()
+    ]
+}
+</code></pre>
+<p>构建输出目录下会有一个 stats.html 文件，其中包含了各个依赖来源和大小。</p>
+<p><img alt="webpack visualizer plugin" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2017-01-31-webpack-plugins/webpack-visualizer-plugin.png"/></p>
+<p>可以看到这里用到了 lodash.merge 占了 56.8k。如果引入整个 lodash 则整个体积会大很多。</p>
+<p>代码中</p>
+<pre><code class="language-js">import _ from 'lodash';
+_.merge({}, {/* ... */});
+</code></pre>
+<p>会导致引入整个 lodash 库。可以修改成</p>
+<pre><code class="language-js">import _merge from 'lodash.merge';
+_merge({}, {/* ... */});
+</code></pre>
+<p>类似地</p>
+<pre><code class="language-js">import { RaisedButton } from 'material-ui';
+</code></pre>
+<p>会引入所有的 <a href="http://www.material-ui.com/#/get-started/usage">material-ui</a> 组件，应该修改成</p>
+<pre><code class="language-js">import RaisedButton from 'material-ui/RaisedButton';
+</code></pre>
+<p><a href="https://ant.design/">ant-design</a> 提供了 <a href="https://github.com/ant-design/babel-plugin-import">babel-plugin-import</a> 以工具的形式处理了上面的写法。</p>

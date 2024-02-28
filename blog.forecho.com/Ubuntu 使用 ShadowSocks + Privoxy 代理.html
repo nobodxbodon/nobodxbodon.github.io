@@ -1,0 +1,126 @@
+<h2>原文：<a href="https://blog.forecho.com/ubuntu-use-shadowsocks-and-privoxy.html">Ubuntu 使用 ShadowSocks + Privoxy 代理</a></h2>
+<hr/>
+<h2>title: "Ubuntu 使用 ShadowSocks + Privoxy 代理"
+date: 2017-01-07T12:35:00+08:00
+tags: ["经验分享", "科学上网"]
+draft: false
+toc: true</h2>
+<h2>引言</h2>
+<p>先说说这东西有什么用吧，我是 Windows7 使用 Vagrant 安装了个 Ubuntu 虚拟机，然后需要在虚拟机里面配置 SS 代理使用 PHP 的 Composer 下载，不然非常慢。
+那么本教程应该同样适用于 Ubuntu 服务器（做为 SS 客户端的方式）配置使用 SS，其他版本的 Linux 要想使用需要稍微改动下，但是思路是一样的。</p>
+<p>如果你的 Mac 电脑，终端需要配置 SS 代理，推荐你使用 proxychains-ng 方式，具体查看<a href="https://gold.xitu.io/entry/5821840cd203090055134cc0">macOS 终端走代理（科学上网）</a></p>
+<h2>ShadowSocks 客户端</h2>
+<p>注意是 ShadowSocks 客户端，服务端我就不介绍了。先安装 Python pip 再安装 shadowsocks，然后再配置：</p>
+<pre><code>sudo apt-get install python-pip
+sudo pip install shadowsocks
+sudo ln -s /usr/local/python/bin/sslocal /usr/bin/sslocal
+sudo vim /etc/shadowsocks.conf
+</code></pre>
+<p>配置文件代码如下：</p>
+<pre><code>{
+    "server":"your_server_ip",
+    "server_port":your_server_port,
+    "local_address": "127.0.0.1",
+    "local_port":1080, 
+    "password":"your_server_passwd",
+    "timeout":300,
+    "method":"aes-256-cfb",
+    "fast_open": false,
+    "workers": 1 
+}
+</code></pre>
+<p><strong>解释</strong></p>
+<ul>
+<li><code>server</code>: ss 服务器 IP</li>
+<li><code>server_port</code>: ss 服务器 IP 端口</li>
+<li><code>local_address</code>: 本地 ip</li>
+<li><code>local_port</code>:  #本地端口</li>
+<li><code>password</code>: 连接 ss 密码</li>
+<li><code>timeout</code>: 等待超时</li>
+<li><code>method</code>: 加密方式</li>
+<li><code>fast_open</code>: true 或 false。如果你的服务器 Linux 内核在 3.7+，可以开启 fast_open 以降低延迟。开启方法：echo 3 &gt; /proc/sys/net/ipv4/tcp_fastopen 开启之后，将 fast_open 的配置设置为 true 即可</li>
+<li><code>workers</code>: 工作线程数</li>
+</ul>
+<p>&lt;!--more--&gt;</p>
+<p>开启：</p>
+<pre><code># 启动 SS
+sudo nohup sslocal -c /etc/shadowsocks.conf &gt;/dev/null 2&gt;%1 &amp;
+# 查看进程
+sudo ps aux |grep sslocal |grep -v "grep"
+</code></pre>
+<p>PS：2018 年 1 月 29 日更新内容</p>
+<p>前一段时间用这种方式发现不用了，搞了半天最后才想起来要看日志，日志大致内容如下：</p>
+<pre><code>Traceback (most recent call last):
+  File "/usr/local/bin/sslocal", line 11, in &lt;module&gt;
+    load_entry_point('shadowsocks==2.8.2', 'console_scripts', 'sslocal')()
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/local.py", line 39, in main
+    config = shell.get_config(True)
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/shell.py", line 262, in get_config
+    check_config(config, is_local)
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/shell.py", line 124, in check_config
+    encrypt.try_cipher(config['password'], config['method'])
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/encrypt.py", line 44, in try_cipher
+    Encryptor(key, method)
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/encrypt.py", line 83, in __init__
+    random_string(self._method_info[1]))
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/encrypt.py", line 109, in get_cipher
+    return m[2](method, key, iv, op)
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/crypto/openssl.py", line 76, in __init__
+    load_openssl()
+  File "/usr/local/lib/python2.7/dist-packages/shadowsocks/crypto/openssl.py", line 52, in load_openssl
+    libcrypto.EVP_CIPHER_CTX_cleanup.argtypes = (c_void_p,)
+  File "/usr/lib/python2.7/ctypes/__init__.py", line 378, in __getattr__
+    func = self.__getitem__(name)
+  File "/usr/lib/python2.7/ctypes/__init__.py", line 383, in __getitem__
+    func = self._FuncPtr((name_or_ordinal, self))
+AttributeError: /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1: undefined symbol: EVP_CIPHER_CTX_cleanup
+</code></pre>
+<p>这是因为 openssl 升级原因导致的，如何解决呢？</p>
+<p>看日志找到 <code>crypto/openssl.py</code> 所在的文件位置，然后打开文件，此处我的位置为：</p>
+<pre><code>sudo cp /usr/local/lib/python2.7/dist-packages/shadowsocks/crypto/openssl.py /usr/local/lib/python2.7/dist-packages/shadowsocks/crypto/openssl.py.bak
+sudo vim /usr/local/lib/python2.7/dist-packages/shadowsocks/crypto/openssl.py
+</code></pre>
+<p>搜索一下 <code>cleanup</code>, 一共有两处，把 <code>cleanup</code> 改成 <code>reset</code>，也就是说：</p>
+<ul>
+<li>将 <code>libcrypto.EVP_CIPHER_CTX_cleanup.argtypes = (c_void_p,)</code> 改为 <code>libcrypto.EVP_CIPHER_CTX_reset.argtypes = (c_void_p,)</code></li>
+<li>将 <code>libcrypto.EVP_CIPHER_CTX_cleanup(self._ctx)</code> 改为 <code>libcrypto.EVP_CIPHER_CTX_reset(self._ctx)</code></li>
+</ul>
+<p>详情说明参考文章末尾的链接，然后继续：</p>
+<pre><code># 添加开启启动
+sudo su
+echo "nohup sslocal -c /etc/shadowsocks.conf /dev/null 2&gt;&amp;1 &amp;" &gt;&gt; /etc/rc.local
+</code></pre>
+<h2>安装 Privoxy</h2>
+<pre><code>sudo apt-get install privoxy -y
+
+</code></pre>
+<p>修改配置文件</p>
+<pre><code>sudo cp /etc/privoxy/config /etc/privoxy/config.bak
+sudo vim /etc/privoxy/config
+</code></pre>
+<p>找到 <code>listen-address</code> 确保有这行代码 <code>listen-address 127.0.0.1:8118</code></p>
+<p>找到 <code>forward-socks5</code> 确保有这行代码 (没有自己加) <code>forward-socks5  /  127.0.0.1:1080 .</code></p>
+<p>启动</p>
+<pre><code>sudo service privoxy start
+sudo service privoxy status
+</code></pre>
+<p>配置转发</p>
+<pre><code>sudo vim ~/.bashrc
+</code></pre>
+<p>在最后添加如下代码：</p>
+<pre><code>export http_proxy="http://127.0.0.1:8118"
+export https_proxy="http://127.0.0.1:8118"
+</code></pre>
+<p>重载配置</p>
+<pre><code>source ~/.bashrc
+</code></pre>
+<h2>测试</h2>
+<pre><code>curl ip.gs
+</code></pre>
+<h2>参考链接</h2>
+<ul>
+<li><a href="https://docs.lvrui.io/2016/12/12/Linux%E4%B8%AD%E4%BD%BF%E7%94%A8ShadowSocks-Privoxy%E4%BB%A3%E7%90%86/">Linux 中使用 ShadowSocks+Privoxy 代理</a></li>
+<li><a href="http://www.voidcn.com/blog/xwydq/article/p-5796260.html">linux 下的 ss+privoxy 代理配置</a></li>
+<li><a href="https://mritd.me/2016/07/22/Linux-%E5%91%BD%E4%BB%A4%E8%A1%8C%E4%B8%8B%E4%BD%BF%E7%94%A8-Shadowsocks-%E4%BB%A3%E7%90%86/">Linux 命令行下使用 Shadowsocks 代理</a></li>
+<li><a href="https://blog.lyz810.com/article/2016/09/shadowsocks-with-openssl-greater-than-110/">解决 openssl 升级到 1.1.0 后 shadowsocks 服务报错问题</a></li>
+</ul>

@@ -1,0 +1,132 @@
+<h2>原文：<a href="https://alxddh.github.io/2019-10-09-ji-yu-bei-xie-si-ping-jun-dui-dou-ban-tu-shu-de-sou-suo-jie-guo-jin-xing-pai-xu.html">基于贝叶斯平均对豆瓣图书的搜索结果进行排序</a></h2>
+<hr/>
+<h2>title: "基于贝叶斯平均对豆瓣图书的搜索结果进行排序"
+date: 2019-10-09 16:59:33 +0800
+categories: [Logs]
+tags: [javascript, douban, books, bayesian average]</h2>
+<p>想必有人会对<a href="https://book.douban.com/">豆瓣图书</a>搜索结果的排序感到困惑吧？举个例子，假设我们搜索<a href="https://search.douban.com/book/subject_search?search_text=javascript">“JavaScript”</a>，我们会发现排在第 3 位的是<a href="https://book.douban.com/subject/6038371/">《JavaScript DOM编程艺术 （第2版）》</a>，豆瓣评分为 8.7，有 1505 人评价；但是排在第 4 位的<a href="https://book.douban.com/subject/3590768/">《JavaScript语言精粹》</a>的豆瓣评分更高，为 9.1，而且评价人数更多，有 1792 人。更糟糕的情况是，我们想要找的高分图书往往出现在好几页之后。因此，我开发了一个 Web <a href="/apps/douban-book-rank.html">应用</a>，它基于<a href="https://en.wikipedia.org/wiki/Bayesian_average">贝叶斯平均</a>对搜索结果进行排序。</p>
+<h2>为什么用贝叶斯平均？</h2>
+<p>如果我只想对搜索到的图书按评分排序，为什么不直接用豆瓣的评分，而用贝叶斯平均分？</p>
+<p>原因之一是，我实在不知道豆瓣评分是怎么计算的！在此，我只能假设它就是一个简单的<a href="https://zh.wikipedia.org/zh-hans/%E7%AE%97%E6%9C%AF%E5%B9%B3%E5%9D%87%E6%95%B0">算术平均</a>。现在我们假设某本书 A 有一个人评价，评分为 9.5；而某本书 B 有 100 个人评价，算术平均分为 8.9。哪一本书应当排在前面？哪一本书更值一读？算术平均不能回答这些问题。</p>
+<p>什么是贝叶斯平均分？它的公式为</p>
+<p>$$
+\bar{x} = \frac{Cm + \sum_{i = 1}^{n} x_i}{C + n}
+$$</p>
+<p>其中 $x_i$ 为某一投票项的某人给出的评分，$n$ 为某一投票项的投票人数；$C$ 是一个与数据集大小成正比的数，我们可以令它等于每一个投票项的平均投票人数；$m$ 为每一个投票项的预设评分，我们可以令它等于总体投票人给出的评分的算术平均值。因此，贝叶斯平均 $\bar{x}$ 是一个随着投票人数的增加而不断修正的值。</p>
+<p>它的意义也很容易看出，即相当于我们预先给每个投票项投了 $C$ 张票，每张票的评分为 $m$，然后再加上新增的用户投票计算一个算术平均分。这是贝叶斯推断的一个与直觉相悖的特点，即用后验统计作为先验条件。</p>
+<h2>通过豆瓣 Open API 获取数据</h2>
+<p>首先看如何获取豆瓣图书的数据。搜索图书的 API 为</p>
+<pre><code>https://api.douban.com/v2/book/search?q=[keywords]
+</code></pre>
+<p>其中参数 <code>q</code> 为搜索的关键词。</p>
+<p>它以 JSON 格式返回数据，类似于</p>
+<pre><code class="language-json">{
+    "count": 20,
+    "start": 0,
+    "total": 199,
+    "books": [
+        { ... },
+        { ... },
+        ...
+    ]
+}
+</code></pre>
+<p>其中 <code>count</code> 为本页所含的数据条目数，<code>start</code> 为本页所含的数据条目的起始索引，<code>total</code> 为总的数据条目数，<code>books</code> 为本页数据条目列表。</p>
+<p>搜索 API 可以带上参数 <code>&amp;start=[start]</code>，则其返回的数据条目从索引 <code>[start]</code> 开始。</p>
+<h2>JavaScript 实现</h2>
+<p>现在我们可以编写 JavaScript 程序去计算豆瓣图书的贝叶斯平均分了。</p>
+<p>由于<a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS">跨域访问</a>的限制，在 JavaScript 中，我们不能直接通过 <a href="https://www.w3schools.com/xml/xml_http.asp">HTTPRequest</a> 访问豆瓣 API，但是我们可以用 <a href="https://www.w3schools.com/js/js_json_jsonp.asp">JSONP</a> 技术。</p>
+<pre><code class="language-javascript">/**
+ * @param url 访问的 URL
+ * @param callback 回调函数的名字，在此函数中我们处理 url 返回的 JSON 数据
+ */ 
+function jsonp(url, callback)
+{
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = url + `&amp;callback=${callback}`;
+    script.async = true;
+    document.body.append(script);
+}
+</code></pre>
+<p>我们的回调函数命名为 <code>jsonpCallback</code>，在此函数中，我们解析、缓存数据，并最终计算出每一本书的贝叶斯平均分。</p>
+<pre><code class="language-javascript">// 收集到的图书数据列表
+let books = [];
+
+// 读取的最大图书数据条目数量
+const MAX_BOOKS = 2048;
+
+// 已经读取的图书数据条目数量
+let booksRead = 0;
+
+// 搜索 URL
+let searchURL;
+
+function jsonpCallback(page)
+{
+    const count = page['count'];
+    const start = page['start'];
+    const total = page['total'] &gt; MAX_BOOKS ? MAX_BOOKS : page['total'];
+
+    if (total == 0) return;
+
+    if (start == 0) {
+        booksRead = 0;
+        // 遍历每一页数据
+        for (let s = start + count; s &lt; total; s += count) {
+            jsonp(searchURL + `&amp;start=${s}`, "jsonpCallback");
+        }
+    }
+
+    page['books'].forEach(book =&gt; {
+        // 只读取评分大于 0 的图书
+        if (parseFloat(book['rating']['average']) &gt; 0) {
+            books.push(book);
+        }
+    });
+
+    booksRead += count;
+
+    // 已读取的条目数达到了总数，解析数据完毕，可以计算贝叶斯平均了
+    if (booksRead &gt;= total) {
+        // 计算每一本书的贝叶斯平均分
+        calculateBayesian(books);
+        // 依贝叶斯平均分从大到小排序
+        books.sort((a, b) =&gt; {
+            return b['rating']['bayesian'] - a['rating']['bayesian'];
+        });
+        // 展示结果给用户查看
+        showBooks();
+    }
+}
+</code></pre>
+<p>计算贝叶斯平均的代码也就是上面所提的公式的翻译了：</p>
+<pre><code class="language-javascript">function calculateBayesian(books) {
+    let allRaters = 0;
+    let allScore = 0;
+
+    for (let book of books) {
+        const n = book['rating']['numRaters'];
+        allRaters += n;
+        allScore += n * parseFloat(book['rating']['average']);
+    }
+
+    const C = allRaters / books.length;
+    const m = allScore / allRaters;
+
+    for (let book of books) {
+        const n = book['rating']['numRaters'];
+        book['rating']['bayesian'] = (C * m + n * parseFloat(book['rating']['average'])) / (C + n);
+    }
+}
+</code></pre>
+<p>最后再封装一下：</p>
+<pre><code class="language-javascript">function sortBooks(keywords)
+{
+    books = [];
+
+    searchURL = `${api}?q=${encodeURI(keywords)}`;
+    jsonp(searchURL, "jsonpCallback");
+}
+</code></pre>
+<p>用户输入 <code>keywords</code>，点击“搜索”按钮，即调用 <code>sortBooks(keywords)</code>。</p>

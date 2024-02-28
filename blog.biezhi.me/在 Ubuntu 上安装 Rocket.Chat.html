@@ -1,0 +1,121 @@
+<h2>原文：<a href="https://blog.biezhi.me/2018-11-17-installing-rocketchat-with-ubuntu.html">在 Ubuntu 上安装 Rocket.Chat</a></h2>
+<hr/>
+<h2>layout: post
+title: 在 Ubuntu 上安装 Rocket.Chat
+tags: ["ubuntu", "vps"]</h2>
+<p><a href="https://github.com/RocketChat/Rocket.Chat">Rocket.Chat</a>{:target="_blank"} 是一种类似 Slack 的开源聊天软件，当然你可能没用过 Slack，毕竟它在国内不流行，这名字听起来像是 “火箭聊天”，非常霸气啊！不过光开源这一项就很吸引我了，同道中人同道中人。</p>
+<blockquote>
+<p>观看 <a href="https://www.youtube.com/watch?v=iaAot5K2sps">视频版</a>{:target="_blank"} 教程。</p>
+</blockquote>
+<h1>Rocket.Chat 特性</h1>
+<ul>
+<li>群组聊天</li>
+<li>直接通信</li>
+<li>私聊群</li>
+<li>桌面通知</li>
+<li>媒体嵌入</li>
+<li>链接预览</li>
+<li>文件上传</li>
+<li>语音/视频聊天</li>
+<li>截图</li>
+<li>支持你目前使用的任何平台</li>
+</ul>
+<p>这篇文章中我将在 <code>Ubuntu 18.04 LTS</code> 上安装 Rocket.Chat，使用 Nginx 作为反向代理，同时还会配置 SSL 证书。</p>
+<h1>准备环境</h1>
+<p>你需要有以下环境：</p>
+<ul>
+<li>一台 Ubuntu 的服务器</li>
+<li>一个域名（非必须，最好提供）</li>
+<li>你的双手</li>
+</ul>
+<blockquote>
+<p>如果有域名在你的网站域名商处添加一条 DNS 的 A 记录指向服务器。</p>
+</blockquote>
+<h1>安装 Rocket.Chat</h1>
+<p>开始前我们先更新下操作系统</p>
+<pre><code class="language-shell">sudo apt update &amp;&amp; sudo apt upgrade
+</code></pre>
+<p>安装 <code>Rocket.Chat</code> 最快的方法是使用它的 <code>Snap</code>。<code>Snap</code> 是 <code>Linux</code> 系统上一种软件包管理的方式。它类似一个容器拥有一个应用程序所有的文件和库，各个应用程序之间完全独立。所以使用snap包的好处就是它解决了应用程序之间的依赖问题，使应用程序之间更容易管理。在 <code>Ubuntu 16.04 LTS</code> 以上版本的系统都内置了。</p>
+<ol>
+<li>安装 Rocket.Chat</li>
+</ol>
+<pre><code class="language-shell">sudo snap install rocketchat-server
+</code></pre>
+<ol start="2">
+<li>安装后，Rocket.Chat 服务会自动启动，检查一下是否在运行：</li>
+</ol>
+<pre><code class="language-shell">sudo service snap.rocketchat-server.rocketchat-server status
+</code></pre>
+<p>你可以访问 <a href="https://rocket.chat/docs/installation/manual-installation/ubuntu/snaps/">Rocket.Chat snap</a>{:target="_blank"} 查看一些其他命令。</p>
+<h1>使用 Nginx 反向代理</h1>
+<h2>安装 Nginx</h2>
+<pre><code class="language-shell">sudo apt install -y nginx
+</code></pre>
+<p><strong>启动 nginx</strong></p>
+<pre><code class="language-shell">sudo systemctl start nginx
+# 开机自动启动
+sudo systemctl enable nginx
+</code></pre>
+<h2>设置反向代理</h2>
+<p><strong>禁用默认欢迎页</strong></p>
+<p>默认的欢迎页配置文件位置在 <code>/etc/nginx/sites-enabled/default</code>。实际上真正的位置是 <code>/etc/nginx/sites-available/</code>，只不过用了软连接。</p>
+<pre><code class="language-shell">sudo ls -l /etc/nginx/sites-enabled
+total 0
+lrwxrwxrwx 1 root root 34 Aug 16 18:20 default -&gt; /etc/nginx/sites-available/default
+</code></pre>
+<p>删除欢迎页</p>
+<pre><code class="language-shell">sudo rm /etc/nginx/sites-enabled/default
+</code></pre>
+<p><strong>创建反向代理配置</strong></p>
+<p>默认可能没安装 <code>vim</code>，可以安装 <code>sudo apt-get install -y vim</code>，然后创建自己的配置文件：</p>
+<pre><code class="language-shell">sudo vim /etc/nginx/sites-available/rocketchat.conf
+</code></pre>
+<p>内容如下：</p>
+<pre><code class="language-conf">server {
+    listen 80;
+
+    server_name example.com;
+
+    location / {
+        proxy_pass http://localhost:3000/;
+    }
+}
+</code></pre>
+<blockquote>
+<p>将这里的 <code>example.com</code> 修改为你自己的域名。</p>
+</blockquote>
+<p>通过以下方式创建指向它的链接来启用新配置 <code>/etc/nginx/sites-available/</code>：</p>
+<pre><code class="language-shell">sudo ln -s /etc/nginx/sites-available/rocketchat.conf /etc/nginx/sites-enabled/
+</code></pre>
+<p>测试配置是否有误</p>
+<pre><code class="language-shell">sudo nginx -t
+</code></pre>
+<p>重新加载 nginx 配置</p>
+<pre><code class="language-shell">sudo nginx -s reload
+</code></pre>
+<h2>配置 SSL 证书</h2>
+<p>申请证书的方式很多，这里我们使用的是免费的 <a href="https://letsencrypt.org/">Let's Encrypt</a>{:target="_blank"} 的 SSL 证书。有人写了一个名为 <a href="https://certbot.eff.org/">Certbot</a>{:target="_blank"} 的工具让我们可以轻松的获得证书。</p>
+<p><strong>安装 Certbot</strong></p>
+<pre><code class="language-shell">sudo apt-get install -y software-properties-common
+sudo add-apt-repository ppa:certbot/certbot
+sudo apt-get update
+sudo apt-get install -y python-certbot-nginx
+sudo certbot --nginx
+</code></pre>
+<p>Certbot 会询问有关该网站的信息。在执行 <code>sudo apt-get install -y python-certbot-nginx</code> 的时候会询问位置信息，我们选择 亚洲（也就是 <code>6. Asia</code>），时区选择 <code>69. Shanghai</code> 即可。</p>
+<p>在执行 <code>sudo certbot --nginx</code> 的时候会询问你的邮箱，填写和你注册域名时相同的邮箱，其他询问同意即可。</p>
+<p><strong>开启证书自动续约</strong></p>
+<p>我们的证书有效期是 3 个月，不过 certbot 很聪明，有一个自动续约的功能，执行以下命令即可：</p>
+<pre><code class="language-shell">sudo certbot renew --dry-run
+</code></pre>
+<h1>开始使用 Rocket.Chat</h1>
+<p>第一次打开会看到这个界面</p>
+<p>![Rocket.Chat 设置]({{ "/public/images/2018/11/rocketchat01.png" | prepend: site.cdnurl }} "Rocket.Chat 设置")</p>
+<p>这里需要设置一下管理员信息，成功后就可以登录啦！</p>
+<p>![Rocket.Chat 登录]({{ "/public/images/2018/11/rocketchat02.png" | prepend: site.cdnurl }} "Rocket.Chat 登录")</p>
+<p>好了，到这里已经安装完毕了，Rocket.Chat 的更多有趣的玩法需要你自己体验，起飞吧少年！</p>
+<h1>参考</h1>
+<ul>
+<li><a href="https://rocket.chat/docs/installation/manual-installation/ubuntu/">Rocket.Chat in Ubuntu</a>{:target="_blank"}</li>
+<li><a href="https://certbot.eff.org/lets-encrypt/ubuntuxenial-nginx.html">Nginx on Ubuntu</a>{:target="_blank"}</li>
+</ul>

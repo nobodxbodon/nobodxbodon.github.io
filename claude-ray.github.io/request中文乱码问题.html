@@ -1,0 +1,51 @@
+<h2>原文：<a href="https://claude-ray.github.io/request%E4%B8%AD%E6%96%87%E4%B9%B1%E7%A0%81%E9%97%AE%E9%A2%98.html">request中文乱码问题</a></h2>
+<hr/>
+<h2>title: request中文乱码问题
+date: 2018-02-26 22:16:20
+tags: Node.js
+categories: Node.js
+description: Node中使用request请求得到的数据为乱码，分析可能的情况并列举解决方案。</h2>
+<h2>gzip</h2>
+<p>可能是需要开启<code>gzip: true</code></p>
+<pre><code class="language-js">request({url, gzip: true});
+</code></pre>
+<h2>编码</h2>
+<h3>buffer decode</h3>
+<p>可以考虑使用<code>iconv-lite</code>转换buffer。request设置<code>encoding: null</code>时，会返回buffer形式的body。</p>
+<pre><code class="language-js">request({url, gzip: true, encoding : null}, (err, res, body) =&gt; {
+  const str = iconv.decode(body, 'gb2312');
+});
+</code></pre>
+<blockquote>
+<p>有个别网站编码不统一，时而gb2312时而utf8，这种情况需要自己判断处理。
+可以参考<a href="https://cnodejs.org/topic/545de1e1a68535a174fe51b5">cnode的回帖</a>——
+先请求下来 Buffer, 也就是 request 的时候指定 encoding: null ，得到 Buffer, 用ASCII解码前一千个字符，用正则，匹配出 ; charset=(\w+)"，得到正确的 charset, 再用 iconv-lite 解码出全部的  buff。</p>
+</blockquote>
+<h3>stream pipe</h3>
+<p>简化一下过程，<code>iconv-lite</code>也支持pipe</p>
+<pre><code class="language-js">request(url).pipe(iconv.decodeStream(code));
+</code></pre>
+<p>Demo</p>
+<pre><code class="language-js">const request = require('request');
+const iconv = require('iconv-lite');
+
+async function name(url, code = 'gb2312') {
+  const filename = 'something.txt';
+  const tempname = `${Date.now()}.txt`;
+
+  try {
+    const writeStream = fs.createWriteStream(tempname);
+    await new Promise((resolve, reject) =&gt; {
+      request(url)
+        .pipe(iconv.decodeStream(code))
+        .pipe(writeStream)
+        .on('close', () =&gt; {
+          fs.renameSync(tempname, filename);
+          resolve();
+        });
+    });
+  } catch (err) {
+    console.error(`${url}文件下载失败,${err.message}`);
+  }
+}
+</code></pre>

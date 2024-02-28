@@ -1,0 +1,267 @@
+<h2>原文：<a href="https://qingbob.com/2019-12-28-angular-onpush-explain.html">如果 Angular 组件无法更新，这篇文章能帮到你</a></h2>
+<hr/>
+<h2>layout: post
+title: 如果 Angular 组件无法更新，这篇文章能帮到你
+modified: 2019-12-28
+tags: [javascript, angular]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>这原本不是一篇文章，是一封对内的邮件。在我们的项目里有一个传统：如果你发现了任何对他人有帮助的事情，不仅于技术上，可以通过邮件的形式告诉大家，邮件上需要加上 tag: #Aha moment#</p>
+<p>虽然说这封邮件看上去只是为了解决某个特定问题，但实际上它涉及到了 Angular 和 AngularJS 后的运行原理和优化技巧，如果你感兴趣，对你也许有帮助</p>
+<p>文章提到的项目 T 是一个 Angular 1.x 版本和 Angular 8 框架共存的应用，问题就发生在其中</p>
+<hr/>
+<p>为了避免歧义，事先声明在接下来的内容中 AngularJS 代指 Angular 1.x 版本，Angular 代指 Angular 8 版本</p>
+<p>在最近开发的一个功能中，我们无法在 T 项目中通过某个 Angular 组件触发另一个 AngularJS 组件的展示。我们经过很长时间才弄清楚了其中的来龙去脉。就像我在之前某封 aha moment 邮件里说的那样，避免写出错误代码的方式是真正理解你编写的代码。所以在这里我不会仅仅给出解决方案，还会详细叙述这个问题背后的机理。如果以后你遇到了相似的问题，希望这篇文章能给你带来帮助。</p>
+<p>很多年前我听过一个笑话，说如果你拿一个疑问去问专家，你的一个疑问会变成三个疑问，因为他会用另外两个你更不明白的词来解释这个疑问。但后来我发现这不是笑话而是绝大部分我自己面临的现状。所以在解释这个问题的过程中，我不可避免的需要引入更多的知识进行，好在它们都易于理解，只是有些冗长。</p>
+<p>因为涉及到很多基本原理，这篇文章也能够让你一窥 Angular 和 AngularJS 的运行机制以及优化技巧</p>
+<h2>也许是 <code>ChangeDetectionStrategy.onPush</code> 的问题</h2>
+<p>我们怀疑是我们的 Angular 组件出了问题。如果你有心留意的话，大部分 Angular 组件的声明中会包含一个名为 <code>changeDetection</code> 的配置，例如：</p>
+<pre><code class="language-javascript">@Component({
+  selector: 'app-system',
+  template: ``,
+  styles: [require('./system.component.scss')],
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class SystemTemplateSectionsComponent {}
+</code></pre>
+<p>留意 <code>@Component</code>装饰器的最后一行：<code>changeDetection: ChangeDetectionStrategy.OnPush</code>。在遇到这个问题时，我们首先怀疑是它引起的。然而这项配置究竟起什么样的作用让我们想当然的把矛头指向它？这里首先要解释一下什么是 change detection</p>
+<h3>Change Detection</h3>
+<p>无论是 Angular 还是 AngularJS ，其中最重要的一个机制是判断当前 UI 是否要进行更新。我们可以把这种机制统一解读为 “脏检查”，即判断数据是否发生了变化。但是在 Angular 和 AngularJS 中字面上的 “脏检查” 背后的逻辑却大相径庭。在 Angular 中这种机制称之为 change detection（以下我们简称 <strong>CD</strong>），而在 AngularJS 中这种机制称之为 dirty checking（以下简称 <strong>DC</strong>）</p>
+<p>我们先简单了解 CD 是如何工作的</p>
+<p>想象一个最简单的场景：你在页面上点击了一个按钮。但如果你在点击事件的回调函数中更改了一些数值，Angular 是怎么知道的？</p>
+<p>因为 Angular 采用 monkey patch 的方式重写并覆盖了浏览器的 <code>addEventListenter</code> 接口，在调用回调函数的同时手动触发了 CD，代码类似于：</p>
+<pre><code class="language-javascript">// this is the new version of addEventListener
+function addEventListener(eventName, callback) {
+     // call the real addEventListener
+     callRealAddEventListener(eventName, function() {
+        // first call the original callback
+        callback(...);     
+        // and then run Angular-specific functionality
+        var changed = angular2.runChangeDetection();
+         if (changed) {
+             angular2.reRenderUIPart();
+         }
+     });
+}
+</code></pre>
+<p>几乎所有的浏览器 API 都被 patch 了，比如你能想到的所有浏览器事件，以及 <code>setTimeout</code> 、<code>setInterval</code>，还有 Ajax 请求等等。</p>
+<p>所有的 patch 工作都交给 Angular 自带的 zone.js （NgZone 和 zone.js 是有差别的，为了便于说明理解，这里统一为一个概念）完成， 同时 zone.js 还为 Angular 提供代码的执行上下文。zone.js 是另一个话题不这次的重点，你只需要记住 zone.js 的目的是告诉 Angular 何时该进行渲染重绘。关于 zone 的工作原理可以参考<a href="https://medium.com/angular-in-depth/i-reverse-engineered-zones-zone-js-and-here-is-what-ive-found-1f48dc87659b">这里</a>和<a href="https://blog.strongbrew.io/how-the-hell-do-zones-really-work/">这里</a></p>
+<p>Angular 的默认 CD 策略也非常简单：它判断每个组件模板里表达式使用到的值前后是否发生了变化。对于对象类型，Angular 也不会进行深度比较，它只会对对象里使用到值进行值比较</p>
+<p>这样的 CD 比较代码是机器生成的，这比人工编写的普适比较代码针对性强，性能要好得多。</p>
+<p>最后提示一个优化技巧：反过来想，如果 CD 作为 Angular 的基本制度存在的话，有没有可能我们的代码游离在 CD 之外？可以的，并且为了避免某些频繁操作频繁的触发 CD 而造成性能问题，使得代码游离在 CD 以外然后手动的触发 CD 也常常作为优化的手段之一。在 CD 之外执行代码有两种方式：</p>
+<ul>
+<li><code>ChangeDetectorRef.detach()</code> 手动和 CD 断绝关系</li>
+</ul>
+<pre><code class="language-javascript">@Component({
+  selector: 'ns-demo',
+  template: ``
+})
+export class DemoComponent {
+  constructor(private ref: ChangeDetectorRef) {
+    this.ref.detach();
+  }
+</code></pre>
+<ul>
+<li>使用 zone.js 提供的 <code>runOutsideAngular</code> API 在 zone 之外执行代码：</li>
+</ul>
+<pre><code class="language-javascript">@Component({
+  selector: 'ns-demo',
+  template: ``
+})
+export class DemoComponent {
+  constructor(private zone: NgZone) {
+    this.zone.runOutsideAngular(() =&gt; {})
+  }
+
+</code></pre>
+<h3>Change Detection VS Dirty Checking</h3>
+<p>你可能听说过 AngularJS 使用某种 loop 机制来判断 scope 上的值是否发生了变化，但这种 loop 并不是主动的轮询，而是被动触发。准确来说这种 loop 称之为 <code>$digest</code> loop / cycle，也就是我们常说的 dirty checking</p>
+<p>对于每一个绑定在 <code>$scope</code> 上并且在 UI 里使用到的属性，比如 <code>&lt;div&gt;{{myModel}}&lt;/div&gt;</code>，AngularJS 都会给它添加一个 <code>watcher</code>以便在它发生改变的时候能够及时的更新 UI，并且添加到 <code>$watch</code> 列表中，类似于：</p>
+<pre><code class="language-javascript">$scope.$watch('myModel', function(newValue, oldValue) {
+  //update the DOM with newValue
+});
+</code></pre>
+<p>谁来触发这些 <code>watcher</code> 呢？通过 dirty checking 流程，也就是 <code>$digest</code> loop，<code>$digest</code>会遍历整个 <code>$watch</code> 列表来判断每个需要监视的值是否发生了变化</p>
+<p>而谁又来触发 <code>$digest</code> 呢？在 AngularJS 中框架推荐使用它提供的私有 directive 来替换原生浏览器 API 功能，比如 <code>$timeout</code>，<code>ng-click</code>，<code>$http</code>，它们类似于 zone.js 中对原生 API 的 patch， 这些 directive 除了完成原生 API 需要完成的功能以外，还通过调用 <code>$digest()</code> 方法来触发 <code>$digest</code> loop 。</p>
+<p>另一个与 <code>$digest()</code> 类似的方法是 <code>$apply</code>。不同之处在于：</p>
+<ol>
+<li><code>$apply</code>支持函数作为参数传入，能够确保在函数在更新之前执行</li>
+<li><code>$apply</code>会触每一个 scope，<code>$rootScope</code>下的每一个 scope，而<code>$digest</code>只会触发当前 scope</li>
+</ol>
+<p>所以你当然也可以使用原生的 <code>setTimeout</code>和 <code>addEventListener</code>，只是别忘了最后手动调用 <code>$apply</code> 确保 dirty checking 的发生。</p>
+<p>最后 dirty checking  与 change detection 相比特殊的地方在于，它会遍历 <code>$watch</code> 列表多次直到确保没有新的更改发生，因为它担心某个 <code>watcher</code> 的回调里会级联的修改另一个变量。而 Angular 的 change detection 因为遵循的是单向数据流的缘故并不会出现这样的行为</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/angular-onpush-explain%5Cdigest.png"/></p>
+<h3>OnPush  策略</h3>
+<p>回到我们的问题，<code>changeDetection: ChangeDetectionStrategy.OnPush</code> 意味我们将默认的 CD 策略改为 OnPush。这个策略只有在以下几种情况下才会触发 CD:</p>
+<ul>
+<li>组件的任意一个 inputs 的<strong>引用</strong>发生了修改</li>
+</ul>
+<p>Angular 组件支持类似于 React 父组件传递属性给子组件的机制，OnPush 策略下将 Angular 组件变成了类似于 React 中 PureComponent ，即仅在属性引用发生改变时才重新渲染。例如我们有一个 UserName 子组件用于展示用户的名称：</p>
+<pre><code class="language-javascript">@Component({
+    selector: 'app-user-name'，
+    template: `&lt;div&gt;{{userName.lastName}}, {userName.firstName}&lt;/div&gt;`
+    changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class UserName {
+    @Input userName: object;
+}
+</code></pre>
+<p>在父组件中我们使用它：</p>
+<pre><code class="language-javascript">@Component({
+    selector: 'app-user',
+    tempalte: `&lt;app-user-name [userName]="userNameInParentComponent"&gt;`
+})
+export class User {
+    userNameInParentComponent = {
+        firstName: 'firstName',
+        lastName: 'lastName'
+    }
+	onClick() {
+        this.userNameInParentComponent.fistName = Math.random()
+    }
+}
+</code></pre>
+<p>即使 <code>onClick</code> 回调函数执行后 <code>userNameInParentComponent</code> 变量发生了更改，但子组件在页面上并不会进行更新。因为我们只是修改了这个对象的内部状态，它的引用却没有发生变化。如果想要生效，应该重新给 <code>userNameInParentComponent</code> 赋值：</p>
+<pre><code class="language-javascript">onClick() {
+    this.userNameInParentComponent = {
+        fistName: Math.random(),
+        lastName: 'lastName'
+    }
+}
+</code></pre>
+<p>和 React 一样，这个特性同样也是常被作为性能优化的手段之一，我们需要在代码中引入 Immutable.js 机制</p>
+<ul>
+<li>组件的事件处理函数被触发调用</li>
+</ul>
+<p>注意这里仅限于<strong>事件处理函数</strong>，比如下面的代码：</p>
+<pre><code class="language-javascript">
+@Component({
+ template: `
+    &lt;button (click)="add()"&gt;Add&lt;/button&gt;
+    {{count}}
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class CounterComponent {
+  count = 0;
+  constructor() {
+    setTimeout(() =&gt; this.count = 5, 0);
+    setInterval(() =&gt; this.count = 5, 100);
+    Promise.resolve().then(() =&gt; this.count = 5); 
+    this.http.get('https://count.com').subscribe(res =&gt; {
+      this.count = res;
+    });
+  }
+  add() {
+    this.count++;
+  }
+}
+</code></pre>
+<p>除了 <code>click</code> 事件调用了 <code>add</code> 方法之外，构造函数中 <code>setTimeout</code>，<code>setInterval</code>等等也调用了 <code>add</code> 方法，但只有 click 之后页面上的 count 才会更新，其他的方式虽然更改了 <code>count</code> 的值，但并不会触发 CD, 也就不会造成重新渲染</p>
+<ul>
+<li>显式的触发 CD</li>
+</ul>
+<p>刚刚在上面我提到过我们可以通过 <code>ChangeDetectorRef.detach()</code> 和 <code>zone.runOutsideAngular</code> 使得代码游离在 CD 之外，但终归我们需要触发 CD 来重新渲染页面，此时我们可以通过已有的 API 来显式的触发 CD：</p>
+<ul>
+<li><code>ChangeDetectorRef.detectChanges()</code>: 在组件和它的所有子组件上运行 CD</li>
+<li><code>ApplicationRef.tick()</code>: 运行整个程序的 CD</li>
+<li><code>ChangeDetectorRef.markForCheck()</code>: （这个方法我不确定我理解的是否正确）它不会立即触发 CD, 而是把当前的组件标记为需要 check 的状态，在未来当父组件被 check 时才触发当前组件的 CD</li>
+<li><code>NgZone.run(() =&gt; {})</code>: 指定在 zone 里运行代码触发 CD</li>
+</ul>
+<p>除了上面的三种主流情况以外，还有一些特殊情况，比如 <code>async</code>，<code>Observable&lt;&gt;</code>可以触发 CD，出于篇幅考虑就不详述了，可以在我最后给出的参考资料里找到说明。以上的几个方案足够应付大多数情况 。</p>
+<p>注意这样显式的触发 CD 是 by design 的行为，并不是 hack</p>
+<p>但是即使在尝试了上面各种能够触发 CD 的方法，甚至移除 <code>ChangeDetectionStrategy.OnPush</code> 之后都无法触发 AngularJS 组件的渲染之后。我们陷入了僵局。</p>
+<h2>因为降级</h2>
+<p>于是我们决定重新审视我们代码，追踪代码的实现。我们目前出现问题的代码是通过  service 触发 AngularJS 的 message box 功能，调用代码类似如下:</p>
+<pre><code class="language-javascript">constructor(private messageBox: MessageBox) {
+    this.messageBox.error(error);
+}
+</code></pre>
+<p>而 AngularJS 那边的实现主要代码如下，以上面的 <code>error</code> 方法为例，实际上只是给 <code>message</code> 变量赋值而已：</p>
+<pre><code class="language-javascript">export function messageBoxFactory(i18n) {
+  let messageStore = null;
+  return {
+    error(message) {
+      messageStore = { description: message, type: 'error' };
+    },
+</code></pre>
+<p>另一端代码里，正用着 <code>$watch</code> 监视着 <code>messageStore</code> 变量是否发生变化，如果发生了变化则在页面上提示消息：</p>
+<pre><code class="language-javascript">(((coreModule) =&gt; {
+  coreModule.directive('myMessageBox', ['messageBox', '$sanitize', function MyMessageBox(messageBox, $sanitize) {
+    return {
+      link(scope, iElement) {
+        scope.$watch(() =&gt; {
+          if (!messageBox.hasMessage()) {
+            return;
+          }
+          fadeInMessageBox();
+          const message = messageBox.retrieveMessage();
+          // ...
+          showMessageBox();
+</code></pre>
+<p>我们猜想问题可能是因为 <code>scope.$watch</code> 并没有监视到 <code>messageStore</code> 的变化。就是没有主动的进行 dirty checking, 于是我们尝试将 scope 赋值到全局 windows 上，然后手动调用 <code>scope.$apply()</code> —— 成功了。我们就能很肯定是因为 AngularJS 没有主动运行 DC 导致的。但是为什么？这也许和 Angular 和 AngularJS 的混用有关。</p>
+<h3>Upgrade VS Downgrade</h3>
+<p>为了能够让 Angular 和 AngularJS 相互兼容工作，我们在整合两个框架时面临着一个选择：</p>
+<ol>
+<li>Upgrade? 将 AngularJS 组件升级为 Angular 组件</li>
+<li>Downgrade? 将 Angular 组件降级为 AngularJS 组件</li>
+</ol>
+<p>在尝试选择 upgrade 之后，我们发现性能出现了很大的问题，因为这和 upgrade 的原理有关，以下引用来自 Angular 的官方文档：</p>
+<blockquote>
+<ul>
+<li>Everything that happens in the application runs inside the Angular zone. This is true whether the event originated in AngularJS or Angular code. The zone triggers Angular change detection after every event.</li>
+<li>The <code>UpgradeModule</code> will invoke the AngularJS <code>$rootScope.$apply()</code> after every turn of the Angular zone. This also triggers AngularJS change detection after every event.</li>
+</ul>
+</blockquote>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/angular-onpush-explain/change_detection.png"/></p>
+<p>过于频繁的 CD / DC 是造成性能问题的主要原因</p>
+<p>所以最终我们选择了 downgrade 方案，downgrade 与 upgrade 的区别在于：</p>
+<blockquote>
+<ol>
+<li>Unlike <code>UpgradeModule</code>, <code>downgradeModule()</code> does not bootstrap the main AngularJS module inside the <a href="https://angular.io/api/core/NgZone">Angular zone</a>.</li>
+<li>Unlike <code>UpgradeModule</code>, <code>downgradeModule()</code> does not automatically run a <a href="https://docs.angularjs.org/api/ng/type/$rootScope.Scope#$digest">$digest()</a> when changes are detected in the Angular part of the application.</li>
+</ol>
+</blockquote>
+<p>也就是在 downgrade 的方案里，两个框架的 CD / DC 机制并不是相互关联的，当一个框架的 CD / DC 被触发时，并不会级联的触发另一个框架里的 CD / DC</p>
+<p>这也解释了为什么我们在 Angular 组件里的修改，没有触发 AngularJS 里的 <code>$digest</code>。</p>
+<h2>解决方案</h2>
+<p>那么我们只要触发 AngularJS 里的 <code>$digest</code> 就好了。例如我们可以新建一个 service 作为管道将 AngularJS 里的 <code>$rootScope</code> 传送到 Angular 里，然后手动触发 <code>$apply</code></p>
+<p>又或者，不就是为了触发 <code>$apply</code> 吗？点击事件也可以，那么不如我们就用代码模拟鼠标的点击 <code>document.body.click()</code> 就好了</p>
+<p>但如果在每个调用 <code>messageBox.error</code> 的地方都同时调用 <code>document.body.click()</code> 代码未免太丑了，于是我们新建一个 Angular service, 来封装这两种行为</p>
+<pre><code class="language-javascript">import {Injectable} from '@angular/core';
+import {MessageBox} from '@app/ajs-upgraded-services';
+
+@Injectable()
+export class MessageBoxService extends MessageBox {
+  constructor(private messageBox: MessageBox) {
+    super();
+  }
+
+  public error = (message: string): void =&gt; {
+    this.messageBox.error(message);
+    document.body.click();
+  }
+}
+</code></pre>
+<p>搞定</p>
+<h2>参考资料集合：</h2>
+<p><a href="https://www.site2share.com/folder/20020534">https://www.site2share.com/folder/20020534</a></p>
+<ul>
+<li><a href="https://blog.angular-university.io/how-does-angular-2-change-detection-really-work/">Angular Change Detection - How Does It Really Work?</a></li>
+<li><a href="https://stackoverflow.com/a/40903120/508236">what is the use of Zone.js in Angular 2</a></li>
+<li><a href="https://www.sitepoint.com/understanding-angulars-apply-digest/">Understanding Angular’s $apply() and $digest()</a></li>
+<li><a href="https://www.ng-book.com/p/The-Digest-Loop-and-apply/">The Digest Loop and $apply</a></li>
+<li><a href="https://stackoverflow.com/questions/35826219/angular-scope-digest-vs-scope-apply">Angular $scope.$digest vs $scope.$apply</a>]</li>
+<li><a href="https://netbasal.com/a-comprehensive-guide-to-angular-onpush-change-detection-strategy-5bac493074a4">A Comprehensive Guide to Angular onPush Change Detection Strategy</a></li>
+<li><a href="https://blog.angular-university.io/onpush-change-detection-how-it-works/">Angular OnPush Change Detection and Component Design - Avoid Common Pitfalls</a></li>
+<li><a href="https://blog.ninja-squad.com/2018/09/27/angular-performances-part-4/">Angular Performances Part 4 - Change detection strategies</a></li>
+<li><a href="https://blog.thoughtram.io/angular/2017/02/21/using-zones-in-angular-for-better-performance.html">Using Zones in Angular for better performance</a></li>
+<li><a href="https://stackoverflow.com/questions/41364386/whats-the-difference-between-markforcheck-and-detectchanges">What's the difference between markForCheck() and detectChanges()</a></li>
+<li><a href="https://stackoverflow.com/questions/34827334/triggering-change-detection-manually-in-angular">Triggering change detection manually in Angular</a></li>
+<li><a href="https://angular.io/guide/upgrade#how-ngupgrade-works">How ngUpgrade Works</a></li>
+<li><a href="https://angular.io/api/upgrade/static/downgradeModule#differences-with-upgrademodule">downgradeModule</a></li>
+</ul>

@@ -1,0 +1,258 @@
+<h2>原文：<a href="https://claude-ray.github.io/elastic-apm-node-research.html">Node.js APM 产品调研：Elastic APM</a></h2>
+<hr/>
+<h2>title: Node.js APM 产品调研：Elastic APM
+date: 2019-05-27 22:46:05
+tags: [Node.js,APM,Elastic-APM,V8]
+categories: Node.js</h2>
+<h1>前言</h1>
+<p>根据上一篇《<a href="http://claude-ray.com/2019/05/19/node-apm-product-research/">Node.js APM 产品调研</a>》的市场调研结果，笔者更青睐 Elastic APM 这个开源产品，故决定带来它的一篇专题介绍。</p>
+<p>尽管团队已经开始试用，但踩坑时间较短，与其编写测评，不如先带大家走进这个项目，剖析个别令人感兴趣的技术点。</p>
+<p>&lt;!--more--&gt;</p>
+<h1>基础介绍</h1>
+<h2>项目背景</h2>
+<p>从 github 的信息来看，项目从 2011 年 11 月开工，已经不算新项目，期间基本就是单人维护的状态，进展到现在颇为不易。</p>
+<p>两任作者分别是 Sentry 的核心成员 Matt Robenolt，以及 Elastic 团队的 Node.js 专职开发 Thomas Watson，同时他也是 Node.js 团队的核心贡献者之一。</p>
+<p>对 Elastic APM 完全没有接触过的读者，可以先阅读 nswbmw/node-in-debugging 中的<a href="https://github.com/nswbmw/node-in-debugging/blob/master/5.2%20Elastic%20APM.md">介绍</a>。</p>
+<h2>基本功能</h2>
+<p>官方文档是相当细致了，使用前推荐阅读。除了基本功能，这里列举一些值得关注的点</p>
+<ul>
+<li>支持自定义 Node 框架和路由。Agent 记录路由的原理都是 patch 各路由中间件的 match 方法，倘若 SDK 没有对你在用的路由库提供支持，可以选择手动记录或自行 patch。</li>
+<li>支持主动上报错误 stack，并且帮你在看板上定位异常的来源代码。</li>
+<li>支持采集 http 请求的 body 参数，默认关闭。一旦开启，可以构成非常强大的日志分析。但不建议在 apm agent 做这种处理，会给监控赋予了太多职能，有需要最好结合全链路 tracing 方案使用额外的 logger agent。</li>
+<li>过滤敏感信息，根据请求头、或自定义维度。</li>
+<li>支持定制 Transaction, Span， 额外的 custom 数据。</li>
+<li>性能优化指南，结合自身业务需要，调整采样率、上报频率、请求体的限制。</li>
+<li>支持 opentracing</li>
+<li>支持 kubernetes</li>
+</ul>
+<h2>数据上报</h2>
+<p>首先我们简称 Elastic APM client 为 agent。agent 到日志采集服务 apm-server 的通讯方式为 http 或 https。请求方法被封装到了 <code>elastic-http-client</code> 模块，负责将 Transaction, Error, Metric, Span 这类指标发送到 apm-server，并且还包含格式检查、过长的信息截断的功能。</p>
+<p>apm-server 负责将采集到的数据存储到 Elasticsearch。</p>
+<p>最终在 Kibana 可视化地分析 Elasticsearch 中存储的数据。</p>
+<pre><code>elastic-apm-node(node)  ➡   apm-server(golang)
+                                   ⬇
+     kibana(展示层)      ➡   elasticsearch(数据层)
+</code></pre>
+<blockquote>
+<p>数据全部由自己的 Elasticsearch 掌控，在此基础上能定制出更多分析工具。</p>
+</blockquote>
+<h2>目录结构</h2>
+<p>相比商业 APM 项目，elastic-apm-node 结构非常简洁。</p>
+<p>基本的目录信息如下</p>
+<ul>
+<li>lib<ul>
+<li>filters</li>
+<li>instrumentation<ul>
+<li>module</li>
+</ul>
+</li>
+<li>metrics<ul>
+<li>platform</li>
+</ul>
+</li>
+<li>middleware</li>
+</ul>
+</li>
+</ul>
+<p>除了 filters 和 middleware 服务于内部功能，分别用于过滤敏感请求头(auth、cookie) 和异常捕获，剩下的就是核心功能  <code>Transaction</code>、<code>Error</code>、<code>Metric</code> 所在目录了。</p>
+<p>接下来，我将围绕这三大功能进行介绍。</p>
+<h1>核心功能</h1>
+<h2>Error</h2>
+<p>通常错误日志包含了哪一行代码报错，但只有翻看代码才能确认究竟哪段代码出现问题。APM 提供了可以在看板界面直接确认异常代码的解决方案。</p>
+<p>核心代码如下，目的是为了在 Error 对象中通过 __error_callsites 属性获取到 callsites 信息。</p>
+<pre><code class="language-js">var formatter = require('./lib/node-0.10-formatter')
+
+var orig = Error.prepareStackTrace
+Error.prepareStackTrace = function (err, callsites) {
+  Object.defineProperty(err, '__error_callsites', {
+    enumerable: false,
+    configurable: true,
+    writable: false,
+    value: callsites
+  })
+
+  return (orig || formatter)(err, callsites)
+}
+
+module.exports = function (err) {
+  err.stack
+  return err.__error_callsites
+}
+</code></pre>
+<p>上面代码中只有一个不常见的方法 <code>Error.prepareStackTrace</code>，并且在 Node.js 的 API 中找不到，因为它实际是 V8 暴露的接口。</p>
+<pre><code class="language-js">Error.prepareStackTrace(error, structuredStackTrace)
+</code></pre>
+<p>这个接口常常被用来格式化错误信息，<code>structuredStackTrace</code> 包含了一组 CallSite 对象，CallSite 对象支持的方法有：getThis, getTypeName, getFunction, getFunctionName, getMethodName, getFileName, getLineNumber, getColumnNumber, getEvalOrigin, isToplevel, isEval, isNative, isConstructor, isAsync, isPromiseAll, getPromiseIndex</p>
+<p>因此借助 CallSite 可以拿到 Error 抛出的文件、行列位置。</p>
+<ul>
+<li><code>getFileName</code>: if this function was defined in a script returns the name of the script</li>
+<li><code>getLineNumber</code>: if this function was defined in a script returns the current line number</li>
+<li><code>getColumnNumber</code>: if this function was defined in a script returns the current column number</li>
+</ul>
+<p>最后通过 <code>source-map</code> 模块的缓存，获取执行前后的代码。</p>
+<p>处理 Error stack 的意义对 JS 直接编写的项目意义可能不是那么大，但假如开发者使用了 TS、或其他原因使生产环境的代码经过了一定编译，这时直接抛出的 Error stack 信息对开发者相当不友好。特定场景下 source-map 的代码映射变得至关重要。</p>
+<p>默认地，Elastic APM 只记录 uncaughtException 和一小部分内部 patch 代码的错误。如果有较强的查错需求，得主动在业务中调用 <code>agent.captureError</code> 方法记录异常。</p>
+<p>另外，若项目有特殊异常上报等原因需要监听 uncaughtException 事件，<strong>应当在 agent start() <code>之后</code>覆盖 <a href="https://www.elastic.co/guide/en/apm/agent/nodejs/current/agent-api.html#apm-handle-uncaught-exceptions">agent.handleUncaughtExceptions</a> 方法</strong>，这样才能使其默认的捕获后 process.exit 的处理失效，以免进程在任务执行结束之前被 APM 的监听器强制退出。用法：</p>
+<pre><code class="language-js">const apm = require('elastic-apm-node').start()
+apm.handleUncaughtExceptions(err =&gt; {
+  // Do your own stuff... and then exit:
+  process.exit(1)
+})
+</code></pre>
+<p>如果 handleUncaughtExceptions 在 start 之前调用，会被重新覆盖。</p>
+<pre><code class="language-js">Agent.prototype.handleUncaughtExceptions = function (cb) {
+  var agent = this
+
+  if (this._uncaughtExceptionListener) {
+    process.removeListener('uncaughtException', this._uncaughtExceptionListener)
+  }
+
+  this._uncaughtExceptionListener = function (err) {
+    agent.logger.debug('Elastic APM caught unhandled exception: %s', err.message)
+    agent.captureError(err, { handled: false }, function () {
+      cb ? cb(err) : process.exit(1)
+    })
+  }
+
+  process.on('uncaughtException', this._uncaughtExceptionListener)
+}
+</code></pre>
+<h2>Metric</h2>
+<p>一般来说，Node.js 原生暴露的接口足够对进程性能的基本状况有所判断了，但 APM 系统总是希望监控更详细的信息。</p>
+<p>尤其是系统 CPU、内存占用率的走势图，原生 API 获取到的信息仍需要一定的计算工作。在简洁和效率的取舍上，一部分探针选择用纯 JS 计算，另一部分探针选择使用 C++ 获取/计算。使用 C++ 的库一般还会获取更复杂的指标，如 <a href="https://github.com/RuntimeTools/appmetrics">appmetrics</a> 会获取一部分 GC、Event loop 信息（然而 GC 耗费占比的监控在 Node.js Runtime 下无法实现，信息来自：<a href="https://www.zhihu.com/question/315261661/answer/637417008">关于Nodejs的性能监控思考？ - hyj1991的回答 - 知乎</a>）</p>
+<p>Elastic APM 是相对小清新的一派，它选择纯 JS 实现，只针对 Linux 环境进行优化。如果发现当前服务环境 <code>process.platform</code> 是 Linux，它会从 /proc/ 目录定时获取系统性能快照，以降低计算量。如果是其他系统，再使用 JS 通过算法计算。</p>
+<blockquote>
+<p>实际上 Node.js 的底层 <code>libuv</code> 就是靠读取 proc 文件来采集 Linux 相关信息的。关于 proc 的介绍可以阅读 Linux 文件系统文档 https://github.com/torvalds/linux/blob/master/Documentation/filesystems/proc.txt</p>
+</blockquote>
+<ul>
+<li>/proc/meminfo: 记录系统内存信息，用来获取两个指标：MemAvailable 和 MemTotal。对应 <code>os.totalmem()</code> 和 <code>os.freemem()</code>。</li>
+<li>/proc/stat: 记录 CPU 活动信息，用来获取两个指标：cpuTotal 和 cpuUsage。这一步用 Node.js 计算略麻烦，需要定时缓存 <code>os.cpus()</code> 的 <code>times.total</code> <code>times.idle</code>指标。</li>
+<li>/proc/self/stat: 不同于前面两个记录系统级信息的文件，此文件记录了当前进程的所有活动信息。可以用来获取进程 CPU、内存使用状况。原本 CPU 使用率需要除法运算，对应 <code>process.cpuUsage([previousValue])</code>，<code>process.hrtime([time])</code>，而通过此文件可以简化为加减法运算。获取的内存数据也可以用来计算 <code>process.memoryUsage().rss</code>，不过还是直接使用 Node.js 的 API 更简单。</li>
+</ul>
+<h2>Transaction</h2>
+<p>Elastic APM 中的事务，类似于 opentracing 中的 Span，但把一个请求中所有的 Span 抽象为一个概念。</p>
+<p>Transaction 实现的基础是各种代码钩子。</p>
+<h3>patch</h3>
+<p>通过 patch ，做一些信息采集，例如 Koa 框架的。</p>
+<pre><code class="language-js">module.exports = function (koa, agent, { version, enabled }) {
+  if (!enabled) return koa
+
+  agent.setFramework({ name: 'koa', version, overwrite: false })
+
+  return koa
+}
+</code></pre>
+<pre><code class="language-js">shimmer.wrap(Router.prototype, 'match', function (orig) {
+  return function (_, method) {
+    var matched = orig.apply(this, arguments)
+
+    if (typeof method !== 'string') {
+      agent.logger.debug('unexpected method type in koa-router prototype.match: %s', typeof method)
+      return matched
+    }
+
+    if (Array.isArray(matched &amp;&amp; matched.pathAndMethod)) {
+      const layer = matched.pathAndMethod.find(function (layer) {
+        return layer &amp;&amp; layer.opts &amp;&amp; layer.opts.end === true
+      })
+
+      var path = layer &amp;&amp; layer.path
+      if (typeof path === 'string') {
+        var name = method + ' ' + path
+        agent._instrumentation.setDefaultTransactionName(name)
+      } else {
+        agent.logger.debug('unexpected path type in koa-router prototype.match: %s', typeof path)
+      }
+    } else {
+      agent.logger.debug('unexpected match result in koa-router prototype.match: %s', typeof matched)
+    }
+
+    return matched
+  }
+})
+</code></pre>
+<p>上面的 patch 配合 <code>require-in-the-middle</code> 模块，完成了对各框架的包装。</p>
+<h3>async-hook</h3>
+<p>利用 async-hook 实现记录整串请求，来看两个代码片段。</p>
+<p>首先是基于 async-hook 封装了 Instrumentation 的 <code>currentTransaction</code> 方法，使异步操作中随时可以拿到当前 async scope id 下的 Transaction 实例。</p>
+<pre><code class="language-js">const asyncHooks = require('async_hooks')
+module.exports = function (ins) {
+  const asyncHook = asyncHooks.createHook({ init, before, destroy })
+  const contexts = new WeakMap()
+
+  const activeTransactions = new Map()
+  Object.defineProperty(ins, 'currentTransaction', {
+    get () {
+      const asyncId = asyncHooks.executionAsyncId()
+      return activeTransactions.get(asyncId) || null
+    },
+    set (trans) {
+      const asyncId = asyncHooks.executionAsyncId()
+      if (trans) {
+        activeTransactions.set(asyncId, trans)
+      } else {
+        activeTransactions.delete(asyncId)
+      }
+    }
+  })
+  // ...
+}
+</code></pre>
+<p>下面是 currentTransaction 的一处应用</p>
+<pre><code class="language-js">Instrumentation.prototype.bindFunction = function (original) {
+  if (typeof original !== 'function' || original.name === 'elasticAPMCallbackWrapper') return original
+
+  var ins = this
+  var trans = this.currentTransaction
+  var span = this.currentSpan
+  if (trans &amp;&amp; !trans.sampled) {
+    return original
+  }
+
+  return elasticAPMCallbackWrapper
+
+  function elasticAPMCallbackWrapper () {
+    var prevTrans = ins.currentTransaction
+    ins.currentTransaction = trans
+    ins.bindingSpan = null
+    ins.activeSpan = span
+    if (trans) trans.sync = false
+    if (span) span.sync = false
+    var result = original.apply(this, arguments)
+    ins.currentTransaction = prevTrans
+    return result
+  }
+}
+</code></pre>
+<p>async hook 是 Node.js 8 以后出现的概念，为了兼容旧版本，Elastic APM 借助 <code>async-listener</code> 模块做了一些兼容，尽管 Elastic APM 官方不推荐使用低版本 Node.js 接入。</p>
+<p>虽然 async hook 更进一步可以帮助优化异步调用栈，改善异步 Error 信息的可读性，但 APM 很难从底层判断哪些异步 CallSite 是用户想保留的，所以没有做这种处理。</p>
+<h3>Span Trace</h3>
+<p>Span 用来记录 db 操作、http、websocket 远程调用等细致操作，Elastic APM 同时记录了调用栈。</p>
+<p>我们知道，console.trace() 方法可以用来定位 trace 信息，它实际使用了 V8 Error 暴露的另一个方法 <code>Error.captureStackTrace(error, constructorOpt)</code>。</p>
+<p><code>error</code> 是用来记录 trace 信息的必传对象，captureStackTrace 会将字符串附加到 error 对象的 stack 属性上。</p>
+<p><code>constructorOpt</code> 是用来隐藏底层调用栈的可选函数，用法如下</p>
+<pre><code class="language-js">function MyError() {
+  Error.captureStackTrace(this, MyError);
+  // Any other initialization goes here.
+}
+</code></pre>
+<h4>小插曲</h4>
+<p>上面提到的 V8 Error trace API，结合 TJ 的 <code>callsite</code> 更容易理解，功能是获取当前的 CallSite 集合。</p>
+<pre><code class="language-js">module.exports = function(){
+  var orig = Error.prepareStackTrace;
+  Error.prepareStackTrace = function(_, stack){ return stack; };
+  var err = new Error;
+  Error.captureStackTrace(err, arguments.callee);
+  var stack = err.stack;
+  Error.prepareStackTrace = orig;
+  return stack;
+};
+</code></pre>
+<h1>总结</h1>
+<p>不得不说，和活跃的商业巨头产品相比，Elastic APM 目前的功能支持度存在不少差距。如果想在 APM 专业领域探索，绕不开对 New Relic 源码的学习。 XD</p>
+<p>但 Elastic APM Node.js 依然是目前最值得关注的开源探针式监控方案，其 agent 基础功能支持度较好，代码结构也很简单，希望能被更多人使用，帮助它更快成长~</p>
+<h1>Reference</h1>
+<ul>
+<li>https://github.com/elastic/apm-agent-nodejs</li>
+<li>https://v8.dev/docs/stack-trace-api</li>
+</ul>

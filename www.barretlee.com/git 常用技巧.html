@@ -1,0 +1,107 @@
+<h2>原文：<a href="https://www.barretlee.com/2018-11-26-git-%E5%B8%B8%E7%94%A8%E6%8A%80%E5%B7%A7.html">git 常用技巧</a></h2>
+<hr/>
+<p>title: git 常用技巧
+description: 小胡子哥的个人网站
+warning: true
+author: 小胡子哥
+tags:</p>
+<ul>
+<li>git
+categories:</li>
+<li>前端杂烩
+date: 2018-11-26 23:29:00</li>
+</ul>
+<hr/>
+<p>git 的版本管理思路，十分简单：使用一个类似链表的结构，将每次修改记录串联起来。每次提交都会产生一个 SHA1 的唯一标示符，我们可以利用 git 提供的命令行工具对“链表”中的每次修改进行编辑、删除、插入、移动等等多种操作。下面就介绍几种十分有用也比较常用的操作方法，为了方便理解，表述上可能不够准确。</p>
+<p>下面是一个提交了 4 次的分支效果，每个节点的意思是 <code>节点名(commit 信息 - SHA1)</code>：</p>
+<pre><code>A(add A - 510fdc) -&gt; B(add B - 0406b6) -&gt; C(add C - 39a9c2) -&gt; D(add D - 3131e0)&lt;当前&gt;
+</code></pre>
+<h3>修改最近一次的提交信息</h3>
+<p>将上次提交的信息（add D），修改为 <code>push D</code>，可以通过 commit 的 amend 指令进行修改，如下：</p>
+<pre><code class="language-bash">git commit --amend
+# 执行命令后，会进入到一个交互窗口，可以在交互窗口内修改上次的提交信息
+</code></pre>
+<h3>利用 rebase 对提交进行各种修改</h3>
+<p>rebase 的常用操作分为这么几步：</p>
+<ol>
+<li>选择操作的起点位置，<code>git rebase -i SHA1</code></li>
+<li>指定每个节点的操作方式，<code>保留/删除/修改/...</code>，进入操作</li>
+<li>进入下一步操作/终止操作，<code>git rebase --continue</code>，<code>git rebase --abort</code></li>
+</ol>
+<p>比如我们要将节点 B 的 commit 信息（add B），修改为 <code>push B</code>，那么按照上述的操作指南，可以执行（<strong>第一步</strong>）：</p>
+<pre><code class="language-bash"># 第一步，进入 B 之前的节点，A
+git rebase -i 510fdc # 510fdc 是 A 节点的 SHA1
+</code></pre>
+<p>此时会进入一个交互窗口，内容大致为：</p>
+<pre><code class="language-bash">pick B 0406b6
+pick C 39a9c2
+pick D 3131e0
+</code></pre>
+<p><strong>你需要看懂这个结构</strong>，不过也不用紧张，它很简单。由于我们将操作指针指向了 A，所以它会展示 A 以后的所有提交记录，根据链表顺序排列，依次展示节点 B、C、D，前面的一个英文单词是操作指令，总共有这么几种指令：</p>
+<ul>
+<li><code>pick</code>，保留节点，不做任何变更</li>
+<li><code>edit</code>，保留节点，修改内容</li>
+<li><code>drop</code>，删除节点，删除本次提交</li>
+<li><code>reword</code>，保留节点，修改提交信息</li>
+<li><code>squash</code>，保留节点修改，并且与上一个节点合并，也就是两次提交并做一次</li>
+<li><code>fixup</code>，保留节点修改，忽略本次提交信息</li>
+<li><code>exec</code>，run command (the rest of the line) using shell</li>
+</ul>
+<p>用的比较多的是前三个，可以只关注前三个。我们需要修改下交互窗口的内容，改为（<strong>第二步</strong>）：</p>
+<pre><code class="language-diff">+ edit B 0406b6
+- pick B 0406b6
+pick C 39a9c2
+pick D 3131e0
+</code></pre>
+<p>上面是 diff，实际内容是：</p>
+<pre><code class="language-bash">edit B 0406b6
+pick C 39a9c2
+pick D 3131e0
+</code></pre>
+<p>此时会进入一个临时 git 分支，大致是这样：</p>
+<pre><code class="language-bash">branch(0406b6): 
+</code></pre>
+<p>由于你告诉了 git 要对 B 节点就行修改，所以它就停在了 B 处理，等着你修改，此时，你可以通过 amend 命令修改提交信息：</p>
+<pre><code class="language-bash">branch(0406b6): git commit --amend
+# 进入交互窗口，将 commit 信息修改为 push B
+</code></pre>
+<p>操作完成后，执行（<strong>第三步</strong>）：</p>
+<pre><code class="language-bash">git rebase --continue
+</code></pre>
+<p>由于你告诉 git 只需要操作一个节点，所以它会回到最初的位置&lt;当前&gt;，否则的话，它会继续进入下一个临时 git 分支。当然，如果你进入第三步以后，突然又不想修改了，可以执行：</p>
+<pre><code class="language-bash">git rebase --skip 
+</code></pre>
+<p>跳过对本节点的修改。</p>
+<p>以上就是 rebase 的基本使用方法，那么留下几个思考题，读者可以自行操作：</p>
+<ul>
+<li>通过 rebase 删除 C 节点（drop）</li>
+<li>通过 rebase 合并 A 和 B 节点的修改（squash）</li>
+<li>交换 B 和 C 的提交顺序</li>
+</ul>
+<h3>将一个分支的修改合并到另一个分支</h3>
+<p>通过 <code>git cherry-pick SHA1</code> 这个指令可以可以完成目标，</p>
+<pre><code>master: A(add A - 510fdc) -&gt; B(add B - 0406b6) -&gt; C(add C - 39a9c2)&lt;当前&gt;
+                                     \
+dev:                             D(add D - 4569c2) -&gt; E(add E - 087342)
+</code></pre>
+<p>如果我们想把 dev 分支 D 节点的修改合并到 master 分支，可以执行：</p>
+<pre><code class="language-bash"># 首先确保自己在 master 分支上，git branch master
+git cherry-pick 4569c2 # 4569c2 为 D 节点的 SHA1
+</code></pre>
+<h3>快速定位一个 bug 在哪次修改上</h3>
+<p>假设我们在本地提交了一堆 commit，正准备 push 到仓库之前，发现有一个 bug，但是记不起来是哪一次 commit 造成的了，怎么办？我们需要通过 <code>reset/rebase/stash</code> 等操作回滚到上一个状态进行测试，但是这样会很麻烦，而且效率不一定很高，git 为我们提供了更加便捷的工具 <code>git bisect</code>，通过二分法找 bug。它提供的命令也很直白：</p>
+<pre><code class="language-bash">git bisect start                 # 进入二分查找
+git bisect good [good-commit-id] # 设置没问题的版本 SHA1，排查起点
+git bisect bad [bad-commit-id]   # 设置有问题的版本 SHA1，排查终点
+# 此时 git 就会自动进入到中间版本状态
+</code></pre>
+<p>进入中间版本状态，测试后，如果有问题，就标记为 bad，如果没有问题，就标记为 good，如下：</p>
+<pre><code class="language-bash">git bisect bad  # 有问题
+git bisect good # 没问题
+</code></pre>
+<p>当你找到问题以后，可以执行 reset 回到初始状态：</p>
+<pre><code class="language-bash">git bisect reset
+</code></pre>
+<p>然后通过上面介绍的 rebase edit 操作对错误分支进行修改。</p>
+<hr/>
+<p>（未完待续）</p>

@@ -1,0 +1,95 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%9C%A8CentOS7%E4%B8%AD%E4%BD%BF%E7%94%A8Shadowsocks%E5%AE%A2%E6%88%B7%E7%AB%AF.html">在CentOS7中使用Shadowsocks客户端</a></h2>
+<hr/>
+<h2>title: 在CentOS7中使用Shadowsocks客户端
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?99'
+date: 2021-05-27 10:35:16
+categories: 软件安装与配置
+tags: [Shadowsocks, 软件安装与配置, CentOS]
+description: 本文讲述了如何在CentOS7中配置并使用Shadowsocks客户端；</h2>
+<p>本文讲述了如何在CentOS7中配置并使用Shadowsocks客户端；</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>在CentOS7中使用Shadowsocks客户端</strong></h2>
+<p><strong>最近需要在CentOS中加入SSR代理，网上的教程大部分都是通过脚本一键安装，具有服务器暴露的风险；</strong></p>
+<p>最后找到了通过原生的Shadowsocks配合Privoxy配置客户端的方法；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>安装Shadowsocks</strong></h3>
+<p>使用pip3安装：</p>
+<pre><code class="language-bash">pip3 install shadowsocks # pip安装ss客户端
+# 如果提示 -bash: pip: command not found
+# 运行 yum -y install python-pip
+</code></pre>
+<p>安装完成会会有<code>sslocal</code>和<code>ssserver</code>两个可执行文件；</p>
+<p>我们使用<code>sslocal</code>连接SSR服务器；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建配置文件</strong></h3>
+<p>创建配置文件：</p>
+<pre><code class="language-bash">mkdir /etc/shadowsocks
+
+vi /etc/shadowsocks/shadowsocks.json
+
+{
+    "server":"SERVER-IP",   
+    "server_port":PORT, 
+    "local_address": "127.0.0.1",
+    "local_port":1080,
+    "password":"PASSWORD",
+    "timeout":300,
+    "method":"aes-256-cfb",
+    "fast_open": false,
+    "workers": 1
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>安装privoxy</strong></h3>
+<p>直接使用sslocal是不能转发HTTP和HTTPS的流量的，所以我们还需要安装privoxy；</p>
+<pre><code class="language-bash">yum -y install privoxy
+</code></pre>
+<p>配置 socks5 全局代理：</p>
+<pre><code class="language-bash">echo 'forward-socks5 / 127.0.0.1:1080 .' &gt;&gt; /etc/privoxy/config
+</code></pre>
+<p>设置 http/https 代理：</p>
+<pre><code class="language-bash"># privoxy默认监听端口为8118
+export http_proxy=http://127.0.0.1:8118
+export https_proxy=http://127.0.0.1:8118
+</code></pre>
+<p>运行 privoxy：</p>
+<pre><code class="language-bash">service privoxy start
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>简化使用</strong></h3>
+<p>每次启动代理时都要输入许多命令太麻烦，可以利用命令别名来简化我们的操作：</p>
+<p>编辑<code>~/.bashrc</code>文件：</p>
+<pre><code class="language-bash">vi ~/.bashrc
+
+alias ssinit='nohup sslocal -c /etc/shadowsocks.json &amp;&gt;&gt; /var/log/sslocal.log &amp;'
+alias sson='export http_proxy=http://127.0.0.1:8118 &amp;&amp; export https_proxy=http://127.0.0.1:8118 &amp;&amp; systemctl start privoxy'
+alias ssoff='unset http_proxy &amp;&amp; unset https_proxy &amp;&amp; systemctl stop privoxy &amp;&amp; pkill sslocal'
+</code></pre>
+<p>立即生效：</p>
+<pre><code class="language-bash">source ~/.bashrc
+</code></pre>
+<p>使用方法：</p>
+<ul>
+<li>开启ss代理：<code>ssinit &amp; sson</code>；</li>
+<li>关闭ss代理：<code>ssoff</code>；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>使用测试</strong></h3>
+<p>启动SSR代理，并测试 socks5 全局代理：</p>
+<pre><code class="language-bash">curl www.google.com
+</code></pre>
+<p>如果出现下面这段输出则代理成功！</p>
+<pre><code class="language-bash">302 Moved
+
+The document has moved
+here.
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>附录</strong></h2>
+<p>文章参考：</p>
+<ul>
+<li><a href="https://woj.app/3857.html">CentOS 7命令行使用shadowsocks客户端(和服务的)代理的方法</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

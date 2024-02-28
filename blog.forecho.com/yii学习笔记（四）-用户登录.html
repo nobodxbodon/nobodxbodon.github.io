@@ -1,0 +1,109 @@
+<h2>原文：<a href="https://blog.forecho.com/yii-xue-xi-bi-ji-si-yong-hu-deng-lu.html">yii学习笔记（四）-用户登录</a></h2>
+<hr/>
+<h2>title: "yii学习笔记（四）-用户登录"
+date: 2012-07-10T15:44:00+08:00
+tags: ["yii"]
+draft: false
+toc: true</h2>
+<p>先在 \protected\components\文件夹里面找到UserIdentity.php</p>
+<p>然后用gii的Model Generator生成User的Model</p>
+<p>然后在UserIdentity.php找到这段代码：</p>
+<pre><code>public function authenticate()
+{
+    $users=array(
+        // username =&gt; password
+        'demo'=&gt;'demo',
+        'admin'=&gt;'admin',
+    );
+    if(!isset($users[$this-&gt;username]))
+        $this-&gt;errorCode=self::ERROR_USERNAME_INVALID;
+    else if($users[$this-&gt;username]!==$this-&gt;password)
+        $this-&gt;errorCode=self::ERROR_PASSWORD_INVALID;
+    else
+        $this-&gt;errorCode=self::ERROR_NONE;
+    return !$this-&gt;errorCode;
+}</code></pre>
+<p>替换为：</p>
+<pre><code>private $_id;
+
+public function authenticate()
+{
+    //用户名转换为小写
+    $username=strtolower($this-&gt;username);
+
+    //$username作为条件进入数据库查询匹配
+    $user=User::model()-&gt;find('LOWER(username)=?',array($username));
+
+    //用户名不存在，报错
+    if ($user===null) {
+        $this-&gt; errorCode=self::ERROR_USERNAME_INVALID;
+    }else{
+
+        //调用一个函数，匹配相应的密码
+        if (!$user-&gt;validatePassword($this-&gt;password)) {
+            $this-&gt;errorCode=self::ERROR_PASSWORD_INVALID;
+        }else {
+
+            //匹配成功，赋值
+            $this-&gt;_id = $user-&gt;id;
+            $this-&gt;username = $user-&gt;username;
+            $this-&gt;errorCode=self::ERROR_NONE;
+        }
+    }
+    return $this-&gt;errorCode === self::ERROR_NONE;
+}
+
+public function getId() {
+    return $this-&gt;_id;
+}</code></pre>
+<p>在Models里面的User.php添加两个新的方法。添加如下代码：</p>
+<pre><code>// 查询密码是否匹配
+public function validatePassword($password)
+{
+    return $this-&gt;encrypt($password)===$this-&gt;password;
+}
+
+public function encrypt($pass)
+{
+    return md5($pass);
+}
+
+// 添加的密码进行MD5加密
+protected function beforeSave() {
+    if (parent::beforeSave()) {
+        //判断是否是新的密码
+        if ($this-&gt;isNewRecord) {
+            $this-&gt;password = $this-&gt;encrypt($this-&gt;password);
+        }
+        return true;
+    }else {
+        return false;
+    }
+}</code></pre>
+<p>然后用gii的Crud Generator生成User的Controllers文件UserController.php 这个文件的下面代码是一个简单的权限系统</p>
+<pre><code>public function accessRules()
+{
+    return array(
+        array('allow',  // allow all users to perform 'index' and 'view' actions
+            'actions'=&gt;array('index','view'),
+            'users'=&gt;array('*'),
+        ),
+        array('allow', // allow authenticated user to perform 'create' and 'update' actions
+            'actions'=&gt;array('create','update'),
+            'users'=&gt;array('@'),
+        ),
+        array('allow', // allow admin user to perform 'admin' and 'delete' actions
+            'actions'=&gt;array('admin','delete'),
+            'users'=&gt;array('admin'),
+        ),
+        array('deny',  // deny all users
+            'users'=&gt;array('*'),
+        ),
+    );
+}</code></pre>
+<p>注：</p>
+<ul>
+<li>“ * ”----任何人都可以访问。</li>
+<li>“ @ ”----登录用户才能访问。</li>
+<li>“ admin ”----是指只有admin用户才能访问。</li>
+</ul>

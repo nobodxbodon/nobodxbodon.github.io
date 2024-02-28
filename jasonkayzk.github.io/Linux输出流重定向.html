@@ -1,0 +1,65 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Linux%E8%BE%93%E5%87%BA%E6%B5%81%E9%87%8D%E5%AE%9A%E5%90%91.html">Linux输出流重定向</a></h2>
+<hr/>
+<h2>title: Linux输出流重定向
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?23'
+date: 2021-06-24 14:08:15
+categories: Linux
+tags: [Linux, 技术杂谈, 重定向]
+description: 在shell中可能经常能看到类似的命令：echo log &gt; /dev/null 2&gt;&amp;1，将输出流重定向，本文介绍了这些重定向符号的含义；</h2>
+<p>在shell中可能经常能看到类似的命令：<code>echo log &gt; /dev/null 2&gt;&amp;1</code>，将输出流重定向；</p>
+<p>本文介绍了这些重定向符号的含义；</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>Linux输出流重定向</strong></h2>
+<p>对于一个命令的结果，可以通过<code>%&gt;</code>的形式来定义；</p>
+<p>下面来看这条命令<code>echo log &gt; /dev/null 2&gt;&amp;1</code>：</p>
+<ul>
+<li><strong>/dev/null</strong>：代表空设备文件；</li>
+<li><strong>&gt;</strong>：代表重定向到哪里，例如：<code>echo "123" &gt; /home/123.txt</code>；</li>
+<li><strong>1</strong>：表示stdout，标准输出，系统默认值是1，所以<code>&gt;/dev/null</code>等同于<code>1&gt;/dev/null</code>；</li>
+<li><strong>2</strong>：表示stderr，标准错误输出；</li>
+<li><strong>&amp;</strong>：表示等同于的意思；</li>
+<li><strong>2&gt;&amp;1</strong>：表示2的输出重定向等同于1；</li>
+</ul>
+<p>因此，<code>1 &gt; /dev/null 2&gt;&amp;1</code>语句的含义就是：</p>
+<ul>
+<li><code>1 &gt; /dev/null</code>：首先，将标准输出重定向到空设备文件，也就是不输出任何信息到终端；</li>
+<li><code>2&gt;&amp;1</code> ：接着，标准错误输出重定向（等同于）标准输出，因为之前标准输出已经重定向到了空设备文件，所以标准错误输出也重定向到空设备文件；</li>
+</ul>
+<p>所以，命令的标志输出、标准错误输出都不显示！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>cmd &gt;a 2&gt;a 和 cmd &gt;a 2&gt;&amp;1 为什么不同？</strong></h3>
+<p><code>cmd &gt;a 2&gt;a</code>：stdout和stderr都直接送往文件 a ，a文件会被打开两遍，由此导致stdout和stderr互相覆盖！</p>
+<p><code>cmd &gt;a 2&gt;&amp;1</code> ：stdout直接送往文件a ，stderr是继承了FD1的管道之后，再被送往文件a，因此a文件只被打开一遍，就是FD1将其打开！</p>
+<p><strong>两者的不同点在于：</strong></p>
+<p><code>cmd &gt;a 2&gt;a</code>相当于使用了FD1、FD2两个互相竞争使用文件 a 的管道；</p>
+<p><code>cmd &gt;a 2&gt;&amp;1</code>只使用了一个管道FD1，但已经包括了stdout和stderr；</p>
+<p>同时，从IO效率上来讲，<code>cmd &gt;a 2&gt;&amp;1</code>的效率更高；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>为何2&gt;&amp;1要写在后面？</strong></h3>
+<p>对于命令<code>command &gt; file 2&gt;&amp;1</code>：</p>
+<p>首先，是<code>command &gt; file</code>将标准输出重定向到file中，<code>2&gt;&amp;1</code>是标准错误拷贝至标准输出的行为，也就是同样被重定向到file中，最终结果就是标准输出和错误都被重定向到file中；</p>
+<p>对于命令<code>command 2&gt;&amp;1 &gt; file</code>：表示<strong><code>2&gt;&amp;1</code>标准错误首先拷贝了标准输出的行为，但此时标准输出还是在终端，<code>&gt;file</code>后的输出才被重定向到file，因此此时标准错误仍然保持在终端；</strong></p>
+<p>使用strace可以看到：</p>
+<ul>
+<li><code>command &gt; file 2&gt;&amp;1</code>这个命令中实现重定向的关键系统调用序列是：<code>open(file) == 3 dup2(3,1) dup2(1,2)</code></li>
+<li>而<code>command 2&gt;&amp;1 &gt;file</code>这个命令中实现重定向的关键系统调用序列是：<code>dup2(1,2) open(file) == 3 dup2(3,1)</code></li>
+</ul>
+<p>而<strong>不同的dup2()调用序列会产生不同的文件共享结构；</strong></p>
+<p>&lt;br/&gt;</p>
+<h3><strong>典型案例</strong></h3>
+<p>在将一些程序后台启动时，我们通常需要将输出写入日志文件，此时就需要用到重定向：</p>
+<p>例如：</p>
+<pre><code class="language-bash">python main.py &gt; ./log.txt 2&gt;&amp;1 &amp;
+</code></pre>
+<p>这样，命令<code>python main.py</code>在后台执行，并同时将标准和错误日志输出至文件：<code>log.txt</code>中；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>附录</strong></h2>
+<p>文章参考：</p>
+<ul>
+<li><a href="https://cloud.tencent.com/developer/article/1392461">Linux Shell 1&gt;/dev/null 2&gt;&amp;1 含义</a></li>
+<li><a href="http://dongwei.iteye.com/blog/322702">1&gt;/dev/null 2&gt;&amp;1的含义</a></li>
+<li><a href="http://blog.163.com/liang8421@126/blog/static/89481957200926105219622/">/dev/null 2&gt;&amp;1 解释</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

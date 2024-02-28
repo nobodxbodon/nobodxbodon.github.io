@@ -1,0 +1,298 @@
+<h2>原文：<a href="https://qingbob.com/2018-10-12-five-tips-for-redux-large-applications.html">【译文】给构建大型 redux 应用的五个建议</a></h2>
+<hr/>
+<h2>layout: post
+title: 【译文】给构建大型 redux 应用的五个建议
+modified: 2018-10-12
+tags: [javascript, react, redux]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>本篇译文的原文在这里：<a href="https://techblog.appnexus.com/five-tips-for-working-with-redux-in-large-applications-89452af4fdcb">Five Tips for Working with Redux in Large Applications</a></p>
+<h2>译者序</h2>
+<p>为什么翻译这篇文章，是因为本文中给出的建议和我在实际项目中的实践不谋而合，更彻底也更优秀。所以特别想分享给大家。</p>
+<p>当项目规模逐渐增大之后，入门文档和教程级别的项目代码的局限性会逐渐显现出来，并且你会遇到在小型应用中不会遇到的问题。更致命的地方在于，如果想要解决这些问题，需要对整个应用的代码做出调整。所以最好是在建立项目之处就有意识的融入最佳实践，有助于预防将来问题的发生</p>
+<p>这篇文章并不适合 redux 的初学者，希望你已经开发了少许完整应用，或者至少正在开发你的第一个应用的时候来阅读这篇文章，这样你才更有体会。</p>
+<p>本文给出的建议在 Redux 的官方文档或者 React 的官方文档里或多或少肯定都有提及。但是文档太庞大，入口太深以至于把这些内容给淹没了。如果你还没有接触过它们，至少这篇文章不会再让你错过它们。</p>
+<p>有些不便的翻译，或者翻译后很别扭，或者大家公认的技术词汇的地方仍然保持原文。下面正式开始</p>
+<h2>正文</h2>
+<p>Redux 是一个用于管理应用状态的出色工具。它的单向数据流和 immmutable state 特色让我们更容易追踪状态的变更。每一个状态的变更都是由被调度的 action 引起 reducer 函数返回新的状态而产生的。我们站点上许多使用 Redux 构建的用户界面都需要处理大量的数据和复杂的交互，因为用户需要通过这些界面管理他们的广告或者在平台上更新库存信息。在开发这些界面的过程中，我们掌握了一些规则和窍门有助于让 Redux 更易于维护。接下来要讨论的几个要点相信对那些使用 Redux 开发大型数据集成类型的应用的同学们会有所帮助</p>
+<ul>
+<li>使用索引和选择器用于排序和访问数据</li>
+<li>把数据对象与编辑状态和其他的UI状态隔离开</li>
+<li>如何在多个视图间共享状态</li>
+<li>在状态间重用 reducer</li>
+<li>将组件连接至 Redux 状态的最佳实践</li>
+</ul>
+<h2>1. 使用索引（index）存储数据，使用选择器（selector）访问数据</h2>
+<p>选择正确的数据结构对应用的组织和性能至关重要。使用索引存储来自接口的可序列化数据会带来很多好处。索引指的是我们需要进行存储的对象里的对象id，而值则是对象本身。这个模式类似于使用哈希map来存储数据，可以节省查找的时间。对于精通 Redux 的人来说这可能不足为奇。事实上 Redux 的作者，Dan Abramob 在他的 <a href="https://egghead.io/lessons/javascript-redux-persisting-the-state-to-the-local-storage">Redux 教程</a>里也推荐这种数据结构</p>
+<p>想象你从 REST 接口里请求到了一个列表数据，比如来自<code>/users</code>服务。我们决定简单的把这个纯数组数据存储在状态中，和接口返回里的一模一样。那么当需要从对象里获取某个具体的用户信息时会发生什么？我们需要遍历状态状态里的所有用户。如果用户数量太多，这会是一个费时的操作。又比如想要追踪用户的子集，比如选中的用户或者非选中的用户又该怎么办？要么把用户存储为两个独立隔离的数组，要么追踪数组里被选中和非选中的用户（数组）索引</p>
+<p>取而代之的我们决定重构代码来使用索引存储数据。在 reducer 中应该像这样存储数据：</p>
+<pre><code class="language-javascript">{
+ "usersById": {
+    123: {
+      id: 123,
+      name: "Jane Doe",
+      email: "jdoe@example.com",
+      phone: "555-555-5555",
+      ...
+    },
+    ...
+  }
+}
+</code></pre>
+<p>但这样的数据结构又是如何帮助我们解决这些问题的呢？如果需要查找一个特定的用户对象，只需要简单的像这样访问即可：<code>const user = state.usersById[userId]</code>. 这个方法不需要遍历整个数组，节省了时间并且简化了检索代码</p>
+<p>此时你或许对如何将这种数据结构的数据渲染为一个简单的用户列表感到疑惑。要完成这项工作，我们需要一个选择器，即一个接受状态传入然后返回数据的函数。一个获取状态中所有用户的简单选择器的例子：</p>
+<pre><code class="language-javascript">const getUsers = ({ usersById }) =&gt; {
+  return Object.keys(usersById).map((id) =&gt; usersById[id]);
+}
+</code></pre>
+<p>在视图代码中，调用该选择器函数产出用户列表。然后遍历这些用户来渲染视图。我们还可以编写另一个函数用于从状态中获取被选中的用户</p>
+<pre><code class="language-javascript">const getSelectedUsers = ({ selectedUserIds, usersById }) =&gt; {
+  return selectedUserIds.map((id) =&gt; usersById[id]);
+}
+</code></pre>
+<p>选择器模式同样提高了代码的可维护性。想象或许一段时间后我们需要改变状态的结构（shape）。如果没有选择器的话，需要更新所有的视图代码来响应状态结构的修改。随着视图组件的增加，更改状态结构的负担也会剧烈增长。为了避免这个问题，在视图中我们使用选择器来访问状态，如果底层的状态结构发生了改变，我们只需要更新选择器来保证访问状态方式的正确性。所有消费方的组件依然会得到它们需要的数据而不用进行更改。基于所有这些原因，大型的 Redux 应用会从索引和选择器的存储模式中受益</p>
+<h2>2. 将标准状态与视图和编辑状态区分开</h2>
+<p>真实的 Redux 应用通常需要从另一个服务请求一些数据，比如 REST 接口。当获取到数据时，会发起一个 action, 并且附带上刚刚取得的数据。<strong>我们倾向于把来自服务的返回数据称之为“标准状态”（canonical state）</strong>。也就是状态中那些来自数据库中的数据。状态也包括其他类型的数据，比如组件的状态，或者应用整体的状态。当首次从API中取得标准数据时，会尝试把它和页面的其他状态都存储在同一个 reducer 中。这个方法虽然会很方便，但是当你需要从不同的源请求更多类型的数据时，扩展起来会非常困难</p>
+<p>另辟蹊径的，我们把标准状态隔离到它独立的 reducer 文件中去。这种方法鼓励用更好的方式组织和模块化代码。纵向的拓展 reducer 文件（增加单个文件行数）的可维护性比横向拓展 reducer （增加更多的reducer文件供 <code>combineReducers</code>调用）的可维护性差。将 reducers 拆分为独立的文件会在复用它们方面也会显得更加容易。此外，它不鼓励开发者向数据对象 reducer 添加非标准状态</p>
+<p>为什么不把其他状态和标准状态存储在一起？想象一下我们有同样一份请求自 REST 接口的用户列表数据。使用上一小节的索引模式进行存储，可以像这样把数据存储在 reducer 中：</p>
+<pre><code class="language-javascript">
+{
+ "usersById": {
+    123: {
+      id: 123,
+      name: "Jane Doe",
+      email: "jdoe@example.com",
+      phone: "555-555-5555",
+      ...
+    },
+    ...
+  }
+}
+</code></pre>
+<p>现在想象 UI 允许用户编辑视图。当编辑图标被用户点击时，我们需要更新视图状态使得视图为用户渲染出编辑控件。我们决定将视图状态与标准状态合并，在每一个索引对象中添加一个新字段 <code>isEditing</code>，像这样：</p>
+<pre><code class="language-javascript">{
+ "usersById": {
+    123: {
+      id: 123,
+      name: "Jane Doe",
+      email: "jdoe@example.com",
+      phone: "555-555-5555",
+      ...
+      isEditing: true,
+    },
+    ...
+  }
+}
+</code></pre>
+<p>编辑之后，点击提交按钮，然后变更便通过 PUT 方法传递回 REST 服务。服务返回对象的新状态。但是如何将新的标准状态合并到 store 中？如果只是根据索引赋值新的对象的话，<code>isEditing</code>标志便不复存在了。所以现在需要手动指定接口的返回中哪些字段需要合并到 store 中。这让更新逻辑变得复杂了。你或许有多个布尔值、字符串、数组、或者其他 UI 所需的新字段插入到了标准状态中。在这个场景下，添加用于更新标准状态的 action 或许很简单，但是容易忘记重置对象里的 UI 字段而造成无效的状态。所以我们应该保证标准状态在 store 的独立的 reducer 中，并且保证 action 简单并且易于追踪</p>
+<p>另一个把编辑状态独立出来的好处是，如果用户取消了编辑，我们能很容易的回滚到标准状态。想象用户点击了编辑图标，并且已经编辑了名称和邮箱字段，现在他不想保留这些更改了，所以他点击了取消按钮。这个操作会引起视图的状态恢复到前一个状态。但是如果已经把标准状态和编辑状态合二为一，我们便不再拥有旧的数据，而不得不被迫重新从 REST 接口中再一次请求数据以获得标准状态。所以现在把编辑状态存储到其他的地方。现在整体状态看上去：</p>
+<pre><code class="language-javascript">{
+ "usersById": {
+    123: {
+      id: 123,
+      name: "Jane Doe",
+      email: "jdoe@example.com",
+      phone: "555-555-5555",
+      ...
+    },
+    ...
+  },
+  "editingUsersById": {
+    123: {
+      id: 123,
+      name: "Jane Smith",
+      email: "jsmith@example.com",
+      phone: "555-555-5555",
+    }
+  }
+}
+</code></pre>
+<p>因为现在有了标准状态和（标准状态的副本）编辑状态，用户点击取消编辑之后回滚操作会变的非常简单。只需要使用标准状态替代编辑状态在视图中进行展示即可，并且不再需要请求 REST 接口。额外的，我们仍然能在 store 中追踪编辑状态。如果决定继续使用上次的编辑，那么只需要再一次点击编辑按钮，旧的更改随着编辑状态又会呈现出来。总的来说，保证视图和编辑状态与标准状态的分离，在代码的组织和可维护性上带来更好的开发体验，同时也给使用表单的用户带来了更好的交互体验。</p>
+<h2>3. 明智的在视图间共享状态</h2>
+<p>许多应用在发起时只有一个用户界面和单个 store。随着功能的增长应用的也会变得庞大，我们需要管理不同视图和 store 之间的状态。为了扩展 Redux 应用，为每一个页面创建一个顶级 reducer 或许是一件有益的事情。每个页面和顶级 reducer 对应于应用中的一个视图。举个例子，用户列表视图会从接口请求所有的用户数据，然后存储在 <code>users</code> reducer 中，另一个负责追踪当前用户拥有域名的页面会从域名接口请求数据然后储存下来，状态看起来类似于：</p>
+<pre><code class="language-javascript">{
+ "usersPage": {
+   "usersById": {...},
+   ...
+ },
+ "domainsPage": {
+   "domainsById": {...},
+   ...
+ }
+}
+</code></pre>
+<p>像这样组织页面能够使视图和数据解耦且独立（self-contained）。每一个页面追踪它自己的状态，reducer 文件甚至也能和视图文件遥相呼应（co-located）。当继续扩展应用时，我们也许会发现需要在不同的视图间共享它们共同依赖的状态。当考虑共享状态时请思考以下几点：</p>
+<ul>
+<li>有多少视图或者 reducer 依赖这一份数据？</li>
+<li>每个页面都需要这份数据的副本吗？</li>
+<li>数据更新的频率时多少？</li>
+</ul>
+<p>举个例子，应用需要在每个页面展示当前登陆用户的信息。我们需要从接口中获取用户信息然后存储在 store 中。我们知道每个页面都依赖这份数据，所以这份数据并不适用于「每个页面都有独立的 reducer」这个策略。我们也知道每个页面不需要依赖这份数据的副本，因为大多数页面不会请求其他的用户也不会修改当前的用户。而且，这份关于当前登陆用户的数据不太可能发生更改，除非他们在用户页面修改他们自己。</p>
+<p>那么在页面间分享当前用户的状态似乎是一个好主意，所以我们把这份数据抽取出来放在处于顶级的它自己的 reducer 中。现在用户第一次访问的页面会检查当前用户的 reducer 是否已经被加载，如果没有的话从接口进行请求。任何连接到 Redux store 的视图都能浏览这份关于当前登陆用户的信息。</p>
+<p>对于那些共享状态没有意义的场景怎么办？让我们来考虑另一个例子。想象每一个属于用户的域名下同样也拥有一定数量的子域名。我们将新增一个子域名列表页面用于展示用户的所有子域名列表，域名列表页面同样提供展示已选域名的子域名。现在就有两个页面同时来展示子域名数据。我们也知道域名常常被修改，用户可能会在任何时候增加、删除或者编辑域名或者子域名。每个页面可能需要独一无二的数据副本。子域名页面允许通过子域名接口读或者写，而且有可能需要对数据进行翻页操作。相反域名视图只需要一次获取子域名的一部分子集（被选择的域名的子域名）。这样看来结果非常明确了，在这个场景中在不同页面共享子域名状态似乎不是一个好的选择。每个页面应该存储它自己子域名数据的副本</p>
+<h2>4. 跨状态的重用公共 reducer 函数</h2>
+<p>在编写了好几个 reducer 函数之后，我们决定尝试在状态中的不同地方复用 reducer 逻辑。举个例子，我们创建了一个 reducer 从接口请求用户信息。接口每次只返回 100 条用户信息，但是在系统中有成千上万个。为了解决这个问题，reducer 需要记录当前展示的是数据的哪一页。请求逻辑会从 reducer 中读取该信息然后决定下一个请求的翻页参数是什么（比如叫<code>page_number</code>）。之后在请求域名列表时，最终也编写了相同的逻辑用于请求和存储域名信息，只是接口和对象的结构（schema）不同而已，翻页的行为仍然保持一致。聪明的开发者会意识到或许能够把 reducer 模块化并且在任何需要翻页的 reducer 中共享这段逻辑。</p>
+<p>在 Redux 中共享 reducer 逻辑需要一些小技巧。默认情况下，当一个新的 action 发起时所有的 reducer 函数都会被调用。如果在多个 reducer 函数中共享同一个 reducer 函数，那么当 action 被发起时它会引起所有的 reducer 被触发。这不是重用 reducer 期望的行为。也就是说当请求用户列表并且取得了500条数据时，我们不希望域名列表的个数也变成500</p>
+<p>我们推荐是两种方式来实现共享，两者都使用作用域（scope）或者前缀（prefix）对动作类型（types）进行特殊处理。第一种方式需要在 action 携带的信息种传递一个作用域。action 使用动作类型来推断状态中的哪个字段需要发生更改。为了便于说明，假设有一个拥有多个不同区域（section）的页面，所有区域都从接口处异步进行加载。追踪加载情况的状态像这个样子：</p>
+<pre><code class="language-javascript">const initialLoadingState = {
+  usersLoading: false,
+  domainsLoading: false,
+  subDomainsLoading: false,
+  settingsLoading: false,
+};
+</code></pre>
+<p>有了这个状态，接下来需要借助 reducer 和 action 来设置每个区域视图加载状态。我们可以写拥有不同 action 的四个 reducer，每一个都有独立的动作类型。但那是一大堆的重复代码。取而代之的是，让我们尝试使用具有作用域的 reducer 和 action，只创建一个动作类型<code>SET_LOADING</code>, 和一个像这样的 reducer 函数：</p>
+<pre><code class="language-javascript">const loadingReducer = (state = initialLoadingState, action) =&gt; {
+  const { type, payload } = action;
+  if (type === SET_LOADING) {
+    return Object.assign({}, state, {
+      // sets the loading boolean at this scope
+      [`${payload.scope}Loading`]: payload.loading,
+    });
+  } else {
+    return state;
+  }
+}
+</code></pre>
+<p>同时也需要提供一个带有作用域的 action creator 函数来调用作用域 reducer。action 看起来像：</p>
+<pre><code class="language-javascript">const setLoading = (scope, loading) =&gt; {
+  return {
+    type: SET_LOADING,
+    payload: {
+      scope,
+      loading,
+    },
+  };
+}
+// example dispatch call
+store.dispatch(setLoading('users', true));
+</code></pre>
+<p>通过使用一个像这样带有作用域的 reducer，解决需要在不同 reducer 函数和 action 中重复相同逻辑的问题。这显著降低了重复代码的数量以及帮助我们编写更小的 action 和 reducer 文件。如果需要在页面中添加另一个区域视图，只需要简单的在初始状态中添加一个新索引，然后使用不同的作用域调用<code>setLoading</code>。这个解决办法在拥有几个需要以同样方式更新的相似字段时非常有效</p>
+<p>同样想要在状态的不同处共享 reducer 逻辑，不同于使用同一个 reducer 和 action 更新状态中的多个字段，我们希望在调用<code>combineReducers</code>时插拔式的重用 reducer 函数。那么需要通过调用 reducer 工厂函数返回一个带有类型前缀的 reducer 函数。</p>
+<p>一个复用 reducer 逻辑很好的例子是处理翻页信息时。回到请求用户信息的例子中，接口或许包含上千个用户，接口也将提供将用户分页之后的翻页信息。假设接收到的接口返回长这个样子：</p>
+<pre><code class="language-javascript">{
+  "users": ...,
+  "count": 2500, // the total count of users in the API
+  "pageSize": 100, // the number of users returned in one page of data
+  "startElement": 0, // the index of the first user in this response
+  ]
+}
+</code></pre>
+<p>如果想要下一页的数据，需要发起一个带着<code>startElement=100</code>参数的 GET 请求。我们刚好为每一个打交道的服务构建了一个 reducer 函数，但是那也意味着在代码中重复了相同的逻辑。相反，可以创建一个独立的翻页 reducer。这个 reducer 来自 reducer 工厂函数，工厂函数接受一个类型前缀参数，然后返回一个新的 reducer 函数</p>
+<pre><code class="language-javascript">
+const initialPaginationState = {
+  startElement: 0,
+  pageSize: 100,
+  count: 0,
+};
+const paginationReducerFor = (prefix) =&gt; {
+  const paginationReducer = (state = initialPaginationState, action) =&gt; {
+    const { type, payload } = action;
+    switch (type) {
+      case prefix + types.SET_PAGINATION:
+        const {
+          startElement,
+          pageSize,
+          count,
+        } = payload;
+        return Object.assign({}, state, {
+          startElement,
+          pageSize,
+          count,
+        });
+      default:
+        return state;
+    }
+  };
+  return paginationReducer;
+};
+// example usages
+const usersReducer = combineReducers({
+  usersData: usersDataReducer,
+  paginationData: paginationReducerFor('USERS_'),
+});
+const domainsReducer = combineReducers({
+  domainsData: domainsDataReducer,
+  paginationData: paginationReducerFor('DOMAINS_'),
+});
+</code></pre>
+<p>reducer 工厂函数<code>paginationReducerFor</code>接收类型前缀参数，该参数将会被添加在该 reducer 函数内所有的类型前。工厂返回一个所有类型都已添加前缀的新的 reducer。现在当发起一个类似于 <code>USERS_SET_PAGINATION</code> 的 action 时，它只会引起用户信息的翻页 reducer 的更新。域名的翻页 reducer 仍然保持不变。这有效的在 store 的多处重用 reducer 函数。为了代码的完整性，这还有一个带有前缀的 action creator 工厂函数：</p>
+<pre><code class="language-javascript">const setPaginationFor = (prefix) =&gt; { 
+  const setPagination = (response) =&gt; {
+    const {
+      startElement,
+      pageSize,
+      count,
+    } = response;
+    return {
+      type: prefix + types.SET_PAGINATION,
+      payload: {
+        startElement,
+        pageSize,
+        count,
+      },
+    };
+  };
+  return setPagination;
+};
+// example usages
+const setUsersPagination = setPaginationFor('USERS_');
+const setDomainsPagination = setPaginationFor('DOMAINS_');
+</code></pre>
+<h2>5. 整合 React</h2>
+<p>有一些 Redux 应用永远也不需要给用户渲染视图（像接口一样），但是大部分情况下你需要视图将数据渲染出来。目前最受欢迎的与 Redux 配合的渲染 UI 类库是 React，这也是接下来用于展示如何与 Redux 整合的 UI 类库。我们可以使用上面几个小节中学习到的策略来让视图代码更友好。为了实现整合，我们将使用 <code>react-redux</code> 类库</p>
+<p>UI 整合的一个有用模式是在视图中使用访问器访问状态中的数据, 在<code>react-redux</code>中便于放置访问器的地方是<code>mapStateToProps</code>函数中。这个函数在<code>connect</code>函数（用于将 React 组件连接至 Redux store 的函数）被调用时传递进去。在这里你能将状态中的数据映射为组件接收到的属性。这是一个完美的使用选择器从状态获取数据，然后以属性的形式传递给组件的地方。整合的例子如下：</p>
+<pre><code class="language-javascript">const ConnectedComponent = connect(
+  (state) =&gt; {
+    return {
+      users: selectors.getCurrentUsers(state),
+      editingUser: selectors.getEditingUser(state),
+      ... // other props from state go here
+    };
+  }),
+  mapDispatchToProps // another `connect` function
+)(UsersComponent);
+</code></pre>
+<p>这种在 React 和 Redux 之间的整合也为我们提供了使用作用域和类型封装 action 的场所。我们需要组件的处理函数有能力唤起 store 并调用 action creator。为了完成这项任务，在<code>react-redux</code>中调用<code>connect</code>时，我们传入<code>mapDispatchToProps</code>函数。函数<code>mapDispatchToProps</code>是调用 Redux 的 <code>bindActionCreators</code> 函数用于将 action 和 dispatch 方法绑定起来的地方。在其中我们可以像上一节展示的那样给 action 绑定作用域。举个例子，如果打算在用户列表页面中使用带有作用域模式的 reduer 实现翻页功能，代码如下所示：</p>
+<pre><code class="language-javascript">const ConnectedComponent = connect(
+  mapStateToProps,
+  (dispatch) =&gt; {
+    const actions = {
+      ...actionCreators, // other normal actions
+      setPagination: actionCreatorFactories.setPaginationFor('USERS_'),
+    };
+    return bindActionCreators(actions, dispatch);
+  }
+)(UsersComponent);
+</code></pre>
+<p>现在从<code>UsersPage</code>组件的角度来说，它接收到了用户列表和其他的状态碎片，以及被绑定的 action creator 作为属性传递给它。组件不需要关心它需要带有什么作用域的 action 又或者如何访问状态；在整合的层面我们已经对这些问题进行了处理。这种机制让我们能够创建不需要依赖状态内部工作机制的非常松耦合的组件。希望借助在这里讨论的各类模式，我们都能以可伸缩，可维护，以及合理的方式创建 Redux 应用。</p>
+<p><strong>更多参考</strong>：</p>
+<ul>
+<li>刚刚讨论的状态管理类库 <a href="http://redux.js.org/">Redux</a></li>
+<li>用于创建选择器的 <a href="https://github.com/reactjs/reselect">Reselect</a> 类库</li>
+<li><a href="https://github.com/paularmstrong/normalizr">Normalizr</a> 是一个用于「标准化」（normalizing）JSON 数据的类库。对使用索引存储数据非常有帮助</li>
+<li>用于在 Redux 中使用异步 action 的中间件类库 <a href="https://github.com/gaearon/redux-thunk">Redux-Thunk</a></li>
+<li>使用 ES2016 generator 实现的异步 action 的另一个中间件类库 <a href="https://github.com/redux-saga/redux-saga">Redux-Saga</a></li>
+</ul>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/understand-react-01">面试系列之二：你真的了解React吗（上）如何设计组件以及重要的生命周期</a></li>
+<li><a href="https://www.v2think.com/understand-react-02">面试系列之三：你真的了解React吗（中）组件间的通信以及React优化</a></li>
+<li><a href="https://www.v2think.com/understand-react-03">面试系列之四：你真的了解React吗（下）Flux与Vuex的差异以及Webpack</a></li>
+<li><a href="https://www.v2think.com/create-app-user-guide">从React脚手架工具学习React项目的最佳实践（上）：前端基础配置</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-01">深入React的生命周期(上)：出生(Mount)</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-02">深入React的生命周期(下)：更新(Update)</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-01">深入理解 Webpack 打包分块（上）</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-02">深入理解 Webpack 打包分块（下）</a></li>
+<li><a href="https://www.v2think.com/webpack-tutorial">Webpack 速成</a></li>
+<li><a href="https://www.v2think.com/tips-for-building-mobx-app">构建大型 Mobx 应用的几个建议</a></li>
+<li><a href="https://www.v2think.com/five-tips-for-redux-large-applications">【译文】给构建大型 redux 应用的五个建议</a></li>
+<li><a href="https://www.v2think.com/redux-performance-01-basic">React + Redux 性能优化（一）：理论篇</a></li>
+<li><a href="https://www.v2think.com/redux-performance-02-immutablejs">React + Redux 性能优化（二）工具篇： Immutablejs</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>

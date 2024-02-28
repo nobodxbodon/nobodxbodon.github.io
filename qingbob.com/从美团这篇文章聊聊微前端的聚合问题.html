@@ -1,0 +1,112 @@
+<h2>原文：<a href="https://qingbob.com/2018-11-15-micro-front-end-aggregation.html">从美团这篇文章聊聊微前端的聚合问题</a></h2>
+<hr/>
+<h2>layout: post
+title: 从美团这篇文章聊聊微前端的聚合问题
+modified: 2018-11-15
+tags: [javascript]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>最近我打算在我的面试题库里加一道题，用于考验候选人的应用的设计能力，这个问题也来源于最近经历的真实的业务问题：</p>
+<blockquote>
+<p>我目前所在的技术中台部门为公司的业务部门开发了非常多的工具应用，比如数据分析、比如A/B测试、比如部署发布平台等等。它们都是基于 React 框架，然后辅佐以不同的状态管理框架进行开发，比如 redux，mobx，又或者 dva。这些应用都是由不同的前端团队维护开发，所以不难想象大家其实重叠的开发了相同的功能或者相同的组件，比如登陆验证（都是基于公司级别的 OAuth ），比如错误处理，又比如发送消息给用户等等。
+因为分散在不同的域名但其实又联系紧密，不便于使用，所以我们打算把它们聚合在同一个门户（站点）下，顶部显示一条公共的导航栏，下方是当前具体的应用。通过导航栏的菜单在当前页面下切换不同的应用。让用户有一种使用单一应用的感觉。
+如何来设计这个聚合方案？</p>
+</blockquote>
+<p>如果大家听说过“微服务（Microservices）”的概念的话就不难理解“微前端（Micro Frontends）”。和后端应用类似，当一个前端应用变得异常庞大以后，它会变得难以维护，同时也会变得不稳定。将大的应用拆分为小的应用能够让每个专业团队专心负责自己的功能，更易于测试、部署以及发布。</p>
+<p>但是这样的拆分有很多，最常见的，是将单个应用拆分为多个独立的应用，通过导航栏和动态加载来实现无缝的切换，这样的 app 甚至可以采用不同的技术栈进行构建:</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/micro-front-end/multi-app.png"/></p>
+<p>单个页面上的模块也可以拆分为不同的微前端由不同的团队使用不同的技术栈进行开发：</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/micro-front-end/three-teams.png"/></p>
+<p>这是两个极端。其他场景包括但不限于</p>
+<ul>
+<li>把第三方的SaaS应用进行集成，</li>
+<li>把第三方私服应用进行集成（比如在公司内部部署的 gitlab）</li>
+<li>在相同技术栈下处理以上各种情况等等</li>
+</ul>
+<p>同理有时候我们也需要进行反向（后置）的操作，比如在开头的例子中，在已有多个应用的情况下，需要将它们聚合为一个单应用。</p>
+<p>可以想象正向的自顶向下的拆分远比反向的聚合简单，因为在开发之初你们就能预见功能，约定接口，统一技术栈，提取公共组件等等；而反向聚合下一切都是未知的，任何困难都有可能发生，只能见招拆招</p>
+<p>说到底，微前端的聚合问题其实是非常复杂的，复杂之处在于细分的场景太多，没法给出一个大一统的解决方案，所以在本文中要处理的问题也仅限于题目中所描述的那样。但即便如此，本文中所描述的思路，考虑到的问题，或许你在未来处理相关问题是依然能够拿来参考。</p>
+<p>也许阅读到这里你可以暂停一会，拿起笔和纸用十到十五分钟的时间来思考如何解决这个问题。在面试一个人的时候，他给出的结果并不重要，重要的是它解决问题的思路以及考虑问题是否周全。一个高手和菜鸟可能会给出同样的答案，但高手是深思熟虑的结果，菜鸟则可能运气好捡到了钥匙。</p>
+<p>在解决这个问题的时候，同事向我推荐了美团技术博客的一篇关于微前端的文章<a href="https://tech.meituan.com/fe_tiny_spa.html">《用微前端的方式搭建类单页应用》</a>。这篇文章为我们提供了一类解决问题的方案，这个方案刚好可以作为我们解决这类问题的一个线索。但是在方案中仍然有值得商榷的地方。文章接下来的内容，就是聊聊这些值得商榷的地方，重点谈文章中的两点：<strong>注册机制</strong>和<strong>命名空间</strong>。</p>
+<p>最后，指出这些不足并没有贬低的意思，我也没法给出一个明确的、更高明的解决办法，而是旨在提供探讨更多的可能性。在正式开始最好先阅读完毕美团的这篇文章，并且与之前你个人的思考结果进行对比。也许你会迸发出一些和我们不一样的想法</p>
+<h2>注册机制</h2>
+<p>美团的需求和我们的需求是一致的，用原文中的话说是</p>
+<blockquote>
+<p>HR系统转变成只有一个域名和一套展示风格的系统</p>
+</blockquote>
+<p>在没有更多额外信息的情况下，我默认认为不同系统之间不需要通信和交互，每个系统都是独立的应用。但是仍然有逻辑交叉，比如用户登陆机制、全局异常处理等等。</p>
+<p>美团的做法是新建一个公共级别的项目，叫做 Portal（“传送门”？），所有的子项目将自己的信息需要向这个 Portal 进行注册，包括路由、包括命名空间。之后所有的项目引入这个功能的组件。那么在之后每个项目上线时，通过路由（导航栏？）动态的加载子项目资源（脚本/样式）来动态的加载子项目</p>
+<p>通常在做反向聚合的工作时，除了要新建类似于上面的容器/入口级别的项目，还需要对原项目进行修改，对原项目修改是痛苦的，因为需要向前和向后的兼容。如果是不同团队维护的项目，你还需要推动“人”去做这方面的工作。所以最理想的状态是“非侵入性”的改造，即原项目是无感知的。这似乎比较难，当然退而求其次，我们的目标是尽可能的把改动的代价降到最小。</p>
+<p>在美团的方案中，他们希望把公共类库交给 Portal 去维护和加载而又不侵入式的改造项目，于是决定在构建阶段替换掉子项目的<code>require('react')</code>方法，改为<code>window.app.require('react')</code>，即 Portal 的私有 <code>require</code>方法。这样看似就能减少子项目的关心项，同时对公共类库进行统一管理；</p>
+<p><strong>但是我们真的需要公共类库管理吗？</strong></p>
+<p>我们可以理解他们为什么要做公类库管理，一方面避免资源的重复加载，例如 <code>react</code>, <code>react-dom</code>, <code>lodash</code> 的类库每个项目都要使用到，另一方面能保证所有项目用到的内部组件库是发布之后最新的</p>
+<p>但在实际情况下，子项目是来自不同时期的不同团队做的，所以哪怕是基本的类库都会出现版本不统一的地方（你可能会有疑问：为什么他们不及时更新呢？很多原因，比如功能够用便不再开发了，比如使用到的其他类库只兼容到这个版本）</p>
+<p>所以说即便你想进行对类库的统一管理，务必还是要对其他的项目进行入侵式的修改，兼容、测试的工作依然不能少。</p>
+<p>那我们依然可以退一步，公用某些版本的组件。当子项目注册时，需要向 Portal 注册它依赖的类库和对应的版本。这又会产生另一个问题，你如何在单页面应用中管理多个版本的相同类库？例如项目 A 依赖<code>react@15</code>，项目 B 依赖<code>react@16</code>，当用户从 A 切换至 B 又切换至 A 时，<code>react@15</code>需要重新加载吗？很明显不需要，应该把类库缓存起来。更好的方式是我们不应该依赖 HTTP 缓存，而是应该把已经加载的类库缓存到内存中，那么这你还需要解决内存中相同类库命名空间冲突问题。</p>
+<p>所以综上：</p>
+<ol>
+<li>如果为了统一公共类库，你需要侵入项目</li>
+<li>如果坚持类库重用，你需要更复杂的公共类库管理</li>
+</ol>
+<p>美团方案中另一个很有幸运的地方是，所有的子应用都是使用 Redux 框架编写的（因为在向 Portal 注册时还需要注册 reducers？但是貌似没有读到在切换项目时卸载 reducers？），所以它们公用了一个 Redux 框架。还是那句老话，在现实情况里没有这么好运，在做前端聚合时就需要考虑如何保证不同的数据流框架在动态加载之后顺利运行，比如从 Redux 切换到 Mobx 怎么办？提前把所有可能使用到的框架都集成到 Portal 中去？版本管理怎么做？</p>
+<p>所作的一切看上去似乎都是为了动态加载而努力。<strong>但我们真的需要动态加载吗？</strong></p>
+<p>多年前在爱奇艺工作的时候我负责播放页的开发（就是播放视频的那个页面），其中有一块逻辑是，当当前页面的视频播放完毕会后自动播放视频列表的下一个视频，或者说剧集的下一集。但方式不是跳转到下一个页面，而是异步请求下一个视频所有的信息，包括作者、评论、热度等在当前页面更新，为的就是实现一种无缝切换的效果。别忘了还要修改 URL。</p>
+<p>但为什么一定要动态加载？性能更快？未必，如此多的请求如此多的DOM节点需要渲染（在那个年代没有 React，没有 Virtual DOM），未必会比由服务器渲染的整张页面来的快；体验更好？我不认为单页面的体验会差（参考优酷）；更可怕的事情是这会造成维护上的困难：想象一个刚入职的同学在修改一个动态加载的功能的时候，很可能就会遗忘某个逻辑需要更新。</p>
+<p>我的个人意见是，如果你被聚合的项目之间是独立的，不如就把它们打包为独立的应用，然后在页面间跳转。并且也不需要再做公共类库管理，直接打包进项目的最终脚本里，重复也罢。</p>
+<p>此时此刻你可能会诧异：看了半天的文章就给我一个这么“朴素”的方案？！</p>
+<p>年青人，我理解你，每个程序员都天生爱好“狂拽酷炫吊炸天”的技术，简单来说越偏门越好、越复杂越好。但是公司级别实施的时候，你的上司，你的老板，他们希望的是业务的稳定和成本。所以在选择实施方案的时候，这两点才是我们首先要考虑的，例如</p>
+<ul>
+<li>方案一： 实现 3 分的功能，需要 5 分的成本，以及 3 分的风险</li>
+<li>方案二： 实现 1 分的功能，需要 1 分的成本，以及 1 分的风险</li>
+</ul>
+<p>那么后者的收益其实更高。</p>
+<p>如果以后可能需要这个功能，为什么不现在就向那个方向看齐，设计并且实施呢？如果只是可能，而不是当前明确的需求的话，相当于你用当前项目的时间做了不需要的功能。这叫做过度设计</p>
+<p>至少在这个场景下，我认为我们不需要更复杂的方案</p>
+<p>在什么场景下需要不得不考虑动态加载呢？比如说跨应用组件（页面）级别的共享：假设目前内部有一个数据分析平台，同时又拥有一个A/B测试平台。在A/B测试平台上我们同样也需要观察数据，比如不同实验方案在不同指标下的效果。如果再编写一个数据分析页面有雷同的嫌疑，直接跳转到数据分析平台又颇为不便。于是最好的办法是将数据分析平台的组件或者页面独立打包出来，让 A/B 平台能够动态的加载数据分析页面并且浏览。</p>
+<h2>命名空间</h2>
+<p>当子项目向 Portal 进行注册时需要指定命名空间，例如原文中的代码：</p>
+<pre><code class="language-javascript"> await window.app.init('namespace-kaoqin',reducers);
+</code></pre>
+<p>注意这里既使用到了全局的变量 <code>window</code> 又手动指定了子项目的命名空间</p>
+<p>向推荐大家一本开源图书：<a href="http://singlepageappbook.com/">"Single page apps in depth"</a>，顾名思义这是一本谈单应用开发的图书，它诞生在 React 出现之前，在那个年代只有 MVC 框架 Backbone 和 Angular，以后有机会可以聊聊书中的内容。重点是，我同意书中的观点（或者说它说服了我），命名空间不是一个好的实践。</p>
+<p>在那个时代，模块化的主要方法是在全局变量上申请独一无二的命名空间（比如<code>window.MyApp</code>），然后把一切都挂载在这个命名空间之下，这样会带来两个问题：</p>
+<ul>
+<li>在这个机制之下，你要么把想公开的方法和变量在全局暴露出来，要么彻底把它隐藏起来。不存在你既想把它隐藏，又把它只暴露给一部分子系统进行使用的情况。如果你把它彻底暴露出来，你无法控制其他的代码访问它甚至依赖它</li>
+<li>既然模块在全局变得都可以访问，你很难保证它不会被弄“脏”：对它引用的模块很可能不小心的修改了它，导致其他依赖它的模块变得不可用。技术人员大部分都没有耐性等待模块的发布者修复bug或者添加功能，他们更宁愿临时 hack 一把，然后心里想着等模块实现了这个功能我再还原回去。不过这个然后从来都不会发生</li>
+</ul>
+<p>所以这也是为什么 CommonJS 诞生的原因，为什么我觉得 <code>window.app</code> 不是一个好的实践</p>
+<p>另一方面，人工手动的指定 namespace 也是一个很令人疑惑的地方。按照我的理解，它们在这里想达到的效果只是给不同的项目以不同的作用域以便将它们隔离开，包括 reducer、包括 css。所以 namespace 是什么并不重要。极端来说，哪怕直接生成一堆随机字符串也是OK（参考 css modules 的实践）</p>
+<p>即使是人工指定命名空间，你有如何保证某一天它们不冲突呢？ Who watches the watchman ?</p>
+<h2>总结</h2>
+<p>技术方案是每个公司每个团队再特定业务场景下的产物，没有优劣之分。如果美团的技术足够统一、公共类库版本维护的足够勤快、开发足够规范，这样的方案没有任何问题。我考虑的角度更多的是从我面对的业务逻辑出发，很显然我是不幸的，因为需要处理的分支情况太多。</p>
+<p>我相信本文中有很多我对原文理解不正确的地方，如果有本身在美团做这项业务的朋友，或者认识原文的作者，可以互相转告，期待进一步的指正和交流</p>
+<h2>参考资料集合</h2>
+<p><a href="https://www.site2share.com/folder/20020531">https://www.site2share.com/folder/20020531</a></p>
+<ul>
+<li><a href="https://tech.meituan.com/fe_tiny_spa.html">用微前端的方式搭建类单页应用</a></li>
+<li><a href="https://medium.com/@tomsoderlund/micro-frontends-a-microservice-approach-to-front-end-web-development-f325ebdadc16">Micro frontends—a microservice approach to front-end web development</a></li>
+<li><a href="https://micro-frontends.org/">Micro Frontends</a></li>
+</ul>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/css-clean-arch">CSS 里的整洁架构</a></li>
+<li><a href="https://www.v2think.com/fe-arch-001-principles">前端架构 101（一）：在谈论它们之前我们需要达成的共识</a></li>
+<li><a href="https://www.v2think.com/fe-arch-002-mvc-solved">前端架构 101（二）： MVC 初探</a></li>
+<li><a href="https://www.v2think.com/fe-arch-003-architecture-principles">前端架构 101（三）：MVC 启示录：模块的职责，作用域和通信</a></li>
+<li><a href="https://www.v2think.com/fe-arch-004-flux-rise">前端架构 101（四）：MVC的不足与Flux的崛起</a></li>
+<li><a href="https://www.v2think.com/fe_arch_005_mvp">前端架构 101（五）：从 Flux 进化到 Model-View-Presenter</a></li>
+<li><a href="https://www.v2think.com/fe_arch_006_clean_architecture">前端架构 101（六）：整洁（Clean Architecture）架构是归宿</a></li>
+<li><a href="https://www.v2think.com/arch-enjoy_angular-architecture-best-practices-zh-cn">【译文】【前端架构鉴赏 01】：Angular 架构模式与最佳实践</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_a-scalable-angular2-architecture-zh-cn">【译文】【前端架构鉴赏 02】：可拓展 Angular 2 架构</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_model-view-presenter-with-angular">【译文】【前端架构鉴赏 03】：Angular 与 MVP 模式</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-specification">微前端说明书</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-aggregation">从美团这篇文章聊聊微前端的聚合问题</a></li>
+<li><a href="https://www.v2think.com/mvc-vs-flux">写给前端看的架构文章(1)：MVC VS Flux</a></li>
+<li><a href="https://www.v2think.com/starting-from-limitations-of-mvc-in-front-end-development">从MVC模式在前端开发中的局限性谈起</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>

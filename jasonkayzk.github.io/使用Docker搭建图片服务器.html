@@ -1,0 +1,110 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8Docker%E6%90%AD%E5%BB%BA%E5%9B%BE%E7%89%87%E6%9C%8D%E5%8A%A1%E5%99%A8.html">使用Docker搭建图片服务器</a></h2>
+<hr/>
+<h2>title: 使用Docker搭建图片服务器
+toc: true
+date: 2020-01-16 11:08:15
+cover: https://img.paulzzh.com/touhou/random?13
+categories: Docker
+tags: [Docker, FTP, Nginx]
+description: 最近做项目需要用到图片服务器, 但是把vsftpd和nginx服务器下载, 配置还是有些麻烦, 所以自己基于fauria/vsftpd镜像构建了一个图片服务器方便使用</h2>
+<p>最近做项目需要用到图片服务器, 但是把vsftpd和nginx服务器下载, 配置还是有些麻烦, 所以自己基于fauria/vsftpd镜像构建了一个图片服务器方便使用</p>
+<p>镜像地址: https://hub.docker.com/repository/docker/jasonkay/image-server</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>基于vsftpd + nginx实现的图片服务器</h2>
+<h3>说明</h3>
+<p>jasonkay/image-server这个镜像基于fauria/vsftpd镜像构建, 在其中添加了nginx服务器, 并完成了配置, 可以通过命令行直接启动</p>
+<p>&lt;br/&gt;</p>
+<h3>使用说明</h3>
+<p>启动参数:</p>
+<pre><code class="language-bash">docker run -d 
+    -v /ftp_file:/home/vsftpd 
+    -p 20:20 
+    -p 21:21 
+    -p 80:80 
+    -p 21100-21110:21100-21110 
+    -e FTP_USER=test 
+    -e FTP_PASS=123456 
+    -e PASV_ADDRESS=192.168.1.100 
+    -e PASV_MIN_PORT=21100 
+    -e PASV_MAX_PORT=21110 
+    --name img_server jasonkay/image-server
+</code></pre>
+<p>默认映射路径: /ftp_file:/home/vsftpd</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>注意:</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>启动后默认是不开启nginx的http -&gt; ftp的服务的, 需要手动进入容器, 执行<code>/sbin/nginx</code> ,开启nginx服务</strong>&lt;/font&gt;</p>
+<p><strong>参数说明:</strong></p>
+<ol>
+<li>-v /ftp_file:/home/vsftpd: ftp文件目录映射(默认为/ftp_file目录下)</li>
+<li>-p 指定端口映射</li>
+<li>FTP_USER: FTP的用户名</li>
+<li>FTP_PASS: FTP的密码</li>
+<li>PASV_ADDRESS: 服务器ip</li>
+<li>PASV_MIN_PORT: 被动模式最小端口号</li>
+<li>PASV_MAX_PORT: 被动模式最大端口号</li>
+</ol>
+<p><strong>启动nginx后, 默认http-ftp映射路径为: http://ip/username/</strong></p>
+<p>如: test用户存放: images/1.png, 则访问路径为: http://ip/test/images/1.png</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>构建时遇到的一些问题</h3>
+<p><strong>① 425 Security: Bad IP connecting.解决方法</strong></p>
+<p>使用FTP客户端进行连接vsftpd时报错</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>解决方法:</strong></p>
+<ol>
+<li><code>vim /etc/vsftpd/vsftpd.conf</code></li>
+<li>添加：<code>pasv_promiscuous=YES</code></li>
+<li>保存后退出</li>
+<li>重启 vsftpd   <code>service vsftpd restart</code></li>
+</ol>
+<p><strong>参数说明:</strong></p>
+<p>此选项激活时，将关闭PASV模式的安全检查: 该检查确保数据连接和控制连接是来自同一个IP地址。小心打开此选项。此选项唯一合理的用法是存在于由安全隧道方案构成的组织中。默认值为NO</p>
+<p>合理的用法是：在一些安全隧道配置环境下，或者更好地支持FXP时(才启用它)</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>② ftpClient.makeDirectory(path)返回false，无法创建目录的问题</strong></p>
+<p>使用Java的FTPClient客户端创建目录时, 返回为false, 即无法创建目录</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>原因:</strong></p>
+<p>由于使用的是普通账号登录，所以一开始就设置chroot_local_user=YES，将用户禁锢在了宿主目录，导致始终无法创建目录。但是可以上传文件，不过，上传的文件最终也只能存放在宿主目录下，即 /home/test/xxx.txt</p>
+<p><strong>解决方法:</strong></p>
+<p>将vsftpd.conf文件中的chroot_local_user=NO，重启vsftpd即可</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>③ 使用nginx创建http -&gt; ftp的反向代理映射</strong></p>
+<p>修改nginx配置文件(默认位于/etc/nginx/nginx.conf):</p>
+<ul>
+<li><p>修改为user root;</p>
+</li>
+<li><p>修改location:</p>
+<pre><code>location / {
+    root /home/vsftpd;
+    autoindex on;
+}
+
+# 或者
+
+location / {  
+    root  /home/ftpuser; # 定义服务器的默认网站根目录位置
+    index index.html index.php index.htm; # 定义首页索引文件的名称
+}
+</code></pre>
+</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>后期展望</h3>
+<p>这个镜像在部署之后默认只开启ftp服务, 还需要手动进入容器启动nginx(使用<code>/sbin/nginx</code>启动)</p>
+<p>下一步添加启动容器自动启动ftp和nginx的镜像</p>
+<p>目前已经尝试过得方法:</p>
+<ul>
+<li>~~使用<code>&lt;RUN&gt;</code>标签运行init.sh脚步~~</li>
+<li>~~使用<code>CMD</code>标签~~</li>
+<li>~~使用<code>ENTRYPOINT</code>标签~~</li>
+</ul>
+<p>有知道解决方案的欢迎在下方留言或直接联系我, 也欢迎与我交流</p>
+<p>&lt;br/&gt;</p>

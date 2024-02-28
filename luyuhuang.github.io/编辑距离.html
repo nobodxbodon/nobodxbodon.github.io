@@ -1,0 +1,67 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2019-09-23-edit-distance.html">编辑距离</a></h2>
+<hr/>
+<h2>key: 10
+title: 编辑距离
+math: true
+tag:
+- algorithms
+- leetcode</h2>
+<p>题目源自Leetcode: <a href="https://leetcode-cn.com/problems/edit-distance/">编辑距离-leetcode</a></p>
+<p>给定两个单词 word1 和 word2，计算出将 word1 转换成 word2 所使用的最少操作数 。</p>
+<p>你可以对一个单词进行如下三种操作：</p>
+<ul>
+<li>插入一个字符</li>
+<li>删除一个字符</li>
+<li>替换一个字符</li>
+</ul>
+<p>示例:</p>
+<blockquote>
+<p>输入: word1 = "horse", word2 = "ros"&lt;br/&gt;
+输出: 3&lt;br/&gt;
+解释: &lt;br/&gt;
+horse -&gt; rorse (将 'h' 替换为 'r')&lt;br/&gt;
+rorse -&gt; rose (删除 'r')&lt;br/&gt;
+rose -&gt; ros (删除 'e')</p>
+</blockquote>
+<h3>解法: 动态规划</h3>
+<p>这是一道很漂亮的动态规划问题. 我们这样想: 越长的单词求解就越困难, 越短的单词求解就越简单: 长度为1的单词只需比较字母是否相等, 相等则编辑距离为1否则为0. 因此, 我们要设法把大问题变成小问题. 这里我们用 <code>dp[i][j]</code> 表示 <code>word1[:i]</code> 到 <code>word2[:j]</code> 的编辑距离. 例如, <code>word1 = "horse"</code> <code>word2 = "ros"</code>, 那么 <code>dp[1][1] = 1</code>, 因为 <code>"h"</code> 到 <code>"r"</code> 只需要执行一次替换, 编辑距离为1. 特别地, <code>dp[0][n] = n</code>, 它表示空字符串到任意长度为n的字符串的编辑距离: 做n次插入即可. 同理, <code>dp[n][0] = n</code>.</p>
+<p>接下来我们想办法构造出递推式. 我们通过观察可以发现, 把 <code>word1[:i]</code> 编辑到 <code>word2[:j]</code> 可以看作:</p>
+<ol>
+<li>先把 <code>word1[:i]</code> 最后一个字母删掉, 得到 <code>word1[:i-1]</code>, 再把 <code>word1[:i-1]</code> 编辑到 <code>word2[:j]</code>. 这个时候的编辑次数等于 <code>dp[i-1][j] + 1</code>;</li>
+<li>先把 <code>word1[:i]</code> 编辑到 <code>word2[:j-1]</code>, 再在 <code>word2[:j-1]</code> 末尾作一次插入. 这个时候编辑次数等于 <code>dp[i][j-1] + 1</code>;</li>
+<li>先把 <code>word1[:i-1]</code> 编辑到 <code>word2[:j-1]</code>, 然后再看:<ul>
+<li>如果最后一个字母相等, 那么就什么都不用做, 编辑距离等于 <code>dp[i-1][j-1]</code>;</li>
+<li>如果最后一个字母不相等, 那么就需要作一次修改, 编辑距离等于 <code>dp[i-1][j-1] + 1</code>.</li>
+</ul>
+</li>
+</ol>
+<p>由此, 我们可得递推式:</p>
+<p>$$
+dp[i][j]=\left{\begin{matrix}
+\min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]) &amp; word_1[i-1]=word_2[j-1] \
+\min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1] + 1) &amp; word_1[i-1]\ne word_2[j-1]
+\end{matrix}\right.
+$$</p>
+<p>OK, 有了递推式, 我们可以开始写代码了.</p>
+<p><strong>第一步:初始化</strong>. 因为我们用 <code>dp[i][j]</code> 表示 <code>word1[:i]</code> 到 <code>word2[:j]</code> 的编辑距离, 所以数组 <code>dp</code> 两个维度的长度分别要比 <code>len(word1)</code> 和 <code>len(word2)</code> 多1. 所以有:</p>
+<pre><code class="language-python">m, n = len(word1), len(word2)
+dp = [[None] * (n + 1) for _ in xrange(m + 1)]
+</code></pre>
+<p>上文提到了 <code>dp[0][n] = n</code> 和 <code>dp[n][0] = n</code>, 所以有:</p>
+<pre><code class="language-python">dp[0][0] = 0
+for i in xrange(m + 1):
+    dp[i][0] = i
+for j in xrange(n + 1):
+    dp[0][j] = j
+</code></pre>
+<p><strong>第二步:安排迭代顺序</strong>. 我们发现, <code>dp[i][j]</code> 依赖于 <code>dp[i-1][j]</code>, <code>dp[i][j-1]</code> 和 <code>dp[i-1][j-1]</code>. 如图所示:</p>
+<p><img alt="iter" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/edit-distance_1.png"/>{width="300"}</p>
+<p>图中红色箭头代表依赖. 所以, 很简单, 逐行遍历即可. 所以代码是这样的:</p>
+<pre><code class="language-python">for i in xrange(1, m + 1):
+    for j in xrange(1, n + 1):
+        if word1[i - 1] == word2[j - 1]:
+            dp[i][j] = min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1])
+        else:
+            dp[i][j] = min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + 1)
+</code></pre>
+<p>最后 <code>return dp[-1][-1]</code> 即可.</p>

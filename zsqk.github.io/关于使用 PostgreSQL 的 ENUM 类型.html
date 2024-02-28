@@ -1,0 +1,46 @@
+<h2>原文：<a href="https://zsqk.github.io/2020-04-30-postgresql-enum.html">关于使用 PostgreSQL 的 ENUM 类型</a></h2>
+<hr/>
+<h2>title: 关于使用 PostgreSQL 的 ENUM 类型
+categories: [postgresql]
+author: iugo</h2>
+<p>数据库版本 v9.6</p>
+<h2>数据库中枚举值的作用</h2>
+<ol>
+<li>约束数据.</li>
+<li>更加语义化.</li>
+</ol>
+<p>在数据库中使用枚举值只是在数据层面确保数据正确的做法, 不能替代程序中的逻辑.</p>
+<p>程序中应该做足够的判断, 尽量确保数据库中不会出现因枚举值不匹配导致的问题.</p>
+<h2>关于枚举值的使用</h2>
+<p>例如:</p>
+<p><code>CREATE TYPE abc AS ENUM ('a', 'b', 'c');</code></p>
+<p>虽然在向数据库中写数据时, 我们是将 <code>'a'</code> 写入到数据库中, 但实际数据库储存的是
+<code>abc[1]</code> 这样的数据.</p>
+<h2>关于枚举值的查询</h2>
+<p>如何查询目前数据库中已经有的枚举值是哪些.</p>
+<p>可以参考 <a href="https://stackoverflow.com/questions/9540681/list-postgres-enum-type">Stack Overflow 上的回答</a>, 效率还是比较高的, 基本 10ms 以内.</p>
+<pre><code class="language-sql">SELECT
+  n.nspname AS enum_schema,
+  t.typname AS enum_name,
+  t.oid AS enum_id,
+  e.enumlabel AS enum_value
+FROM
+  pg_type t
+  JOIN pg_enum e ON t.oid = e.enumtypid
+  JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+ORDER BY
+  enum_name,
+  e.enumsortorder;
+</code></pre>
+<h2>关于枚举值的修改</h2>
+<ol>
+<li>支持添加新值.</li>
+<li>支持修改原值.</li>
+<li>不支持删除原值.</li>
+</ol>
+<p>虽然文档说支持向后添加新值, 但实际可以加在任何地方.</p>
+<p>虽然文档写不支持修改排序, 但可以通过修改 <code>enumsortorder</code> 来完成重排序. 并且排序
+支持浮点数, 比如当执行 <code>ALTER TYPE abc ADD VALUE a- BEFORE b</code> 时,
+会将新插入值的排序改为浮点数, 如 <code>1.5</code>.</p>
+<p>关于如何修改枚举值, 直接 <code>UPDATE pg_enum</code> 就可以了.</p>
+<p>能否直接修改原值的排序呢? 实测是没问题的, 不会影响表中使用到该类型的数据.</p>

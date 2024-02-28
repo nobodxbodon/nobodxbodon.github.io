@@ -1,0 +1,70 @@
+<h2>原文：<a href="https://claude-ray.github.io/%E4%BD%BF%E7%94%A8chokidar%E7%9B%91%E8%A7%86%E6%96%87%E4%BB%B6%E6%9B%B4%E6%96%B0.html">使用chokidar监视文件更新</a></h2>
+<hr/>
+<h2>title: 使用chokidar监视文件更新
+date: 2018-01-27 12:57:42
+tags: [Node.js]
+categories: Node.js
+description: 为了提高文件读取效率，有时会将文件内容缓存到内存再使用。但是当文件发生更改，如何将改动更新到缓存而又不重启Node进程。</h2>
+<h2>监视文件</h2>
+<p>使用<code>chokidar</code>，可以监视指定路径下目录、文件的变动。由于我只关注更改，因此监视<code>change</code>事件即可。</p>
+<pre><code class="language-js">'use strict';
+
+const fs   = require('fs');
+const path = require('path');
+
+const chokidar = require('chokidar');
+
+module.exports = watchChange;
+
+/**
+ * 监听目录或文件变动
+ * @param {string|array} paths    目录或文件路径
+ * @param {function}     onChange 回调函数
+ * @return {Promise.&lt;*&gt;}
+ */
+function watchChange(paths, onChange) {
+  if (typeof onChange !== 'function') throw Error(`onChange (${onChange}) is not a function`);
+
+  if (!Array.isArray(paths)) paths = [paths];
+
+  paths.forEach(path =&gt; {
+    if (!(path &amp;&amp; fs.existsSync(path))) throw Error(`can't find path ${path}`);
+  });
+
+  chokidar.watch(paths)
+    // .on('add', filepath =&gt; {console.log('you can watch more events by chains')})
+    .on('change', filepath =&gt; {
+      const filename = path.basename(filepath);
+      onChange(filename);
+    });
+}
+</code></pre>
+<h2>更新缓存</h2>
+<p>为了避免每次取内容都读文件，使用了<code>lodash.memoize</code>缓存读取结果。</p>
+<pre><code class="language-js">async function readFile(params) {
+  return;
+}
+
+const getFile = _.memoize(readFile);
+</code></pre>
+<p>要更新这部分缓存，可以使用如下方法。用大文件测试了内存占用，没有泄露产生。</p>
+<pre><code class="language-js">getFile.cache.set(file, readFile(file));
+</code></pre>
+<p>完整部分，加上了try catch。</p>
+<pre><code class="language-js">function watchTpl() {
+  try {
+    watchFiles('./test', file =&gt; {
+      getFile.cache.set(file, readFile(file));
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+watchTpl();
+</code></pre>
+<h2>小结</h2>
+<p>由于使用场景明确，代码实现较简单，没有考虑太多情况，也算不上热更新。但借这种思路，可以完成配置文件甚至功能模块的更新。</p>
+<h2>References</h2>
+<p><a href="https://ngtmuzi.com/Node%E7%9B%91%E8%A7%86%E6%96%87%E4%BB%B6%E4%BB%A5%E5%AE%9E%E7%8E%B0%E7%83%AD%E6%9B%B4%E6%96%B0/">Node监视文件以实现热更新</a>
+<a href="http://fex.baidu.com/blog/2015/05/nodejs-hot-swapping/">Node.js Web应用代码热更新的另类思路</a></p>

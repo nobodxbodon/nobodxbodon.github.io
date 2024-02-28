@@ -1,0 +1,99 @@
+<h2>原文：<a href="https://blog.forecho.com/easy-use-hexo.html">手把手教你不依赖任何环境使用 Hexo</a></h2>
+<hr/>
+<h2>title: "手把手教你不依赖任何环境使用 Hexo"
+date: 2016-10-27T20:58:00+08:00
+tags: ["经验分享"]
+draft: false
+toc: true</h2>
+<h2>引言</h2>
+<p>今天心血来潮，想搭建一个 <a href="http://3li3.com/">3li3</a> 的博客，准备以博客的形式记录产品的成长。类似的博客有：<a href="http://blog.selfstore.io/">SelfStore 博客</a>。</p>
+<p>感觉 Hexo 的博客插件比较多，于是这次想试试。因为很早以前就搭建过一次，这次以为分分钟搞定，但实际上还是花了我不少时间，为了以后不再重复踩坑，我决定记录下整个过程。</p>
+<p>我们先看一下成果<a href="http://blog.3li3.com/"> 3li3博客</a>，然后我再来分享我的经验。</p>
+<p>&lt;!--more--&gt;</p>
+<h2>安装 Hexo</h2>
+<p><strong>方式一</strong></p>
+<p>根据 <a href="https://hexo.io/zh-cn/docs/">Hexo 官网</a>文档安装说明，你需要先安装 node 环境。
+由于我不是专业的前端，本地发环境没有 node，还好 hexo 文档有提供安装方法，而且<a href="https://hexo.io/zh-cn/docs/#%E5%AE%89%E8%A3%85-Node-js">安装方法</a>非常简单：</p>
+<pre><code>wget -qO- https://raw.github.com/creationix/nvm/master/install.sh | sh
+nvm install stable
+</code></pre>
+<p>然后<a href="https://hexo.io/zh-cn/docs/#%E5%AE%89%E8%A3%85-Hexo">安装 Hexo</a>:</p>
+<pre><code>$ npm install -g hexo-cli
+</code></pre>
+<p>但是实际上我安装的时候，<code>nvm install stable</code> 命令卡半天也没反应，进度很慢。而且第一次我明明安装成功了，但是输入 npm 的时候任然提示：</p>
+<p><code>The program 'npm' is currently not installed. To run 'npm' please ask your administrator to install the package 'npm'</code></p>
+<p>输入 hexo 的时候也是遇到：<code>hexo: command not found</code></p>
+<p>我一脸懵逼，只能重新再安装一遍。每次看到一推输出 <code>npm WARN ...</code> 我也很慌，它是安装成功了吗？</p>
+<p>总结一下，就是搭建环境是巨耗费时间的，特别是你对它不是十分了解的时候，如果你敢时间的话，我们来换一种姿势安装看看。</p>
+<p><strong>方式二</strong></p>
+<p>直接下载我刚刚安装好的 <a href="https://github.com/WJTeam/hexo/archive/v0.1.zip">Hexo</a> 包，解压，然后我们就可以继续下一个步骤了。</p>
+<p>这个方式不需要你安装 node 环境，任何一台新电脑都能直接使用。当然也有一个缺点就是：本地不能预览，但是这功能我们需要吗？</p>
+<p>配合 <a href="https://travis-ci.org/">Travis CI</a> 实现自动发布，还要啥本地预览？？</p>
+<h2>使用 Travis CI 工具自动部署 Hexo</h2>
+<p>我安装完 Hexo 第二件事就是完成此功能，而且今天在这个功能上「浪费」了最多时间。</p>
+<p>其实 Google 搜索<a href="https://www.google.com.hk/search?q=%E9%85%8D%E7%BD%AEtravis%E6%9D%A5%E8%87%AA%E5%8A%A8%E5%8F%91%E5%B8%83hexo&amp;newwindow=1&amp;safe=strict&amp;biw=1920&amp;bih=974&amp;ei=yZYRWPazAoKR0gLkj6j4Bw&amp;start=0&amp;sa=N">「配置travis来自动发布hexo」</a> 结果一大把，但是我看了几篇都没找到想要的，我要的很简单 - 用最少的步骤完成此功能。</p>
+<p>下面我来简单分享一下我的步骤：</p>
+<p>1、去 Github 提供的 <a href="https://github.com/settings/tokens">Personal Access Token</a> 创建一个 Token，然后复制 Token 值，记录下来，后面会用到。</p>
+<p><img alt="" src="https://blog-1251237404.cos.ap-guangzhou.myqcloud.com/20190424161626.png"/></p>
+<p>2、在项目根目录下新建 <code>.travis.yml</code> 文件，代码如下：</p>
+<pre><code>language: node_js
+node_js: stable
+
+# Travis-CI Caching
+cache:
+  directories:
+    - node_modules
+
+install:
+  - npm install  #安装hexo及插件
+
+script:
+  - hexo cl  #清除
+  - hexo g  #生成
+
+after_script:
+  - cd public
+  - git init
+  - git config user.name "forecho"
+  - git config user.email "caizhenghai@gmail.com"
+  - git add .
+  - git commit -m "Auto deploy from Travis-CI."
+  - git push --force --quiet "https://${GH_TOKEN}@github.com/${GH_REPO}.git" master:gh-pages
+
+branches:
+  only:
+    - master
+
+env:
+  global:
+    - GH_REPO: 3li3/blog
+</code></pre>
+<p>以上文件你需要修改4处：</p>
+<ul>
+<li><code>git config user.name</code></li>
+<li><code>git config user.email" </code></li>
+<li><code>GH_REPO</code></li>
+</ul>
+<p>3、然后就去 GitHub 新建仓库、push 代码，操作 git 命令参考如下：</p>
+<pre><code>git init
+git add .
+git commit -m "first commit"
+git remote add origin https://github.com/3li3/blog.git
+git push -u origin master
+</code></pre>
+<p>4、然后你要去 <a href="https://travis-ci.org/account/repositories">Travis CI</a>，手动开启此项目的监控（没有看到的话，点左边的  Sync account 按钮）。</p>
+<p>开启之后点击设置添加环境变量值，在 <code>Environment Variables</code> 处添加 <code>GH_TOKEN</code> 值为上面第一步生成的 token 值。</p>
+<p><img alt="" src="https://blog-1251237404.cos.ap-guangzhou.myqcloud.com/20190424161645.png"/></p>
+<p>至此配置完成，以后你写文章就是要去 <code>source/_posts/</code> 目录下，参照已有文件规则手动新建一个文件，就可以开始写博客了，写完再次 <code>git push</code> 就可以实现自动部署了。</p>
+<h2>添加域名解析</h2>
+<p>这个很简单，首先你要在项目 <strong><code>source</code> 目录</strong>下创建一个 <code>CNAME</code> 文件，写入你要解析的域名就可以了，比方说：</p>
+<pre><code>blog.3li3.com
+</code></pre>
+<p>然后你需要在域名管理中心，添加一个 cname 解析，记录值写 <code>3li3.github.io</code>，3li3 代表 GitHub 组织名或者用户名，如下</p>
+<p><img alt="" src="https://blog-1251237404.cos.ap-guangzhou.myqcloud.com/20190424161658.png"/></p>
+<h2>更换主题</h2>
+<p>这个也遇到一个坑，首先我看到这篇文章 <a href="https://en.abnerchou.me/Blog/5c00ca67/">Hexo Top 10 Popular Themes</a>，然后找到了 <a href="http://theme-next.iissnan.com/">NexT</a> 主题，下载主题的时候一定要使用「下载稳定版本」的方式，不然你会遇到 git 子模块的坑。</p>
+<p>然后使用上面的配置会导致 Travis CI 不能自动部署 Hexo，除非你让配置支持子模块，哎，懒得折腾了，所以我用最简单的方式把主题重新安装整了一遍。</p>
+<p>关于主题的时候，文档已经很明确了，我就不多讲了。</p>
+<h2>总结</h2>
+<p>为了以后方便，一定要<strong>使用 Travis CI 工具自动部署 Hexo</strong>。 最后大家可以去参考 <a href="https://github.com/3li3/blog">3li3/blog</a> 项目的源码。</p>

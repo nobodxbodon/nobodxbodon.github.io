@@ -1,0 +1,83 @@
+<h2>原文：<a href="https://knightyun.github.io/2021-07-05-css-flex-chrome-safari-bug.html">CSS flex 盒子在 Chrome 和 Safari 中的行为差异</a></h2>
+<hr/>
+<h2>title: CSS flex 盒子在 Chrome 和 Safari 中的行为差异
+layout: post
+categories: CSS
+tags: flex box chrome safari
+excerpt: 分析与解决 flex 盒子在 Chrome 和 Safari 中的行为差异问题</h2>
+<h2>问题</h2>
+<p>最近的开发中有遇到一个页面样式的兼容性问题，大致是使用 <code>flex</code> 布局的两个嵌套弹性盒子，在 <strong>Chrome</strong> 和 <strong>Safari</strong> 中对一些特殊情况的处理行为不一致，从而产生了测试 bug；</p>
+<h2>复现</h2>
+<p>下面将问题简化为了一个 <strong>demo</strong> 模型，一个定高 <code>300px</code> 的 <code>flex</code> 盒子 A（红色边框），嵌套了另一个高度被子元素（绿色块）撑开的 <code>flex</code> 盒子 B（蓝色边框），其中盒子 B 为垂直伸缩 <code>flex-direction: column;</code>，Footer 元素（绿色边框）高度固定 <code>100px</code>，背景半透明；代码：</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+    &lt;head&gt;
+        &lt;meta charset="UTF-8" /&gt;
+        &lt;meta http-equiv="X-UA-Compatible" content="IE=edge" /&gt;
+        &lt;meta name="viewport" content="width=device-width, initial-scale=1.0" /&gt;
+        &lt;title&gt;Demo&lt;/title&gt;
+        &lt;style&gt;
+            .flex-box-a {
+                display: flex;
+                width: 300px;
+                height: 300px;
+                flex-direction: column;
+                border: 2px solid red;
+            }
+            .flex-box-b {
+                display: flex;
+                width: 200px;
+                height: auto;
+                border: 2px solid blue;
+            }
+            .inner-green-box {
+                width: 100px;
+                height: 100px;
+                background: green;
+            }
+            .inner-aqua-box {
+                width: 100px;
+                height: 100px;
+                background: aqua;
+            }
+            .footer-box {
+                width: 200px;
+                height: 100px;
+                border: 2px solid lime;
+                background: skyblue;
+                opacity: .5;
+            }
+            .bottom-brown-box {
+                width: 304px;
+                height: 100px;
+                color: white;
+                background: burlywood;
+            }
+        &lt;/style&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        Flex Box A - height: 300px;
+        &lt;div class="flex-box-a"&gt;
+            Flex Box B - height: auto;
+            &lt;div class="flex-box-b"&gt;
+                &lt;div class="inner-green-box"&gt;height: 100px;&lt;/div&gt;
+                &lt;div class="inner-aqua-box"&gt;&lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div class="footer-box"&gt;Footer - height: 100px;&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="bottom-brown-box"&gt;
+            height: 100px;
+        &lt;/div&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>效果：</p>
+<p><img alt="1" src="https://img-blog.csdnimg.cn/20210705143709768.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L0tOSUdIX1lVTg==,size_16,color_FFFFFF,t_70#pic_center"/></p>
+<p>然后增加绿色块子元素的高度，可以发现在 <strong>Chrome</strong> 中 <code>flex</code> 盒子 B 的高度会被该子元素撑开，Footer 元素高度被压缩，而 <strong>Safari</strong> 中的盒子 B 的高度并没有被子元素撑开，而是超出部分被隐藏在了 Footer 下层，同时 Footer 元素也被少量压缩：</p>
+<p><img alt="2" src="https://img-blog.csdnimg.cn/20210705143709805.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L0tOSUdIX1lVTg==,size_16,color_FFFFFF,t_70#pic_center"/></p>
+<p>当绿色块子元素高度超过最外层 <code>flex</code> 盒子 A 的高度时，<strong>Chrome</strong> 中的内层 <code>flex</code> 盒子 B 继续被撑开，Footer 元素直接脱离外层 <code>flex</code> 盒子，而 <strong>Safari</strong> 中只有子元素超出外层 <code>flex</code> 盒子，Footer 依然只被少量压缩：</p>
+<p><img alt="3" src="https://img-blog.csdnimg.cn/20210705143709771.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L0tOSUdIX1lVTg==,size_16,color_FFFFFF,t_70#pic_center"/></p>
+<h2>解决</h2>
+<p>最终解决问题的方式是放开外层 <code>flex</code> 盒子 A 的<strong>高度限制</strong>，这样无论在 <strong>Chrome</strong> 还是 <strong>Safari</strong> 中 <code>flex</code> 盒子都能被自由撑开，行为表现一致：</p>
+<p><img alt="4" src="https://img-blog.csdnimg.cn/20210705143709810.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L0tOSUdIX1lVTg==,size_16,color_FFFFFF,t_70#pic_center"/></p>
+<p>因此开发中遇到类似<strong>定高</strong>与<strong>弹性</strong>并存的情况，需要合理设计布局，避免不必要的兼容问题；</p>

@@ -1,0 +1,84 @@
+<h2>原文：<a href="https://lineuman_blog/2018-01-08-testng-java.html">testng-java</a></h2>
+<hr/>
+<h2>tags: [java]</h2>
+<h1>testng dataprovider</h1>
+<pre><code>从数据源读取数据，进行自动循环测试的方法
+从数据中读取数据，进行测试
+从xml中读取数据
+从json中读取数据
+从csv中读取数据
+</code></pre>
+<pre><code>import java.sql.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+/**
+ * @author lineuman
+ */
+
+
+public class DataProvider_forDB implements Iterator {
+
+    ResultSet rs;
+    ResultSetMetaData rd;
+
+    public DataProvider_forDB(String ip, String port, String baseName,
+                              String userName, String password, String sql) throws ClassNotFoundException, SQLException {
+
+        Class.forName("com.mysql.jdbc.Driver");
+        String url = String.format("jdbc:mysql://%s:%s/%s?characterEncoding=utf8", ip, port, baseName);
+        Connection conn = DriverManager.getConnection(url, userName, password);
+        Statement createStatement = conn.createStatement();
+
+        rs = createStatement.executeQuery(sql);
+        System.out.println(rs);
+        rd = rs.getMetaData();
+
+    }
+
+    @Override
+    public boolean hasNext() {
+        boolean flag = false;
+        try {
+            flag = rs.next();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return flag;
+    }
+
+    @Override
+    public Object[] next() {
+        Map data = new HashMap();
+        try {
+            for (int i = 1; i &lt;= rd.getColumnCount(); i++) {
+                data.put(rd.getColumnName(i), rs.getString(i));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        Object r[] = new Object[1];
+        r[0] = data;
+        return r;
+    }
+
+    @Override
+    public void remove() {
+        try {
+            rs.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+</code></pre>
+<h1>testng listener监听器</h1>
+<p><a href="https://www.ibm.com/developerworks/cn/opensource/os-cn-testinglistener/index.html">https://www.ibm.com/developerworks/cn/opensource/os-cn-testinglistener/index.html</a></p>
+<p>尽管 TestNG 的默认配置已经提供了不少强大的功能和灵活的选项，但是没有一种方案能够解决所有的问题。在实际应用中，我们多多少少会发现 TestNG 自带的功能无法满足我们的一些实际需求，尤其是关于测试方法运行的行为、报表以及通知功能。此时，我们就需要使用 TestNG 的监听器定制额外的功能以满足我们的需要。</p>
+<p>使用监听器的方法有两种</p>
+<ol>
+<li>通过xml配置listener</li>
+<li>在源码中使用注解的方式</li>
+</ol>
+<p>在 @Listeners 中添加监听器跟在 testng.xml 添加监听器的不同之处在于，它不能添加 IAnnotationTransformer 和 IAnnotationTransformer2 监听器。原因是因为这两种监听器必须在更早的阶段添加到 TestNG 中才能实施修改注释的操作，所以它们只能在 testng.xml 添加。</p>

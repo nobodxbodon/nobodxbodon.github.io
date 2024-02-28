@@ -1,0 +1,56 @@
+<h2>原文：<a href="https://claude-ray.github.io/ubuntu16to18md.html">ubuntu16.04升级18.04LTS</a></h2>
+<hr/>
+<h2>title: ubuntu16.04升级18.04LTS
+date: 2018-08-23 21:16:15
+tags: Ubuntu
+categories: Linux
+description: 上个月第一次收到升级推送，当时工作较重又担心出现问题就拒绝了。今天又收到推送，恰好本地没有怕丢的代码，但是经验不足，直接通过推送窗口点击了同意，接下来虚惊一场。次日，桌面系统再次崩溃，强烈建议不要升级而是彻底重装!</h2>
+<h2>踩坑</h2>
+<h3>- 进度缓慢</h3>
+<p>部分软件需要手动输入y/n来决定一些新旧配置项的取舍，长时间不去查看就会一直卡着。</p>
+<h3>- 桌面崩溃</h3>
+<p>由于加了一些界面美化插件，非常担心桌面崩溃，果然更新了三分之一就跪了。</p>
+<p>尝试注销桌面系统，过一会儿屏幕上只剩一个鼠标，凉凉。</p>
+<pre><code>sudo pkill Xorg
+</code></pre>
+<p>为了恢复工作，尝试重新安装</p>
+<pre><code>sudo apt install --reinstall ubuntu.desktop
+</code></pre>
+<p>但提示<code>Could not get lock /var/lib/dpkg/lock</code>，尝试强制获取lock</p>
+<pre><code>sudo rm /var/cache/apt/archives/lock
+sudo rm /var/lib/dpkg/lock
+</code></pre>
+<p>这时再执行reinstall ubuntu.desktop时，提示需要</p>
+<pre><code>sudo dpkg --configure -a
+</code></pre>
+<p>电脑硬盘不好，漫长的等待。此时一边在命令行工作，一边，等到上面指令终于执行完毕，基本上心态已崩，揣着重装系统的念头，(此时一定要做好数据备份)。</p>
+<p>继续尝试重启<code>shutdown now -r</code>无效，按提示<code>systemctl reboot -i</code>成功启动</p>
+<h2>善后</h2>
+<p>惊喜是一次重启就成功了，部分软件如redshift提示无法使用，原因是缺了一些依赖，重新下载即可。</p>
+<p>但是打开浏览器发现无法上网，但系统提示网线已连接，第一反应是dns，修改了<code>/etc/resolv.conf</code>没效果，又习惯性用ssh测远程连接，再次失败陷入误区。当发现使用ip和端口可以访问服务时才彻底意识到是dns的问题。</p>
+<h3>- 修改dns</h3>
+<p>一般情况，使用DHCP就可以动态处理网络问题。当有修改必要时，需要注意新旧版本Ubuntu修改方式存在差异。</p>
+<h4>16.04以下：</h4>
+<p>旧版本的ubuntu修改dns有两种方式，并不包含直接修改<code>/etc/resolv.conf</code>。</p>
+<p>编辑<code>/etc/resolvconf/resolv.conf.d/base</code>，文件初始内容为空，加上<code>nameserver 8.8.8.8</code>，之后需执行</p>
+<pre><code>resolvconf -u
+</code></pre>
+<p>才会正确生效并写入<code>/etc/resolv.conf</code>。</p>
+<p>另一种方式是直接修改<code>/etc/network/interfaces</code>。</p>
+<h4>18.04：</h4>
+<p>以上方法均不适用，因为Ubuntu18采用了<code>Netplan</code>，查看DNS配置应使用<code>systemd-resolve --status</code>，</p>
+<p>可以停用<code>systemd-resolved</code>服务但不推荐，目前修改教程较少，之后会越来越多。（<a href="https://www.itzgeek.com/how-tos/linux/ubuntu-how-tos/netplan-how-to-configure-static-ip-address-in-ubuntu-18-04-using-netplan.html">参考链接</a>）</p>
+<h3>- 修复ssh</h3>
+<p>升级之后使用ssh提示<code>permission denied (publickey)</code>，最快排查办法是带上参数<code>-vvv</code>，我这里的错误是未指定私钥文件，使用<code>-i</code>加私钥路径可解。</p>
+<p>当然不想每次都-i，因此可以将公钥私钥放在id_rsa，id_rsa.pub。同时不想每次都输入密码，执行<code>ssh-add ~/.ssh/id_dsa</code>。</p>
+<p>注意密钥权限只能属于使用者，文件400权限就好，超过权限范围会提示Permissions too open。</p>
+<h3>- 18.04部署攻略</h3>
+<p>重装redshift时发现有人整理了一些安装指令，可以方便大家部署新系统。</p>
+<p><a href="https://github.com/erikdubois/Ultimate-Ubuntu-18.04">https://github.com/erikdubois/Ultimate-Ubuntu-18.04</a></p>
+<h2>小结</h2>
+<p>由于桌面系统相当脆弱，一定要通过命令行来完成升级，也方便处理异常。出现问题升级不一定中断，不要急着重启，避免让问题严重到系统无法访问。</p>
+<p>不要听信网上的无痛升级论，做好数据备份，谨慎操作。</p>
+<h3>16-08-24更新</h3>
+<p>桌面系统再次崩溃，详情可以看这个<a href="https://bugs.launchpad.net/ubuntu/+source/gdm3/+bug/1779476">Bug</a>，并且在论坛找到了非常相似的<a href="https://ubuntuforums.org/showthread.php?t=2391542">遭遇</a>。</p>
+<p>起初还不清楚是什么状况，试过了swapoff，gnome重装，gdm3降级，切换lightdm等等，看到bug反馈时终于决定接受了各位前人的重装解决方案。</p>
+<p>顺便碰到了双系统不能上网问题，修复较容易，BIOS 关闭<code>wake on lan</code>，如果已经关闭就重新打开再关闭。</p>

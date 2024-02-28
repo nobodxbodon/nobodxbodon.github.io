@@ -1,0 +1,243 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Rust%E5%8F%8D%E5%B0%84%E4%B9%8B%E8%BF%87%E7%A8%8B%E5%AE%8F.html">Rust反射之过程宏</a></h2>
+<hr/>
+<h2>title: Rust反射之过程宏
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?1'
+date: 2022-11-25 11:08:40
+categories: Rust
+tags: [Rust, 反射]
+description: 在上一篇文章《Rust反射之Any》中，我提到了可以使用过程宏来实现类似于反射的功能；本文就提供了这么个思路和简单的实现；</h2>
+<p>在上一篇文章《Rust反射之Any》中，我提到了可以使用过程宏来实现类似于反射的功能；</p>
+<p>本文就提供了这么个思路和简单的实现；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/reflection</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2022/11/24/Rust%E5%8F%8D%E5%B0%84%E4%B9%8BAny/">《Rust反射之Any》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/11/25/Rust%E5%8F%8D%E5%B0%84%E4%B9%8B%E8%BF%87%E7%A8%8B%E5%AE%8F/">《Rust反射之过程宏》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Rust反射之过程宏</strong></h1>
+<h2><strong>前言</strong></h2>
+<p>在Rust中，宏是一个非常大的话题，在这里我不打算以非常大的篇幅来讲述如何编写过程宏；</p>
+<p>而是使用过程宏来进行类似于反射的AOP实现；</p>
+<p>关于过程宏的开发，可以参考：</p>
+<ul>
+<li><a href="https://dengjianping.github.io/2019/02/28/%E5%A6%82%E4%BD%95%E7%BC%96%E5%86%99%E4%B8%80%E4%B8%AA%E8%BF%87%E7%A8%8B%E5%AE%8F(proc-macro">如何编写一个过程宏(proc-macro)</a>.html)</li>
+<li><a href="https://rustmagazine.github.io/rust_magazine_2021/chapter_5/proc_macro_workshop_guide_for_builder_project.html#rust%E8%BF%87%E7%A8%8B%E5%AE%8F%E7%B3%BB%E5%88%97%E6%95%99%E7%A8%8B--proc-macro-workshop-%E4%B9%8B-builder-%E5%AE%9E%E7%8E%B0">Rust过程宏系列教程 | Proc Macro Workshop 之 Builder 实现</a></li>
+<li>https://github.com/dtolnay/proc-macro-workshop/</li>
+<li><a href="https://course.rs/advance/macro.html#macro-%E5%AE%8F%E7%BC%96%E7%A8%8B">Macro 宏编程</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>使用过程宏实现AOP</strong></h2>
+<h3><strong>实现前说明</strong></h3>
+<p>使用过Spring框架的同学应该都用过AOP的特性吧，对Python熟悉的同学也应该对包装器不陌生；</p>
+<p>在本文中会使用过程宏，实现和AOP类似的功能，而我们要实现的是计算函数的执行时间 <code>elapsed</code>；</p>
+<p>实现逻辑其实非常简单，就是：</p>
+<pre><code class="language-rust">fn some_func() {
+  use std::time;
+  let start = time::Instant::now();
+  
+  // some logic...
+  
+  println!("time cost {:?}", start.elapsed());
+}
+</code></pre>
+<p>即在函数执行前初始化当前时间，在执行结束后计算经过的时间即可；</p>
+<p>在Spring框架中，我们可以动态的创建一个代理类，将方法的调用包装在这个类中，并在调用的前后插入相应的逻辑；</p>
+<p>在 Rust 中，我们无法在运行时通过反射获取函数的定义，但是我们可以在编译器进行！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>实现<code>elapsed</code>过程宏</strong></h3>
+<h4><strong>初始化项目</strong></h4>
+<p>首先创建一个 macro 的 lib 项目：</p>
+<pre><code class="language-bash">cargo new my-macro --lib
+</code></pre>
+<p>这一点非常重要：</p>
+<p>&lt;font color="#f00"&gt;<strong>目前，当创建过程宏时，它的定义必须要放入一个独立的包中，且包的类型也是特殊的；</strong>&lt;/font&gt;</p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>事实上，根据<a href="https://www.reddit.com/r/rust/comments/t1oa1e/what_are_the_complex_technical_reasons_why/">这个说法</a>，过程宏放入独立包的原因在于它必须先被编译后才能使用，如果过程宏和使用它的代码在一个包，就必须先单独对过程宏的代码进行编译，然后再对我们的代码进行编译，但悲剧的是 Rust 的编译单元是包，因此你无法做到这一点；</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>随后需要修改配置：</p>
+<pre><code class="language-toml">[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1"
+syn = { version = "1.0.56", features = ["full"] }
+</code></pre>
+<p>在 stable 版本里，我们需要借助两个crate：</p>
+<ul>
+<li><a href="https://docs.rs/syn/1.0.1/syn/"><strong>syn</strong></a>：用来解析语法树(AST)、各种语法构成；</li>
+<li><a href="https://docs.rs/quote/1.0.0/quote/"><strong>quote</strong></a>：解析语法树，生成rust代码，从而实现你想要的新功能；</li>
+</ul>
+<p><strong>同时，还需要在 <code>[lib]</code> 中将过程宏的开关开启 : <code>proc-macro = true</code>；</strong></p>
+<p>&lt;br/&gt;</p>
+<h4><strong>实现<code>elapsed</code>逻辑</strong></h4>
+<p>目前过程宏必须在 crate root 下声明（lib.rs中），如果在非 root 下使用 <code>#[proc_macro_attribute]</code> 等进行标注则会报错：</p>
+<pre><code class="language-rust">functions tagged with `#[proc_macro_attribute]` must currently reside in the root of the crate
+</code></pre>
+<p><strong>而为了使具体逻辑和宏定义注册分离，我们可以在 crate root 中只做声明，而调用其他 mod 中具体逻辑的实现；</strong></p>
+<p>修改 <code>lib.rs</code> 增加声明：</p>
+<p>my-macro/src/lib.rs</p>
+<pre><code class="language-rust">use proc_macro::TokenStream;
+
+mod elapsed;
+
+/// A proc macro for calculating the elapsed time of the function
+#[proc_macro_attribute]
+#[cfg(not(test))]
+pub fn elapsed(args: TokenStream, func: TokenStream) -&gt; TokenStream {
+    elapsed::elapsed(args, func)
+}
+</code></pre>
+<p>具体的实现在：<code>elapsed::elapsed</code> 中；</p>
+<p>在 crate 的 src 目录下创建 <code>elapsed.rs</code>：</p>
+<p>my-macro/src/elapsed.rs</p>
+<pre><code class="language-rust">use proc_macro::TokenStream;
+use quote::quote;
+use syn::parse_macro_input;
+use syn::ItemFn;
+
+pub(crate) fn elapsed(_attr: TokenStream, func: TokenStream) -&gt; TokenStream {
+    let func = parse_macro_input!(func as ItemFn);
+    let func_vis = &amp;func.vis; // like pub
+    let func_block = &amp;func.block; // { some statement or expression here }
+
+    let func_decl = func.sig;
+    let func_name = &amp;func_decl.ident; // function name
+    let func_generics = &amp;func_decl.generics;
+    let func_inputs = &amp;func_decl.inputs;
+    let func_output = &amp;func_decl.output;
+
+    let caller = quote! {
+        // rebuild the function, add a func named is_expired to check user login session expire or not.
+        #func_vis fn #func_name #func_generics(#func_inputs) #func_output {
+            use std::time;
+
+            let start = time::Instant::now();
+            #func_block
+            println!("time cost {:?}", start.elapsed());
+        }
+    };
+
+    caller.into()
+}
+</code></pre>
+<p>我们通过 <code>pub(crate)</code> 指定了该函数仅在当前crate中可见，随后在 elapsed 函数中实现了我们的逻辑；</p>
+<p>首先通过 <code>parse_macro_input!(func as ItemFn)</code> 将我们的 AST Token 转为函数定义 <code>func</code>；</p>
+<p>随后获取了函数的各个部分：</p>
+<ul>
+<li><strong>vis：可见性；</strong></li>
+<li><strong>block：函数体；</strong></li>
+<li><strong>func.sig：函数签名：</strong><ul>
+<li><strong>ident：函数名；</strong></li>
+<li><strong>generics：函数声明的范型；</strong></li>
+<li><strong>inputs：函数入参；</strong></li>
+<li><strong>output：函数出参；</strong></li>
+</ul>
+</li>
+</ul>
+<p>随后，我们通过 <code>quote!</code> 创建了一块新的 rust 代码；</p>
+<blockquote>
+<p><strong>关于：<code>quote!</code>：</strong></p>
+<p><strong><code>quote!</code> 中可以定义我们想要返回的 Rust 代码；</strong></p>
+<p><strong>由于编译器需要的内容和 <code>quote!</code> 直接返回的不一样，因此还需要使用 <code>.into</code> 方法其转换为 <code>TokenStream</code>；</strong></p>
+</blockquote>
+<p>在代码中，我们将函数声明重新拼好，同时在 <code>#func_block</code> 前后增加了我们的逻辑：</p>
+<pre><code class="language-rust">#func_vis fn #func_name #func_generics(#func_inputs) #func_output {
+  use std::time;
+
+  let start = time::Instant::now();
+  #func_block
+  println!("time cost {:?}", start.elapsed());
+}
+</code></pre>
+<p>这样，我们的过程宏就已经开发完成了！</p>
+<p>怎么样，是不是非常的暴力！</p>
+<p>&lt;font color="#f00"&gt;<strong><a href="https://docs.rs/syn/1.0.1/syn/">syn</a> 和 <a href="https://docs.rs/quote/1.0.0/quote/">quote</a> 库让我们有了操纵整个 Rust 代码 AST 的能力，使得在编译期我们无所不能，有无限的可能！</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>测试过程宏</strong></h4>
+<p>前面我们开发了一个过程宏，当然最后需要测试一下；</p>
+<p>首先，引入我们的过程宏 crate：</p>
+<p>Cargo.toml</p>
+<pre><code class="language-toml">[dependencies]
+my-macro = { path = "./my-macro" }
+</code></pre>
+<p>随后，修改 <code>main.rs</code>，使用我们定义的宏：</p>
+<p>src/main.rs</p>
+<pre><code class="language-rust">use my_macro::elapsed;
+use std::thread;
+use std::time::Duration;
+
+#[elapsed]
+fn demo(t: u64) {
+    let secs = Duration::from_secs(t);
+    thread::sleep(secs);
+}
+
+fn main() {
+    demo(4);
+    demo(2);
+}
+</code></pre>
+<p>代码中，我们为函数 <code>demo</code> 增加了 <code>#[elapsed]</code> 过程宏声明；</p>
+<p>因此，在编译时这个函数会被我们替换，我们可以通过 <code>cargo-expand</code> 来查看：</p>
+<pre><code class="language-rust">$ cargo expand       
+
+#![feature(prelude_import)]
+#[prelude_import]
+use std::prelude::rust_2018::*;
+#[macro_use]
+extern crate std;
+use my_macro::elapsed;
+use std::thread;
+use std::time::Duration;
+fn demo(t: u64) {
+    use std::time;
+    let start = time::Instant::now();
+    {
+        let secs = Duration::from_secs(t);
+        thread::sleep(secs);
+    }
+    {
+        ::std::io::_print(
+            ::core::fmt::Arguments::new_v1(
+                &amp;["time cost ", "\n"],
+                &amp;[::core::fmt::ArgumentV1::new_debug(&amp;start.elapsed())],
+            ),
+        );
+    };
+}
+fn main() {
+    demo(4);
+    demo(2);
+}
+</code></pre>
+<p>可以看到，在 demo 中增加了我们定义的代码！</p>
+<p>执行代码，结果如下：</p>
+<pre><code class="language-bash">$ cargo run   
+
+time cost 4.00297825s
+time cost 2.000378291s
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>总结</strong></h2>
+<p>通过上面的例子可以看到，虽然我们不能在运行时对函数、结构体等定义进行解析，但是 Rust 为我们提供了更强大的方式：<strong>直接在编译期操作代码的 AST，从而提供了无限的可能！</strong></p>
+<p><strong>而 <code>#[elapsed]</code> 过程宏的使用方式也像极了 Java 中的注解 <code>@elapsed</code>！</strong></p>
+<p>但是过程宏的整个实现方式都在编译期完成，没有任何运行时消耗！</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/reflection</li>
+</ul>
+<p>参考文章：</p>
+<ul>
+<li>https://github.com/dtolnay/reflect</li>
+<li>https://course.rs/advance/macro.html#%E7%B1%BB%E5%B1%9E%E6%80%A7%E5%AE%8Fattribute-like-macros</li>
+<li>https://dengjianping.github.io/2019/02/28/%E5%A6%82%E4%BD%95%E7%BC%96%E5%86%99%E4%B8%80%E4%B8%AA%E8%BF%87%E7%A8%8B%E5%AE%8F(proc-macro).html</li>
+</ul>
+<p>&lt;br/&gt;</p>

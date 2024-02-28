@@ -1,0 +1,140 @@
+<h2>原文：<a href="https://www.barretlee.com/2016-08-25-pac-file.html">详解代理自动配置 PAC</a></h2>
+<hr/>
+<p>title: 详解代理自动配置 PAC
+description: PAC，一个自动代理配置脚本，包含了很多使用 JavaScript 编写的规则，它能够决定网络流量走默认通道还是代理服务器通道，控制的流量类型包括：HTTP、HTTPS 和 FTP。
+warning: true
+categories:</p>
+<ul>
+<li>网络交互</li>
+<li>网络安全
+tags:</li>
+<li>翻墙</li>
+<li>proxy</li>
+<li>pac
+date: 2016-08-25 01:31:50</li>
+</ul>
+<hr/>
+<p>最近一直在做跨域中华局域网的工作，了解了很多代理知识和基础概念，很零散，也很细碎。希望通过一段时间的学习，能够自由地穿梭在国际互联网和中华局域网之间。后续会写一系列文章记录我了解到的知识点，本文要说的是我们平时接触比较多的 PAC，全名为 proxy auto-config。</p>
+<p><img alt="Why Machinima's Warner Brothers round could be a bridge to nowhere" src="/media/wwww/share/study/聚聚/源数据/博客聚合/www.barretlee.com../blogimgs/2016/08/25/6c0378f8gw1f75co9fseuj20p00dwwhk.jpg"/>&lt;!--&lt;source src="http://ww4.sinaimg.cn/large/6c0378f8gw1f75co9fseuj20p00dwwhk.jpg"&gt;--&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h3>什么是 PAC</h3>
+<p>PAC，一个自动代理配置脚本，包含了很多使用 JavaScript 编写的规则，它能够决定网络流量走默认通道还是代理服务器通道，控制的流量类型包括：HTTP、HTTPS 和 FTP。</p>
+<p>它是一段 JavaScript 脚本：</p>
+<pre><code class="language-javascript">function FindProxyForURL(url, host) {
+  return "DIRECT";
+}
+</code></pre>
+<p>上面就是一个最简洁的 PAC 文件，意思是所有流量都直接进入互联网，不走代理。</p>
+<h3>PAC 语法和函数</h3>
+<p>上面函数中，<code>url</code> 字段就是我们在浏览器地址栏输入的待访问地址，<code>host</code> 为该地址对应的 hostname，<code>return</code> 语句有三种指令：</p>
+<ul>
+<li><code>DIRECT</code>，表示无代理直接连接</li>
+<li><code>PROXY host:port</code>，表示走 <code>host:port</code> 的 proxy 服务</li>
+<li><code>SOCKS host:port</code>，表示走 <code>host:port</code> 的 socks 服务</li>
+</ul>
+<p>而返回的接口可以是多个代理串联：</p>
+<pre><code class="language-javascript">return "PROXY 222.20.74.89:8800; SOCKS 222.20.74.89:8899; DIRECT";
+</code></pre>
+<p>上面代理的意思是，默认走 <code>222.20.74.89:8800</code> 的 proxy 服务；如果代理挂了或者超时，则走 <code>222.20.74.89:8899</code> 的 socks 代理；如果 socks 也挂了，则无代理直接连接。从这里可以看出 PAC 的一大优势：自动容灾。</p>
+<p>PAC 提供了几个内置的函数，下面一一介绍下：</p>
+<p><strong>dnsDomainIs</strong></p>
+<p>类似于 <code>==</code>，但是对大小写不敏感，</p>
+<pre><code class="language-javascript">if (dnsDomainIs(host, "google.com") || 
+    dnsDomainIs(host, "www.google.com")) {
+  return "DIRECT";
+}
+</code></pre>
+<p><strong>shExpMatch</strong></p>
+<p>Shell 正则匹配，<code>*</code> 匹配用的比较多，可以是 <code>*.example.com</code>，也是可以下面这样，</p>
+<pre><code class="language-javascript">if (shExpMatch(host, "vpn.domain.com") ||
+    shExpMatch(url, "http://abcdomain.com/folder/*")) {
+  return "DIRECT"; 
+}
+</code></pre>
+<p><strong>isInNet</strong></p>
+<p>判断是否在网段内容，比如 <code>10.1.0.0</code> 这个网段，<code>10.1.1.0</code> 就在网段中，</p>
+<pre><code class="language-javascript">if (isInNet(dnsResolve(host), "172.16.0.0", "255.240.0.0")) {
+  return "DIRECT";
+}
+</code></pre>
+<p><strong>myIpAddress</strong></p>
+<p>返回主机的 IP，</p>
+<pre><code class="language-javascript">if (isInNet(myIpAddress(), "10.10.1.0", "255.255.255.0")) {
+  return "PROXY 10.10.5.1:8080";
+}
+</code></pre>
+<p><strong>dnsResolve</strong></p>
+<p>通过 DNS 查询主机 ip，</p>
+<pre><code class="language-javascript">if (isInNet(dnsResolve(host), "10.0.0.0", "255.0.0.0") ||
+    isInNet(dnsResolve(host), "172.16.0.0",  "255.240.0.0") ||
+    isInNet(dnsResolve(host), "192.168.0.0", "255.255.0.0") ||
+    isInNet(dnsResolve(host), "127.0.0.0", "255.255.255.0")) {
+  return "DIRECT";
+}
+</code></pre>
+<p><strong>isPlainHostName</strong></p>
+<p>判断是否为诸如 <code>http://barret/</code>，<code>http://server-name/</code> 这样的主机名，</p>
+<pre><code class="language-javascript">if (isPlainHostName(host)) {
+  return "DIRECT";
+}
+</code></pre>
+<p><strong>isResolvable</strong></p>
+<p>判断主机是否可访问，</p>
+<pre><code class="language-javascript">if (isResolvable(host)) {
+  return "PROXY proxy1.example.com:8080";
+}
+</code></pre>
+<p><strong>dnsDomainLevels</strong></p>
+<p>返回是几级域名，比如 <code>dnsDomainLevels(barretlee.com)</code> 返回的结果就是 1，</p>
+<pre><code class="language-javascript">if (dnsDomainLevels(host) &gt; 0) {
+  return "PROXY proxy1.example.com:8080";
+} else {
+  return "DIRECT";
+}
+</code></pre>
+<p><strong>weekdayRange</strong></p>
+<p>周一到周五，</p>
+<pre><code class="language-javascript">if (weekdayRange("MON", "FRI")) {
+  return "PROXY proxy1.example.com:8080";
+} else {
+  return "DIRECT";
+}
+</code></pre>
+<p><strong>dateRange</strong></p>
+<p>一月到五月，</p>
+<pre><code class="language-javascript">if (dateRange("JAN", "MAR"))  {
+  return "PROXY proxy1.example.com:8080";  
+} else {
+  return "DIRECT";
+}
+</code></pre>
+<p><strong>timeRange</strong></p>
+<p>八点到十八点，</p>
+<pre><code class="language-javascript">if (timeRange(8, 18)) {
+  return "PROXY proxy1.example.com:8080";
+} else {
+  return "DIRECT";  
+}
+</code></pre>
+<p><strong>alert</strong></p>
+<p>据说这个函数可以用来调试，不过我在 Chrome 上测试并未生效，</p>
+<pre><code class="language-javascript">resolved_host = dnsResolve(host);
+alert(resolved_host);
+</code></pre>
+<h3>PAC 文件的安装和注意事项</h3>
+<p>在 Windows 系统中，通过「Internet选项 -&gt; 连接 -&gt; 局域网设置 -&gt; 使用自动配置脚本」可以找到配置处，下放的地址栏填写  PAC 文件的 URI，这个 URI 可以是本地资源路径(file:///)，也可以是网络资源路径(http://)。</p>
+<p>Chrome 中可以在「chrome://settings/ -&gt; 显示高级设置 -&gt; 更改代理服务器设置」中找到 PAC 填写地址。</p>
+<p><strong>需要注意的几点：</strong></p>
+<ul>
+<li>PAC 文件被访问时，返回的文件类型（Content-Type）应该为：<code>application/x-ns-proxy-autoconfig</code>，当然，如果你不写，一般浏览器也能够自动辨别</li>
+<li><code>FindProxyByUrl(url, host)</code> 中的 host 在上述函数对比时无需转换成小写，对大小写不敏感</li>
+<li>没必要对 <code>dnsResolve(host)</code> 的结果做缓存，DNS 在解析的时候会将结果缓存到系统中</li>
+</ul>
+<h3>更多阅读</h3>
+<ul>
+<li><a href="https://zh.wikipedia.org/wiki/%E4%BB%A3%E7%90%86%E8%87%AA%E5%8A%A8%E9%85%8D%E7%BD%AE">代理自动配置 - wikipedia</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Web_Proxy_Autodiscovery_Protocol">Web Proxy Autodiscovery Protocol</a></li>
+<li><a href="https://web.archive.org/web/20070602031929/http://wp.netscape.com/eng/mozilla/2.0/relnotes/demo/proxy-live.html">Navigator Proxy Auto-Config File Format</a></li>
+<li><a href="https://www.ibm.com/developerworks/cn/linux/1309_quwei_wpad/">WPAD 的原理及实现</a></li>
+<li><a href="http://findproxyforurl.com/">findproxyforurl</a></li>
+</ul>

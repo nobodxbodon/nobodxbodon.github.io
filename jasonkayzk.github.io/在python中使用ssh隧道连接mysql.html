@@ -1,0 +1,78 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%9C%A8python%E4%B8%AD%E4%BD%BF%E7%94%A8ssh%E9%9A%A7%E9%81%93%E8%BF%9E%E6%8E%A5mysql.html">在python中使用ssh隧道连接mysql</a></h2>
+<hr/>
+<h2>title: 在python中使用ssh隧道连接mysql
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?23'
+date: 2020-11-22 14:37:12
+categories: Python
+tags: [Python, SSH, MySQL]
+description: 通常为了保证数据库安全，不会允许直接连接数据库，而是需要通过SSH隧道去连接服务器背后的数据库；今天我在用Python连接远程的MySQL时，直连遇到了无法连接的情况，使用了SSH隧道之后解决了问题；</h2>
+<p>通常为了保证数据库安全，不会允许直接连接数据库，而是需要通过SSH隧道去连接服务器背后的数据库；</p>
+<p>今天我在用Python连接远程的MySQL时，直连遇到了无法连接的情况，使用了SSH隧道之后解决了问题；</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>在python中使用ssh隧道连接mysql</h2>
+<p>通常在python中，我们是使用下面的代码连接MySQL的：</p>
+<pre><code class="language-python">import pymysql
+ 
+# 打开数据库连接
+db = pymysql.connect("localhost","testuser","test123","TESTDB" )
+</code></pre>
+<blockquote>
+<p>依赖库PyMySQL；</p>
+<p>安装：</p>
+<p><code>pip install PyMySQL</code></p>
+</blockquote>
+<p>此时直接连接可能会报错：</p>
+<pre><code>ConnectionRefusedError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。
+</code></pre>
+<p>此时，我们需要通过SSH隧道的方式进行访问！</p>
+<p>&lt;br/&gt;</p>
+<p>首先使用SSH隧道需要安装依赖<code>sshtunnel</code>，使用pip安装即可：</p>
+<p><code>pip install sshtunnel</code></p>
+<p>其次，首先创建SSH隧道，然后在创建MySQL连接时，使用隧道即可：</p>
+<pre><code class="language-python">import pymysql
+from sshtunnel import SSHTunnelForwarder
+
+server = SSHTunnelForwarder(
+    ssh_address_or_host=('&lt;服务器地址&gt;', 22),  # 指定ssh登录的跳转机的address
+    ssh_username='root',  # 跳转机的用户
+    ssh_password='your_passwd',  # 跳转机的密码
+    remote_bind_address=('&lt;数据库地址&gt;', 3306))
+server.start()
+db = 'dbname'
+myConfig = pymysql.connect(
+    user="root",
+    passwd="password",
+    host="127.0.0.1",  # 此处必须是 127.0.0.1
+    db=db,
+    port=server.local_bind_port)
+cursor =myConfig.cursor()
+cursor.execute('SELECT COUNT(*) FROM table;')
+print(cursor.fetchall())
+server.stop()
+cursor.close()
+</code></pre>
+<p>也可以使用with语句：</p>
+<pre><code class="language-python">import pymysql
+from sshtunnel import SSHTunnelForwarder
+
+if __name__ == '__main__':
+     with SSHTunnelForwarder(
+        ssh_address_or_host=('&lt;服务器地址&gt;', 22),  # 指定ssh登录的跳转机的address
+        ssh_username='root',  # 跳转机的用户
+        ssh_password='ZHIrensha123456',  # 跳转机的密码
+        remote_bind_address=('&lt;数据库地址&gt;', 3306)) as server:
+        db = 'resultdb'
+        myConfig = pymysql.connect(
+            user="root",
+            passwd="password",
+            host="127.0.0.1", # 此处必须是 127.0.0.1
+            db=db,
+            port=server.local_bind_port)
+        cursor =myConfig.cursor()
+        cursor.execute('SELECT COUNT(*) FROM table;')
+        print(cursor.fetchall())
+        cursor.close()
+</code></pre>
+<p>&lt;br/&gt;</p>

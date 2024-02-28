@@ -1,0 +1,127 @@
+<h2>原文：<a href="https://blog.forecho.com/yii-diao-shi-cuo-wu-yi-ji-yi-xie-ji-qiao-chi-xu-geng-xin.html">Yii调试错误以及一些技巧（持续更新）</a></h2>
+<hr/>
+<h2>title: "Yii调试错误以及一些技巧（持续更新）"
+date: 2013-04-02T10:37:00+08:00
+tags: ["Yii"]
+draft: false
+toc: true</h2>
+<h3>Yii添加不了数据:</h3>
+<pre><code class="language-php">&lt;?php
+$admin = new Admin;        
+$admin-&gt;username = $username; 
+$admin-&gt;password = $password; 
+if($admin-&gt;save()&gt;0){ 
+    echo "添加成功";  
+}else{  
+    echo "添加失败";  
+}
+</code></pre>
+<p>上面是一条最简单的Yii添加数据方法，按着这个来写，能读出数据，但是还是无法写入数据库，利用下面的这段代码我们可以找出错误的原因。</p>
+<pre><code class="language-php">&lt;?php    
+$admin-&gt;save();
+var_dump($admin-&gt;errors);
+exit;
+</code></pre>
+<p>最后一般能找出原因。 <strong>Yii的findAll打印输出问题：</strong></p>
+<pre><code class="language-php">&lt;?php
+$project=Project::model()-&gt;findAll();
+foreach($project as $v){
+    echo $v-&gt;attributes['title'];
+}
+</code></pre>
+<h3>findAll条件查询简写：</h3>
+<pre><code class="language-php">&lt;?php
+$criteria = new CDbCriteria(array(
+    'condition' =&gt; '(id=35 OR id=36) AND commend=2 AND status=2',//多个条件查询
+    'limit' =&gt; '1',
+    'order'=&gt;'id DESC',
+    //'order'=&gt;'RAND()',  //随机筛选
+    ));
+    $video = News::model()-&gt;findAll($criteria);
+</code></pre>
+<p>或者可以这样写：</p>
+<pre><code class="language-php">&lt;?php
+$video = News::model()-&gt;findAll(array(
+    'condition'=&gt;'(id=35 OR id=36) AND commend=2 AND status=2', 
+    'order'=&gt;'id DESC', 
+    'limit'=&gt;1,
+));
+</code></pre>
+<h3>Yii页面包含其它页面方法：</h3>
+<pre><code class="language-php">&lt;?php
+$this-&gt;renderPartial('/comment/_form',array(
+    'model'=&gt;$comment,
+)); ?&gt;
+</code></pre>
+<h3>清空缓存</h3>
+<pre><code class="language-php">&lt;?php
+Setting::model()-&gt;destructCache();
+</code></pre>
+<h3>更新数据</h3>
+<pre><code class="language-php">&lt;?php
+//第一个是根据条件更新多行数据
+//第二个是根据主键更新单条数据
+Posts::model()-&gt;updateAll(array('title'=&gt;'Hello World'), array('condition'=&gt;'user='.Yii::app()-&gt;user-&gt;getId()));
+$count = User::model()-&gt;updateByPk($_POST['userid'], array('name'=&gt;'forecho'));
+if($count&gt;0)
+{
+echo "更新成功";
+}
+</code></pre>
+<h3>关于分页联表查找时，字段重复的问题</h3>
+<pre><code class="language-php">&lt;?php
+$dataProvider=new CActiveDataProvider('Post', array(
+    'criteria'=&gt;array(
+        'condition'=&gt;'status=1',
+        'order'=&gt;'create_time DESC',
+        'with'=&gt;array('author'),//调用relations
+    ),
+    'pagination'=&gt;array(
+        'pageSize'=&gt;20,
+    ),
+));
+</code></pre>
+<p>主表用的是主表名，关联表是关系名. 读取数据的时候，比如说两个表ID字段重复了。要读取第二个ID的话，可以这样读取:</p>
+<pre><code class="language-php">&lt;?php
+$data-&gt;author-&gt;id//根据文章userid关联user表读取id
+</code></pre>
+<h3>添加JS和CSS</h3>
+<pre><code class="language-php">&lt;?php
+Yii::app()-&gt;clientScript-&gt;registerCoreScript(Yii::app()-&gt;homeUrl.'/js/jquery.js');
+Yii::app()-&gt;clientScript-&gt;registerCssFile(Yii::app()-&gt;homeUrl.'/css/style.css');
+</code></pre>
+<h3>验证规则添加情景（页面）</h3>
+<p>Yii的验证规则要写在Model的rules里面，例如下面的这行代码：</p>
+<pre><code class="language-php">&lt;?php
+array('psword, email, old_psword, re_psword, captchal', 'required', 'on'=&gt;'forgot'),
+</code></pre>
+<p>解释一下，有时候不止一个页面会使用同一个Model里面的验证规则，这个时候为了不冲突，我们需要设置情景，上面的<code>'on'=&gt;'forgot'</code>就是自定义的情景。如果要使用的话，还需要要在相应的控制器的action里面添加情景，代码如下：</p>
+<pre><code class="language-php">&lt;?php    
+$model-&gt;scenario = 'forgot'; //设置当前情况下的验证场景
+</code></pre>
+<h3>Yii里设置SESSION过期时间</h3>
+<p>在app config里，设置：</p>
+<pre><code class="language-php">&lt;?php    
+'components'=&gt;array(
+    'session'=&gt;array(
+        'timeout'=&gt;3600,
+    ),
+)
+</code></pre>
+<h3>查询个数</h3>
+<pre><code class="language-php">&lt;?php
+$count = Notification::model()-&gt;countByAttributes(array(
+    'user_id'=&gt; Yii::app()-&gt;user-&gt;uid
+));
+</code></pre>
+<h3>Yii 数据save后得到插入id</h3>
+<pre><code class="language-php">&lt;?php
+$model-&gt;save();
+//得到上次插入的Insert id
+$id = $model-&gt;attributes['id'];
+</code></pre>
+<h3>添加手机号码验证</h3>
+<p>在Model里面的rules添加代码：</p>
+<pre><code class="language-php">&lt;?php    
+array('phone', 'match', 'pattern'=&gt;'^13[0-9]{9}|15[012356789][0-9]{8}|18[0256789][0-9]{8}|147[0-9]{8}$','message'=&gt;'请输入正确的手机号码'),
+</code></pre>

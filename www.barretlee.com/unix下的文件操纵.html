@@ -1,0 +1,69 @@
+<h2>原文：<a href="https://www.barretlee.com/2015-09-07-lsof-in-xnix.html">unix下的文件操纵</a></h2>
+<hr/>
+<p>title: unix下的文件操纵
+warning: true
+categories:</p>
+<ul>
+<li>工具</li>
+<li>Linux
+tags:</li>
+<li>lsof</li>
+<li>linux
+descrition: unix/linux 下的命令太多了，花时间系统去学肯定十分枯燥，平时有需求用到某些命令的时候就会将这个命令所有的功能都看看，这次是为了关掉某个端口的进程，学习了下 lsof 和 kill 命令。
+date: 2015-09-07 22:24:17
+description:</li>
+</ul>
+<hr/>
+<p>unix/linux 下的命令太多了，花时间系统去学肯定十分枯燥，平时有需求用到某些命令的时候就会将这个命令所有的功能都看看，这次是为了关掉某个端口的进程，学习了下 lsof 和 kill 命令。</p>
+<p>&lt;!--more--&gt;</p>
+<p>在 sublime 中配置了开启 node 的快捷方式，<code>Command + B</code> 可以直接执行正在编辑的 js 文件。多次由于操作不当，报错：</p>
+<pre><code>Error: listen EADDRINUSE
+    at exports._errnoException (util.js:746:11)
+    at Server._listen2 (net.js:1156:14)
+    at listen (net.js:1182:10)
+    at Server.listen (net.js:1267:5)
+    ...
+</code></pre>
+<p>意思就是端口被占用 <code>EADDRINUSE</code>，即 "Error: Address in use"，这里为啥唤作 address 而不是 port 被占用，还是有说法的。</p>
+<p>在 linux/unix 下，任何事物都以文件的形式存在，通过文件不仅仅可以访问常规数据，还可以访问网络连接和硬件。如 TCP/UDP 套接字，应用程序都会在系统目录下为期分配一个文件描述符，这个描述符就是程序和系统交互的接口。</p>
+<h3>lsof 命令</h3>
+<p><code>lsof</code> 是 *nix 下常用的一个命令，全称为 "list open file"，列举被打开的文件描述符的相关信息，包括：</p>
+<ul>
+<li><code>-u</code> 用户，如 root</li>
+<li><code>-c</code> 进程名，如 chrome</li>
+<li><code>-g</code> gid</li>
+<li><code>-p</code> pid</li>
+<li><code>-a</code> and 的意思，满足多个条件过滤</li>
+<li><code>-i</code> 端口号</li>
+</ul>
+<p>还有几个就不列举了，对一般用户来说并不常用。一次命令的执行，程序会吐出这些信息：</p>
+<pre><code>➜  blogsys ✗ lsof -i :4001
+COMMAND     PID      USER   FD   TYPE NODE NAME
+Google    57881 barretlee  113u  IPv4 TCP localhost:52445-&gt;localhost:newoak (ESTABLISHED)
+node      68004 barretlee   11u  IPv6 TCP *:newoak (LISTEN)
+node      68004 barretlee   18u  IPv6 TCP localhost:newoak-&gt;localhost:52445 (ESTABLISHED)
+</code></pre>
+<p>中间还有一个 DEVICE 和 SIZE，被我删掉了。从上面可以看到包含如下信息：</p>
+<ul>
+<li>COMMAND 对应我们上面提到的 -c</li>
+<li>PID     对应 -p</li>
+<li>USER    对应 -u</li>
+<li>NAME    被打开文件的名字</li>
+<li>FD、TYPE、NODE 就不细说了，可以看下面两篇参考文章</li>
+</ul>
+<p>通过前面的参数，可以筛选被打开的文件。</p>
+<h3>关闭开启的端口</h3>
+<p>通过 lsof 的端口查找参数找到 pid 或者 command：</p>
+<pre><code class="language-bash">lsof -i :4001
+</code></pre>
+<p>比如我们找到的 command 是 node， pid 为 73220，则可以通过下面的方式关闭端口：</p>
+<pre><code>kill -p 73220
+pkill node
+</code></pre>
+<p>另外还有 killall、xkill 等命令，可以阅读 <a href="http://www.thegeekstuff.com/2009/12/4-ways-to-kill-a-process-kill-killall-pkill-xkill/">4 Ways to Kill a Process – kill, killall, pkill, xkil</a></p>
+<h3>参考文章</h3>
+<ul>
+<li><a href="http://blog.csdn.net/guoguo1980/article/details/2324454">linux lsof详解</a></li>
+<li><a href="http://blog.csdn.net/jkh753/article/details/10060423">linux 系统监控、诊断工具之 lsof 用法简介</a></li>
+<li><a href="http://www.thegeekstuff.com/2009/12/4-ways-to-kill-a-process-kill-killall-pkill-xkill/">4 Ways to Kill a Process – kill, killall, pkill, xkil</a></li>
+</ul>

@@ -1,0 +1,82 @@
+<h2>原文：<a href="https://blog.forecho.com/yii-duo-biao-shi-yong-yi-ge-model-wen-jian.html">Yii 多表使用一个Model文件</a></h2>
+<hr/>
+<h2>title: "Yii 多表使用一个Model文件"
+date: 2013-08-03T14:20:00+08:00
+categories:
+draft: false
+toc: true</h2>
+<p>表结构一样，现在需要把这些表全部都的数据都查出来，使用一个Model文件。 首先要声明三个私有变量：</p>
+<pre><code>private $tableName = 'fr_goods';//默认表名
+private static $_models=array();
+private $_md;</code></pre>
+<p>添加 构造函数:创建和初始化对象成员属性，代码如下：</p>
+<pre><code>public function __construct($scenario='search', $tableName = null)
+{
+    if($tableName !== null)
+        $this-&gt;tableName = $tableName;
+    parent::__construct($scenario);
+}</code></pre>
+<p>把默认的function tableName() 改为如下：</p>
+<pre><code>public function tableName()
+{
+     return $this-&gt;tableName;
+
+}</code></pre>
+<p>这个时候你调用的时候，输出tableName的时候，虽然成功了，但是数据还是没有变。 下面我们要改变数据元才行。   把默认生成的 function model()，改成如下代码：</p>
+<pre><code>public static function model($tableName = false, $className=__CLASS__)
+{
+    if($tableName === null) $className=null; // 这个字符串将节省内部CActiveRecord的功能
+    if(!$tableName)
+        return parent::model($className);
+
+    if(isset(self::$_models[$tableName.$className]))
+        return self::$_models[$tableName.$className];
+    else
+    {
+        $model=self::$_models[$tableName.$className]=new $className(null);
+        $model-&gt;tableName = $tableName;
+
+        $model-&gt;_md=new CActiveRecordMetaData($model);
+        $model-&gt;attachBehaviors($model-&gt;behaviors());
+
+        return $model;
+    }
+}</code></pre>
+<p>最关键的是添加下面这行代码：</p>
+<pre><code>public function getMetaData()
+{
+    if($this-&gt;_md!==null)
+        return $this-&gt;_md;
+    else
+        return $this-&gt;_md=static::model($this-&gt;tableName())-&gt;_md;
+}</code></pre>
+<p>现在配置完成。下面我们写一个调用的小例子。 下面是Model的function search()代码：</p>
+<pre><code>public function search()
+{
+    // Warning: Please modify the following code to remove attributes that
+    // should not be searched.
+
+    $criteria=new CDbCriteria;
+
+    $criteria-&gt;compare('id',$this-&gt;id,true);
+    $criteria-&gt;compare('goods_sn',$this-&gt;goods_sn,true);
+    $criteria-&gt;compare('language_ids',$this-&gt;language_ids,true);
+    $criteria-&gt;compare('site_ids',$this-&gt;site_ids,true);
+
+    return new CActiveDataProvider($this, array(
+        'criteria'=&gt;$criteria,
+    ));
+}</code></pre>
+<p>Controller文件代码如下：</p>
+<pre><code>public function actionAdmin()
+{
+    $model=new KindsGoods('search', 'es_goods');//es_goods表名
+    $model-&gt;unsetAttributes();  // clear any default values
+    if(isset($_GET['KindsGoods']))
+        $model-&gt;attributes=$_GET['KindsGoods'];
+
+    $this-&gt;render('admin',array(
+        'model'=&gt;$model,
+    ));
+}</code></pre>
+<p>这个时候输出的结果如果是es_goods表的数据，那就说明你成功了。   参考文章：<a href="http://stackoverflow.com/questions/16399561/yii-one-model-for-multiple-tables">http://stackoverflow.com/questions/16399561/yii-one-model-for-multiple-tables</a></p>

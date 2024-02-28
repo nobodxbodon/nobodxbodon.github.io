@@ -1,0 +1,141 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E6%80%BB%E7%BB%93%E4%B8%80%E4%B8%AA%E5%9C%A8%E6%8A%80%E6%9C%AF%E4%BA%A4%E6%B5%81%E7%BE%A4%E4%B8%AD%E8%A7%A3%E5%86%B3%E7%BE%A4%E5%8F%8B%E7%9A%84%E9%97%AE%E9%A2%98.html">总结一个在技术交流群中解决群友的问题</a></h2>
+<hr/>
+<h2>title: 总结一个在技术交流群中解决群友的问题
+cover: https://img.paulzzh.com/touhou/random?21
+toc: true
+date: 2020-03-03 21:45:02
+categories: 程序人生
+tags: [Lambda表达式, 程序人生]
+description: 前两天在Java技术交流群中有人问有谁会Lambda表达式的，我看了一下给解决了, 问题挺有意思的, 就在这里总结一下</h2>
+<p>前两天在Java技术交流群中有人问有谁会Lambda表达式的，我看了一下给解决了, 问题挺有意思的, 就在这里总结一下</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>问题是这样的：</p>
+<p>在一个Set中保存的是Json字符串，希望通过Lambda表达式实现Json转JSONObject，然后对给定字段排序，然后修改时间戳为日期，最后返回List类型</p>
+<p>其实在Java中用Lambda还是很简洁的，就写了一下：</p>
+<pre><code class="language-java">import com.alibaba.fastjson.JSON;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+
+public class LambdaSort {
+
+    private static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
+
+    public static void main(String[] args) {
+        Set&lt;String&gt; set = new HashSet&lt;&gt;();
+
+        set.add("{\n" +
+                "  \"name\": \"test1\",\n" +
+                "  \"timeStamp\": 1123451235\n" +
+                "}");
+        set.add("{\n" +
+                "  \"name\": \"test2\",\n" +
+                "  \"timeStamp\": 12351251235\n" +
+                "}");
+        set.add("{\n" +
+                "  \"name\": \"test3\",\n" +
+                "  \"timeStamp\": 31235123512\n" +
+                "}");
+
+        List&lt;Entity&gt; list = new LinkedList&lt;&gt;();
+
+        set.stream().map(x -&gt; JSON.parseObject(x, Entity.class))
+                .sorted((x, y) -&gt; y.getTimeStamp().compareTo(x.getTimeStamp()))
+                .forEach(x -&gt; {
+                    x.setTimeStamp(timeStamp2Date(x.getTimeStamp(), DATE_FORMAT));
+                    list.add(x);
+                });
+
+        System.out.println(list);
+    }
+
+    /**
+     * 时间戳转换成日期格式字符串
+     *
+     * @param seconds 精确到秒的字符串
+     * @param format  日期格式
+     */
+    public static String timeStamp2Date(String seconds, String format) {
+        if (seconds == null || seconds.isEmpty() || seconds.equals("null")) {
+            return "";
+        }
+        if (format == null || format.isEmpty()) format = "yyyy-MM-dd HH:mm:ss";
+        SimpleDateFormat sdf = new SimpleDateFormat(format);
+        return sdf.format(new Date(Long.parseLong(seconds + "000")));
+    }
+
+    private static class Entity {
+        private String name;
+        private String timeStamp;
+
+        public Entity() {
+        }
+
+        public Entity(String name, String timeStamp) {
+            this.name = name;
+            this.timeStamp = timeStamp;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getTimeStamp() {
+            return timeStamp;
+        }
+
+        public void setTimeStamp(String timeStamp) {
+            this.timeStamp = timeStamp;
+        }
+
+        @Override
+        public String toString() {
+            return "Entity{" +
+                    "name='" + name + '\'' +
+                    ", timeStamp='" + timeStamp + '\'' +
+                    '}';
+        }
+    }
+}
+</code></pre>
+<p>上面通过一个静态内部类Entity接收Json为实体类，Lambda的核心方法也就几行：</p>
+<p>先通过map将String转为Entity，然后通过sort排序(<strong>注意这个排序</strong>)，然后对于每个Entity设置转换字段，最后输出</p>
+<pre><code class="language-java">set.stream().map(x -&gt; JSON.parseObject(x, Entity.class))
+        .sorted((x, y) -&gt; y.getTimeStamp().compareTo(x.getTimeStamp()))
+        .forEach(x -&gt; {
+            x.setTimeStamp(timeStamp2Date(x.getTimeStamp(), DATE_FORMAT));
+            list.add(x);
+        });
+</code></pre>
+<p>调用后输出：</p>
+<pre><code>[
+Entity{name='test3', timeStamp='2959-10-20 23:11:52'}, 
+Entity{name='test2', timeStamp='2361-05-25 15:07:15'}, 
+Entity{name='test1', timeStamp='2005-08-08 05:47:15'}
+]
+</code></pre>
+<p>但是这个群友又问我，为什么把<code>.sort()</code>改为：</p>
+<pre><code class="language-java">.sorted(Comparator.comparing(x -&gt; x.getTimeStamp()).reversed())
+</code></pre>
+<p>就报错了？</p>
+<p>我看了一下，结果发现：<strong>当调用<code>.reverse()</code>之后Lambda返回的是Object类型！</strong></p>
+<p>此时使用强转类型转换：</p>
+<pre><code class="language-java">.sorted(Comparator.comparing(x -&gt; ((Entity) x).getTimeStamp()).reversed())
+</code></pre>
+<p>结果是正常的！</p>
+<p>或者也可以使用静态引用</p>
+<pre><code class="language-java">.sorted(Comparator.comparing(Entity::getTimeStamp).reversed())
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
+<p>内容和博客同步更新~</p>
+<p>&lt;br/&gt;</p>

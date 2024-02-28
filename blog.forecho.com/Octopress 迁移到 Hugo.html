@@ -1,0 +1,158 @@
+<h2>原文：<a href="https://blog.forecho.com/octopress-migrate-to-hugo.html">Octopress 迁移到 Hugo</a></h2>
+<hr/>
+<h2>title: "Octopress 迁移到 Hugo"
+date: 2020-01-02T18:48:00+08:00
+tags: ["Octopress"]
+draft: false
+toc: true</h2>
+<h2>引言</h2>
+<p>终于还是受不了 Octopress 了，准备迁移到 <a href="https://gohugo.io/">Hugo</a>，受不了 Octopress 是因为：</p>
+<ul>
+<li>markdown code 语法支持不好，很多时候莫名其妙的 Build 失败，让人抓狂。（最主要原因）</li>
+<li>生成速度太慢，目前生成一次要2分多钟了</li>
+<li>Octopress 项目已经没人维护了</li>
+</ul>
+<p>&lt;!--more--&gt;</p>
+<h2>安装 Hugo</h2>
+<p>如果是 Mac 的话直接：</p>
+<pre><code class="language-sh">brew install hugo
+hugo new site blog
+cd blog
+git init
+git submodule add https://github.com/budparr/gohugo-theme-ananke.git themes/ananke
+echo 'theme = "ananke"' &gt;&gt; config.toml
+</code></pre>
+<p>然后就可以用下面命令生成文章了：</p>
+<pre><code class="language-sh">hugo new posts/my-first-post.md
+</code></pre>
+<p>开启服务</p>
+<pre><code class="language-sh">hugo server -D
+</code></pre>
+<p>然后访问 <a href="http://localhost:1313/">http://localhost:1313/</a> 就可以看到你的 Hugo 博客了。</p>
+<h2>迁移文章</h2>
+<p>官方有<a href="https://gohugo.io/tools/migrations/">迁移指南</a>，Octopress 迁移到 Hugo 官方推荐使用 <a href="https://github.com/codebrane/octohug">octohug</a>，但是我使用下来发现不好用，迁移完之后有小问题。于是我找了一篇文章，结合文章给的代码，自己完善了功能，终于达到我要的效果，参考代码如下：</p>
+<pre><code class="language-go">package main
+
+import (
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"regexp"
+	"strings"
+)
+
+func main() {
+	var src, dst string
+	flag.StringVar(&amp;src, "src", "", "source")
+	flag.StringVar(&amp;dst, "dst", "", "destination")
+	flag.Parse()
+
+	if _, err := os.Stat(src); os.IsNotExist(err) {
+		panic("source directory does not exist")
+	}
+
+	if _, err := os.Stat(dst); os.IsNotExist(err) {
+		if err := os.Mkdir(dst, os.ModePerm); err != nil {
+			panic(err)
+		}
+	}
+
+	files, err := ioutil.ReadDir(src)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, file := range files {
+		filename := file.Name()
+		re := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-(.*).m(arkdown|d)`)
+		// Ignore non-matching filenames (i.e. do no dereference nil)
+		if matches := re.FindStringSubmatch(filename); matches == nil {
+			continue
+		}
+
+		in := fmt.Sprintf("%s%s", src, filename)
+		data, err := ioutil.ReadFile(in)
+		if err != nil {
+			panic(err)
+		}
+
+		re = regexp.MustCompile(`(\d{4}-\d{2}-\d{2})-(.*)`)
+		newFilename := re.ReplaceAllString(filename, "$2")
+
+		re = regexp.MustCompile(`---\n([\s\S]*)---\n([\s\S]*)`)
+		matches := re.FindSubmatch(data)
+		header := string(matches[1])
+		body := string(matches[2])
+		draftline := "draft: false\n"
+
+		// date
+		re = regexp.MustCompile(`date: (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}).*\n`)
+		header = re.ReplaceAllString(header, `date: ${1}T$2:00+08:00`+"\n")
+
+		// layout
+		re = regexp.MustCompile(`layout: .*\n`)
+		header = re.ReplaceAllString(header, "")
+
+		// comments
+		re = regexp.MustCompile(`comments: .*\n`)
+		header = re.ReplaceAllString(header, "")
+
+		// categories
+		re = regexp.MustCompile(`categories: (.*)\n`)
+		matches = re.FindSubmatch([]byte(header))
+		if categories := string(matches[1]); categories != "" {
+			tags := strings.ReplaceAll(categories, " ", "\", \"")
+			header = re.ReplaceAllString(header, fmt.Sprintf("tags: [\"%s\"] \n", tags))
+		}
+
+		more := "toc: true\n"
+		header = fmt.Sprintf("%s%s%s", header, draftline, more)
+
+		content := fmt.Sprintf("---\n%s---\n%s", header, body)
+
+		// toc
+		toc := "* list element with functor item\n{:toc}\n"
+		content = strings.ReplaceAll(content, toc, "")
+
+		content = strings.ReplaceAll(content, "{{ .Site.BaseURL }}", "{{ .Site.BaseURL }}")
+
+		out := dst + newFilename
+		fmt.Printf("%s -&gt; %s\n", in, out)
+
+		if err := ioutil.WriteFile(out, []byte(content), 0644); err != nil {
+			panic(err)
+		}
+	}
+}
+</code></pre>
+<h3>使用方式</h3>
+<p>在 Octopress 博客根目录下新建一个 <code>main.go</code> 文件，然后把上面代码拷贝进去，然后执行下面代码完成迁移：</p>
+<pre><code class="language-sh">go run main.go -src octopress-blog/blog/_posts/ -dst hugo-blog/content/posts/
+</code></pre>
+<h2>最后</h2>
+<p>这篇文章主要是分享 Octopress 迁移 Hugo 文章的经验，上面的迁移代码不复杂，有一点点 Golang 经验应该是看得懂的，你可以根据自己的需求修改代码。</p>
+<h2>使用感受对比</h2>
+<h3>博客源码结构</h3>
+<p>Hugo 的目录结构要比 Octopress 简单的多。主题有一个专门的文件夹存放，这样使得博客源码显得干净整洁。</p>
+<h3>CI 时间</h3>
+<p>同样都配置了 CI ，使用 Travis-CI 自动生成静态文件，自动更新博客。但是身为 Golang 开发的 Hugo，明显要比基于 Ruby 开发的 Octopress 要快的多，之前要2分多钟，现在只要1分钟左右就可以了。</p>
+<p><img alt="KPA3Wt" src="https://blog-1251237404.cos.ap-guangzhou.myqcloud.com/KPA3Wt.png"/></p>
+<h3>功能</h3>
+<p>Octopress 我已经很久没完了，但是最近我自己写了一个 Hugo 主题，明显感觉到 Hugo 要比 Octopress 功能多。官方也有一个基础的 <a href="https://gohugo.io/templates/internal/">templates</a></p>
+<h2>总结</h2>
+<p>这次迁移总的来说 Hugo 各方面基本上都完胜 Octopress，就着这次迁移博客的时候顺便做了以下几件事情：</p>
+<ul>
+<li>把所有 URL 都转为小写了（虽然以前的部分 URL 可能会收到影响）</li>
+<li>放弃通过分类来管理文章，只使用标签来管理（虽然一篇文章分类也允许有多个）。</li>
+<li>自己写了一个 <a href="https://github.com/forecho/hugo-theme-echo">Hugo 主题</a>，通过写这个主题实现了几个自己一直想要的功能：<ul>
+<li>优化了 SEO，现在分享我的文章到 Twitter 上会显示卡片模式链接</li>
+<li>文章详情会自动列出相关文章（Hugo 自带这个功能，太棒了）</li>
+<li>通过给文章打特定的标签，实现热门文章列表</li>
+</ul>
+</li>
+</ul>
+<h2>参考链接</h2>
+<ul>
+<li><a href="https://miguelmota.com/blog/migrating-from-jekyll-to-hugo/">Migrating from Jekyll to Hugo</a></li>
+</ul>

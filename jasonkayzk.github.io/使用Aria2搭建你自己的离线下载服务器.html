@@ -1,0 +1,89 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8Aria2%E6%90%AD%E5%BB%BA%E4%BD%A0%E8%87%AA%E5%B7%B1%E7%9A%84%E7%A6%BB%E7%BA%BF%E4%B8%8B%E8%BD%BD%E6%9C%8D%E5%8A%A1%E5%99%A8.html">使用Aria2搭建你自己的离线下载服务器</a></h2>
+<hr/>
+<h2>title: 使用Aria2搭建你自己的离线下载服务器
+cover: https://img.paulzzh.com/touhou/random?62
+date: 2020-05-02 16:14:20
+categories: 服务自建
+toc: true
+tags: [服务自建, Aria2]
+description: 上一篇我们讲述了如何安装和配置Aria2, 并使用Aria2下载; 这一篇我们在此基础之上讲解如何使用Aria2搭建离线下载服务器;</h2>
+<p>上一篇我们讲述了如何安装和配置Aria2, 并使用Aria2下载; 这一篇我们在此基础之上讲解如何使用Aria2搭建离线下载服务器;</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>&lt;!-- **目录:** --&gt;</p>
+<p>&lt;!-- toc --&gt;</p>
+<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+<h2>使用Aria2搭建你自己的离线下载服务器</h2>
+<p>有时我们可能不想浪费本地的带宽去下载, 或者现在使用的是手机, 不想浪费流量; 并且这些资源可以预先被下载, 稍后有需要的时候再去取, 这时可以用到离线下载;</p>
+<p>在上一篇关于Aria2的文章:</p>
+<p><a href="https://jasonkayzk.github.io/2020/05/01/Aria2%E5%AE%89%E8%A3%85%E4%B8%8E%E9%85%8D%E7%BD%AE/">Aria2安装与配置</a></p>
+<p>讲解了Aria2的下载, 配置以及一般的使用方法;</p>
+<p>而Aria2可以使用JSON-RPC(一个无状态且轻量级的远程过程调用（RPC）传送协议，其传递内容透过 <a href="https://baike.baidu.com/item/JSON">JSON</a> 为主)来接收一个RPC调用;</p>
+<p>这样我们可以通过向部署在服务器端的Aria2发送RPC调用来在服务器上实现离线下载;</p>
+<h3>前期准备</h3>
+<p>首先要在远端服务器下载并启动Aria2, 这个前文已经讲过了;</p>
+<p>需要注意的是Aria2的配置:</p>
+<p>| <strong>配置名称</strong>                                                 | <strong>配置参考值</strong>                                               | <strong>备注</strong>                                                     |
+| :----------------------------------------------------------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
+| <strong>bt-tracker</strong>                                               | 可在Github中查看最新的:&lt;br /&gt;https://github.com/ngosang/trackerslist | 这个一定要配置&lt;br /&gt;离线下载的速度在一定程度上也取决于tracker的活跃程度; |
+| <strong>dir</strong>                                                      | /data                                                        | 默认的下载文件夹;&lt;br /&gt;推荐配置, 便于管理                    |
+| <strong>continue</strong>                                                 | true                                                         |                                                              |
+| <strong>max-connection-per-server</strong>                                | 15                                                           | 同一服务器连接数&lt;br /&gt;不建议很大                             |
+| <strong>split</strong>                                                    | 16                                                           | 单个任务最大线程数&lt;br /&gt;可根据服务器性能修改                 |
+| <strong>max-overall-upload-limit</strong>                                 | 20kb                                                         | 整体上传速度限制                                             |
+| <strong>max-upload-limit</strong>                                         | 5kb                                                          | 单个任务上传速度限制                                         |
+| <strong>enable-rpc&lt;br /&gt;rpc-allow-origin-all&lt;br /&gt;rpc-listen-all</strong> | true                                                         | 为了能够进行Web端管理, 需要开启RPC                           |
+| <strong>rpc-listen-port</strong>                                          | 6800                                                         | 默认6800, 可根据需要修改&lt;br /&gt;在Web配置时需要用到            |
+| <strong>rpc-secret</strong>                                               | xxxxxx                                                       | RPC连接令牌&lt;br /&gt;早期版本使用username和passwd&lt;br /&gt;新版本建议使用rpc-secret配置 |
+| <strong>enable-dht</strong>                                               | true                                                         | 打开DHT功能&lt;br /&gt;优化BT下载                                  |
+| <strong>seed-ratio</strong>                                               | 1.0                                                          | 当种子的分享率达到这个数时, 自动停止做种&lt;br /&gt;0为一直做种, 默认:1.0&lt;br /&gt;不建议开很高&lt;br /&gt;因为当下载完毕时未达到seed-ratio时下载并不停止; |</p>
+<p>需要特别注意的是:</p>
+<ul>
+<li><strong>rpc-secret</strong>: 用于登录的令牌一定要配置, 否则可能被他人恶意下载;</li>
+</ul>
+<p>在配置rpc-secret之后, JSON-RPC Path为:</p>
+<p><code>http://token:rpc-secret@hostname:rpc-listen-port/jsonrpc</code></p>
+<p>例如:</p>
+<p><code>http://token:123456@127.0.0.1:6800/jsonrpc</code></p>
+<ul>
+<li><strong>seed-ratio</strong></li>
+</ul>
+<p>默认情况下为1.0;</p>
+<p>在下载完毕之后, Aria2并不会停止下载, 而是继续上传一次资源完整的资源供他人下载, 然后再退出并保存DHT;</p>
+<p><strong>如果设置为0时则永远不会退出下载, 而是继续为别人服务!</strong></p>
+<p>&lt;br/&gt;</p>
+<h3>远程管理</h3>
+<p>服务器端使用:</p>
+<pre><code class="language-bash">aria2c --conf-path=/etc/aria2/aria2.conf -D
+</code></pre>
+<p>后台启动服务之后我们一般还需要Web面板;</p>
+<p>前端web面板一般使用webui-aria2和YAAW(当然还有AriaNG)</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p>这两个的架设方法都很简单，基本上就是绑定域名之后丢到网站文件夹里，没啥特殊环境要求<strong>(直接本地使用YAAW时甚至不需要使用Apache静态Server, 直接打开index.html即可)</strong></p>
+<p>当然你也可以使用别人架设的，<a href="http://aria2c.com/">aria2c.com</a></p>
+</blockquote>
+<p>简单的使用就是直接在上面添加任务，但是这对一些网盘之类的可能不太方便，可以使用一些插件:</p>
+<ul>
+<li>全功能插件，基本上支持大部分网盘：<a href="https://chrome.google.com/webstore/detail/mblmc%E8%BF%85%E9%9B%B7%E7%A6%BB%E7%BA%BFqq%E6%97%8B%E9%A3%8E%E7%99%BE%E5%BA%A6%E7%BD%91%E7%9B%98360%E4%BA%91%E7%9B%98%E7%AD%89ar/iamaphkapjbdhhpdapkalhanifedeged?utm_source=chrome-app-launcher-info-dialog">MBL&amp;MC迅雷离线/QQ旋风/百度网盘/360云盘等aria2增强脚本</a></li>
+<li>115网盘支持插件：<a href="https://chrome.google.com/webstore/detail/115exporter/ojafklbojgenkohhdgdjeaepnbjffdjf?utm_source=chrome-app-launcher-info-dialog">115下载助手</a></li>
+<li>~~百度网盘支持插件：<a href="https://chrome.google.com/webstore/detail/baiduexporter/mjaenbjdjmgolhoafkohbhhbaiedbkno?utm_source=chrome-app-launcher-info-dialog">百度网盘助手</a>~~</li>
+<li>迅雷离线支持插件：<a href="https://chrome.google.com/webstore/detail/thunderlixianassistant/eehlmkfpnagoieibahhcghphdbjcdmen?utm_source=chrome-app-launcher-info-dialog">迅雷离线助手</a></li>
+</ul>
+<p>我给出的都是chrome应用商店的地址，访问需要某些特殊的姿势。</p>
+<p>&lt;br/&gt;</p>
+<h3>后记</h3>
+<p>在服务器端离线下载之后, 可以通过Plex实现私人的在线片库, 或者通过类似FileZilla将服务器的文件传送回本地保存;</p>
+<p>除了使用Aria2实现离线下载之外, 也可以使用docker-thunder-xware部署迅雷的离线下载;</p>
+<p>迅雷远程下载官网:</p>
+<p>http://yuancheng.xunlei.com/login.html</p>
+<p>有机会再在博客更新关于部署docker-thunder-xware的文章;</p>
+<p>&lt;br/&gt;</p>
+<h2>附录</h2>
+<p>文章参考:</p>
+<ul>
+<li><a href="http://www.senra.me/download-artifact-aria2-create-your-own-offline-download-server/">下载神器——Aria2，打造你自己的离线下载服务器</a></li>
+</ul>
+<p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
+<p>内容和博客同步更新~</p>
+<p>&lt;br/&gt;</p>

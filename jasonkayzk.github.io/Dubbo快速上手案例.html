@@ -1,0 +1,571 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Dubbo%E5%BF%AB%E9%80%9F%E4%B8%8A%E6%89%8B%E6%A1%88%E4%BE%8B.html">Dubbo快速上手案例</a></h2>
+<hr/>
+<h2>title: Dubbo快速上手案例
+toc: true
+date: 2019-12-06 18:23:55
+cover: https://img.paulzzh.com/touhou/random?12
+categories: Dubbo
+tags: [Dubbo]
+description: 最近开始学习Dubbo框架, 这一篇主要总结了首次使用Dubbo并集成Spring的一个快速上手的例子</h2>
+<p>最近开始学习Dubbo框架, 这一篇主要总结了首次使用Dubbo并集成Spring的一个快速上手的例子</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>所需环境</h2>
+<p><strong>zookeeper作为dubbo的注册中心，dubbo服务提供方和消费方都需要在zookeeper注册中心注册</strong></p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>注: 本案例选择在Docker中运行Zookeeper</strong></p>
+<p>具体的docker启动Zookeeper服务的命令如下:</p>
+<pre><code class="language-bash">docker run -d -p 2181:2181 \
+ -v /home/zk/workspace/dubbo_learn/quick-start/zookeeper/data/:/data/ \
+ --name=zookeeper \
+ --privileged zookeeper
+</code></pre>
+<p>&lt;font color="#ff0000"&gt;<strong>使用时请将具体Zookeeper保存目录修改为你的实际目录</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2>开始搭建</h2>
+<h3>服务提供方和消费方都需要的包</h3>
+<p>这里我新建maven工程为pom工程，将共同的项目依赖写到pom.xml中</p>
+<p><strong>① 总的项目结构</strong></p>
+<pre><code>zk@jasonkay:~/workspace/dubbo_learn/quick-start$ tree
+.
+├── docker_cmd.sh
+├── dubbo-api
+│   ├── dubbo-provider.iml
+│   ├── pom.xml
+│   ├── src
+│   │   └── main
+│   │       ├── java
+│   │       │   └── top
+│   │       │       └── jasonkayzk
+│   │       │           └── service
+│   │       │               └── DemoService.java
+│   │       └── resources
+├── dubbo-consumer
+│   ├── dubbo-provider.iml
+│   ├── pom.xml
+│   ├── src
+│   │   └── main
+│   │       ├── java
+│   │       │   └── top
+│   │       │       └── jasonkayzk
+│   │       │           └── ConsumerTest.java
+│   │       └── resources
+│   │           ├── dubbo-consumer.xml
+│   │           ├── log4j.properties
+│   │           └── springmvc.xml
+├── dubbo-provider
+│   ├── dubbo-provider.iml
+│   ├── pom.xml
+│   ├── src    原文链接：https://blog.csdn.net/jingyangV587/article/details/84986577
+│   │   └── main
+│   │       ├── java
+│   │       │   └── top
+│   │       │       └── jasonkayzk
+│   │       │           ├── ProviderTest.java
+│   │       │           └── service
+│   │       │               └── DemoServiceImpl.java
+│   │       └── resources
+│   │           ├── dubbo-provider.xml
+│   │           ├── log4j.properties
+│   │           └── springmvc.xml
+├── pom.xml
+
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>② pom.xml文件内容</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;groupId&gt;top.jasonkayzk&lt;/groupId&gt;
+    &lt;artifactId&gt;quick-start&lt;/artifactId&gt;
+    &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;packaging&gt;pom&lt;/packaging&gt;
+
+
+    &lt;modules&gt;
+        &lt;module&gt;dubbo-api&lt;/module&gt;
+        &lt;module&gt;dubbo-provider&lt;/module&gt;
+        &lt;module&gt;dubbo-consumer&lt;/module&gt;
+    &lt;/modules&gt;
+
+    &lt;properties&gt;
+        &lt;dubbo.version&gt;2.5.3&lt;/dubbo.version&gt;
+        &lt;dubbox.version&gt;2.8.4&lt;/dubbox.version&gt;
+        &lt;spring.version&gt;5.2.2.RELEASE&lt;/spring.version&gt;
+        &lt;java.version&gt;11&lt;/java.version&gt;
+        &lt;project.build.sourceEncoding&gt;UTF-8&lt;/project.build.sourceEncoding&gt;
+    &lt;/properties&gt;
+
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;com.alibaba&lt;/groupId&gt;
+            &lt;artifactId&gt;dubbo&lt;/artifactId&gt;
+            &lt;version&gt;${dubbo.version}&lt;/version&gt;
+            &lt;exclusions&gt;
+                &lt;exclusion&gt;
+                    &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+                    &lt;artifactId&gt;spring&lt;/artifactId&gt;
+                &lt;/exclusion&gt;
+            &lt;/exclusions&gt;
+        &lt;/dependency&gt;
+
+        &lt;dependency&gt;
+            &lt;groupId&gt;com.github.sgroschupf&lt;/groupId&gt;
+            &lt;artifactId&gt;zkclient&lt;/artifactId&gt;
+            &lt;version&gt;0.1&lt;/version&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- spring相关 --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-core&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-beans&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-context&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-jdbc&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-web&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-webmvc&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-aop&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-tx&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-orm&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-context-support&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-test&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-jms&lt;/artifactId&gt;
+            &lt;version&gt;${spring.version}&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.aspectj&lt;/groupId&gt;
+            &lt;artifactId&gt;aspectjrt&lt;/artifactId&gt;
+            &lt;version&gt;1.6.11&lt;/version&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.aspectj&lt;/groupId&gt;
+            &lt;artifactId&gt;aspectjweaver&lt;/artifactId&gt;
+            &lt;version&gt;1.6.11&lt;/version&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+    &lt;build&gt;
+        &lt;plugins&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+                &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+                &lt;version&gt;3.8.0&lt;/version&gt;
+                &lt;configuration&gt;
+                    &lt;target&gt;11&lt;/target&gt;
+                    &lt;source&gt;11&lt;/source&gt;
+                &lt;/configuration&gt;
+            &lt;/plugin&gt;
+        &lt;/plugins&gt;
+    &lt;/build&gt;
+
+&lt;/project&gt;
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>说明:</strong></p>
+<p>本案例中主要的依赖有:</p>
+<ul>
+<li><strong>JDK 11</strong></li>
+<li><strong>dubbo: 2.5.3</strong></li>
+<li><strong>dubbox: 2.8.4</strong></li>
+<li><strong>spring: 5.2.2.RELEASE(目前最新)</strong></li>
+<li><strong>zkclient: 0.1</strong></li>
+<li><strong>aspectj: 1.6.11</strong></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>一. dubbo-api模块</h3>
+<p>dubbo-api中定义服务接口</p>
+<p>&lt;font color="#ff0000"&gt;<strong>注意: (服务提供方和消费方都需要依赖这个项目)</strong>&lt;/font&gt;</p>
+<p>模块结构如下:</p>
+<pre><code>├── pom.xml
+├── src
+│   └── main
+│       ├── java
+│       │   └── top
+│       │       └── jasonkayzk
+│       │           └── service
+│       │               └── DemoService.java
+│       └── resources
+...
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>① 在pom.xml中声明parent</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;artifactId&gt;dubbo-api&lt;/artifactId&gt;
+    &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;packaging&gt;jar&lt;/packaging&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;top.jasonkayzk&lt;/groupId&gt;
+        &lt;artifactId&gt;quick-start&lt;/artifactId&gt;
+        &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;/parent&gt;
+
+&lt;/project&gt;
+</code></pre>
+<p>&lt;br&gt;</p>
+<p><strong>② 定义服务接口DemoService</strong></p>
+<pre><code class="language-java">package top.jasonkayzk.service;
+
+/**
+ * 公共服务接口, 生产者和消费者都需要依赖这个项目
+ * @author zk
+ */
+public interface DemoService {
+
+    /**
+     * @param name 名称
+     *
+     * @return 返回名称, 作为测试
+     */
+    String sayHello(String name);
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>二. dubbo-provider 服务提供方模块</h3>
+<p>模块结构:</p>
+<pre><code>├── pom.xml
+├── src
+│   └── main
+│       ├── java
+│       │   └── top
+│       │       └── jasonkayzk
+│       │           ├── ProviderTest.java
+│       │           └── service
+│       │               └── DemoServiceImpl.java
+│       └── resources
+│           ├── dubbo-provider.xml
+│           ├── log4j.properties
+│           └── springmvc.xml
+...
+</code></pre>
+<p><strong>① 在pom.xml声明parent并引入dubbo-api模块依赖</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;artifactId&gt;dubbo-provider&lt;/artifactId&gt;
+    &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;packaging&gt;jar&lt;/packaging&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;top.jasonkayzk&lt;/groupId&gt;
+        &lt;artifactId&gt;quick-start&lt;/artifactId&gt;
+        &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;/parent&gt;
+
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;top.jasonkayzk&lt;/groupId&gt;
+            &lt;artifactId&gt;dubbo-api&lt;/artifactId&gt;
+            &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+            &lt;scope&gt;compile&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+&lt;/project&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>② 实现接口</strong></p>
+<pre><code class="language-java">package top.jasonkayzk.service;
+
+import org.springframework.stereotype.Service;
+
+/**
+ * 服务接口生产者的实现类
+ *
+ * @author zk
+ */
+@Service("demoService")
+public class DemoServiceImpl implements DemoService {
+
+    @Override
+    public String sayHello(String name) {
+        return name;
+    }
+}
+
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>③ 声明暴露服务</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8" ?&gt;
+&lt;beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://code.alibabatech.com/schema/dubbo
+	http://code.alibabatech.com/schema/dubbo/dubbo.xsd"&gt;
+
+    &lt;!-- 提供方应用信息，用于计算依赖关系 --&gt;
+    &lt;dubbo:application name="dubbo_provider" /&gt;
+
+    &lt;!-- 使用zookeeper注册中心暴露服务地址 --&gt;
+    &lt;dubbo:registry address="zookeeper://127.0.0.1:2181" /&gt;
+
+    &lt;!-- 用dubbo协议在20880端口暴露服务 --&gt;
+    &lt;dubbo:protocol name="dubbo" path="20880" /&gt;
+
+    &lt;!-- 声明需要暴露的服务接口 --&gt;
+    &lt;dubbo:service interface="top.jasonkayzk.service.DemoService" ref="demoService" /&gt;
+    
+&lt;/beans&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>④ 在springmvc.xml中扫描service注解并将dubbo-provider.xml中的相关的dubbo配置引入进来</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;beans xmlns="http://www.springframework.org/schema/beans" xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:util="http://www.springframework.org/schema/util" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/aop
+        http://www.springframework.org/schema/aop/spring-aop-4.0.xsd
+        http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context-4.0.xsd
+        http://www.springframework.org/schema/util
+        http://www.springframework.org/schema/util/spring-util-4.0.xsd"
+       default-autowire="byName"&gt;
+
+    &lt;aop:aspectj-autoproxy /&gt;
+    &lt;context:component-scan base-package="top.jasonkayzk" /&gt;
+    &lt;import resource="classpath:dubbo-provider.xml" /&gt;
+
+&lt;/beans&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>⑤ 配置log4j</strong></p>
+<pre><code class="language-properties">log4j.rootLogger=INFO,stdout
+
+# Console Appender
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern= %d{hh:mm:ss,SSS} [%t] %-5p %c %x - %m%n
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>⑥ 配置启动类</strong></p>
+<pre><code class="language-java">package top.jasonkayzk;
+
+import org.springframework.context.support.ClassPathXmlApplicationContext;
+
+import java.io.IOException;
+
+/**
+ * 加载Spring配置，启动服务类
+ *
+ * @author zk
+ */
+public class ProviderTest {
+
+    public static void main(String[] args) {
+        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext("classpath:springmvc.xml");
+        context.start();
+
+        System.out.println("Dubbo provider start...");
+
+        try {
+            System.in.read(); // 按任意键退出
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>三. dubbo-consumer 服务消费者模块</h3>
+<p>模块结构:</p>
+<pre><code>├── pom.xml
+├── src
+│   └── main
+│       ├── java
+│       │   └── top
+│       │       └── jasonkayzk
+│       │           └── ConsumerTest.java
+│       └── resources
+│           ├── dubbo-consumer.xml
+│           ├── log4j.properties
+│           └── springmvc.xml
+...
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>① 在pom.xml声明parent并引入dubbo-api模块依赖</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;artifactId&gt;dubbo-consumer&lt;/artifactId&gt;
+    &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;packaging&gt;jar&lt;/packaging&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;top.jasonkayzk&lt;/groupId&gt;
+        &lt;artifactId&gt;quick-start&lt;/artifactId&gt;
+        &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+    &lt;/parent&gt;
+
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;top.jasonkayzk&lt;/groupId&gt;
+            &lt;artifactId&gt;dubbo-api&lt;/artifactId&gt;
+            &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+            &lt;scope&gt;compile&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+&lt;/project&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>② 在dubbo-consumer.xml中声明所需要消费的服务</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8" ?&gt;
+&lt;beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://code.alibabatech.com/schema/dubbo
+        http://code.alibabatech.com/schema/dubbo/dubbo.xsd "&gt;
+
+    &lt;!-- 消费方应用名，用于计算依赖关系，不是匹配条件，不要与提供方一样 --&gt;
+    &lt;dubbo:application name="dubbo_consumer" /&gt;
+
+    &lt;!-- 使用multicast广播注册中心暴露发现服务地址 --&gt;
+    &lt;dubbo:registry protocol="zookeeper" address="zookeeper://127.0.0.1:2181" /&gt;
+
+    &lt;!-- 生成远程服务代理，可以和本地bean一样使用demoService --&gt;
+    &lt;dubbo:reference interface="top.jasonkayzk.service.DemoService" id="demoService" /&gt;
+
+&lt;/beans&gt;
+
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>③ 在springmvc.xml中扫描service注解并将dubbo-consumer.xml中的相关的dubbo配置引入进来</strong></p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8" ?&gt;
+&lt;beans xmlns="http://www.springframework.org/schema/beans" xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:util="http://www.springframework.org/schema/util" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/aop
+        http://www.springframework.org/schema/aop/spring-aop-4.0.xsd
+        http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context-4.0.xsd
+        http://www.springframework.org/schema/util
+        http://www.springframework.org/schema/util/spring-util-4.0.xsd"
+       default-autowire="byName"&gt;
+
+    &lt;aop:aspectj-autoproxy /&gt;
+    &lt;context:component-scan base-package="top.jasonkayzk" /&gt;
+    &lt;import resource="classpath:/dubbo-consumer.xml" /&gt;
+    
+&lt;/beans&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>④ 配置log4j</strong></p>
+<pre><code class="language-properties">log4j.rootLogger=INFO,stdout
+
+# Console Appender
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern= %d{hh:mm:ss,SSS} [%t] %-5p %c %x - %m%n
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>⑤ 创建启动类</strong></p>
+<pre><code class="language-java">package top.jasonkayzk;
+
+import org.springframework.context.support.ClassPathXmlApplicationContext;
+import top.jasonkayzk.service.DemoService;
+
+import java.io.IOException;
+
+/**
+ * @author zk
+ */
+public class ConsumerTest {
+
+    public static void main(String[] args) {
+        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(new String[] {"classpath:springmvc.xml"});
+
+        context.start();
+
+        DemoService demoService = (DemoService) context.getBean("demoService");
+
+        System.out.println(demoService.sayHello("Hello World!"));
+
+        try {
+            System.in.read();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2>测试</h2>
+<p>首先保证Zookeeper是启动的</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>注: 本案例使用Docker部署Zookeeper, 直接在主机本地部署Zookeeper的方法见官方文档</strong></p>
+</blockquote>
+<p>然后先启动dubbo-provider, 再启动dubbo-consumer, 控制台输出:</p>
+<pre><code>Hello World!
+</code></pre>
+<p>则调用成功</p>
+<p>&lt;br/&gt;</p>

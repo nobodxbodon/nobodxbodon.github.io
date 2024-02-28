@@ -1,0 +1,98 @@
+<h2>原文：<a href="https://zsqk.github.io/2020-03-28-php-go-nodejs-web-framework-benchmarks.html">PHP, Go, Node.js 框架性能综合对比</a></h2>
+<hr/>
+<h2>title: PHP, Go, Node.js 框架性能综合对比
+categories: [programming-language]</h2>
+<h2>数据来源</h2>
+<p><a href="https://www.techempower.com/benchmarks/#section=data-r18&amp;hw=cl&amp;test=query">https://www.techempower.com/benchmarks/#section=data-r18&amp;hw=cl&amp;test=query</a></p>
+<h2>分析的指标</h2>
+<ul>
+<li>JSON serialization 序列化响应</li>
+<li>Plaintext 简单响应</li>
+<li>Single query 单行查询</li>
+<li>Multiple queries 多行查询</li>
+<li>Data updates 数据更新</li>
+</ul>
+<h2>分析的对象</h2>
+<p>考虑的几种方案:</p>
+<ul>
+<li>Node.js (函数计算)</li>
+<li>Go (单机部署)</li>
+</ul>
+<p>这里的单机部署并非只有一台机器, 只是区别于 网关 + 函数计算 的方式.</p>
+<p>具体应用:</p>
+<ul>
+<li>echo (Go)</li>
+<li>go-pgx-easyjson</li>
+<li>nodejs-postgres (ORM)</li>
+<li>php (nginx)</li>
+<li>php-pgsql-raw (nginx)</li>
+<li>lumen (nginx, ORM, MySQL)</li>
+</ul>
+<p>没有看到 PHP + PostgreSQL 的组合.</p>
+<p>与 Golang 组合的基本都是 PostgreSQL.</p>
+<h2>分析概览</h2>
+<ul>
+<li>Rust 非常快, 甚至超过 C 与 C++.</li>
+<li>Java 也很快, 但我不知道这些框架流行程度.</li>
+<li>原生 PHP 整体并不慢, 但结合框架就慢了.</li>
+<li>Go 数据请求的处理性能比 Node.js 更快.</li>
+<li>虽然显示 Go 的性能是 Node.js 的 3 倍以上, 但慢一部分出在 ORM 上.</li>
+<li>原生写 Go 与使用 echo 性能基本一致.</li>
+</ul>
+<h2>分析细节</h2>
+<h3>JSON serialization 序列化响应</h3>
+<p>不涉及具体数据库.</p>
+<p>Framework | Performance
+--- | ---
+echo | 32.8%
+go | 31.9%
+go-pgx-easyjson | 31.4%
+nodejs | 23.6%
+php | 12.5%
+lumen | 1.1%</p>
+<h3>Plaintext 简单响应</h3>
+<p>不涉及具体数据库.</p>
+<p>Framework | Performance
+--- | ---
+fasthttp | 65.3%
+nodejs | 7.9%
+go | 6.4%
+echo | 5.2%
+lumen | 0.1%</p>
+<p>Go 在这个环节比 Node.js 慢有点出乎意料,
+但换用 fasthttp 第三方库还是一骑绝尘的.</p>
+<p>一般来说, 这种简单响应的应用场景主要是 HTTP OPTIONS method.
+但在函数计算中, 可以由网关响应该请求以节省运行开支.</p>
+<h3>Single query 单行查询</h3>
+<p>Framework | Performance
+--- | ---
+echo | 46.2%
+go-pgx-easyjson | 43.1%
+nodejs-postgres | 13.8%
+php-pgsql-raw | 13.8%
+lumen | 1.5%</p>
+<h3>Multiple queries 多行查询</h3>
+<p>Framework | Performance
+--- | ---
+go-pgx-easyjson | 47.8%
+echo | 44.3%
+php-pgsql-raw  | 30.0%
+nodejs-postgres | 14.4%
+lumen | 8.1%</p>
+<h3>Data updates 数据更新</h3>
+<p>Framework | Performance
+--- | ---
+go-pgx-easyjson | 35.4%
+echo | 31.8%
+php-pgsql-raw | 20.4%
+nodejs-postgres | 8.2%
+lumen | 6.9%</p>
+<h2>总结</h2>
+<p>如果单机部署, 使用 echo 作为基础是一个好的方案, 良好的社区支持, 简单易用.</p>
+<p>如果使用了 echo, 就不考虑 fasthttp 了. 虽然在 v2 中支持过 fasthttp,
+但在 <a href="https://github.com/labstack/echo/issues/665">https://github.com/labstack/echo/issues/665</a> 中,
+echo 作者解释了为什么放弃, 保持简单及社区兼容, 也就是尽量使用标准库.</p>
+<p>如果函数计算, 那么 Node.js 也是不错的选择, 可以接受的性能, 与前端通用的语法.</p>
+<p>从以上的性能测试来看, PHP 本身的性能问题不大, 但标准库太过老旧,
+必须使用框架才能提高开发效率. 但普通框架导致性能极具下降. 并且因为历史原因,
+PHP 配合 Nginx 才能高效完成网络任务, 单机部署步骤更多.</p>

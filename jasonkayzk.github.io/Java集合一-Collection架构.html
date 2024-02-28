@@ -1,0 +1,708 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Java%E9%9B%86%E5%90%88%E4%B8%80-Collection%E6%9E%B6%E6%9E%84.html">Java集合一-Collection架构</a></h2>
+<hr/>
+<h2>title: Java集合一-Collection架构
+toc: true
+date: 2019-11-23 13:31:19
+cover: https://img.paulzzh.com/touhou/random?21
+categories: Java源码
+tags: [Java基础, 面试总结, 集合]
+description: 本篇总结了Java中提供的集合类的相关知识</h2>
+<p>本篇总结了Java中提供的集合类的相关知识, 即java.util.*包中的集合类.</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>一. 集合总体框架概述</h2>
+<p>Java集合是java 提供的工具包<code>java.util.*</code>, 包含了常用的数据结构：集合、链表、队列、栈、数组、映射等。</p>
+<p>Java集合主要可以划分为4个部分：</p>
+<ul>
+<li>List列表;</li>
+<li>Set集合;</li>
+<li>Map映射;</li>
+<li>工具类(Iterator迭代器、Enumeration枚举类、Arrays和Collections)</li>
+</ul>
+<p>Java集合工具包框架图(如下)：</p>
+<p><img alt="Collection框架结构.jpg" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/Collection%E6%A1%86%E6%9E%B6%E7%BB%93%E6%9E%84.jpg"/></p>
+<p>看上面的框架图，先抓住它的主干，即Collection和Map。</p>
+<p><strong>① Collection</strong></p>
+<p>Collection是一个接口，是高度抽象出来的集合，它包含了集合的基本操作和属性。AbstractCollection抽象类，它实现了Collection中的绝大部分函数;</p>
+<p>Collection包含了List和Set两大分支。  AbstractList和AbstractSet都继承于AbstractCollection; 具体的List实现类继承于AbstractList，而Set的实现类则继承于AbstractSet。</p>
+<p>(1) List是一个<strong>有序</strong>的队列，每一个元素都有它的索引。第一个元素的索引值是0. List的实现类有: LinkedList, ArrayList, Vector, Stack</p>
+<p>(2) Set是一个不允许有重复元素的集合. Set的实现类有: HashSet和TreeSet. HashSet依赖于HashMap，它实际上是通过HashMap实现的；TreeSet依赖于TreeMap，它实际上是通过TreeMap实现的。</p>
+<p><strong>② Map</strong></p>
+<p>Map是一个映射接口，即key-value键值对。</p>
+<p>AbstractMap是个抽象类，它实现了Map接口中的大部分API。HashMap，TreeMap，WeakHashMap都是继承于AbstractMap。
+Hashtable虽然继承于Dictionary，但它实现了Map接口。</p>
+<p>接下来，再看Iterator。</p>
+<p><strong>③ Iterator</strong></p>
+<p>Iterator是遍历集合的工具，即我们通常通过Iterator迭代器来遍历集合。我们说Collection依赖于Iterator，是因为Collection的实现类都要实现iterator()函数，返回一个Iterator对象. ListIterator是专门为遍历List而存在的。</p>
+<p><strong>④ Enumeration</strong></p>
+<p>再看Enumeration，它是JDK 1.0引入的抽象类。作用和Iterator一样，也是遍历集合；但是Enumeration的功能要比Iterator少。在上面的框图中，Enumeration只能在Hashtable, Vector, Stack中使用。</p>
+<p><strong>⑤ Arrays和Collections</strong></p>
+<p>最后，看Arrays和Collections。它们是操作数组、集合的两个工具类。</p>
+<p>&lt;br/&gt;</p>
+<h2>二. Collection 框架概述</h2>
+<p>Collection实现了Iterable接口, 先来看一下Iterable:</p>
+<pre><code class="language-java">public interface Iterable&lt;T&gt; {
+    
+    Iterator&lt;T&gt; iterator();
+
+    default void forEach(Consumer&lt;? super T&gt; action) {
+        Objects.requireNonNull(action);
+        for (T t : this) {
+            action.accept(t);
+        }
+    }
+    
+    default Spliterator&lt;T&gt; spliterator() {
+        return Spliterators.spliteratorUnknownSize(iterator(), 0);
+    }
+}
+
+</code></pre>
+<p>在Iterable接口中, 定义了一个Interator类型的属性(接口中默认为public static final类型), 和forEach以及seliterator方法, 并通过default声明了默认方法</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注: default函数</strong></p>
+<p>在java8之前 ,一个类实现一个接口需要实现接口所有的方法.</p>
+<p>但是这样会导致一个问题: 当一个接口有很多的实现类的时候,修改这个接口就变成了一个非常麻烦的事,需要修改这个接口的所有实现类!</p>
+<p>不过在java8中这个问题得到了解决: default函数</p>
+<p>看下面这个例子:</p>
+<pre><code class="language-java">interface DefaultInterface {
+   int operate(int a, int b);
+   
+   default int addition(int a, int b) {
+       return a + b;
+   }
+}
+
+public class Test implements DefaultInterface {
+
+   @Override
+   public int operate(int a, int b) {
+       return a - b;
+   }
+
+   public static void main(String[] args) {
+       Test defaultMethodTest = new Test();
+       System.out.println("5 + 3 = " + defaultMethodTest.addition(5, 3)); // 5 + 3 = 8
+       System.out.println("5 - 3 = " + defaultMethodTest.operate(5, 3)); // 5 - 3 = 2
+   }
+}
+</code></pre>
+<p>可以看到 DefaultInterface 接口的addition方法用default进行了修饰,并且有自己的默认实现.</p>
+<p>而Test仅仅实现DefaultInterface 接口一个方法, 却不用实现addition方法.</p>
+<p>&lt;font color="#ff0000"&gt;如果我们对一个接口进行修改,而又不想修改已经有的实现类的时候就变得非常有用!&lt;/font&gt;</p>
+</blockquote>
+<p><strong>1.</strong> <strong>Iterator</strong></p>
+<p>Iterator 是一个接口，它是集合的迭代器, 集合可以通过Iterator去遍历集合中的元素。</p>
+<p>Iterator提供的API接口，包括：</p>
+<ul>
+<li><strong>是否存在下一个元素</strong>: boolean hasNext()</li>
+<li><strong>获取下一个元素</strong>: E next()</li>
+<li><strong>删除当前元素</strong>: void remove()</li>
+</ul>
+<pre><code class="language-java">public interface Iterator&lt;E&gt; {
+
+    boolean hasNext();
+    E next();
+    
+    // JDK 8加入默认方法(之前只有声明)
+    default void remove() { throw new UnsupportedOperationException("remove"); }
+    
+    // JDK 8加入
+    default void forEachRemaining(Consumer&lt;? super E&gt; action) {
+        Objects.requireNonNull(action);
+        while (hasNext())
+            action.accept(next());
+    }
+    
+}
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>注意:</strong></p>
+<p><strong>① Iterator遍历Collection时，是 fail-fast 机制的</strong>: &lt;font color="#0000ff"&gt;当某一个线程A通过iterator去遍历某集合的过程中，若该集合的内容被其他线程所改变了；那么线程A访问集合时，就会抛出ConcurrentModificationException异常，产生fail-fast事件;&lt;/font&gt;</p>
+<p><strong>② JDK 8中加入了forEachRemaining()默认方法.</strong></p>
+<ol>
+<li><p><strong>与forEach()方法的区别在于:</strong> &lt;font color="#0000ff"&gt;可以多次调用forEach，并将元素进行多次传递。而forEachRemaining()使用迭代器Iterator的所有元素之后，第二次调用它将不会做任何事情，因为不再有下一个元素!&lt;/font&gt;</p>
+</li>
+<li><p><strong>forEachRemaining可使用Lambda表达式来遍历集合元素</strong>, 例如:</p>
+</li>
+</ol>
+<pre><code class="language-java">public class Test {
+
+    public static void main(String[] args) {
+        List&lt;String&gt; list = new ArrayList&lt;&gt;();
+        list.add("1");
+        list.add("make");
+        list.add("2");
+        Iterator&lt;String&gt; it=list.iterator();
+
+        it.forEachRemaining(System.out::println); // 1 make 2
+        it.forEachRemaining(System.out::println); // 已经没有输出了
+    }
+
+}
+</code></pre>
+</blockquote>
+<p><strong>2. ListIterator</strong></p>
+<p>ListIterator 是一个<strong>继承于Iterator的接口</strong>，它是队列迭代器, <strong>专门用于遍历List，能提供向前向后遍历。</strong></p>
+<p>相比于Iterator它新增了:</p>
+<ul>
+<li>添加</li>
+<li>是否存在上一个元素</li>
+<li>获取上一个元素等;</li>
+</ul>
+<pre><code class="language-java">public interface ListIterator&lt;E&gt; extends Iterator&lt;E&gt; {
+    
+    /* Iterator接口中的方法 */
+    boolean hasNext();
+    E next();
+    void remove();
+    
+    /* ListIterator中定义的方法 */
+    boolean hasPrevious();
+    E previous();
+    int nextIndex();
+    int previousIndex();
+    void set(E e);
+    void add(E e);
+}
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注: ListIterator相比于Iterator只是扩充了一些针对于List遍历的方法而已!</strong></p>
+</blockquote>
+<p><strong>3. Collection</strong></p>
+<p>Collection 是一个接口，是高度抽象出来的集合，它包含了集合的基本操作：添加、删除、清空、遍历(读取)、是否为空、获取大小、是否保护某元素等等；</p>
+<p>&lt;font color="#0000ff"&gt;Collection 接口的所有子类(直接子类和间接子类)都必须实现2种构造函数：不带参数的构造函数 和 参数为Collection的构造函数。带参数的构造函数，可以用来转换Collection的类型;&lt;/font&gt;</p>
+<pre><code class="language-java">public interface Collection&lt;E&gt; extends Iterable&lt;E&gt; { 
+    int size(); 
+    boolean isEmpty(); 
+    boolean contains(Object o); 
+    Iterator&lt;E&gt; iterator(); 
+    Object[] toArray();
+    
+    // String[] y = x.toArray(new String[0]);
+    &lt;T&gt; T[] toArray(T[] a); 
+
+    boolean add(E e); 
+    boolean remove(Object o); 
+    boolean containsAll(Collection&lt;?&gt; c); 
+    boolean addAll(Collection&lt;? extends E&gt; c); 
+    boolean removeAll(Collection&lt;?&gt; c); 
+    boolean retainAll(Collection&lt;?&gt; c); 
+    void clear(); 
+    boolean equals(Object o); 
+    int hashCode(); 
+    
+    // JDK 11新添加
+    default &lt;T&gt; T[] toArray(IntFunction&lt;T[]&gt; generator) { 
+        return toArray(generator.apply(0));
+    }
+    
+	// JDK 8添加
+	default boolean removeIf(Predicate&lt;? super E&gt; filter) {
+        Objects.requireNonNull(filter);
+        boolean removed = false;
+        final Iterator&lt;E&gt; each = iterator();
+        while (each.hasNext()) {
+            if (filter.test(each.next())) {
+                each.remove();
+                removed = true;
+            }
+        }
+        return removed;
+    }
+    
+    // JDK 8新添加
+    @Override
+    default Spliterator&lt;E&gt; spliterator() {
+        return Spliterators.spliterator(this, 0);
+    }
+
+    // JDK 8新添加
+    default Stream&lt;E&gt; stream() {
+        return StreamSupport.stream(spliterator(), false);
+    }    
+    // JDK 8新添加
+    default Stream&lt;E&gt; parallelStream() {
+        return StreamSupport.stream(spliterator(), true);
+    }
+    
+}
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注:</strong> 可以看到, 除了一些正常的增删改查操作之外, JDK8/11还加入了一些流操作</p>
+</blockquote>
+<p><strong>4. List</strong></p>
+<p>List是一个继承于Collection的接口，即List是集合中的一种。List是<strong>有序</strong>的队列，List中的每一个元素都有一个索引；第一个元素的索引值是0，往后的元素的索引值依次+1。和Set不同，List中允许有重复的元素。</p>
+<p>&lt;font color="#0000ff"&gt;关于API方面。既然List是继承于Collection接口，它自然就包含了Collection中的全部函数接口；由于List是有序队列，它也额外的有自己的API接口。主要有“添加、删除、获取、修改指定位置的元素”、“获取List中的子队列”等&lt;/font&gt;</p>
+<pre><code class="language-java">public interface List&lt;E&gt; extends Collection&lt;E&gt; {
+    
+    /* Collection的API */
+    boolean         add(E object)
+    boolean         addAll(Collection&lt;? extends E&gt; collection)
+    void            clear()
+    boolean         contains(Object object)
+    boolean         containsAll(Collection&lt;?&gt; collection)
+    boolean         equals(Object object)
+    int             hashCode()
+    boolean         isEmpty()
+    Iterator&lt;E&gt;     iterator()
+    boolean         remove(Object object)
+    boolean         removeAll(Collection&lt;?&gt; collection)
+    boolean         retainAll(Collection&lt;?&gt; collection)
+    int             size()
+    &lt;T&gt; T[]         toArray(T[] array)
+    Object[]        toArray()
+        
+    // JDK 8新加入 
+    @Override
+    default Spliterator&lt;E&gt; spliterator() {
+        if (this instanceof RandomAccess) {
+            return new AbstractList.RandomAccessSpliterator&lt;&gt;(this);
+        } else {
+            return Spliterators.spliterator(this, Spliterator.ORDERED);
+        }
+    }
+        
+    /* 相比与Collection，List新增的API */
+    void                add(int location, E object)
+    boolean             addAll(int location, Collection&lt;? extends E&gt; collection)
+    E                   get(int location)
+    int                 indexOf(Object object)
+    int                 lastIndexOf(Object object)
+    ListIterator&lt;E&gt;     listIterator(int location)
+    ListIterator&lt;E&gt;     listIterator()
+    E                   remove(int location)
+    E                   set(int location, E object)
+    List&lt;E&gt;             subList(int start, int end)
+
+    // JDK 8新加入 
+    default void replaceAll(UnaryOperator&lt;E&gt; operator) {
+        Objects.requireNonNull(operator);
+        final ListIterator&lt;E&gt; li = this.listIterator();
+        while (li.hasNext()) {
+            li.set(operator.apply(li.next()));
+        }
+    }
+
+    // JDK 8新加入 
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    default void sort(Comparator&lt;? super E&gt; c) {
+            Object[] a = this.toArray();
+            Arrays.sort(a, (Comparator) c);
+            ListIterator&lt;E&gt; i = this.listIterator();
+            for (Object e : a) {
+                i.next();
+                i.set((E) e);
+            }
+    }
+    
+	// JDK 9新加入
+    static &lt;E&gt; List&lt;E&gt; of() {
+        return ImmutableCollections.emptyList();
+    }
+    
+    // JDK 9新加入
+    static &lt;E&gt; List&lt;E&gt; of(E e1) {
+        return new ImmutableCollections.List12&lt;&gt;(e1);
+    }
+    
+    // JDK 9新加入
+    static &lt;E&gt; List&lt;E&gt; of(E e1, E e2) {
+        return new ImmutableCollections.List12&lt;&gt;(e1, e2);
+    }
+    
+    ...
+      
+    // JDK 9新加入
+	static &lt;E&gt; List&lt;E&gt; of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9, E e10) {
+        return new ImmutableCollections.ListN&lt;&gt;(e1, e2, e3, e4, e5,
+                                                e6, e7, e8, e9, e10);
+    }
+    
+    // JDK 9新加入
+    @SafeVarargs
+    @SuppressWarnings("varargs")
+    static &lt;E&gt; List&lt;E&gt; of(E... elements) {
+        switch (elements.length) { // implicit null check of elements
+            case 0:
+                return ImmutableCollections.emptyList();
+            case 1:
+                return new ImmutableCollections.List12&lt;&gt;(elements[0]);
+            case 2:
+                return new ImmutableCollections.List12&lt;&gt;(elements[0], elements[1]);
+            default:
+                return new ImmutableCollections.ListN&lt;&gt;(elements);
+        }
+    }
+    
+    // JDK 10加入
+    static &lt;E&gt; List&lt;E&gt; copyOf(Collection&lt;? extends E&gt; coll) {
+        return ImmutableCollections.listCopy(coll);
+    }
+    
+}
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注:</strong> 可以看到, JDK 8中List添加了sort方法, JDK 10中添加了copyOf方法(虽然大多数人还是习惯使用Collections中的方法)</p>
+</blockquote>
+<p><strong>5. Set</strong></p>
+<p>Set 是一个继承于Collection的接口，即Set也是集合中的一种。Set是没有重复元素的集合。</p>
+<p>关于API方面。Set的API和Collection几乎完全一样。</p>
+<pre><code class="language-java">public interface Set&lt;E&gt; extends Collection&lt;E&gt; {
+    
+    /* Collection的API */
+    boolean         add(E object)
+    boolean         addAll(Collection&lt;? extends E&gt; collection)
+    void             clear()
+    boolean         contains(Object object)
+    boolean         containsAll(Collection&lt;?&gt; collection)
+    boolean         equals(Object object)
+    int             hashCode()
+    boolean         isEmpty()
+    Iterator&lt;E&gt;     iterator()
+    boolean         remove(Object object)
+    boolean         removeAll(Collection&lt;?&gt; collection)
+    boolean         retainAll(Collection&lt;?&gt; collection)
+    int             size()
+    &lt;T&gt; T[]         toArray(T[] array)
+    Object[]         toArray()
+     
+    // JDK 8新增
+    @Override
+    default Spliterator&lt;E&gt; spliterator() {
+        return Spliterators.spliterator(this, Spliterator.DISTINCT);
+    }        
+    
+    /* Set新增API */
+    // JDK 9新增
+    static &lt;E&gt; Set&lt;E&gt; of() {
+        return ImmutableCollections.emptySet();
+    }
+    
+    // JDK 9新增
+    static &lt;E&gt; Set&lt;E&gt; of(E e1) {
+        return new ImmutableCollections.Set12&lt;&gt;(e1);
+    }
+    
+    // JDK 9新增
+    static &lt;E&gt; Set&lt;E&gt; of(E e1, E e2) {
+        return new ImmutableCollections.Set12&lt;&gt;(e1, e2);
+    }
+    
+    ...
+        
+    // JDK 9新增        
+    static &lt;E&gt; Set&lt;E&gt; of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9, E e10) {
+        return new ImmutableCollections.SetN&lt;&gt;(e1, e2, e3, e4, e5,
+                                               e6, e7, e8, e9, e10);
+    }        
+    
+	// JDK 9新增
+    @SafeVarargs
+    @SuppressWarnings("varargs")
+    static &lt;E&gt; Set&lt;E&gt; of(E... elements) {
+        switch (elements.length) { // implicit null check of elements
+            case 0:
+                return ImmutableCollections.emptySet();
+            case 1:
+                return new ImmutableCollections.Set12&lt;&gt;(elements[0]);
+            case 2:
+                return new ImmutableCollections.Set12&lt;&gt;(elements[0], elements[1]);
+            default:
+                return new ImmutableCollections.SetN&lt;&gt;(elements);
+        }
+    }
+    
+    // JDK 10新增
+    @SuppressWarnings("unchecked")
+    static &lt;E&gt; Set&lt;E&gt; copyOf(Collection&lt;? extends E&gt; coll) {
+        if (coll instanceof ImmutableCollections.AbstractImmutableSet) {
+            return (Set&lt;E&gt;)coll;
+        } else {
+            return (Set&lt;E&gt;)Set.of(new HashSet&lt;&gt;(coll).toArray());
+        }
+    }    
+    
+}
+</code></pre>
+<p><strong>6. AbstractCollection</strong></p>
+<p>AbstractCollection是一个<strong>抽象类</strong>，它&lt;font color="#ff0000"&gt;实现了Collection中除iterator()和size()之外的方法&lt;/font&gt;, 从而<strong>方便其它类实现Collection</strong>.</p>
+<p>比如ArrayList、LinkedList等，它们这些类想要实现Collection接口，而通过继承AbstractCollection就已经实现了大部分的接口了。</p>
+<pre><code class="language-java">public abstract class AbstractCollection&lt;E&gt; implements Collection&lt;E&gt; {
+    
+    protected AbstractCollection() {}
+    
+    /* Collection中未实现的方法 */
+    public abstract Iterator&lt;E&gt; iterator();
+    public abstract int size();
+    
+    /* 实现Collection接口中的方法 */
+    public boolean isEmpty() {...}
+    public boolean contains(Object o) {...}
+    public Object[] toArray() {...}
+    public &lt;T&gt; T[] toArray(T[] a) {...}
+    public boolean add(E e) {...}
+    public boolean remove(Object o) {...}
+    public boolean containsAll(Collection&lt;?&gt; c) {...}
+    public boolean addAll(Collection&lt;? extends E&gt; c) {...}
+    public boolean removeAll(Collection&lt;?&gt; c) {...}
+    public boolean retainAll(Collection&lt;?&gt; c) {...}
+    public void clear() {...}
+    
+    /* 继承Object的方法 */
+    public String toString() {...}
+    
+    /* AbstractCollection中的方法 */
+    private static &lt;T&gt; T[] finishToArray(T[] r, Iterator&lt;?&gt; it) {...}
+    private static int hugeCapacity(int minCapacity) {...}
+    
+    /* AbstractCollection中的属性 */
+    private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+    
+}
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注:</strong></p>
+<p><strong>①</strong> <strong>AbstractCollection抽象类</strong>中实现了Collection接口<strong>除iterator()和size()的方法</strong>, 并且请注意, &lt;font color="#ff0000"&gt;对于那些没有重写但是被声明为default的方法, 类中也是可以使用的!&lt;/font&gt;</p>
+<p><strong>②</strong> AbstractCollection中已经重写了toString()方法;</p>
+<p><strong>③</strong> AbstractCollection中定义了MAX_ARRAY_SIZE, 表示数组可分配的最大容量, 原文:</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>The maximum size of array to allocate. Some VMs reserve some header words in an array.</strong></p>
+<p><strong>Attempts to allocate larger arrays may result in OutOfMemoryError: Requested array size exceeds VM limit</strong></p>
+</blockquote>
+<p><strong>④</strong> AbstractCollection中存在两个private方法:</p>
+<ul>
+<li><strong>finishToArray:</strong> 在toArray()方法中使用, 当迭代器返回的元素比预期的多时，重新分配toArray中使用的数组，并从迭代器中完成数组填充。(Reallocates the array being used within toArray when the iterator returned more elements than expected, and finishes filling it from the iterator.)</li>
+<li><strong>hugeCapacity:</strong> 在finishToArray方法中使用, 当finished方法需要开辟更大数组空间时, 判断空间大小并返回新的大小</li>
+</ul>
+</blockquote>
+<p><strong>7. AbstractList</strong></p>
+<p>AbstractList 是一个<strong>继承于AbstractCollection，并且实现List接口的抽象类</strong>。</p>
+<p>&lt;font color="#0000ff"&gt;它实现了List中除size()、get(int location)之外的函数, 从而方便其它类继承List。  另外，和AbstractCollection相比，AbstractList抽象类中，<strong>实现了iterator()接口</strong>。&lt;/font&gt;</p>
+<pre><code class="language-java">public abstract class AbstractList&lt;E&gt; extends AbstractCollection&lt;E&gt; implements List&lt;E&gt; {
+    
+    protected transient int modCount = 0;
+    
+    protected AbstractList() {}
+    
+    /* AbstractList中未实现的List接口方法 */
+    public abstract E get(int index);
+    
+    /* AbstractList中实现的List接口(AbstractList他自己实现的) */
+    public boolean add(E e) {...}
+    public E set(int index, E element) {...}
+    public void add(int index, E element) {...}
+    public E remove(int index) {...}
+    public int indexOf(Object o) {...}
+    public int lastIndexOf(Object o) {...}
+    public void clear() {...}
+    public boolean addAll(int index, Collection&lt;? extends E&gt; c) {...}
+    public Iterator&lt;E&gt; iterator() {...}
+    public ListIterator&lt;E&gt; listIterator() {...}
+    public ListIterator&lt;E&gt; listIterator(final int index) {...}
+    public List&lt;E&gt; subList(int fromIndex, int toIndex) {...}
+    
+    /* 重写Collection中的方法 */
+    public boolean equals(Object o) {...}
+    public int hashCode() {...}
+    
+    /* AbstractList中定义的方法 */
+    static void subListRangeCheck(int fromIndex, int toIndex, int size) {...}
+    protected void removeRange(int fromIndex, int toIndex) {...}
+    private void rangeCheckForAdd(int index) {...}
+    private String outOfBoundsMsg(int index) {...}
+    
+    
+    /* AbstractList中的Iterator实现类, 真正List元素ListItr的父类 */
+    private class Itr implements Iterator&lt;E&gt; {
+        /**
+         * Index of element to be returned by subsequent call to next.
+         */        
+    	int cursor = 0;
+        /**
+         * Index of element returned by most recent call to next or
+         * previous.  Reset to -1 if this element is deleted by a call
+         * to remove.
+         */
+        int lastRet = -1; 
+        /**
+         * The modCount value that the iterator believes that the backing
+         * List should have.  If this expectation is violated, the iterator
+         * has detected concurrent modification.
+         */
+        int expectedModCount = modCount;
+        
+        /* Iterator接口中的方法 */
+        public boolean hasNext() {...}        
+        public E next() {...}
+        public void remove() {...}
+        
+        /* Itr中定义的方法 */
+        final void checkForComodification() {...}
+    }
+    
+    
+    /* AbstractList中Iterator真正的元素 */
+    private class ListItr extends Itr implements ListIterator&lt;E&gt; {
+        ListItr(int index) { cursor = index; }    
+        
+        /* ListIterator接口中的方法 */
+        public boolean hasPrevious() {...}
+        public E previous() {...}
+        public int nextIndex() {...}
+        public int previousIndex() {...}
+        public void set(E e) {...}
+        public void add(E e) {...}
+    }
+    
+    
+    /* JDK 8之后, 为了并行遍历元素而设计的一个可分割迭代器(splitable iterator) */
+    static final class RandomAccessSpliterator&lt;E&gt; implements Spliterator&lt;E&gt; {
+        
+        private final List&lt;E&gt; list;
+        private int index; // current index, modified on advance/split
+        private int fence; // -1 until used; then one past last index
+        private final AbstractList&lt;E&gt; alist; // The following fields are valid if covering an AbstractList
+        private int expectedModCount; // initialized when fence set
+        
+        /* RandomAccessSpliterator的构造方法 */
+        RandomAccessSpliterator(List&lt;E&gt; list) {...}
+        
+		/* Spliterator接口中的方法 */
+        public Spliterator&lt;E&gt; trySplit() {...}
+        public boolean tryAdvance(Consumer&lt;? super E&gt; action) {...}
+        public long estimateSize() {...}
+        public int characteristics() {...}
+        public void forEachRemaining(Consumer&lt;? super E&gt; action) {...}
+        
+        /* RandomAccessSpliterator类中定义的方法 */
+        RandomAccessSpliterator(List&lt;E&gt; list) {...}
+        private RandomAccessSpliterator(RandomAccessSpliterator&lt;E&gt; parent, int origin, int fence) {...} // Create new spliterator covering the given range
+		private static &lt;E&gt; E get(List&lt;E&gt; list, int i) {...}
+        private int getFence() {...} // initialize fence to size on first use
+    }
+    
+    /* AbstractList的内部类SubList, 继承了AbstractList本身, 是List的一个视图 */
+    private static class SubList&lt;E&gt; extends AbstractList&lt;E&gt; {
+        
+        private final AbstractList&lt;E&gt; root;
+        private final SubList&lt;E&gt; parent;
+        private final int offset;
+        protected int size;
+        
+        /* AbstractList抽象类(内部类继承了包括他的类!)的方法 */
+        public E set(int index, E element) {...}
+        public void add(int index, E element) {...}
+        public E remove(int index) {...}
+        protected void removeRange(int fromIndex, int toIndex) {...}
+        public boolean addAll(int index, Collection&lt;? extends E&gt; c) {...}
+        public Iterator&lt;E&gt; iterator() {...}
+        public ListIterator&lt;E&gt; listIterator(int index) {...}
+        public List&lt;E&gt; subList(int fromIndex, int toIndex) {...}
+        public E get(int index) {...}
+        
+        /* AbstractCollection抽象类中的方法 */
+        public int size() {...} // AbstractCollection并未实现该方法, 另一个未实现的方法是Iterator()
+        public boolean addAll(Collection&lt;? extends E&gt; c) {...} // 覆盖AbstractCollection的方法
+        
+        /* SubList中定义的方法 */
+        public SubList(AbstractList&lt;E&gt; root, int fromIndex, int toIndex) {...} // Constructs a sublist of an arbitrary AbstractList, which is not a SubList itself.
+        protected SubList(SubList&lt;E&gt; parent, int fromIndex, int toIndex) {...} // Constructs a sublist of another SubList.
+        private void rangeCheckForAdd(int index) {...}
+        private String outOfBoundsMsg(int index) {...}
+        private void checkForComodification() {...}
+        private void updateSizeAndModCount(int sizeChange) {...}
+    }
+    
+    /* 继承自SubList(他的爸爸就是AbstractList), 并实现RandomAccess接口 */
+    private static class RandomAccessSubList&lt;E&gt; extends SubList&lt;E&gt; implements RandomAccess {
+        
+        /* 覆盖了父类SubList的方法 */
+        public List&lt;E&gt; subList(int fromIndex, int toIndex) {...}
+		
+        /* RandomAccessSubList中定义的方法 */
+         RandomAccessSubList(AbstractList&lt;E&gt; root, int fromIndex, int toIndex) {...} // Constructs a sublist of an arbitrary AbstractList, which is not a RandomAccessSubList itself.
+        RandomAccessSubList(RandomAccessSubList&lt;E&gt; parent, int fromIndex, int toIndex) {...} // Constructs a sublist of another RandomAccessSubList.
+    }
+    
+}
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注:</strong></p>
+<p>这里的关系比较复杂, 首先先说明一下RandomAccess接口:</p>
+<p><strong>RandomAccess接口:</strong></p>
+<p>它是JDK 1.4中加入的接口, 它内部一个方法都没定义, 是一个标志接口, 文档原文为:</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>Marker interface used by <code>List</code> implementations to indicate that they support fast (generally constant time) random access.</strong></p>
+</blockquote>
+<p>即RandomAccess 是一个标志接口，表明实现这个这个接口的 List 集合是支持快速随机访问的。也就是说，实现了这个接口的集合是支持 <strong>快速随机访问</strong> 策略的;</p>
+<p>且如果是实现了这个接口的 <strong>List</strong>，那么使用for循环的方式获取数据会优于用迭代器获取数据。</p>
+<p>接下来结合代码, 再看一下AbstractList:</p>
+<p><strong>① AbstractList本身:</strong></p>
+<ol>
+<li><p>AbstractList自身继承自AbstractCollection(显而易见, 为了方便才创立的AbstractCollection, <strong>要注意AbstractCollection未实现iterator()和size()方法</strong>);</p>
+</li>
+<li><p>同时AbstractList实现了List的部分接口&lt;font color="#ff0000"&gt;(除了get()方法, 因为数组实现和链表实现的get显然是不同的!)&lt;/font&gt;</p>
+</li>
+<li><p><strong>AbstractList重写了equals()和hashcode()方法!</strong></p>
+</li>
+<li><p>AbstractList定义了四个方法:</p>
+<ul>
+<li><strong>void subListRangeCheck(int fromIndex, int toIndex, int size)</strong>: 包内可见的方法, 用于subList()方法, 截取自列表前判断index, size的合法性;</li>
+<li><strong>removeRange</strong>: 删除指定区间的元素;</li>
+<li><strong>rangeCheckForAdd</strong>: 用于addAll方法, 判断index的合法性;</li>
+<li><strong>outOfBoundsMsg</strong>: 代码: return "Index: "+index+", Size: "+size(); 用于rangeCheckForAdd抛出的IndexOutOfBoundsException时的错误信息;</li>
+</ul>
+</li>
+</ol>
+<p><strong>② AbstractList中定义的内部类:</strong></p>
+<ul>
+<li><strong>Itr</strong>: AbstractList中的一个Iterator实现类, 为ListItr服务的父类;</li>
+<li><strong>ListItr</strong>: AbstractList中Iterator真正的元素, 继承了Itr, 并实现了ListIterator接口<strong>(ListIterator是一个继承了Iterator的接口, 为List遍历而创建)</strong>;</li>
+<li><strong>RandomAccessSpliterator</strong>: 实现了Spliterator接口. JDK 8之后, 为了并行遍历元素而设计的一个可分割迭代器(splitable iterator);</li>
+<li><strong>SubList</strong>: AbstractList的内部类SubList, 继承了AbstractList本身, 作为List的一个视图, 为RandomAccessSubList服务;&lt;font color="#ff0000"&gt;这个内部类的牛逼之处在于, 他继承了包含他的类!&lt;/font&gt;</li>
+<li><strong>RandomAccessSubList</strong>: 继承自SubList(那个很牛逼的内部类), 并实现了RandomAccess接口;</li>
+</ul>
+<p><strong>③ AbstractList中的内部类关系整理:</strong></p>
+<ol>
+<li><p><strong>RandomAccessSpliterator与其他内部类没有关系</strong>, 它仅仅是实现了Spliterator接口, 在JDK 8之后, 为了并行遍历元素而设计的;</p>
+</li>
+<li><p><strong>Itr与ListItr是一组</strong>: 两者为父子完成了对ListIterator接口的实现; 是普遍使用的List内部的迭代器实现;</p>
+</li>
+<li><p><strong>SubList与RandomAccessSubList是一组</strong>: 最牛逼的父子组合, 连续继承了包含他们的AbstractList, 并配合实现了RandomAccess和AbstractList; 主要应用于创建List的子视图;</p>
+</li>
+</ol>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>8. AbstractSet</strong></p>
+<p>AbstractSet 是一个继承于AbstractCollection，并且实现Set接口的抽象类。&lt;font color="#ff0000"&gt;由于Set接口和Collection接口中的API完全一样，Set也就没有自己单独的API。&lt;/font&gt;</p>
+<p><strong>和AbstractCollection一样，它实现了List中除iterator()和size()之外的方法, 从而方便其它类实现Set接口。</strong></p>
+<pre><code class="language-java">public abstract class AbstractSet&lt;E&gt; extends AbstractCollection&lt;E&gt; implements Set&lt;E&gt; {
+    
+    protected AbstractSet() {}
+    
+    /* 重写了Collection中的equals()和hashcode()方法 */
+    public boolean equals(Object o) {...}
+    public int hashCode() {...}
+    
+    /* 实现了Set接口中的removeAll()方法 */
+    public boolean removeAll(Collection&lt;?&gt; c) {...}
+}
+
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注:</strong></p>
+<p>AbstractSet比较简单, 因为Set接口在继承自Collection时, 除了of()方法和copyOf()方法之外, 也确实没声明什么新的东西;</p>
+<p>不过在AbstractSet中就实现了removeAll, 说明下面的代码估计都懒省事了233.</p>
+</blockquote>
+<p>&lt;br/&gt;</p>

@@ -1,0 +1,75 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E3%80%90%E8%BD%AC%E3%80%91Nginx%E7%9A%84Header%E4%B8%AD%E4%BD%BF%E7%94%A8%E4%B8%8B%E5%88%92%E7%BA%BF%E6%97%B6%E7%9A%84%E4%B8%80%E4%B8%AA%E5%9D%91.html">【转】Nginx的Header中使用下划线时的一个坑</a></h2>
+<hr/>
+<h2>title: 【转】Nginx的Header中使用下划线时的一个坑
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?34'
+date: 2021-06-24 15:10:29
+categories: Nginx
+tags: [Nginx, 技术杂谈]
+description: Nginx的Header中默认不解析下划线，这一点要注意！</h2>
+<p>Nginx的Header中默认不解析下划线，这一点要注意！</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>【转】Nginx的Header中使用下划线时的一个坑</strong></h2>
+<h3><strong>问题描述</strong></h3>
+<p>最近遇到一个 Nginx 转发的坑，一个请求转发到 Tomcat 时发现有几个 http header 始终获取不到，导致线上出现 bug，运维说不是他的问题，这个锅我背了。</p>
+<p>新增的几个 <strong>header</strong> 是这样的：</p>
+<ul>
+<li>accept_sign</li>
+<li>accept_token</li>
+<li>...</li>
+</ul>
+<p>反复检查代码，确定这些 header 是传了的，而且本地测试单独在 tomcat 中是可以接受到这些参数的，所以 tomcat 和命名本身是没问题的，初步断定是 Nginx 的问题；</p>
+<p>经过一翻搜索，终于找到了一个 Nginx 的配置参数：</p>
+<ul>
+<li><strong>underscores_in_headers</strong>：这个参数默认值为：off，即默认忽略带下划线的 header；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>解决方案：</strong></h3>
+<h4><strong>① 修改Nginx配置</strong></h4>
+<p>在 http 或者 server 配置中把 <strong>underscores_in_headers</strong> 配置参数开关打开：</p>
+<pre><code>server {
+  ...
+  underscores_in_headers on;
+  ...
+}
+</code></pre>
+<p>增加配置后，然后重启 Nginx；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>② 修改Header</strong></h4>
+<p>使用破折号（-）代替下划线（_），或者统一规范直接不要使用下划线；</p>
+<p>我们来看下一般的 http <strong>header</strong> 长什么样的：</p>
+<pre><code>HTTP/1.1 200 OK
+Date: Thu, 24 Jun 2021 07:23:35 GMT
+Cache-Control: max-age=600, public, must-revalidate
+CF-Cache-Status: DYNAMIC
+cf-request-id: 0ade802cdc0000cc6684aa3000000001
+Server: cloudflare
+CF-RAY: 66443627cfaacc66-YOW
+alt-svc: h3-27=":443"; ma=86400, h3-28=":443"; ma=86400, h3-29=":443"; ma=86400, h3=":443"; ma=86400
+Content-Type: text/html
+Last-Modified: Fri, 02 Apr 2021 00:40:42 GMT
+Vary: Accept-Encoding
+Content-Encoding: gzip
+X-DNS-Prefetch-Control: off
+</code></pre>
+<p>一般所见的 headers 确实也都是中杠线，没有下划线；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>Nginx 为什么默认忽略带下划线 header？</strong></h3>
+<p>我找到了 Nginx 的官方说明：</p>
+<blockquote>
+<p>https://www.nginx.com/resources/wiki/start/topics/tutorials/config_pitfalls/?highlight=underscores#missing-disappearing-http-headers</p>
+</blockquote>
+<blockquote>
+<p>If you do not explicitly set <code>underscores_in_headers on;</code>, NGINX will silently drop HTTP headers with underscores (which are perfectly valid according to the HTTP standard). This is done in order to prevent ambiguities when mapping headers to CGI variables as both dashes and underscores are mapped to underscores during that process.</p>
+</blockquote>
+<p>根据官方说明，这样做是&lt;font color="#f00"&gt;<strong>为了避免把 headers 映射为 CGI 变量时出现歧义，因为破折号和下划线都会被映射为下划线，所以两者不好区分；</strong>&lt;/font&gt;</p>
+<p>好吧，终于弄清楚了，这个问题也太变态了，这应该是 Nginx 设计时的一个缺陷吧，这个坑我替你们踩了！</p>
+<p>所以，推荐大家使用第二种方案：&lt;font color="#f00"&gt;<strong>统一规范 headers 不要使用下划线，使用 Nginx 默认的配置即可，这样可以尽量避免环境上的差异，以免后续带来问题；</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>附录</strong></h2>
+<p>文章转自：</p>
+<ul>
+<li><a href="https://mp.weixin.qq.com/s/gERA4XFZnTrHcczyWMIBtg">Nginx 转发时的一个坑，运维居然让我背锅！！</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

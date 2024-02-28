@@ -1,0 +1,356 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2020-01-05-how-babel-is-built.html">How Babel Is Built</a></h2>
+<hr/>
+<h2>layout: post
+title: How Babel Is Built
+tags: [babel]</h2>
+<h2>Introduction</h2>
+<p><a href="https://github.com/babel/babel">Babel</a> is a Node.js tool to use next-generation JavaScript now. This article will explain how Babel is designed to solve this problem, based on the source codes on the master branch in November 2019.</p>
+<h2>How is Babel designed?</h2>
+<p><img alt="Babel Modules" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2020-01-05-how-babel-is-built/babel-modules.svg"/></p>
+<p>babel-loader belongs to webpack project, which is not in the Babel repository.</p>
+<h2>Framework Layer</h2>
+<h3>Common Compilers</h3>
+<p>There are acorn, @babel/parser (babylon), flow, traceur, typescript, and uglify-js e.t.c. The ASTs of those compilers are almost the same.</p>
+<h3>How @babel/parser Is Designed</h3>
+<h4>Important Conceptes</h4>
+<ul>
+<li>Literal: Including Boolean, Number, and String.</li>
+<li>Identifier: Including variable names, undefined and null e.t.c.</li>
+<li>Val: Value. There are two kinds of values, left values ​​, and right values. Left values represent nodes that can be assigned to, like: <code>[a]</code>. They are mostly Pattern or Identifier type. Right values represent nodes that convey specific values, like <code>b.c</code>. They are mostly Expression, Identifier and Literal type. Left values and right values are connected with equal signs to represent assignment expressions, like <code>[a] = b.c</code>.</li>
+<li>Expression: often be used as the right value. There are expressions like MemberExpression, BinaryExpression, UnaryExpression, AssignmentExpression, CallExpression e.t.c.</li>
+<li>Statement: often consists of expressions. ExpressionStatements are often seen.</li>
+<li>Program: all codes contained within a program. A program contains some parallel statements.</li>
+</ul>
+<pre><code class="language-js">let c = 0;
+while (a &lt; 10) {
+  const b = a % 2;
+  if (b == 0) {
+    c++;
+  }
+}
+console.log(c);
+</code></pre>
+<p>The codes above are converted to AST below by  @babel/parser:</p>
+<p><img alt="Example AST" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2020-01-05-how-babel-is-built/example-ast.svg"/></p>
+<h4>@babel/parser's 9 Levels of Inheritance</h4>
+<p><img alt="@babel/parser's 9 Levels of Inheritance" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2020-01-05-how-babel-is-built/9-extends.svg"/></p>
+<ul>
+<li>Parser: Initialization</li>
+<li>StatementParser: Parses statements and combine them into a program. 2100+ lines of codes.</li>
+<li>ExpressionParser: 2400+ lines of codes.</li>
+<li>LValParser: Parses left values, converts a node into an assignable node. e.g. convert an ArrayExpression into ArrayPattern.</li>
+<li>NodeUtils: Provides AST operations. e.g. copy node.</li>
+<li>UtilParser: Provides utilities, e.g. to tell if it's the end of a line.</li>
+<li>Tokenizer: 1400+ lines of codes.</li>
+<li>LocationParser: Records line and column locations.</li>
+<li>CommentsParser: Parses comments.</li>
+<li>BaseParser: Provides plugin abilities.</li>
+</ul>
+<p>Most modules are written in about 100 lines. Excepts StatementParser, ExpressionParser, and Tokenizer, they have complex logic.</p>
+<h3>@babel/traverse</h3>
+<p>@babel/traverse provides a way of walk through all AST nodes, like:</p>
+<pre><code class="language-js">traverse(ast, {
+  FunctionDeclaration: function(path) {
+    path.node.id.name = "x";
+  }
+});
+
+traverse(ast, {
+  enter(path) {
+    if (path.isIdentifier({ name: "n" })) {
+      path.node.name = "x";
+    }
+  }
+});
+</code></pre>
+<p><code>path</code> is an object representing the link between two nodes, with some properties and methods listed below:</p>
+<ul>
+<li>Properties<ul>
+<li>node: child node</li>
+<li>parent: parent node</li>
+<li>parentPath: parent path</li>
+<li>scope: current scope</li>
+</ul>
+</li>
+<li>Methods<ul>
+<li>get: get child node AST properties</li>
+<li>findParent: find parent paths</li>
+<li>getSibling: get sibling paths</li>
+<li>getFunctionParent: get the closest parent path which is a function type</li>
+<li>getStatementParent: get the closest parent path which is a statement type</li>
+<li>replaceWith: replace child node with input</li>
+<li>replaceWithMultiple: replace child node with multiple inputs</li>
+<li>replaceWithSourceString: replace child node with source code string, Babel will convert source string into AST first</li>
+<li>insertBefore: insert input before child node as its silbing before</li>
+<li>insertAfter: insert input after child node as its silbing after</li>
+<li>remove: remove child node</li>
+<li>pushContainer: push input into an array like node property</li>
+</ul>
+</li>
+</ul>
+<h3>@babel/generator</h3>
+<p>@babel/generator converts AST into source string. e.g.:</p>
+<pre><code class="language-js">import { parse } from '@babel/parser';
+import generate from '@babel/generator';
+
+const ast = parse('class Example {}');
+generate(ast); // =&gt; { code: 'class Example {}' }
+</code></pre>
+<p>It can generates a source map. e.g.:</p>
+<pre><code class="language-js">import { parse } from '@babel/parser';
+import generate from '@babel/generator';
+
+const code = 'class Example {}';
+const ast = parse(code);
+
+const output = generate(ast, { sourceMaps: true, sourceFileName: code }); // =&gt; { code: 'class Example {}', rawMappings: ... }
+// or
+const output = generate(ast, { sourceMaps: true, sourceFileName: 'source.js' }, code); // =&gt; { code: 'class Example {}', rawMappings: ... }
+</code></pre>
+<p>It can merge multiple source files together and generates a source map. e.g.:</p>
+<pre><code class="language-js">import { parse } from '@babel/parser';
+import generate from '@babel/generator';
+
+const a = 'var a = 1;';
+const b = 'var b = 2;';
+const astA = parse(a, { sourceFilename: 'a.js' });
+const astB = parse(b, { sourceFilename: 'b.js' });
+const ast = {
+  type: 'Program',
+  body: [...astA.program.body, ...astB.program.body]
+};
+
+const { code, map } = generate(ast, { sourceMaps: true }, {
+  'a.js': a,
+  'b.js': b
+});
+</code></pre>
+<h3>@babel/core</h3>
+<p>@babel/core provides APIs of <code>transform</code> and <code>parse</code>.</p>
+<p>The <code>transform</code> API consists steps of parse -&gt; traverse -&gt; generate.</p>
+<p>The <code>parse</code> API is mainly a wrapper of @babel/parser.</p>
+<h2>Implementation Layer</h2>
+<h3>@babel/plugin</h3>
+<h4>@babel/plugin-syntax-x</h4>
+<p>They provide syntax parsing abilities by switching on the syntax switches. In @babel/parser, if a syntax switch is on, then it parses a certain syntax. Otherwise, it raises a syntax error. Let's see @babel/plugin-syntax-jsx for example:</p>
+<pre><code class="language-js">parserOpts.plugins.push("jsx");
+</code></pre>
+<h4>@babel/plugin-transform-x</h4>
+<p>They provide transformations from latest-generation JavaScript to past-generation JavaScript. Like @babel/plugin-transform-exponentiation-operator:</p>
+<pre><code class="language-js">export default {
+  name: "transform-exponentiation-operator",
+  visitor: build({
+    operator: "**",
+    build(left, right) {
+      return t.callExpression(
+        t.memberExpression(t.identifier("Math"), t.identifier("pow")),
+        [left, right],
+      );
+    },
+  }),
+}
+</code></pre>
+<h4>@babel/plugin-proposal-x</h4>
+<p>They provide transformations from next-generation JavaScript to past-generation JavaScript. Like: @babel/plugin-proposal-numeric-separator：</p>
+<pre><code class="language-js">export default {
+  name: "proposal-numeric-separator",
+  inherits: syntaxNumericSeparator,
+
+  visitor: {
+    CallExpression: replaceNumberArg,
+    NewExpression: replaceNumberArg,
+    NumericLiteral({ node }) {
+      const { extra } = node;
+      if (extra &amp;&amp; /_/.test(extra.raw)) {
+        extra.raw = extra.raw.replace(/_/g, "");
+      }
+    },
+  },
+}
+</code></pre>
+<h3>@babel/preset-x</h3>
+<p>They provide sets of combined plugins, syntax and helpers.</p>
+<p>The most common preset is @babel/preset-env, which takes advantage of browserslist to decide which level of past-generation transformation should be used.</p>
+<h3>@babel/polyfill</h3>
+<p>This is deprecated from Babel 7.4.0. Now core-js and regenerator-runtime are recommended to replace it. core-js provides polyfills of ECMAScript and regenerator-runtime provides runtimes for async functions and generator functions.</p>
+<h3>@babel/helpers</h3>
+<p>It defines helper functions for Babel runtime. e.g. classCallCheck is used for checking a function is called as a class, and it is inserts to a class define.</p>
+<p>In a plugin, the helpers are called as:</p>
+<pre><code class="language-js">export default {
+  visitor: {
+    ClassExpression(path) {
+	    this.addHelper("classCallCheck");
+      // ...
+  }
+};
+</code></pre>
+<p>The generated code will contain classCallCheck:</p>
+<pre><code class="language-js">function _classCallCheck(instance, Constructor) {
+  if (!(instance instanceof Constructor)) {
+    throw new TypeError("Cannot call a class as a function");
+  }
+}
+
+var Circle = function Circle() {
+  _classCallCheck(this, Circle);
+};
+</code></pre>
+<h3>@babel/runtime</h3>
+<p>It provides Babel runtimes, including regenerator-runtime. Runtimes provide some helper codes. e.g.:</p>
+<p>When we use @babel/helpers:</p>
+<pre><code class="language-js">function _classCallCheck(instance, Constructor) {
+  if (!(instance instanceof Constructor)) {
+    throw new TypeError("Cannot call a class as a function");
+  }
+}
+
+var Circle = function Circle() {
+  _classCallCheck(this, Circle);
+};
+</code></pre>
+<p>While we use @babel/plugin-transform-runtime to reduce such codes:</p>
+<pre><code class="language-js">var _classCallCheck = require("@babel/runtime/helpers/classCallCheck");
+
+var Circle = function Circle() {
+  _classCallCheck(this, Circle);
+};
+</code></pre>
+<p>There is no code in @babel/runtime source code repository. The build script copies @babel/helpers into @babel/runtime.</p>
+<p>Apart from this runtime, Babel provides @babel/runtime-corejs2 and @babel/runtime-corejs3. They are based on core-js v2 and v3. You can use them by setting corejs option in configs of @babel/plugin-transform-runtime.</p>
+<h2>Helpers Layer</h2>
+<h3>@babel/types</h3>
+<p>This provides basic AST node types and AST node factories to make @babel/plugin and @babel/parser easy to manipulate AST nodes.</p>
+<pre><code class="language-js">const binaryExpression = t.binaryExpression('+', t.numericLiteral(1), t.numericLiteral(2))
+</code></pre>
+<h3>@babel/code-frame</h3>
+<p>This prints out a code frame to explain the error to the users. e.g.:</p>
+<pre><code class="language-js">import { codeFrameColumns } from '@babel/code-frame';
+
+const rawLines = `class Foo {
+  constructor()
+}`;
+const location = { start: { line: 2, column: 16 } };
+codeFrameColumns(rawLines, location);
+</code></pre>
+<p>The output is:</p>
+<pre><code>  1 | class Foo {
+&gt; 2 |   constructor()
+    |                ^
+  3 | }
+</code></pre>
+<h3>@babel/highlight</h3>
+<p>This provides syntax highlight in the terminal.</p>
+<pre><code class="language-js">import highlight from "@babel/highlight";
+
+const code = `class Foo {
+  constructor()
+}`;
+highlight(code);												// =&gt; "\u001b[36mclass\u001b[39m \u001b[33mFoo\u001b[39m {\n  constructor()\n}"
+</code></pre>
+<p>In the terminal, it prints out:</p>
+<p><img alt="@babel/highlight" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2020-01-05-how-babel-is-built/highlight.png"/></p>
+<h3>@babel/template</h3>
+<p>Babel template engine.</p>
+<pre><code class="language-js">import template from "@babel/template";
+import generate from "@babel/generator";
+import * as t from "@babel/types";
+
+const buildRequire = template(`
+  var %%importName%% = require(%%source%%);
+`);
+
+const ast = buildRequire({
+  importName: t.identifier("myModule"),
+  source: t.stringLiteral("my-module"),
+});
+
+generate(ast).code											// =&gt; var myModule = require('my-module');
+</code></pre>
+<h3>@babel/helper-x</h3>
+<p>This contains Babel helper functions, including common utilities, helper functions for testing and so on.</p>
+<h2>Application Layer</h2>
+<h3>@babel/cli</h3>
+<p>This transforms codes in the terminal.</p>
+<pre><code class="language-sh">babel script.js # prints out the transformed codes
+</code></pre>
+<h3>@babel/standalone</h3>
+<p>This transforms codes in the browser. e.g. the Babel website uses this module.</p>
+<pre><code class="language-html">&lt;div id="input"&gt;&lt;/div&gt;
+&lt;div id="output"&gt;&lt;/div&gt;
+&lt;button id="transform"&gt;Transform&lt;/button&gt;
+&lt;!-- Load @babel/standalone --&gt;
+&lt;script src="https://unpkg.com/@babel/standalone/babel.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+document.getElementById('transform').addEventListener('click', function() {
+	const input = document.getElementById('input').value;
+	const output = Babel.transform(input, { presets: ['es2015'] }).code;
+	document.getElementById('output').value = output;
+});
+&lt;/script&gt;
+</code></pre>
+<p>@babel/standalone can also automatically transform and execute codes in <code>&lt;script type="text/babel"&gt;&lt;/script&gt;</code> and <code>&lt;script type="text/jsx"&gt;&lt;/script&gt;</code> tag.</p>
+<pre><code class="language-html">&lt;div id="output"&gt;&lt;/div&gt;
+&lt;!-- Load @babel/standalone --&gt;
+&lt;script src="https://unpkg.com/@babel/standalone/babel.min.js"&gt;&lt;/script&gt;
+&lt;!-- ES2015 will be transformed and executed --&gt;
+&lt;script type="text/babel"&gt;
+const getMessage = () =&gt; "Hello World";
+document.getElementById('output').innerHTML = getMessage();
+&lt;/script&gt;
+</code></pre>
+<h3>@babel/node</h3>
+<p>This provides you to execute next-generation JavaScript in the command line. @babel/cli is the command line interface to transform codes, but not execute them. While @babel/node transforms and executes codes. This module is not suitable for production.</p>
+<pre><code class="language-sh">babel-node -e script.js # You can use next-generation JavaScript in script.js 
+</code></pre>
+<h3>@babel/register</h3>
+<p>This provides you to require a next-generation JavaScript file in Node.js environment. This is much similar to @babel/node. This is not suitable for production too.</p>
+<pre><code class="language-js">require("@babel/register")();
+require("./script.js"); 					// You can use next-generation JavaScript in script.js 
+</code></pre>
+<h2>Example Syntax Transform Outputs</h2>
+<h3><code>Array.from</code></h3>
+<pre><code class="language-js">// input
+Array.from([1, 2, 3])
+
+// output
+var _array_from_ = require('@babel/runtime-corejs3/core-js-stable/array/from');
+_array_from_([1, 2, 3]);
+</code></pre>
+<h3>JSX</h3>
+<pre><code class="language-js">// input
+&lt;div className="text"&gt;{content}&lt;/div&gt;
+
+// output
+React.createElement('div', { className: 'text' }, content);
+</code></pre>
+<h3><code>class</code></h3>
+<pre><code class="language-js">// input
+class Example extends Component { constructor(props) { super(props) } }
+
+// output
+var _inherits_ = require('@babel/runtime-corejs3/helpers/interits');
+var _class_call_check_ = require('@babel/runtime-corejs3/helpers/classCallCheck');
+var _possible_constructor_return_ = require('@babel/runtime-corejs3/helpers/possibleConstructorReturn');
+var _get_prototype_of_ = require('@babel/runtime-corejs3/helpers/getPrototypeOf');
+var _create_class_ = require('@babel/runtime-corejs3/helpers/createClass');
+
+var Example = function (_Component) {
+  _inherits_(Example, _Component);
+
+  function Example(props) {
+    _class_call_check_(this, Example);
+
+    return _possible_constructor_return_(this, _get_prototype_of_(Example).call(this, props));
+  }
+
+  _create_class_(Example, []);
+
+  return Example;
+}(Component);
+</code></pre>
+<h2>Reference</h2>
+<ul>
+<li><a href="http://www.alloyteam.com/2017/04/analysis-of-babel-babel-overview/">剖析 Babel——Babel 总览</a></li>
+<li><a href="https://juejin.im/post/5b56e5636fb9a04fd26098bd">从AST编译解析谈到写babel插件</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/27289600">Babel是如何读懂JS代码的</a></li>
+</ul>

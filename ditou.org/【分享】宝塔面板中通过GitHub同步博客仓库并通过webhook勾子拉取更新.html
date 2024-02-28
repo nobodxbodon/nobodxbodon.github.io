@@ -1,0 +1,102 @@
+<h2>原文：<a href="https://ditou.org/20191121.html">【分享】宝塔面板中通过GitHub同步博客仓库并通过webhook勾子拉取更新</a></h2>
+<hr/>
+<h2>title: "【分享】宝塔面板中通过GitHub同步博客仓库并通过webhook勾子拉取更新"
+date: 2019-11-21T00:42:00+08:00
+draft: false
+categories: ["建站"]
+tags: ["分享", "宝塔webhook", "Gridea同步到VPS服务器", "云中君", "webhook", "github", "Gridea"]
+slug: 4
+toc: true</h2>
+<p>今天博友<a href="https://blog.shanbu.fun/">云中君</a>反馈，说他的博客又抽风了。</p>
+<p>原因是他将静态博客托管在coding上面，可是今天coding挂了，导致他的博客无法访问。</p>
+<p>这就很蛋疼了，写个博客本来就没几个人看还时不时失联，情何以堪。本来还有<a href="https://github.com/">GitHub</a>等一些平台可以使用，但我觉得换个方式可能会更好也说不定？</p>
+<p>他是通过<a href="https://gridea.dev/">Gridea</a>客户端写博客并更新同步到仓库的，但Gridea目前并不支持直接同步到自己的私有服务器，据说未来可能会支持FTP方式同步到私有服务器对应的网站目录。但何必这么麻烦，Gridea能同步推送更新到GitHub仓库就很好办。目前大部分使用的服务器都是Linux系统居多，只要服务器支持git就可以使用webhook勾子拉取仓库更新，使服务器对应的网站根目录文件与GitHub仓库保持一致。博客通过私有服务器提供访问应该会相对稳定一些，毕竟我的某个VPS上面就只有我自己的博客使用，并没有其它网站和额外的服务占用这个VPS的资源。</p>
+<p>那么，接下来就来完成这个工作，让他与我分享这个资源吧。</p>
+<h2>1.确保Gridea同步推送接口使用GitHub</h2>
+<p>这里我因为不使用该客户端所以不做说明，因为它的<a href="https://gridea.dev/">官网</a>已经介绍的非常详细了。</p>
+<h2>2.宝塔面板新建网站并启用</h2>
+<p>我使用的服务器是 CentOS 7 系统，该系统默认自带有git所以可以直接使用。如果你的系统没有请自行安装。</p>
+<p>CentOS 7 安装方法：<code>yum install git</code> ，其它系统请自行搜索和研究安装方式。</p>
+<p>需要注意的地方：</p>
+<ul>
+<li>域名需要解析到宝塔面板所在服务器的IP</li>
+<li>启用https访问需要注册ssl证书并在面板对应的网站正确配置并启用</li>
+</ul>
+<h2>3.宝塔面板使用webhook插件</h2>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/c3fe9bfa4196d113.png"/></p>
+<p>如上图。</p>
+<p>在宝塔面板的<code>软件商店</code>中搜索<code>webhook</code>安装并启用，在webhook插件的设置中添加一个调用条目：</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/12fecd83901de133.png"/></p>
+<p>编辑该条目的shell命令并保存：</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/fd3c9d3f1af3ef16.png"/></p>
+<p>命令内容参考：</p>
+<pre><code class="language-shell">#!/bin/bash
+echo ""
+#输出当前时间
+date --date='0 days ago' "+%Y-%m-%d %H:%M:%S"
+echo "Start"
+#判断宝塔WebHook参数是否存在
+if [ ! -n "$1" ];
+then
+          echo "param参数错误"
+          echo "End"
+          exit
+fi
+#git项目路径
+gitPath="①/www/wwwroot/$1"
+#git 网址
+gitHttp="②https://github.com/1078503/blog.git"
+
+echo "Web站点路径：$gitPath"
+
+#判断项目路径是否存在
+if [ -d "$gitPath" ]; then
+        cd $gitPath
+        #判断是否存在git目录
+        if [ ! -d ".git" ]; then
+                echo "在该目录下克隆 git"
+                git clone $gitHttp gittemp
+                mv gittemp/.git .
+                rm -rf gittemp
+        fi
+        #拉取最新的项目文件
+        git reset --hard origin/master
+        git pull
+        #设置目录权限
+        chown -R www:www $gitPath
+        echo "End"
+        exit
+else
+        echo "该项目路径不存在"
+        echo "End"
+        exit
+fi
+</code></pre>
+<p><code>①/www/wwwroot/$1</code>：请将这部分内容修改为你的网站对应的目录，比如你的博客对应的目录是<code>/www/wwwroot/blog.shan.fun/</code>，请直接编辑修改成<code>/www/wwwroot/$1</code>即可。<code>$1</code>请保留以便后面GitHub中配置webhook调用时生效，请勿删除或更改。</p>
+<p><code>②https://github.com/1078503/blog.git</code> ：你的GitHub仓库对应的拉取地址。</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/fdb87be7a455883c.png"/></p>
+<p>查看密钥：</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/faf73f831b0ce66e.png"/></p>
+<h2>4.GitHub配置webhook调用</h2>
+<p>打开GitHub对应仓库的<code>Settings</code>：</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/ef2f6ddf8ec3c79a.png"/></p>
+<p>找到webhooks并Add webhook：</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/de16c8f206705c3d.png"/></p>
+<p>如下图填写相关信息并保持：</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/decba050e45dffa7.png"/></p>
+<p><code>Payload URL</code>：<code> http://IP:端口/hook?access_key=密钥&amp;param=目录名</code></p>
+<p>IP:端口：修改为宝塔面板对应的</p>
+<p>密钥：为宝塔面板中webhook条目“查看密钥”获得的密钥，前文图中箭头所指。</p>
+<p>目录名：为宝塔面板对应网站的根目录，比如是<code>/www/wwwroot/blog.shan.fun/</code>则直接写<code>blog.shan.fun</code></p>
+<p>示例：</p>
+<p><code>http://127.0.0.1:8888/hook?access_key=Hd4gl6BrPSvqH5vnSbSjgtwIY3Lf5KGomG1XEd5VHhJxrrFt&amp;param=blog.shan.fun</code></p>
+<p><code>Content type</code> 按图示选择</p>
+<p><code>Secret</code> 密钥同上</p>
+<p>按图示检查设置好后保存。</p>
+<h2>5.Gridea中修改或新建文件（写文章也可以）同步推送后验证</h2>
+<p><a href="https://blog.shanbu.fun/">云中君</a>的验证方法是在博客页脚添加了我的链接😏，大爱：</p>
+<p><img alt="" src="https://img.dtz9.com/imgs/2019/11/37ad8cf5521924b0.png"/></p>
+<p>画了个难看的箭头请无视😂。</p>
+<p>通过上面的操作所有工作已经完成，接下来写博客就好。Gridea客户端正常同步后访问博客域名就能验证操作是否有效。注意由于涉及到服务器与GitHub仓库的通信，偶尔可能会有拉取不成功或缓慢的情况，这取决于你的服务器与GitHub之间的通信线路是否阻塞。不过，这种情况几乎可以忽略不计，除非你的服务器在国内。</p>
+<p>最后，突然想到我自己使用的hugo静态博客其实也可以这样推送更新，原理是一样的，我只是绕过了GitHub仓库直接与服务器的git仓库通信而已。我之前没有把博客直接放在GitHub上面提供访问是因为听多了经常抽风的传闻，所以直接放在了VPS上。另外还有独立博客中“独立”二字的考虑。</p>
+<p>参考：https://www.bt.cn/bbs/thread-5348-1-1.html</p>

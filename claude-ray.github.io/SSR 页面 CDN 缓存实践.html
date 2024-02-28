@@ -1,0 +1,169 @@
+<h2>原文：<a href="https://claude-ray.github.io/ssr-cdn-cache.html">SSR 页面 CDN 缓存实践</a></h2>
+<hr/>
+<h2>title: SSR 页面 CDN 缓存实践
+date: 2020-07-03 19:38:57
+tags: [SSR,CDN,Cache]
+categories: Architect</h2>
+<p>SSR 是一项资源密集型任务，要抵抗更大流量、提供更快的服务，缓存是其中的必修课。</p>
+<p>而 CDN 缓存——作为静态资源的首要支撑，适合武装到 SSR 页面吗？</p>
+<p>&lt;!--more--&gt;</p>
+<h2>开始之前</h2>
+<p>大家对 CDN 应该已经耳熟能详，如果不甚了解也没关系，我们先通过一系列问答带诸位走近这个话题。</p>
+<h3>为什么接入 CDN？</h3>
+<p>抽象一个简单的请求链路，方便理解 CDN 的定位。</p>
+<p>接入前：</p>
+<p><img alt="cdn1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/image/ssr-cdn-cache/cdn1.png"/></p>
+<blockquote>
+<p>用户 -&gt; Nginx -&gt; App Server</p>
+</blockquote>
+<p>接入后：</p>
+<p><img alt="cdn2" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/image/ssr-cdn-cache/cdn2.png"/></p>
+<blockquote>
+<p>用户 -&gt; CDN -&gt; Nginx -&gt; App Server</p>
+</blockquote>
+<p>看似增加了一层传输成本，其实不然。</p>
+<p>CDN 利用自身广大的服务器资源，能动态优化访问路由、就近提供访问节点，以更低延迟、更高带宽从源站获取数据，优化了网络层面的用户体验。</p>
+<h3>为什么开启 CDN 缓存？</h3>
+<p>开启前：浏览器 -&gt; CDN -&gt; Nginx -&gt; App Server1 -&gt; App Server2 -&gt; …</p>
+<p>开启后：浏览器 &lt;-&gt; CDN</p>
+<p>CDN 能够缓存用户请求到的资源，并且可以包含 HTTP 响应头。在下一次任意用户请求同样的资源时，用缓存的资源直接响应用户，节省了本该由源站处理的所有后续步骤。</p>
+<p>更直观的表达，就是截短了请求链路。</p>
+<p><img alt="cdn3" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/image/ssr-cdn-cache/cdn3.png"/></p>
+<h3>如何开启 CDN 缓存？</h3>
+<p>在不考虑自研 CDN 的情况下，开启 CDN 缓存的步骤非常简单：</p>
+<ol>
+<li>域名接入 CDN 服务，同时针对路径启用缓存</li>
+<li>在源站设置 Cache-Control 响应头，为了更灵活地控制缓存规则，但并不是必须</li>
+</ol>
+<h3>哪些服务可以开启 CDN 缓存？</h3>
+<p>大部分网站都适合接入 CDN，但 SSR 页面只有满足一定条件才可以开启 CDN 缓存</p>
+<ul>
+<li>无用户状态</li>
+<li>对时效性要求不高，至少能接受分钟级的延迟</li>
+</ul>
+<h3>怎样判断是否命中缓存？</h3>
+<p>不同 CDN 平台检测的方法略有不同，本质上都是判断响应头的标识字段。以腾讯 CDN 为例，响应头 X-Cache-Lookup 分别表示</p>
+<ul>
+<li>Hit From MemCache: 命中 CDN 节点的内存</li>
+<li>Hit From Disktank: 命中 CDN 节点的磁盘</li>
+<li>Hit From Upstream: 未命中缓存，回源</li>
+</ul>
+<p>&lt;img src="/image/ssr-cdn-cache/cdn-headers.png" alt="cdn-headers" style="zoom:50%;" /&gt;</p>
+<p>如果该字段不存在，说明该页面没有配置 CDN，或未开启缓存。</p>
+<h2>CDN 缓存优化</h2>
+<p>用来衡量缓存效果的重要指标是缓存命中率，在正式设置 CDN 缓存之前，我们再来了解几个提高缓存命中率的要点。这些要点也适合作为评估系统是否应该接入 CDN 缓存的标准。</p>
+<h3>延长缓存时间</h3>
+<p>提高 Cache-Control 的时间是最有效的措施，缓存持续时间越久，缓存失效的机会越少。</p>
+<p>即使页面访问量不大的时候也能显著提高缓存命中率。</p>
+<p>需要注意，Cache-Control 只能告知 CDN 该缓存的时间上限，并不影响它被 CDN 提早淘汰。流量过低的资源，很快会被清理掉，CDN 用逐级沉淀的缓存机制保护自己的资源不被浪费。</p>
+<h3>忽略 URL 参数</h3>
+<p>用户访问的完整 URL 可能包含了各种参数，CDN 默认会把它们当作不同的资源，每个资源又是独立的缓存。</p>
+<p>而有些参数是明显不合预期的，例如，页面链接在微信等渠道分享后，末尾被挂上各种渠道自身设置的统计参数。平均到单个资源的访问量就会大大降低，进而降低了缓存效果。</p>
+<p>CDN 支持后台开启 <code>过滤参数</code> 选项，来忽略 URL <code>?</code> 后面的参数。 此时同一个 URL 一律当作同一个资源文件。</p>
+<p>在腾讯 CDN 中，忽略参数的功能无法针对某个 URL，仅支持整个域名生效，这让过滤参数成为了极具风险的操作。除非域名缓存专用，否则不建议开启这个选项，即便同域名内所有已接入 CDN 缓存的资源都不依赖 URL 参数，也不能保证将来不会因此踩坑。</p>
+<h3>主动缓存</h3>
+<p>化被动为主动，才有可能实现 100% 的缓存命中率。</p>
+<p>常用的主动缓存是资源预热，更适合 URL 路径明确的静态文件，动态路由无法交给 CDN 智能预热，除非依次推送具体的地址。</p>
+<h2>代码演进</h2>
+<p>谈过 CDN 缓存优化的几个要点，便可得知 CDN 后台的配置是需要谨慎对待的。我在实际操作中，也经过了几个阶段的调整，可毕竟具体配置方式取决于 CDN 服务商，因此本文不再深入讨论。</p>
+<p>现在，我们要把目光转到代码层的演进了。</p>
+<h3>一、掌控缓存</h3>
+<p>代码配置有一个前提，即 CDN 后台需要开启读取源站 Cache-Control 的支持。</p>
+<p>而后，只要简单地添加响应头，就能从运维手中接管设置 CDN 缓存规则的主动权。</p>
+<p>以 Node.js Koa 中间件为例，全局的初始化版本如下</p>
+<pre><code class="language-js">app.use((ctx, next) =&gt; {
+  ctx.set('Cache-Control', `max-age=300`)
+})
+</code></pre>
+<p>当然，上述代码的疏漏是非常多的。在 SSR 应用中，不太需要缓存所有的页面，这就要补充路径的判断条件。</p>
+<h3>二、控制路径</h3>
+<p>虽然 CDN 后台也可以配置路径，但配置方式乃至路径数量都有局限性，不如代码形式灵活。</p>
+<p>假如我们只需要缓存 /foo 页面，就加入 if 判断</p>
+<pre><code class="language-js">app.use((ctx, next) =&gt; {
+  if (ctx.path === '/foo') {
+    ctx.set('Cache-Control', `max-age=300`)
+  }
+})
+</code></pre>
+<p>这就陷入了第一个陷阱，一定要注意路由对 path 的处理。一般地，'/foo' 和 '/foo/' 是两个独立的 path。可能因为 ctx.path === '/foo' 而漏掉了请求 path 为 /foo/ 的处理。</p>
+<h3>三、补充路径</h3>
+<p>伪代码如下</p>
+<pre><code class="language-js">app.use((ctx, next) =&gt; {
+  if ([ '/foo', '/foo/' ].includes(ctx.path)) {
+    ctx.set('Cache-Control', `max-age=300`)
+  }
+})
+</code></pre>
+<p>此外，CDN 后台的配置也需要规避这个问题。在腾讯 CDN 中，目录和文件适用于不同的页面路径。</p>
+<h3>四、忽略降级页面</h3>
+<p>在服务端渲染失败时，为了提高容错，我们会返回降级之后的页面，转为客户端渲染。如果因为偶然的网络波动，导致 CDN 缓存了降级页面，将在一段时间内持续影响用户体验。</p>
+<p>所以我们又引入了 ctx._degrade 自定义变量，标识页面是否触发了降级</p>
+<pre><code class="language-js">app.use(async (ctx, next) =&gt; {
+  if ([ '/foo', '/foo/' ].includes(ctx.path)) {
+    ctx.set('Cache-Control', `max-age=300`)
+  }
+
+  await next()
+
+  // 页面降级时，取消缓存
+  if (ctx._degrade) {
+    ctx.set('Cache-Control', 'no-cache')
+  }
+})
+</code></pre>
+<p>没错，这并不是最后一个陷阱。</p>
+<h3>五、Cookie 和状态治理</h3>
+<p>上面已经提到了 CDN 可以选择性地缓存 HTTP 响应头，可是此选项是对整个域名生效，又普遍需要开启。</p>
+<p>新的问题正是来自一个不希望被缓存的响应头。</p>
+<p>应用 Cookie 的设置依赖于响应头 Set-Cookie 字段，Set-Cookie 的缓存直接会导致所有用户的 Cookie 被刷新为同一个。</p>
+<p>有多个解决方案，一是该页面不要设置任何 Cookie，二是代理层过滤掉 Set-Cookie 字段。可惜腾讯 CDN 目前还不支持对响应头的过滤，这步容错必须自己操作。</p>
+<pre><code class="language-js">app.use(async (ctx, next) =&gt; {
+  const enableCache = [ '/foo', '/foo/' ].includes(ctx.path)
+
+  if (enableCache) {
+    ctx.set('Cache-Control', `max-age=300`)
+  }
+
+  await next()
+
+  // 页面降级时，取消缓存
+  if (ctx._degrade) {
+    ctx.set('Cache-Control', 'no-cache')
+  }
+  // 缓存页面不设 Set-Cookie
+  else if (enableCache) {
+    ctx.res.removeHeader('Set-Cookie')
+  }
+})
+</code></pre>
+<p>上面增加的代码旨在页面响应前移除 Set-Cookie，但是中间件的加载顺序是难以控制的。特别是一些（中间件）插件，会隐式地创建 Cookie，这让 Cookie 的清理工作异常麻烦。如果后续维护人员不知情，很可能将 Set-Cookie 重新加入到响应头中。所以，这种擦屁股的工作，尽量在代理层处理，而不是放在代码逻辑中。</p>
+<p>除了 Cookie，还可能面临其他状态信息管理问题。比如在 Vuex 的 renderState 中存放请求用户的登录状态，此时 HTML 页面嵌入了用户信息，如果被 CDN 缓存，在客户端将发生和未清除 Set-Cookie 相似的问题。类似的例子还有很多，它们的解决思路非常相像，接入 CDN 缓存前务必对状态信息做好全面的排查。</p>
+<h3>六、定制缓存路径</h3>
+<p>现在功能总算趋于正常，然而缓存规则复杂多变，如果想设置更多页面，还要单独定制缓存时间呢？这段代码仍需要不断地变动。</p>
+<p>例如，我们只想缓存 /foo/:id，而不缓存 /foo/foo、/foo/bar 等路径。</p>
+<blockquote>
+<p>注意 CDN 后台可能只支持配置一个 /foo/ 开头的缓存路径，这就要求我们需要将 ctx.set('Cache-Control', 'no-cache') 做为默认处理，加在中间件的第一行。</p>
+</blockquote>
+<p>又比如，我们想缓存 /foo 页面 5 分钟，/bar 页面 1 天，又需要引入一个时间配置表。</p>
+<p>这个中间件和相应的配置就会变得越来越难以维护。</p>
+<p>因此，我们换一种思路，缓存规则不再交给中间件，而是转到 Vue SSR 的 entry-server，通过 metadata 可以做到页面级别的配置。由于 SSR 方案的差异性，不再赘述具体实现。</p>
+<h3>七、缓存失效</h3>
+<p>缓存失效是个中性词，如何处理 CDN 缓存失效，此中利弊不得不慎重权衡。</p>
+<p>一方面，它会间歇增加服务压力，在 Serverless 应用中还会提高计算成本。而另一方面，许多场景我们不得不主动触发它，才能真正更新资源。</p>
+<p>CDN 缓存的黑暗面无法让人忽视。对用户而言，缓存是透明的，对产品、技术却很可能成为阻碍。</p>
+<p>如果处理不当，它将影响新功能能否及时发布、阻断后置所有服务的埋点、提高风险感知的成本，以及无法保障一致性，增加了线上问题的排查难度。</p>
+<p>因此，十分有必要设立一个负责缓存刷新、预热的触发式服务，用以改进开发人员的体验。可是 CDN 缓存可控性很低，刷新也不能做到全然实时生效。</p>
+<p>处于频繁变化的页面，最好考虑进入稳定期再开启 CDN 缓存。即使是稳定的、大流量的页面，也还需要考虑 CDN 缓存穿透的防范措施。</p>
+<p>一旦 CDN 缓存在 SSR 架构中得到重用，就要做好长期调整决策的准备。</p>
+<h2>总结</h2>
+<p>CDN 缓存是一把利刃，在大流量的场景下，可以替源站拦截几乎所有的请求，能提供极强伸缩性的负载。</p>
+<p>那么 SSR 应用适合接入 CDN 缓存吗？再一次细数上面提到的诸多问题…</p>
+<ul>
+<li>路径控制</li>
+<li>页面降级</li>
+<li>状态治理</li>
+<li>缓存失效</li>
+</ul>
+<p>答案得你自己说了算。</p>
+<p>实际上，极少数 SSR 页面场景才需要 CDN 缓存，如门户首页。</p>
+<p>流量不高、路径分散的一般业务，只需要使用动态的 CDN 加速和静态文件缓存，就能基本满足 CDN 代理层的优化需要。</p>

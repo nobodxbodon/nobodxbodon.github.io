@@ -1,0 +1,127 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2018-09-17-custom-elements-components.html">基于 Custom Elements 的组件化开发</a></h2>
+<hr/>
+<h2>layout: post
+title: 基于 Custom Elements 的组件化开发
+tags: [custom elements, components]</h2>
+<p><a href="https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_custom_elements">customElements</a> 是 Web Components 规范下的新 API，可以用来实现组件化开发。</p>
+<p>如果你的应用只用兼容最新的 Chrome 浏览器，那么用它来替代 React 或者 Vue 是一个不错的选择。</p>
+<h2>基本用法</h2>
+<p>组件声明在一个 HTML 文件中。组件包括样式（Style），节点（DOM）和交互逻辑（Script）。一个组件文件的基本结构如下：</p>
+<pre><code class="language-html">&lt;template&gt;
+  &lt;style&gt;&lt;/style&gt;
+  &lt;div&gt;DOM 节点&lt;/div&gt;
+&lt;/template&gt;
+&lt;script&gt;
+  const componentDocument = document.currentScript.ownerDocument;
+
+  class Component extends HTMLElement {
+
+    static get TAG_NAME() {
+      return 'component-tag-name';
+    };
+
+    constructor() {
+      super();
+      const shadow = this.attachShadow({ mode: 'closed' });
+      const content = componentDocument.querySelector('template').content.cloneNode(true);
+      shadow.appendChild(content);
+    }
+  }
+
+  customElements.define(Component.TAG_NAME, Component);
+&lt;/script&gt;
+</code></pre>
+<p>其中 <code>template</code> 节点下包含样式（Style）和节点（DOM）。交互逻辑在 <code>script</code> 标签中。</p>
+<p>组件文件通过 <code>&lt;link rel="import" href="./component.html"&gt;</code> 的方式引入 HTML 文件中。在 HTML 文件中使用组件的方式就是直接写组件标签。比如：</p>
+<pre><code class="language-html">&lt;!DOCTYPE HTML&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;meta http-equiv="Content-Type" content="text/html; charset=UTF-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"&gt;
+  &lt;title&gt;HTML&lt;/title&gt;
+  &lt;link rel="import" href="./component.html"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;component-tag-name&gt;&lt;/component-tag-name&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<h2>组件注册</h2>
+<p><code>customElements.define</code> API 用来组册组件，API 接受三个参数：组件标签名称、组件的类和组件继承的标签类型。如：</p>
+<pre><code class="language-js">customElements.define('expanding-list', ExpandingList, { extends: "ul" });
+</code></pre>
+<p>上面声明了一个标签为 <code>expanding-list</code> 的组件，组件的构造类是 <code>ExpandingList</code> 需要声明，组件继承 <code>ul</code> 标签的特性。</p>
+<h2>组件构造类</h2>
+<p>组件的构造类需要继承 <code>HTMLElement</code> 类，或者可以继承 <code>HTMLParagraphElement</code> 等 <code>HTMLElement</code> 的子类，如果继承了 <code>HTMLParagraphElement</code> 这个类，那么组件将拥有 <code>p</code> 标签的特性。</p>
+<pre><code class="language-js">class Component extends HTMLElement {
+  constructor() {
+    super();
+    const shadow = this.attachShadow({ mode: 'closed' });
+    const content = componentDocument.querySelector('template').content.cloneNode(true);
+    shadow.appendChild(content);
+  }
+}
+</code></pre>
+<p>组件内的构造函数是必须的，在构造函数内，我们先需要调用父类的构造函数，然后创建一个 <a href="https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_shadow_DOM">Shadow DOM</a> 节点，再将组件模版内容添加到节点内。</p>
+<p>使用 Shadow DOM 可以做到组件内的样式和组件外的样式不互相干扰，可以让组件封装更彻底。</p>
+<p>我们可以通过 <code>document.currentScript.ownerDocument;</code> 来拿到模版自身的跟节点。</p>
+<h2>组件属性</h2>
+<p>组件可以像 HTML 标签一样使用属性。在组件中可以获取属性。</p>
+<pre><code class="language-html">&lt;component-tag-name attr-name="attr-value"&gt;&lt;/component-tag-name&gt;
+</code></pre>
+<pre><code class="language-js">class Component extends HTMLElement {
+  constructor() {
+    super();
+    const shadow = this.attachShadow({ mode: 'closed' });
+    const content = componentDocument.querySelector('template').content.cloneNode(true);
+    shadow.appendChild(content);
+    const attrValue = this.getAttribute('attr-name');
+  }
+}
+</code></pre>
+<h2>组件生命周期</h2>
+<ul>
+<li><code>connectedCallback</code> 组件挂载，组件初始化后和移动时会触发</li>
+<li><code>disconnectedCallback</code> 组件卸载</li>
+<li><code>adoptedCallback</code> 组件被移动到一个新的文档树</li>
+<li><code>attributeChangedCallback</code> 组件属性变化</li>
+</ul>
+<h2>组件事件</h2>
+<p>可以触发自定义事件。</p>
+<pre><code class="language-html">&lt;template&gt;
+  &lt;style&gt;&lt;/style&gt;
+  &lt;button&gt;组件事件&lt;/button&gt;
+&lt;/template&gt;
+&lt;script&gt;
+  const componentDocument = document.currentScript.ownerDocument;
+
+  class Component extends HTMLElement {
+
+    static get TAG_NAME() {
+      return 'component-tag-name';
+    };
+
+    static get BUTTON_CLICK() {
+      return 'button-click';
+    }
+
+    constructor() {
+      super();
+      const shadow = this.attachShadow({ mode: 'closed' });
+      const content = componentDocument.querySelector('template').content.cloneNode(true);
+      shadow.appendChild(content);
+      const button = shadow.querySelector('button');
+      button.addEventListener('click', () =&gt; {
+        this.dispatchEvent(new CustomEvent(Component.BUTTON_CLICK, { button }));
+      });
+    }
+  }
+
+  customElements.define(Component.TAG_NAME, Component);
+&lt;/script&gt;
+</code></pre>
+<h2>例子</h2>
+<ul>
+<li><a href="https://github.com/vivaxy/samples/tree/master/native-api/custom-elements">customElements 的基本例子</a></li>
+<li><a href="https://github.com/vivaxy/samples/tree/master/native-api/custom-elements">用 customElements 实现的 indexedDB 示例</a></li>
+</ul>

@@ -1,0 +1,569 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/mini-redis%E9%A1%B9%E7%9B%AE-5-%E5%AE%A2%E6%88%B7%E7%AB%AF.html">mini-redis项目-5-客户端</a></h2>
+<hr/>
+<h2>title: mini-redis项目-5-客户端
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?5'
+date: 2022-12-07 16:20:06
+categories: Rust
+tags: [Rust, 数据库, Redis]
+description: 在上一篇《mini-redis项目-4-服务端》中，我们实现了mini-redis的服务端，这一篇来实现客户端；</h2>
+<p>在上一篇<a href="https://jasonkayzk.github.io/2022/12/06/mini-redis%E9%A1%B9%E7%9B%AE-4-%E6%9C%8D%E5%8A%A1%E7%AB%AF/">《mini-redis项目-4-服务端》</a>中，我们实现了mini-redis的服务端，这一篇来实现客户端；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/mini-redis</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-1-%E7%AE%80%E4%BB%8B/">《mini-redis项目-1-简介》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-2-%E5%AD%98%E5%82%A8%E5%B1%82/">《mini-redis项目-2-存储层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-3-%E8%BF%9E%E6%8E%A5%E5%B1%82/">《mini-redis项目-3-连接层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/06/mini-redis%E9%A1%B9%E7%9B%AE-4-%E6%9C%8D%E5%8A%A1%E7%AB%AF/">《mini-redis项目-4-服务端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-5-%E5%AE%A2%E6%88%B7%E7%AB%AF/">《mini-redis项目-5-客户端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-6-%E6%B5%8B%E8%AF%95%E4%B8%8E%E7%A4%BA%E4%BE%8B/">《mini-redis项目-6-测试与示例》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>mini-redis项目-5-客户端</strong></h1>
+<h2><strong>客户端入口</strong></h2>
+<p>和服务端相同，客户端的入口也是 bin 目录下的可执行文件，具体实现如下：</p>
+<p>首先来看客户端命令行的定义：</p>
+<p>src/bin/cli.rs</p>
+<pre><code class="language-rust">use mini_redis::client::cmd::Command;
+
+#[derive(Parser, Debug)]
+#[clap(
+    name = "mini-redis-cli",
+    version,
+    author,
+    about = "Issue Redis commands"
+)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Command,
+
+    #[clap(name = "hostname", long, default_value = "127.0.0.1")]
+    host: String,
+
+    #[clap(long, default_value_t = DEFAULT_PORT)]
+    port: u16,
+}
+</code></pre>
+<p>我们定义了客户端的命令行参数 Cli，包括：</p>
+<ul>
+<li>command：子命令，同时使用了 <code>#[clap(subcommand)]</code> 标注；<strong>注意：这里的 Command 是客户端命令行 Command 不是我们上一节讲述的 mini-redis 中的命令！</strong></li>
+<li>host：服务端地址，默认为 <code>127.0.0.1</code>；</li>
+<li>port：服务端端口地址，默认为 <code>DEFAULT_PORT=6379</code>；</li>
+</ul>
+<p>main 函数的定义如下：</p>
+<pre><code class="language-rust">/// Entry point for CLI tool.
+///
+/// `flavor = "current_thread"` is used here to avoid spawning background
+/// threads. The CLI tool use case benefits more by being lighter instead of
+/// multi-threaded.
+#[tokio::main(flavor = "current_thread")]
+async fn main() -&gt; Result&lt;(), MiniRedisClientError&gt; {
+    dotenv().ok();
+    logger::init();
+
+    // Parse command line arguments
+    let cli = Cli::parse();
+    debug!("get cli: {:?}", cli);
+
+    // Get the remote address to connect to
+    let addr = format!("{}:{}", cli.host, cli.port);
+
+    // Establish a connection
+    let mut client = client::connect(&amp;addr).await?;
+
+    // Process the requested command
+    match cli.command {
+        Command::Ping { msg } =&gt; {
+            let value = client.ping(msg).await?;
+            if let Ok(string) = std::str::from_utf8(&amp;value) {
+                println!("\"{}\"", string);
+            } else {
+                println!("{:?}", value);
+            }
+        }
+        Command::Get { key } =&gt; {
+            if let Some(value) = client.get(&amp;key).await? {
+                if let Ok(string) = std::str::from_utf8(&amp;value) {
+                    println!("\"{}\"", string);
+                } else {
+                    println!("{:?}", value);
+                }
+            } else {
+                println!("(nil)");
+            }
+        }
+        Command::Set {
+            key,
+            value,
+            expires: None,
+        } =&gt; {
+            client.set(&amp;key, value).await?;
+            println!("OK");
+        }
+        Command::Set {
+            key,
+            value,
+            expires: Some(expires),
+        } =&gt; {
+            client.set_expires(&amp;key, value, expires).await?;
+            println!("OK");
+        }
+        Command::Publish { channel, message } =&gt; {
+            client.publish(&amp;channel, message).await?;
+            println!("Publish OK");
+        }
+        Command::Subscribe { channels } =&gt; {
+            if channels.is_empty() {
+                return Err(MiniRedisConnectionError::InvalidArgument(
+                    "channel(s) must be provided".into(),
+                )
+                .into());
+            }
+            let mut subscriber = client.subscribe(channels).await?;
+
+            // await messages on channels
+            while let Some(msg) = subscriber.next_message().await? {
+                println!(
+                    "got message from the channel: {}; message = {:?}",
+                    msg.channel, msg.content
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+</code></pre>
+<p>和服务端类似，也是：</p>
+<ul>
+<li>首先初始化了 env、logger、cli；</li>
+<li>随后通过 <code> client::connect(&amp;addr).await</code> 建立了和服务端之间的 TCP 连接；</li>
+<li>最后通过 match 执行命令行指定的对应的命令；</li>
+</ul>
+<p>上面的 Command、Client 都在 client 模块中定义，下面我们具体来看；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>Client模块概述</strong></h2>
+<p>client 模块的目录结构如下：</p>
+<pre><code class="language-rust">$ tree ./src/client 
+./src/client
+├── cli.rs
+├── cmd.rs
+├── mod.rs
+└── subscriber.rs
+</code></pre>
+<p>各个文件内容：</p>
+<ul>
+<li>mod：对外暴露了 connect 函数，获取 TCP 连接并创建 Client；</li>
+<li>cmd：定义客户端命令行工具的 Command 命令；</li>
+<li>cli：定义 Client 实现；</li>
+<li>subscriber：客户端 channel 订阅者；</li>
+</ul>
+<p>下面分别来看；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>命令行子命令</strong></h3>
+<p>在 <code>cmd.rs</code> 中定义了上文中使用 <code>#[clap(subcommand)]</code> 宏标注的子命令 command 字段；</p>
+<p>下面是具体实现：</p>
+<p>src/client/cmd.rs</p>
+<pre><code class="language-rust">#[derive(Subcommand, Debug)]
+pub enum Command {
+    Ping {
+        /// Message to ping
+        msg: Option&lt;String&gt;,
+    },
+    /// Get the value of key.
+    Get {
+        /// Name of key to get
+        key: String,
+    },
+    /// Set key to hold the string value.
+    Set {
+        /// Name of key to set
+        key: String,
+
+        /// Value to set.
+        #[clap(parse(from_str = bytes_from_str))]
+        value: Bytes,
+
+        /// Expire the value after specified amount of time
+        #[clap(parse(try_from_str = duration_from_ms_str))]
+        expires: Option&lt;Duration&gt;,
+    },
+    ///  Publisher to send a message to a specific channel.
+    Publish {
+        /// Name of channel
+        channel: String,
+
+        #[clap(parse(from_str = bytes_from_str))]
+        /// Message to publish
+        message: Bytes,
+    },
+    /// Subscribe a client to a specific channel or channels.
+    Subscribe {
+        /// Specific channel or channels
+        channels: Vec&lt;String&gt;,
+    },
+}
+
+fn duration_from_ms_str(src: &amp;str) -&gt; Result&lt;Duration, ParseIntError&gt; {
+    let ms = src.parse::&lt;u64&gt;()?;
+    Ok(Duration::from_millis(ms))
+}
+
+fn bytes_from_str(src: &amp;str) -&gt; Bytes {
+    Bytes::from(src.to_string())
+}
+</code></pre>
+<p>可以看到各个子命令基本上是和 mini-redis 中的命令一一对应；</p>
+<p>同时，有几个命令通过 <code>from_str</code> 指定了类型转换，完成的对应格式的解析；</p>
+<blockquote>
+<p><strong>这里可以学到 clap 命令行库的用法；</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建客户端</strong></h3>
+<p>在 <code>mod.rs</code> 中定义了创建客户端的函数 connect：</p>
+<p>src/client/mod.rs</p>
+<pre><code class="language-rust">/// Establish a connection with the Redis server located at `addr`.
+///
+/// `addr` may be any type that can be asynchronously converted to a
+/// `SocketAddr`. This includes `SocketAddr` and strings. The `ToSocketAddrs`
+/// trait is the Tokio version and not the `std` version.
+pub async fn connect&lt;T: ToSocketAddrs&gt;(addr: T) -&gt; Result&lt;Client, MiniRedisConnectionError&gt; {
+    // The `addr` argument is passed directly to `TcpStream::connect`. This
+    // performs any asynchronous DNS lookup and attempts to establish the TCP
+    // connection. An error at either step returns an error, which is then
+    // bubbled up to the caller of `mini_redis` connect.
+    let socket = TcpStream::connect(addr).await?;
+
+    // Initialize the connection state. This allocates read/write buffers to
+    // perform redis protocol frame parsing.
+    let connection = Connection::new(socket);
+
+    Ok(Client { connection })
+}
+</code></pre>
+<p>函数通过获取 socket 创建了我们之前第三篇中定义的 Connection（发送一整个 Frame），并返回；</p>
+<p>逻辑非常简单，不再赘述；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>客户端实现Client</strong></h3>
+<p>先来看 Client 的定义：</p>
+<p>src/client/cli.rs</p>
+<pre><code class="language-rust">pub struct Client {
+    pub(crate) connection: Connection,
+}
+</code></pre>
+<p>非常简单，就是包装了我们之前定义的 Connection；</p>
+<p>下面来看 Client 中的方法：</p>
+<pre><code class="language-rust">impl Client {
+
+  pub async fn ping(&amp;mut self, msg: Option&lt;String&gt;) -&gt; Result&lt;Bytes, MiniRedisConnectionError&gt; {
+        let frame = Ping::new(msg).into_frame()?;
+
+        self.connection.write_frame(&amp;frame).await?;
+
+        match self.read_response().await? {
+            Frame::Simple(value) =&gt; Ok(value.into()),
+            Frame::Bulk(value) =&gt; Ok(value),
+            frame =&gt; Err(MiniRedisConnectionError::CommandExecute(frame.to_string())),
+        }
+    }
+
+    pub async fn get(&amp;mut self, key: &amp;str) -&gt; Result&lt;Option&lt;Bytes&gt;, MiniRedisConnectionError&gt; {
+        let frame = Get::new(key).into_frame()?;
+
+        self.connection.write_frame(&amp;frame).await?;
+
+        match self.read_response().await? {
+            Frame::Simple(value) =&gt; Ok(Some(value.into())),
+            Frame::Bulk(value) =&gt; Ok(Some(value)),
+            Frame::Null =&gt; Ok(None),
+            frame =&gt; Err(MiniRedisConnectionError::CommandExecute(frame.to_string())),
+        }
+    }
+
+    pub async fn set(&amp;mut self, key: &amp;str, value: Bytes) -&gt; Result&lt;(), MiniRedisConnectionError&gt; {
+        self.set_cmd(Set::new(key, value, None)).await
+    }
+
+    pub async fn set_expires(
+        &amp;mut self,
+        key: &amp;str,
+        value: Bytes,
+        expiration: Duration,
+    ) -&gt; Result&lt;(), MiniRedisConnectionError&gt; {
+        self.set_cmd(Set::new(key, value, Some(expiration))).await
+    }
+
+    async fn set_cmd(&amp;mut self, cmd: Set) -&gt; Result&lt;(), MiniRedisConnectionError&gt; {
+        let frame = cmd.into_frame()?;
+
+        self.connection.write_frame(&amp;frame).await?;
+
+        match self.read_response().await? {
+            Frame::Simple(response) if response == "OK" =&gt; Ok(()),
+            frame =&gt; Err(MiniRedisConnectionError::CommandExecute(frame.to_string())),
+        }
+    }
+
+    pub async fn publish(
+        &amp;mut self,
+        channel: &amp;str,
+        message: Bytes,
+    ) -&gt; Result&lt;u64, MiniRedisConnectionError&gt; {
+        let frame = Publish::new(channel, message).into_frame()?;
+
+        self.connection.write_frame(&amp;frame).await?;
+
+        match self.read_response().await? {
+            Frame::Integer(response) =&gt; Ok(response),
+            frame =&gt; Err(MiniRedisConnectionError::CommandExecute(frame.to_string())),
+        }
+    }
+
+    pub async fn subscribe(
+        mut self,
+        channels: Vec&lt;String&gt;,
+    ) -&gt; Result&lt;Subscriber, MiniRedisConnectionError&gt; {
+        self.subscribe_cmd(&amp;channels).await?;
+
+        Ok(Subscriber {
+            client: self,
+            subscribed_channels: channels,
+        })
+    }
+
+    pub(crate) async fn subscribe_cmd(
+        &amp;mut self,
+        channels: &amp;[String],
+    ) -&gt; Result&lt;(), MiniRedisConnectionError&gt; {
+        let frame = Subscribe::new(channels).into_frame()?;
+
+        self.connection.write_frame(&amp;frame).await?;
+
+        for channel in channels {
+            let response = self.read_response().await?;
+
+            // Verify it is confirmation of subscription.
+            match response {
+                Frame::Array(ref frame) =&gt; match frame.as_slice() {
+                    [subscribe, schannel, ..]
+                        if *subscribe == "subscribe" &amp;&amp; *schannel == channel =&gt;
+                    {
+                        debug!("subscribe channel: {} success", channel);
+                    }
+                    _ =&gt; {
+                        error!("subscribe frame failed, response: {}", response);
+                        return Err(MiniRedisConnectionError::CommandExecute(
+                            response.to_string(),
+                        ));
+                    }
+                },
+                frame =&gt; {
+                    error!(
+                        "subscribe frame failed, response frame type not match: {}",
+                        frame
+                    );
+                    return Err(MiniRedisConnectionError::InvalidFrameType);
+                }
+            };
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn read_response(&amp;mut self) -&gt; Result&lt;Frame, MiniRedisConnectionError&gt; {
+        let response = self.connection.read_frame().await?;
+
+        match response {
+            Some(Frame::Error(msg)) =&gt; Err(MiniRedisConnectionError::CommandExecute(msg)),
+            Some(frame) =&gt; Ok(frame),
+            None =&gt; {
+                // Receiving `None` here indicates the server has closed the
+                // connection without sending a frame. This is unexpected and is
+                // represented as a "connection reset by peer" error.
+                Err(MiniRedisConnectionError::Disconnect)
+            }
+        }
+    }
+}
+</code></pre>
+<p>逻辑都非常类似，都是：</p>
+<ul>
+<li>先通过创建对应命令，然后调用 <code>into_frame</code> 转为具体的 frame；</li>
+<li>然后通过 connection 中封装好的 write_frame 方法，将数据发送给 Server；</li>
+<li>最后再调用内部的 read_response 方法，解析响应并输出；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>Channel订阅Subscriber</strong></h3>
+<p>当执行了 subscribe 命令后，会创建对应的 Subscriber 来订阅各个 channel；</p>
+<p>具体实现如下：</p>
+<pre><code class="language-rust">/// A client that has entered pub/sub mode.
+///
+/// Once clients subscribe to a channel, they may only perform pub/sub related
+/// commands. The `Client` type is transitioned to a `Subscriber` type in order
+/// to prevent non-pub/sub methods from being called.
+pub struct Subscriber {
+    /// The subscribed client.
+    pub(crate) client: Client,
+
+    /// The set of channels to which the `Subscriber` is currently subscribed.
+    pub(crate) subscribed_channels: Vec&lt;String&gt;,
+}
+
+/// A message received on a subscribed channel.
+#[derive(Debug, Clone)]
+pub struct Message {
+    pub channel: String,
+    pub content: Bytes,
+}
+
+impl Subscriber {
+    /// Subscribe to a list of new channels
+    pub async fn subscribe(&amp;mut self, channels: &amp;[String]) -&gt; Result&lt;(), MiniRedisConnectionError&gt; {
+        // Issue the subscribe command
+        self.client.subscribe_cmd(channels).await?;
+
+        // Update the set of subscribed channels.
+        self.subscribed_channels
+            .extend(channels.iter().map(Clone::clone));
+
+        Ok(())
+    }
+
+    /// Returns the set of channels currently subscribed to.
+    pub fn get_subscribed(&amp;self) -&gt; &amp;[String] {
+        &amp;self.subscribed_channels
+    }
+
+    /// Receive the next message published on a subscribed channel, waiting if
+    /// necessary.
+    ///
+    /// `None` indicates the subscription has been terminated.
+    pub async fn next_message(&amp;mut self) -&gt; Result&lt;Option&lt;Message&gt;, MiniRedisConnectionError&gt; {
+        match self.client.connection.read_frame().await? {
+            Some(frame) =&gt; {
+                debug!("subscribe received next message: {:?}", frame);
+
+                match frame {
+                    Frame::Array(ref frame) =&gt; match frame.as_slice() {
+                        [message, channel, content] if *message == "message" =&gt; Ok(Some(Message {
+                            channel: channel.to_string(),
+                            content: Bytes::from(content.to_string()),
+                        })),
+                        _ =&gt; {
+                            error!("invalid message, frame: {:?}", frame);
+                            Err(MiniRedisConnectionError::InvalidFrameType)
+                        }
+                    },
+                    frame =&gt; Err(MiniRedisConnectionError::CommandExecute(frame.to_string())),
+                }
+            }
+            None =&gt; Ok(None),
+        }
+    }
+
+    /// Convert the subscriber into a `Stream` yielding new messages published
+    /// on subscribed channels.
+    ///
+    /// `Subscriber` does not implement stream itself as doing so with safe code
+    /// is non trivial. The usage of async/await would require a manual Stream
+    /// implementation to use `unsafe` code. Instead, a conversion function is
+    /// provided and the returned stream is implemented with the help of the
+    /// `async-stream` crate.
+    pub fn into_stream(mut self) -&gt; impl Stream&lt;Item = Result&lt;Message, MiniRedisConnectionError&gt;&gt; {
+        // Uses the `try_stream` macro from the `async-stream` crate. Generators
+        // are not stable in Rust. The crate uses a macro to simulate generators
+        // on top of async/await. There are limitations, so read the
+        // documentation there.
+        try_stream! {
+            while let Some(message) = self.next_message().await? {
+                yield message;
+            }
+        }
+    }
+
+    /// Unsubscribe to a list of new channels
+    pub async fn unsubscribe(
+        &amp;mut self,
+        channels: &amp;[String],
+    ) -&gt; Result&lt;(), MiniRedisConnectionError&gt; {
+        let frame = Unsubscribe::new(channels).into_frame()?;
+
+        debug!("unsubscribe command: {:?}", frame);
+
+        // Write the frame to the socket
+        self.client.connection.write_frame(&amp;frame).await?;
+
+        // if the input channel list is empty, server acknowledges as unsubscribing
+        // from all subscribed channels, so we assert that the unsubscribe list received
+        // matches the client subscribed one
+        let num = if channels.is_empty() {
+            self.subscribed_channels.len()
+        } else {
+            channels.len()
+        };
+
+        // Read the response
+        for _ in 0..num {
+            let response = self.client.read_response().await?;
+
+            match response {
+                Frame::Array(ref frame) =&gt; match frame.as_slice() {
+                    [unsubscribe, channel, ..] if *unsubscribe == "unsubscribe" =&gt; {
+                        let len = self.subscribed_channels.len();
+
+                        if len == 0 {
+                            // There must be at least one channel
+                            return Err(MiniRedisConnectionError::InvalidArgument(
+                                response.to_string(),
+                            ));
+                        }
+
+                        // unsubscribed channel should exist in the subscribed list at this point
+                        self.subscribed_channels.retain(|c| *channel != &amp;c[..]);
+
+                        // Only a single channel should be removed from the
+                        // list of subscribed channels.
+                        if self.subscribed_channels.len() != len - 1 {
+                            return Err(MiniRedisConnectionError::CommandExecute(
+                                response.to_string(),
+                            ));
+                        }
+                    }
+                    _ =&gt; {
+                        return Err(MiniRedisConnectionError::InvalidFrameType);
+                    }
+                },
+                frame =&gt; return Err(MiniRedisConnectionError::CommandExecute(frame.to_string())),
+            };
+        }
+
+        Ok(())
+    }
+}
+</code></pre>
+<p>实现逻辑也很清晰：主要就是将 Client 封装了一层，然后通过 connection 提供的 stream 读取消息；</p>
+<p>同时也能接收 sub/unsub 命令，并且处理逻辑和服务端非常相似；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>小结</strong></h2>
+<p>本篇讲解了客户端的实现，由于前面几个部分的封装，使得客户端的实现变得非常简单；</p>
+<p>下一篇也会是本系列的最后一篇，主要是对我们的实现进行测试；</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/mini-redis</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-1-%E7%AE%80%E4%BB%8B/">《mini-redis项目-1-简介》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-2-%E5%AD%98%E5%82%A8%E5%B1%82/">《mini-redis项目-2-存储层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-3-%E8%BF%9E%E6%8E%A5%E5%B1%82/">《mini-redis项目-3-连接层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/06/mini-redis%E9%A1%B9%E7%9B%AE-4-%E6%9C%8D%E5%8A%A1%E7%AB%AF/">《mini-redis项目-4-服务端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-5-%E5%AE%A2%E6%88%B7%E7%AB%AF/">《mini-redis项目-5-客户端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-6-%E6%B5%8B%E8%AF%95%E4%B8%8E%E7%A4%BA%E4%BE%8B/">《mini-redis项目-6-测试与示例》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

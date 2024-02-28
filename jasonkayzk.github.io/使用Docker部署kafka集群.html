@@ -1,0 +1,425 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8Docker%E9%83%A8%E7%BD%B2kafka%E9%9B%86%E7%BE%A4.html">使用Docker部署kafka集群</a></h2>
+<hr/>
+<h2>title: 使用Docker部署kafka集群
+cover: https://img.paulzzh.com/touhou/random?92
+date: 2020-04-26 20:15:21
+categories: Docker
+toc: true
+tags: [Docker, kafka]
+description: 本文讲解如何使用Docker部署kafka集群;</h2>
+<p>本文讲解如何使用Docker部署kafka集群;</p>
+<p>源代码:</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker_repo/tree/kafka-v2.4.1-cluster</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>&lt;!-- **目录:** --&gt;</p>
+<p>&lt;!-- toc --&gt;</p>
+<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+<h2>使用Docker部署kafka集群</h2>
+<p>在上一篇<a href="https://jasonkayzk.github.io/2020/04/26/%E4%BD%BF%E7%94%A8Docker%E9%83%A8%E7%BD%B2zookeeper%E9%9B%86%E7%BE%A4/">使用Docker部署zookeeper集群</a>的基础之上, 本篇讲解如何使用Docker部署kafka集群;</p>
+<h3>前言</h3>
+<p>kafka依赖于zookeeper存放元数据, 所以在创建kafka集群之前需要创建zookeeper;</p>
+<p>更多关于zookeeper集群创建见:</p>
+<p><a href="https://jasonkayzk.github.io/2020/04/26/%E4%BD%BF%E7%94%A8Docker%E9%83%A8%E7%BD%B2zookeeper%E9%9B%86%E7%BE%A4/">使用Docker部署zookeeper集群</a></p>
+<p>&lt;br/&gt;</p>
+<h3>拉取镜像</h3>
+<pre><code class="language-bash">docker pull zookeeper:3.4
+docker pull wurstmeister/kafka:2.12-2.4.1
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>其中kafka版本中的2.12为Scala版本</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>创建子网段</h3>
+<pre><code>docker network create --subnet 172.30.1.0/16 --gateway 172.30.0.1 kafka
+</code></pre>
+<p>以三个zookeeper为例, 各个子容器的ip地址分配如下:</p>
+<p>| hostname | ip          | port      |
+| -------- | ----------- | --------- |
+| zoo1     | 172.30.0.11 | 2184:2181 |
+| zoo2     | 172.30.0.12 | 2185:2181 |
+| zoo3     | 172.30.0.13 | 2186:2181 |
+| kafka1   | 172.30.1.11 | 9092:9092 |
+| kafka2   | 172.30.1.12 | 9093:9093 |
+| kafka3   | 172.30.1.13 | 9094:9094 |</p>
+<p>&lt;br/&gt;</p>
+<h3>Zookeeper集群</h3>
+<p>zookeeper的docker-compose文件与<a href="https://jasonkayzk.github.io/2020/04/26/%E4%BD%BF%E7%94%A8Docker%E9%83%A8%E7%BD%B2zookeeper%E9%9B%86%E7%BE%A4/">使用Docker部署zookeeper集群</a>中的类似, 这里不再赘述;</p>
+<p>docker-compose-zookeeper.yml</p>
+<pre><code class="language-yaml">version: '3.4'
+
+services: 
+    zoo1:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo1
+        container_name: zoo1
+        ports:
+            - 2184:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo1/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo1/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 1
+            ZOO_SERVERS: server.1=0.0.0.0:2888:3888 server.2=zoo2:2888:3888 server.3=zoo3:2888:3888
+        networks:
+            kafka:
+                ipv4_address: 172.30.0.11
+
+    zoo2:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo2
+        container_name: zoo2
+        ports:
+            - 2185:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo2/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo2/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 2
+            ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=0.0.0.0:2888:3888 server.3=zoo3:2888:3888
+        networks:
+            kafka:
+                ipv4_address: 172.30.0.12
+        
+    zoo3:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo3
+        container_name: zoo3
+        ports:
+            - 2186:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo3/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo3/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 3
+            ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=zoo2:2888:3888 server.3=0.0.0.0:2888:3888
+        networks:
+            kafka:
+                ipv4_address: 172.30.0.13
+
+networks: 
+    kafka:
+        external: 
+            name: kafka 
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>Kafka集群</h3>
+<p>在<code>docker-compose-kafka.yml</code>中定义了三个kafka容器:</p>
+<p>docker-compose-kafka.yml</p>
+<pre><code class="language-yaml">version: '3.4'
+
+services: 
+    kafka1:
+        image: wurstmeister/kafka:2.12-2.4.1
+        restart: always
+        hostname: kafka1
+        container_name: kafka1
+        privileged: true
+        ports:
+            - 9092:9092
+        environment:
+              KAFKA_ADVERTISED_HOST_NAME: kafka1
+              KAFKA_LISTENERS: PLAINTEXT://kafka1:9092
+              KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092
+              KAFKA_ADVERTISED_PORT: 9092
+              KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        volumes:
+            - /home/zk/workspace/volumes/kafkaCluster/kafka1/logs:/kafka
+        networks:
+            kafka:
+                ipv4_address: 172.30.1.11
+        extra_hosts: 
+            zoo1: 172.30.0.11
+            zoo2: 172.30.0.12
+            zoo3: 172.30.0.13
+
+    kafka2:
+        image: wurstmeister/kafka:2.12-2.4.1
+        restart: always
+        hostname: kafka2
+        container_name: kafka2
+        privileged: true
+        ports:
+            - 9093:9093
+        environment:
+              KAFKA_ADVERTISED_HOST_NAME: kafka2
+              KAFKA_LISTENERS: PLAINTEXT://kafka2:9093
+              KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+              KAFKA_ADVERTISED_PORT: 9093
+              KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        volumes:
+            - /home/zk/workspace/volumes/kafkaCluster/kafka2/logs:/kafka
+        networks:
+            kafka:
+                ipv4_address: 172.30.1.12
+        extra_hosts: 
+            zoo1: 172.30.0.11
+            zoo2: 172.30.0.12
+            zoo3: 172.30.0.13
+
+    kafka3:
+        image: wurstmeister/kafka:2.12-2.4.1
+        restart: always
+        hostname: kafka3
+        container_name: kafka3
+        privileged: true
+        ports:
+            - 9094:9094
+        environment:
+              KAFKA_ADVERTISED_HOST_NAME: kafka3
+              KAFKA_LISTENERS: PLAINTEXT://kafka3:9094
+              KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:9094
+              KAFKA_ADVERTISED_PORT: 9094
+              KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        volumes:
+            - /home/zk/workspace/volumes/kafkaCluster/kafka3/logs:/kafka
+        networks:
+            kafka:
+                ipv4_address: 172.30.1.13
+        extra_hosts: 
+            zoo1: 172.30.0.11
+            zoo2: 172.30.0.12
+            zoo3: 172.30.0.13                            
+
+networks: 
+    kafka:
+        external: 
+            name: kafka      
+</code></pre>
+<p>需要注意的是zookeeper和kafka需要在同一个网段(如上方声明的kafka);</p>
+<p>此外需要在extra_hosts中声明各zookeeper的host地址;(会被写入<code>/etc/hosts</code>)中</p>
+<p>&lt;br/&gt;</p>
+<h3>将zookeeper和kafka合并</h3>
+<p>可将zookeekper和kafka的配置结合为单独一个compose文件如<code>docker-compose.yml</code>:</p>
+<p>docker-compose.yml</p>
+<pre><code class="language-yaml">version: '3.4'
+
+services: 
+    zoo1:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo1
+        container_name: zoo1
+        ports:
+            - 2184:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo1/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo1/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 1
+            ZOO_SERVERS: server.1=0.0.0.0:2888:3888 server.2=zoo2:2888:3888 server.3=zoo3:2888:3888
+        networks:
+            kafka:
+                ipv4_address: 172.30.0.11
+
+    zoo2:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo2
+        container_name: zoo2
+        ports:
+            - 2185:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo2/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo2/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 2
+            ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=0.0.0.0:2888:3888 server.3=zoo3:2888:3888
+        networks:
+            kafka:
+                ipv4_address: 172.30.0.12
+        
+    zoo3:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo3
+        container_name: zoo3
+        ports:
+            - 2186:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo3/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo3/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 3
+            ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=zoo2:2888:3888 server.3=0.0.0.0:2888:3888
+        networks:
+            kafka:
+                ipv4_address: 172.30.0.13
+
+    kafka1:
+        image: wurstmeister/kafka:2.12-2.4.1
+        restart: always
+        hostname: kafka1
+        container_name: kafka1
+        privileged: true
+        ports:
+            - 9092:9092
+        environment:
+              KAFKA_ADVERTISED_HOST_NAME: kafka1
+              KAFKA_LISTENERS: PLAINTEXT://kafka1:9092
+              KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092
+              KAFKA_ADVERTISED_PORT: 9092
+              KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        volumes:
+            - /home/zk/workspace/volumes/kafkaCluster/kafka1/logs:/kafka
+        networks:
+            kafka:
+                ipv4_address: 172.30.1.11
+        extra_hosts: 
+            - "zoo1:172.30.0.11"
+            - "zoo2:172.30.0.12"
+            - "zoo3:172.30.0.13"
+        depends_on: 
+            - zoo1
+            - zoo2
+            - zoo3
+        external_links: 
+            - zoo1
+            - zoo2
+            - zoo3
+
+    kafka2:
+        image: wurstmeister/kafka:2.12-2.4.1
+        restart: always
+        hostname: kafka2
+        container_name: kafka2
+        privileged: true
+        ports:
+            - 9093:9093
+        environment:
+              KAFKA_ADVERTISED_HOST_NAME: kafka2
+              KAFKA_LISTENERS: PLAINTEXT://kafka2:9093
+              KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9093
+              KAFKA_ADVERTISED_PORT: 9093
+              KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        volumes:
+            - /home/zk/workspace/volumes/kafkaCluster/kafka2/logs:/kafka
+        networks:
+            kafka:
+                ipv4_address: 172.30.1.12
+        extra_hosts: 
+            - "zoo1:172.30.0.11"
+            - "zoo2:172.30.0.12"
+            - "zoo3:172.30.0.13"                
+        depends_on: 
+            - zoo1
+            - zoo2
+            - zoo3                
+        external_links: 
+            - zoo1
+            - zoo2
+            - zoo3           
+
+    kafka3:
+        image: wurstmeister/kafka:2.12-2.4.1
+        restart: always
+        hostname: kafka3
+        container_name: kafka3
+        privileged: true
+        ports:
+            - 9094:9094
+        environment:
+              KAFKA_ADVERTISED_HOST_NAME: kafka3
+              KAFKA_LISTENERS: PLAINTEXT://kafka3:9094
+              KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:9094
+              KAFKA_ADVERTISED_PORT: 9094
+              KAFKA_ZOOKEEPER_CONNECT: zoo1:2181,zoo2:2181,zoo3:2181
+        volumes:
+            - /home/zk/workspace/volumes/kafkaCluster/kafka3/logs:/kafka
+        networks:
+            kafka:
+                ipv4_address: 172.30.1.13
+        extra_hosts: 
+            - "zoo1:172.30.0.11"
+            - "zoo2:172.30.0.12"
+            - "zoo3:172.30.0.13"                
+        depends_on: 
+            - zoo1
+            - zoo2
+            - zoo3                
+        external_links: 
+            - zoo1
+            - zoo2
+            - zoo3
+
+networks: 
+    kafka:
+        external: 
+            name: kafka
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>在kafka服务中声明了depends_on, 所以在所有zookeeper启动之后才会真正启动kafka容器</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>使用</h3>
+<h4>分别启动各容器</h4>
+<p>分别使用<code>docker-compose-zookeeper</code>和<code>docker-compose-kafka</code>启动两个集群;</p>
+<pre><code class="language-bash">docker-compose -f docker-compose-zookeeper.yml up -d
+docker-compose -f docker-compose-kafka.yml up -d
+</code></pre>
+<p>先启动注册中心zookeeper, 然后启动kafka;</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>此方法的好处是在关闭时可以分别关闭;</strong></p>
+<p><strong>但是启动时可能需要按照顺序启动</strong></p>
+</blockquote>
+<hr/>
+<h4>启动两个集群</h4>
+<p>直接使用组合启动:</p>
+<pre><code class="language-bash">docker-compose -f docker-compose.yml up -d
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>此方法的好处是启动便捷;</strong></p>
+<p><strong>但是关闭时会将zookeeper和kafka同时关闭;</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>测试</h3>
+<p>登录kafka1创建topic并发送消息:</p>
+<pre><code class="language-bash">$ docker exec -it kafka1 /bin/bash
+
+# 在容器中执行
+# 创建topic
+$ cd /opt/kafka_2.12-2.4.1/bin/
+$ kafka-topics.sh --create --topic test1 --replication-factor 3 --partitions 2 --zookeeper 192.168.1.106:2184
+Created topic test1.
+
+$ kafka-topics.sh --list --zookeeper 192.168.1.106:2184
+test1
+
+$ sh /opt/kafka_2.12-2.4.1/bin/kafka-console-producer.sh --broker-list 192.168.1.106:9092 --topic test1
+&gt;你好
+&gt;这是我的test1
+&gt;哈哈
+&gt;e 
+&gt;asef
+</code></pre>
+<p>登录kafka2连接topic并接收消息:</p>
+<pre><code class="language-bash">$ docker exec -it kafka2 /bin/bash
+$ sh /opt/kafka_2.12-2.4.1/bin/kafka-console-consumer.sh --bootstrap-server 192.168.1.106:9092 --topic test1 --from-beginning
+这是我的test1
+你好
+哈哈
+e 
+asef
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2>附录</h2>
+<p>源代码:</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker_repo/tree/kafka-v2.4.1-cluster</li>
+</ul>
+<p>参考文章:</p>
+<ul>
+<li><a href="https://blog.csdn.net/weixin_45778734/article/details/105689685">Docker快速搭建Zookeeper和kafka集群超详细</a></li>
+</ul>
+<p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
+<p>内容和博客同步更新~</p>
+<p>&lt;br/&gt;</p>

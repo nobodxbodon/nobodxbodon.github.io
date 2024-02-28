@@ -1,0 +1,171 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8Kuboard%E5%BF%AB%E9%80%9F%E9%83%A8%E7%BD%B2Kubernetes%E9%9B%86%E7%BE%A4.html">使用Kuboard快速部署Kubernetes集群</a></h2>
+<hr/>
+<h2>title: 使用Kuboard快速部署Kubernetes集群
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?44'
+date: 2023-12-15 07:49:53
+categories: Kubernetes
+tags: [Kubernetes, VMWare]
+description: 之前的文章中提到过如何在CentOS上手动部署Kubernetes集群，这种方式需要修改大量系统参数，并且需要自行安装大量软件比较麻烦；而KuboardSpray提供了图形化界面，可以迅速的安装并管理Kubernetes集群；</h2>
+<p>之前的文章中提到过如何在CentOS上手动部署Kubernetes集群，这种方式需要修改大量系统参数，并且需要自行安装大量软件比较麻烦；</p>
+<p>而KuboardSpray提供了图形化界面，可以迅速的安装并管理Kubernetes集群；</p>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2021/05/16/%E5%9C%A8VMWare%E4%B8%AD%E9%83%A8%E7%BD%B2%E4%BD%A0%E7%9A%84K8S%E9%9B%86%E7%BE%A4/">《在VMWare中部署你的K8S集群》</a></li>
+</ul>
+<p>官方文档：</p>
+<ul>
+<li>https://kuboard.cn/install/install-k8s.html#kuboard-spray</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>使用Kuboard快速部署Kubernetes集群</strong></h1>
+<h2><strong>前言</strong></h2>
+<p>本次要部署的Kubernetes集群配置如下：</p>
+<ul>
+<li>control-plane: ubuntu-1</li>
+<li>worker: ubuntu-2</li>
+<li>worker: ubuntu-3</li>
+</ul>
+<p>同时，还需要一台机器安装 Kuboard-Spray，以执行 Ansible 脚本进行安装；</p>
+<p>这里使用的操作系统都是 Ubuntu 22.04.3；</p>
+<blockquote>
+<p><strong>注意：需要使用 Kuboard-Spray 支持的操作系统进行安装，否则 Ansible 检测会报错！</strong></p>
+<p><strong>例如：不能使用 Debian！</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>前期准备</strong></h2>
+<h3><strong>安装 Kuboard-Spray</strong></h3>
+<p>对于安装 Kuboard-Spray 的机器，只需要安装 Docker，并且创建 Kuboard-Spray 容器即可：</p>
+<pre><code class="language-shell">docker run -d \
+  --privileged \
+  --restart=unless-stopped \
+  --name=kuboard-spray \
+  -p 80:80/tcp \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v ~/kuboard-spray-data:/data \
+  eipwork/kuboard-spray:latest-amd64
+  # 如果抓不到这个镜像，可以尝试一下这个备用地址：
+  # swr.cn-east-2.myhuaweicloud.com/kuboard/kuboard-spray:latest-amd64
+</code></pre>
+<p>在浏览器打开地址 <code>http://这台机器的IP</code>，输入用户名 <code>admin</code>，默认密码 <code>Kuboard123</code>，即可登录 Kuboard-Spray 界面；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建Ubuntu集群机器</strong></h3>
+<p>这里的 Ubuntu 集群机器可以是真实的物理机，也可以是 VMWare 或者 KVM 创建的虚拟机；</p>
+<p>需要保证三台机器为：</p>
+<ul>
+<li><strong>静态 IP</strong></li>
+<li><strong>互相能 ping 通</strong></li>
+<li><strong>修改了各自的 hostname</strong></li>
+<li><strong>在 hosts 中添加了解析</strong></li>
+</ul>
+<p>以 ubuntu-1 为例：</p>
+<pre><code class="language-shell"># 1：静态IP
+$ cat /etc/netplan/00-installer-config.yaml 
+
+# This is the network config written by 'subiquity'
+network:
+  ethernets:
+    ens33:
+      addresses:
+      - 192.168.31.201/24
+      nameservers:
+        addresses:
+        - 8.8.8.8
+        search:
+        - 8.8.8.8
+      routes:
+      - to: default
+        via: 192.168.31.1
+  version: 2
+  
+# 2：修改hostname
+$ cat /etc/hostname 
+
+ubuntu-1
+
+# 3：hosts添加解析
+cat /etc/hosts
+127.0.0.1 localhost localhost.localdomain
+127.0.1.1 ubuntu-1
+
+# The following lines are desirable for IPv6 capable hosts
+::1 ip6-localhost ip6-loopback localhost6 localhost6.localdomain
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+192.168.31.201 ubuntu-1
+192.168.31.202 ubuntu-2
+192.168.31.203 ubuntu-3
+</code></pre>
+<p>测试 ping：</p>
+<pre><code class="language-shell">root@ubuntu-1:~# ping ubuntu-1
+PING ubuntu-1 (127.0.1.1) 56(84) bytes of data.
+64 bytes from ubuntu-1 (127.0.1.1): icmp_seq=1 ttl=64 time=0.050 ms
+64 bytes from ubuntu-1 (127.0.1.1): icmp_seq=2 ttl=64 time=0.030 ms
+^C
+--- ubuntu-1 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1015ms
+rtt min/avg/max/mdev = 0.030/0.040/0.050/0.010 ms
+
+root@ubuntu-1:~# ping ubuntu-2
+PING ubuntu-2 (192.168.31.202) 56(84) bytes of data.
+64 bytes from ubuntu-2 (192.168.31.202): icmp_seq=1 ttl=64 time=0.215 ms
+64 bytes from ubuntu-2 (192.168.31.202): icmp_seq=2 ttl=64 time=0.168 ms
+^C
+--- ubuntu-2 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1012ms
+rtt min/avg/max/mdev = 0.168/0.191/0.215/0.023 ms
+
+root@ubuntu-1:~# ping ubuntu-3
+PING ubuntu-3 (192.168.31.203) 56(84) bytes of data.
+64 bytes from ubuntu-3 (192.168.31.203): icmp_seq=1 ttl=64 time=0.189 ms
+64 bytes from ubuntu-3 (192.168.31.203): icmp_seq=2 ttl=64 time=0.152 ms
+^C
+--- ubuntu-3 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1019ms
+rtt min/avg/max/mdev = 0.152/0.170/0.189/0.018 ms
+</code></pre>
+<p>保证这些即可，其他配置都不需要修改，kubeadm 等工具也会由 Ansible 脚本安装！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>正式安装</strong></h2>
+<h3><strong>加载离线资源包</strong></h3>
+<p>根据官方文档导入 Kuboard-Spray 离线资源包即可！</p>
+<p>官方文档：</p>
+<ul>
+<li>https://kuboard.cn/install/install-k8s.html#%E5%8A%A0%E8%BD%BD%E7%A6%BB%E7%BA%BF%E8%B5%84%E6%BA%90%E5%8C%85</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>规划并安装集群</strong></h3>
+<p>在 Kuboard-Spray 界面中，导航到 <code>集群管理</code> 界面，点击 <code>添加集群安装计划</code> 按钮；</p>
+<p>配置集群名称、资源包；</p>
+<p>然后根据文档配置节点信息，最后保存并执行即可！</p>
+<p>官方文档：</p>
+<ul>
+<li>https://kuboard.cn/install/install-k8s.html#%E8%A7%84%E5%88%92%E5%B9%B6%E5%AE%89%E8%A3%85%E9%9B%86%E7%BE%A4</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>安装完成</strong></h2>
+<p>等待 Ansible 执行结束，Kubernetes 集群就部署完成了！</p>
+<p>可以通过在 Kuboard-Spray  <code>访问集群</code> 标签页查看访问集群的方式；</p>
+<p>我使用的是访问 control-plane 上部署的 Kuboard 的方式，访问：</p>
+<ul>
+<li><code>http://&lt;control-plane-ip&gt;</code> 即可！</li>
+</ul>
+<p>如下：</p>
+<p><img alt="Kuboard.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/Kuboard.png"/></p>
+<p>即完成了 Kubernetes 的集群部署；</p>
+<p>Have fun！</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2021/05/16/%E5%9C%A8VMWare%E4%B8%AD%E9%83%A8%E7%BD%B2%E4%BD%A0%E7%9A%84K8S%E9%9B%86%E7%BE%A4/">《在VMWare中部署你的K8S集群》</a></li>
+</ul>
+<p>官方文档：</p>
+<ul>
+<li>https://kuboard.cn/install/install-k8s.html#kuboard-spray</li>
+</ul>
+<p>&lt;br/&gt;</p>

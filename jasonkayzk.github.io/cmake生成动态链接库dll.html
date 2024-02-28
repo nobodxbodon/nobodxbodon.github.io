@@ -1,0 +1,195 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/cmake%E7%94%9F%E6%88%90%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5%E5%BA%93dll.html">cmake生成动态链接库dll</a></h2>
+<hr/>
+<h2>title: cmake生成动态链接库dll
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?23'
+date: 2021-01-27 17:35:04
+categories: C++
+tags: [C++, DLL]
+description: 本文讲解了如何使用cmake将C++代码生成DLL库；</h2>
+<p>本文讲解了如何使用cmake将C++代码生成DLL库；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp_learn/tree/dll</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="/2021/01/27/cmake%E7%94%9F%E6%88%90%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5%E5%BA%93dll/">cmake生成动态链接库dll</a></li>
+<li><a href="/2021/01/28/%E5%90%84%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%E5%8A%A0%E8%BD%BD%E5%B9%B6%E8%B0%83%E7%94%A8dll%E5%BA%93/">各编程语言加载并调用dll库</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>cmake生成动态链接库dll</strong></h2>
+<h3><strong>DLL概述</strong></h3>
+<p>为了更好的实现代码复用，DLL库应运而生；与Windows平台下的exe格式相比，DLL可以被认为是一个单独的组件；</p>
+<p>通过使用 DLL，可以将程序模块化为单独的组件。 例如，会计程序可以按模块出售；</p>
+<p>如果安装了该模块，则每个模块都可以运行时加载到主程序中。 由于模块是分开的，因此程序的加载时间会更快。 并且仅在请求该功能时加载模块；</p>
+<p>DLL 优势：</p>
+<ul>
+<li><p>使用更少的资源</p>
+<p>当多个程序使用相同的函数库时，DLL 可以减少在磁盘和物理内存中加载的代码的重复。 它不仅会大大影响前台运行的程序的性能，还会影响在 Windows 操作系统上运行的其他程序的性能。</p>
+</li>
+<li><p>提升模块化体系结构</p>
+<p>DLL 有助于推动开发模块化程序。 它可以帮助你开发需要多种语言版本的大型程序或需要模块化体系结构的程序。 模块化程序的一个示例是一个会计程序，该程序具有许多可在运行时动态加载的模块。</p>
+</li>
+<li><p>简化部署和安装</p>
+<p>当 DLL 中的函数需要更新或修复时，DLL 的部署和安装不需要程序与 DLL 重新链接。 此外，如果多个程序使用相同的 DLL，则多个程序都将从更新或修复中获益。 在使用定期更新或修复的第三方 DLL 时，此问题可能更频繁地出现。</p>
+</li>
+</ul>
+<blockquote>
+<p>关于DLL的Microsoft官方文档：</p>
+<ul>
+<li>https://docs.microsoft.com/zh-cn/troubleshoot/windows-client/deployment/dynamic-link-library</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>实验前说明</strong></h3>
+<p>通常情况下，DLL都是以lib库的形式编写的，所以我们使用cmake以类似于子项目的形式创建dll库，并构建整个项目；</p>
+<p>整个项目的结构如下：</p>
+<pre><code class="language-bash">.
+│  CMakeLists.txt
+│  run_dll.cpp
+│
+└─lib
+        CMakeLists.txt
+        my_dll.cpp
+        my_dll.h
+</code></pre>
+<p>其中，根目录下放置了<code>CMakeLists.txt</code>，用于声明整个项目；</p>
+<p>而<code>run_dll.cpp</code>为最终生成DLL库的加载测试代码，这里可以暂时忽略；</p>
+<p><code>lib</code>目录下就是生成DLL库的代码；</p>
+<p>在这个简单的项目中，我们会在C++代码中创建一个<code>add</code>函数，用于实现两个数字相加，并返回结果；</p>
+<p>生成DLL库，以供其他代码调用；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>编写C++生成DLL</strong></h3>
+<h4><strong>初始化项目</strong></h4>
+<p>首先在项目根目录创建<code>CMakeLists.txt</code>，并编辑：</p>
+<pre><code class="language-cmake">cmake_minimum_required(VERSION 3.16)
+project(dll_learn)
+
+set(CMAKE_CXX_STANDARD 20)
+
+# 声明引入子项目(目录)
+ADD_SUBDIRECTORY(lib)
+</code></pre>
+<p>声明一些项目属性，创建lib目录，初始化整个项目；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>初始化lib库</strong></h4>
+<p>在lib目录下，我们会真正的编写DLL库；</p>
+<p>首先在lib目录下创建一个<code>CMakeLists.txt</code>，声明为一个子项目；</p>
+<pre><code class="language-cmake"># 设置变量
+SET(LIBHELLO_SRC ./my_dll.h ./my_dll.cpp)
+SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY ../lib_out)
+
+# 第一个参数为你需要构建的dll的名字，第二个为类型
+ADD_LIBRARY(my_dll SHARED ${LIBHELLO_SRC})
+INSTALL(TARGETS my_dll)
+# 为dll设置linker
+# 指定dll的生成目录，这里是：./lib_out
+SET_TARGET_PROPERTIES(my_dll PROPERTIES LINKER_LANGUAGE C
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+        OUTPUT_NAME "my_dll"
+        PREFIX "")
+</code></pre>
+<p>首先使用<code>SET</code>定义了两个变量：</p>
+<ul>
+<li><strong>LIBHELLO_SRC</strong>：lib库源文件；</li>
+<li><strong>CMAKE_LIBRARY_OUTPUT_DIRECTORY</strong>：编译最终输出目录；</li>
+</ul>
+<p>随后使用<code>ADD_LIBRARY</code>声明了这是一个lib库；</p>
+<p>然后使用<code>INSTALL</code>指定了目标<code>my_dll</code>，并使用<code>SET_TARGET_PROPERTIES</code>设置了目标的属性：</p>
+<ul>
+<li><strong>PROPERTIES LINKER_LANGUAGE C</strong>：声明为C链接库，提高DLL库的兼容性；</li>
+<li><strong>XXX_OUTPUT_DIRECTORY</strong>：指定输出命令；</li>
+<li><strong>OUTPUT_NAME</strong>：DLL库输出名称；</li>
+<li><strong>PREFIX</strong>：DLL库前缀，若不设置，可能会加默认前缀；如，<code>cygmy_dll.dll</code>；</li>
+</ul>
+<blockquote>
+<p>更多关于CMake的内容可以查询相关文档！</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h4><strong>编写lib库代码</strong></h4>
+<p>在lib目录下的CMakeLists中，我们声明了<code>my_dll.cpp</code>和<code>my_dll.h</code>两个文件；</p>
+<p>下面我们来编写这两个文件；</p>
+<p>my_dll.h</p>
+<pre><code class="language-cpp">#ifndef CPP_LEARN_MY_DLL_H
+#define CPP_LEARN_MY_DLL_H
+
+#define EXPORT_DLL __declspec(dllexport)
+
+extern "C" EXPORT_DLL int add(int a, int b); // 即 int add(int a,int b)
+
+#endif //CPP_LEARN_MY_DLL_H
+</code></pre>
+<p>my_dll.cpp</p>
+<pre><code class="language-cpp">#include "my_dll.h"
+
+int add(int a, int b) {
+    return (a + b);
+}
+</code></pre>
+<p>在头文件中，我们使用<code>__declspec(dllexport)</code>声明并导出了一个dll函数；</p>
+<p>使用<code>extern "C"</code>也是为了导出为C代码，以提高代码兼容性；</p>
+<p>在cpp文件中，我们定义了头文件中声明的add函数；</p>
+<p>至此，dll库就已经编写完成了！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>编译DLL</strong></h3>
+<p>在根目录先使用<code>cmake .</code>命令，在根目录和lib目录下编译出Makefile文件；</p>
+<p>然后在根目录或者lib目录下使用<code>make install</code>即可编译出DLL库；</p>
+<p>编译出的DLL库位于根目录的<code>lib_out</code>目录下，名称为：<code>my_dll.dll</code>；</p>
+<p>和我们在cmake中配置的完全相同；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>测试DLL</strong></h3>
+<p>为了测试生成的DLL能否正常运行，我们需要编写代码并加载测试生成的DLL是否可以正常被调用；</p>
+<p>在根目录下创建<code>run_dll.cpp</code>：</p>
+<p>run_dll.cpp</p>
+<pre><code class="language-cpp">#include &lt;windows.h&gt;
+#include &lt;iostream&gt;
+
+typedef int (*add)(int, int);
+
+int main() {
+    HINSTANCE handle = LoadLibrary("./lib_out/my_dll.dll");
+    auto f = (add) GetProcAddress(handle, "add");
+    std::cout &lt;&lt; f(1, 32) &lt;&lt; std::endl;
+    FreeLibrary(handle);
+    return 0;
+}
+</code></pre>
+<p>在run_dll.cpp中，我们首先动态加载了生成的DLL库，随后获取到了<code>add</code>方法，最后调用并输出了求和结果；</p>
+<p>编写完成后，还要在根目录中的<code>CMakeLists.txt</code>中添加编译可执行文件的声明：</p>
+<pre><code class="language-diff">cmake_minimum_required(VERSION 3.16)
+project(dll_learn)
+
+set(CMAKE_CXX_STANDARD 20)
+
+ADD_SUBDIRECTORY(lib)
+
++ add_executable(run_dll run_dll.cpp)
+</code></pre>
+<p>然后重新执行<code>cmake .</code>和<code>make install</code>编译项目；</p>
+<p>这时会在项目根目录生成<code>run_dll.exe</code>；</p>
+<p>运行<code>run_dll.exe</code>，可以生成结果：</p>
+<pre><code class="language-bash">$ run_dll.exe
+33
+</code></pre>
+<p>测试成功！</p>
+<blockquote>
+<p>关于其他编程语言加载DLL库，见：</p>
+<ul>
+<li><a href="/2021/01/28/%E5%90%84%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%E5%8A%A0%E8%BD%BD%E5%B9%B6%E8%B0%83%E7%94%A8dll%E5%BA%93/">各编程语言加载并调用dll库</a></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>附录</strong></h2>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp_learn/tree/dll</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="/2021/01/27/cmake%E7%94%9F%E6%88%90%E5%8A%A8%E6%80%81%E9%93%BE%E6%8E%A5%E5%BA%93dll/">cmake生成动态链接库dll</a></li>
+<li><a href="/2021/01/28/%E5%90%84%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%E5%8A%A0%E8%BD%BD%E5%B9%B6%E8%B0%83%E7%94%A8dll%E5%BA%93/">各编程语言加载并调用dll库</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

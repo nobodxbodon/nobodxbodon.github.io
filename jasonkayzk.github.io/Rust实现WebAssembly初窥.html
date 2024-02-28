@@ -1,0 +1,235 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Rust%E5%AE%9E%E7%8E%B0WebAssembly%E5%88%9D%E7%AA%A5.html">Rust实现WebAssembly初窥</a></h2>
+<hr/>
+<h2>title: Rust实现WebAssembly初窥
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?66'
+date: 2021-10-10 13:19:14
+categories: Rust
+tags: [Rust, WebAssembly]
+description: 最近在学习Rust，而Rust和WebAssembly的结合正在如火如荼的进行着；相比于Go，Rust和WebAssembly的结合可以说是更加成熟，包括了编译优化、甚至编译完成可以一键发布到npm库；本文讲述了如何使用Rust实现一个Hello-World的WebAssembly；</h2>
+<p>最近在学习Rust，而Rust和WebAssembly的结合正在如火如荼的进行着；相比于Go，Rust和WebAssembly的结合可以说是更加成熟，包括了编译优化、甚至编译完成可以一键发布到npm库；</p>
+<p>本文讲述了如何使用Rust实现一个Hello-World的WebAssembly；</p>
+<p>关于Go实现WebAssembly，见：</p>
+<ul>
+<li><a href="/2020/09/23/%E5%88%9D%E6%8E%A2Go-WebAssembly/">初探Go-WebAssembly/</a></li>
+</ul>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/wasm-hello</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Rust实现WebAssembly初窥</strong></h1>
+<h2><strong>前言-为什么使用WebAssembly</strong></h2>
+<p>目前，WebAssembly主要使用在浏览器中，但是在不久的将来， <em>wasm</em> 可能成为在各种环境中，重要的”便携式可执行”格式，十分具有发展前景；</p>
+<p>同时，WebAssembly 可以实现，无GC、高性能等特点，可以提高网页性能；</p>
+<p>目前 WebAssembly 被广泛应用在：</p>
+<ul>
+<li>音视频解码，如：视频直播；</li>
+<li>游戏；</li>
+<li>Web办公软件，如：CAD软件等；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>前言-为什么选择Rust-WebAssembly？</strong></h2>
+<p>关于这个问题网上已经存在很多答案了：</p>
+<ul>
+<li>https://llever.com/rustwasm-book/why-rust-and-webassembly.zh.html#a%E5%B0%8Fwasm%E5%B0%BA%E5%AF%B8</li>
+</ul>
+<p>这里简单总结一下：</p>
+<ul>
+<li>小体积的<code>.wasm</code>：对于Web应用而言，包的体积大小对于网页加载是非常重要的，而Rust本身无GC，包体积可以做的非常小！</li>
+<li>和JS、TS等深度集成：Rust可以直接支持npm、Webpack等工具！</li>
+<li>Rust本身的零成本抽象、高性能以及安全性等；</li>
+</ul>
+<p>下面，废话不多说，来看一个例子；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>环境准备</strong></h2>
+<p>想要开发Rust-Assembly，本地需要安装以下工具：</p>
+<p>Rust工具：</p>
+<ul>
+<li>Rust工具链：rustup、rustc、cargo等，用于编译Rust代码、管理Rust依赖包：<a href="https://www.rust-lang.org/tools/install">安装 Rust 工具链.</a>；</li>
+<li>wasm-pack：编译Rust代码到WebAssembly：<a href="https://rustwasm.github.io/wasm-pack/installer/">安装<code>wasm-pack</code></a>；</li>
+<li>cargo-generate：使用Git仓库生成Rust项目模板：<code>cargo install cargo-generate</code>；</li>
+</ul>
+<p>前端工具：</p>
+<ul>
+<li>Node；</li>
+<li>Npm；</li>
+</ul>
+<p>上面各种工具的安装都比较简单，这里不再赘述；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>编写Rust-WebAssembly项目</strong></h2>
+<h3><strong>使用模板生成项目</strong></h3>
+<p>使用下面的命令通过模板创建项目：</p>
+<pre><code class="language-bash">cargo generate --git https://github.com/rustwasm/wasm-pack-template --name hello-wasm
+</code></pre>
+<p>随后，生成<code>hello-wasm</code>目录：</p>
+<pre><code class="language-bash">.
+├── Cargo.toml
+├── LICENSE_APACHE
+├── LICENSE_MIT
+├── README.md
+├── src
+|  ├── lib.rs
+|  └── utils.rs
+└── tests
+   └── web.rs
+
+directory: 2 file: 7
+</code></pre>
+<p>下面详细几个比较重要的文件：</p>
+<ul>
+<li>Cargo.toml：该<code>Cargo.toml</code>文件是<code>cargo</code>的 指定依赖项和元数据，Cargo 则是 Rust 的包管理器和构建工具；这个预先配置了一个<code>wasm-bindgen</code>依赖项，用于正确初始化<code>crate-type</code>并生成<code>.wasm</code>库；</li>
+<li>src/lib.rs：<code>src/lib.rs</code>文件 声明了 Rust 项目中的一个包入口，用于编译成 WebAssembly。它用<code>wasm-bindgen</code>与 JavaScript 交互；我们可以在该文件中声明需要导出的库函数；</li>
+<li>src/utils.rs：<code>src/utils.rs</code>模块提供了常用的实用函数，让 Rust 编译成 WebAssembly 来得更容易；</li>
+</ul>
+<p>下面是<code>src/lib.rs</code>的代码：</p>
+<pre><code class="language-rust">mod utils;
+
+use wasm_bindgen::prelude::*;
+use crate::utils::set_panic_hook;
+
+// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
+// allocator.
+#[cfg(feature = "wee_alloc")]
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+#[wasm_bindgen]
+extern {
+    fn alert(s: &amp;str);
+}
+
+#[wasm_bindgen]
+pub fn greet() {
+    set_panic_hook();
+    alert("Hello, hello-wasm in local!");
+}
+</code></pre>
+<p>我们通过：<code>extern</code>引入了JS中的 <code>alert</code> 函数，并在 <code>greet</code>函数中使用；</p>
+<p>最终，greet函数会调用 <code>alert</code> 函数，并在浏览器中弹窗通知！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>构建Rust-WebAssembly项目</strong></h3>
+<p>使用<code>wasm-pack</code>对项目进行构建；</p>
+<p>在构建项目时会根据以下步骤：</p>
+<ul>
+<li>确保我们有 Rust 1.30 或打上版本，通过<code>rustup</code>安装<code>wasm32-unknown-unknown</code>目标(target)；</li>
+<li>用<code>cargo</code>将我们的 Rust 的源 编译为 WebAssembly 的 <code>.wasm</code>二进制文件；</li>
+<li>为 Rust 生成的 WebAssembly 使用<code>wasm-bindgen</code>，生成 JavaScript API；</li>
+</ul>
+<p>在项目的根目录执行命令：</p>
+<pre><code class="language-bash">$ wasm-pack build
+
+[INFO]: Checking for the Wasm target...
+[INFO]: Compiling to Wasm...
+   Compiling proc-macro2 v1.0.29
+   ……
+   Compiling hello-wasm v0.1.0 (D:\workspace\rust-learn\hello-wasm)
+    Finished release [optimized] target(s) in 8.54s
+[INFO]: Installing wasm-bindgen...
+[INFO]: Optimizing wasm binaries with `wasm-opt`...
+[INFO]: Optional fields missing from Cargo.toml: 'description', 'repository', and 'license'. These are not necessary, but recommended
+[INFO]: :-) Done in 9.41s
+[INFO]: :-) Your wasm pkg is ready to publish at D:\workspace\rust-learn\hello-wasm\pkg.
+</code></pre>
+<p>构建完成后，我们可以在<code>pkg</code>目录中找到输出：</p>
+<pre><code class="language-bash">.
+├── hello_wasm.d.ts
+├── hello_wasm.js
+├── hello_wasm_bg.js
+├── hello_wasm_bg.wasm
+├── hello_wasm_bg.wasm.d.ts
+├── package.json
+└── README.md
+</code></pre>
+<p>生成的README由主项目复制而来，下面解释下其他生成的文件：</p>
+<ul>
+<li><code>hello_wasm_bg.wasm</code>：该<code>.wasm</code>文件是 Rust 编译器从 Rust 源代码生成的 WebAssembly 二进制文件；其包含 所有 Rust 函数和数据。例如，它具有导出的”greet”函数；</li>
+<li><code>hello_wasm.js</code>：该<code>.js</code>文件是由<code>wasm-bindgen</code>生成的，其用于将 DOM 和 JavaScript 函数导入 Rust，并向 WebAssembly 函数公开一个很好的 API 到 JavaScript；例如，有一个 JavaScript 的<code>greet</code>函数，其包裹着从 WebAssembly 模块导出的<code>greet</code>函数；</li>
+<li><code>hello_wasm.d.ts</code>：该文件包含 <a href="http://www.typescriptlang.org/">TypeScript</a> 的类型声明；</li>
+<li><code>hello_wasm_bg.js</code> &amp; <code>hello_wasm_bg.wasm.d.ts</code>：JS 和 TS的 wasm 接入层代码；</li>
+<li><code>package.json</code>：npm 包声明文件，用于依赖管理；我们可以一键发布包到npm！</li>
+</ul>
+<p>至此，我们的 wasm 项目构建完毕！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>前端项目</strong></h2>
+<h3><strong>使用模板初始化项目</strong></h3>
+<p>使用模板创建前端项目：</p>
+<pre><code class="language-bash">npm init wasm-app frontend
+</code></pre>
+<p>其目录结构就是一个经典的前端项目：</p>
+<pre><code class="language-bash">.
+├── .bin
+|  └── create-wasm-app.js
+├── .gitignore
+├── bootstrap.js
+├── index.html
+├── index.js
+├── package-lock.json
+├── package.json
+├── README.md
+└── webpack.config.js
+</code></pre>
+<p>其中，<code>index.js</code>就是我们的JS入口；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>引入本地wasm包</strong></h3>
+<p>在<code>hello-wasm/pkg</code>目录下执行<code>npm link</code>，以便本地包可以被其他本地包依赖，而不需要将它们发布到 npm：</p>
+<pre><code class="language-bash">npm link
+</code></pre>
+<p>随后，在前端根目录执行导入本地包：</p>
+<pre><code class="language-bash">npm link hello-wasm
+</code></pre>
+<p>链接成功后，修改<code>frontend/index.js</code>，导入本地包：</p>
+<pre><code class="language-bash">import * as wasm from "hello-wasm";
+
+wasm.greet();
+</code></pre>
+<p>至此，整个前端项目成功引入了本地包；</p>
+<blockquote>
+<p><strong>如果是引入发布到wasm-npm包，就更简单了：和其他npm包的引入方式完全一致！</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>启动项目测试</strong></h2>
+<p>本地启动前端项目：</p>
+<pre><code class="language-bash">npm run start
+</code></pre>
+<p>访问<code>localhost:8080</code>，可以看到Alert通知：</p>
+<pre><code>Hello, hello-wasm in local!
+</code></pre>
+<p>说明项目测试通过！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>前端项目热更新</strong></h2>
+<p>对于 wasm 项目而言，热更新也是非常的简单；</p>
+<p>我们只需要修改 hello-wasm 项目，并使用<code>wasm-pack build</code>命令重新编译整个项目，即可实现前端的热更新！</p>
+<p>下面，修改文件：</p>
+<p>hello-wasm/src/lib.rs</p>
+<pre><code class="language-diff">pub fn greet() {
+    set_panic_hook();
+-    alert("Hello, hello-wasm in local!");
++    alert("Hello, hello-wasm in local again!");
+}
+</code></pre>
+<p>并重新编译；</p>
+<p>编译完成后，项目即时生效，并输出了：</p>
+<pre><code>Hello, hello-wasm in local again!
+</code></pre>
+<p>可以看到，开发起来还是非常方便的！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>小结</strong></h2>
+<p>本文只是抛砖引玉的介绍了rust和wasm相结合，而真正的 WebAssembly 而言是一个非常宏大的项目！</p>
+<p>我们甚至可以使用Rust直接像React一样直接开发一个Web应用，见：</p>
+<ul>
+<li>https://github.com/yewstack/yew</li>
+</ul>
+<p>可以预见，在不久的将来，我们的3A大作、甚至是操作系统都可以直接在浏览器中运行；</p>
+<p>真正到了那天，我们只需要一个浏览器即可；</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>文章参考：</p>
+<ul>
+<li>https://llever.com/rustwasm-book/introduction.zh.html</li>
+<li>https://zhuanlan.zhihu.com/p/104299612</li>
+<li>https://www.modb.pro/db/46512</li>
+<li>https://developer.mozilla.org/zh-CN/docs/WebAssembly/Rust_to_wasm</li>
+</ul>
+<p>&lt;br/&gt;</p>

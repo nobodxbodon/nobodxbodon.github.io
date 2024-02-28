@@ -1,0 +1,103 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%9C%A8Win10%E4%B8%8B%E4%BD%BF%E7%94%A8Docker%E9%83%A8%E7%BD%B2FTP%E6%9C%8D%E5%8A%A1.html">在Win10下使用Docker部署FTP服务</a></h2>
+<hr/>
+<h2>title: 在Win10下使用Docker部署FTP服务
+toc: true
+date: 2020-01-10 10:27:18
+cover: https://img.paulzzh.com/touhou/random?13
+categories: Docker
+tags: [Docker, FTP]
+description: 本篇总结了在win10下面使用Docker来部署vsftpd服务</h2>
+<p>本篇总结了在win10下面使用Docker来部署vsftpd服务</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>最近写项目用到了FTP，也已经习惯了使用Docker进行容器化部署，这样可以不污染宿主的环境，所以在网上查了相关资料</p>
+<p>而网上大部分使用的都是在Linux服务器上使用Docker部署，所以自己摸索了一下，稍作修改在win10下也完成了FTP的部署</p>
+<h3>拉取镜像</h3>
+<p>执行命令拉取vsftpd镜像</p>
+<pre><code class="language-powershell">docker pull fauria/vsftpd
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>启动容器</h3>
+<p>通过命令创建容器并启动：</p>
+<pre><code class="language-powershell">docker run -d -v f:\ftp_file:/home/vsftpd 
+    -p 20:20 -p 21:21 -p 21100-21110:21100-21110
+    -e FTP_USER=zk 
+    -e FTP_PASS=zk137818 
+    -e PASV_ADDRESS=192.168.1.105 
+    -e PASV_MIN_PORT=21100 
+    -e PASV_MAX_PORT=21110 
+    --name vsftpd --restart=always fauria/vsftpd
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>说明：</strong></p>
+<p>在上述命令中：</p>
+<ul>
+<li>-d: 后台运行容器，并返回容器ID;</li>
+<li>-v: 建立<code>宿主机文件目录:容器内文件目录</code>映射</li>
+<li>-p: 多个端口映射</li>
+<li>-e: 对容器进行配置<ul>
+<li>FTP_USER: FTP服务器用户名</li>
+<li>FTP_PASS: FTP服务器密码</li>
+<li>PASV_ADDRESS: FTP服务器地址(通常是本地IP)</li>
+<li>PASV_MIN_PORT: 被动模式最小端口号</li>
+<li>PASV_MAX_PORT: 被动模式下最大端口号</li>
+</ul>
+</li>
+<li>--name xxx: 启动后容器名称</li>
+<li>--restart=always: 容器挂了之后会自动重启</li>
+<li>fauria/vsftpd: 构建容器时使用的镜像名称</li>
+</ul>
+<p>&lt;font color="#ff0000"&gt;<strong>使用上述命令时, 根据自己的实际需求来替换命令</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>一些注意事项</h3>
+<p><strong>① 关于-v文件目录映射问题</strong></p>
+<ul>
+<li>容器目录不可以为相对路径</li>
+<li>宿主机目录如果不存在，则会自动生成</li>
+</ul>
+<p><strong>② 当创建容器时, win10可能会提示磁盘访问权限, 允许即可</strong></p>
+<p>&lt;br/&gt;</p>
+<h3>访问服务</h3>
+<p>可以使用FileZilla直接访问, 如下图:</p>
+<p><img alt="ftp1.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/ftp1.png"/></p>
+<p>当然也可以使用浏览器直接访问: url为:</p>
+<pre><code>ftp://username:password@hostname:port
+</code></pre>
+<p>在本例中为: <code>ftp://zk:zk137818@192.168.1.105:21</code></p>
+<p>如下图:</p>
+<p><img alt="ftp2.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/ftp2.png"/></p>
+<p>&lt;br/&gt;</p>
+<h3>增加一个新用户</h3>
+<p><strong>① 首先执行如下命令进入到容器</strong></p>
+<pre><code class="language-powershell">docker exec -i -t vsftpd bash
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>② 创建新用户的文件夹</strong></p>
+<pre><code class="language-shell">mkdir /home/vsftpd/test
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>说明: 其中test为新用户的用户名</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>③  编辑用户配置文件</strong></p>
+<pre><code class="language-shell">vi /etc/vsftpd/virtual_users.txt
+
+# 文件内容
+zk
+zk137818
+test # 新用户用户名
+zk137818 # 新用户密码
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>④ 保存退出后执行如下命令，把登录的验证信息写入数据库</strong></p>
+<pre><code class="language-shell">/usr/bin/db_load -T -t hash -f /etc/vsftpd/virtual_users.txt /etc/vsftpd/virtual_users.db
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>⑤ 最后退出容器，并重启容器可以使用新用户连接 FTP 服务了</strong></p>
+<pre><code class="language-powershell">exit
+docker restart vsftpd
+</code></pre>
+<p>&lt;br/&gt;</p>

@@ -1,0 +1,361 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Rust%E4%B8%AD%E7%9A%84%E9%94%99%E8%AF%AF%E5%A4%84%E7%90%86.html">Rust中的错误处理</a></h2>
+<hr/>
+<h2>title: Rust中的错误处理
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?17'
+date: 2022-11-18 11:19:07
+categories: Rust
+tags: [Rust]
+description: 本文讲解了如何Rust中进行错误处理；</h2>
+<p>本文讲解了如何Rust中进行错误处理；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/error</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Rust中的错误处理</strong></h1>
+<h2><strong>Result枚举</strong></h2>
+<p>Rust 中没有提供类似于 Java、C++ 中的 Exception 机制，而是使用 <code>Result</code> 枚举的方式来实现：</p>
+<pre><code class="language-rust">pub enum Result&lt;T, E&gt; {
+    /// Contains the success value
+    Ok(T),
+    /// Contains the error value
+    Err(E),
+}
+</code></pre>
+<p>在使用时：</p>
+<ul>
+<li><strong>如果无错误则使用 <code>Ok(T)</code> 返回；</strong></li>
+<li><strong>如果存在错误，则使用 <code>Err(E)</code> 包装错误类型返回；</strong></li>
+</ul>
+<p>例如：</p>
+<p>examples/0_result.rs</p>
+<pre><code class="language-rust">#[derive(Debug)]
+pub enum MyError {
+    Internal(String),
+    InvalidId(String),
+}
+
+fn add(num: i64) -&gt; Result&lt;i64, MyError&gt; {
+    if num &lt; 0 {
+        Err(MyError::InvalidId(String::from("Invalid num!")))
+    } else {
+        Ok(num + 100000)
+    }
+}
+
+fn main() -&gt; Result&lt;(), MyError&gt; {
+    // fetch_id(-1)?;
+
+    let res = add(1)?;
+    println!("{}", res);
+    Ok(())
+}
+</code></pre>
+<p>上面的代码首先通过 MyError 枚举定义了多个可能会出现的错误；</p>
+<p>随后，在 <code>add</code> 函数中：</p>
+<ul>
+<li>当 num 小于 0 时返回错误；</li>
+<li>否则给 num 增加 100000 并返回；</li>
+</ul>
+<p>在上面的 <code>let res = add(1)?;</code> 中使用了 <code>?</code> 操作符，他相当于是一个语法糖：</p>
+<ul>
+<li><strong>如果被调函数正常返回则调用 <code>unwrap</code> 获取其值；</strong></li>
+<li><strong>反之，则将被调函数的错误直接向上返回（相当于直接 return Err）；</strong></li>
+</ul>
+<p>即上面的语法糖相当于：</p>
+<pre><code class="language-rust">let res = match add() {
+  Ok(id) =&gt; id,
+  Err(err) =&gt; {
+    return Err(err);
+  }
+};
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>错误类型转换</strong></h2>
+<p>上面简单展示了 Rust 中错误的使用；</p>
+<p>由于 Rust 是强类型的语言，因此如果在一个函数中使用 <code>?</code> 返回了多个错误，并且他们的类型是不同的，<strong>还需要对返回的错误类型进行转换，转为相同的类型！</strong></p>
+<p>例如下面的例子：</p>
+<pre><code class="language-rust">#[derive(Debug)]
+pub enum MyError {
+    ReadError(String),
+    ParseError(String),
+}
+
+fn read_file() -&gt; Result&lt;i64, MyError&gt; {
+    // Error: Could not get compiled!
+    let content = fs::read_to_string("/tmp/id")?;
+    let id = content.parse::&lt;i64&gt;()?;
+}
+
+fn main() -&gt; Result&lt;(), MyError&gt; {
+    let id = read_file()?;
+    println!("id: {}", id);
+    Ok(())
+}
+</code></pre>
+<p>上面的例子无法编译通过，原因在于： <strong><code>read_to_string</code> 和 <code>parse</code> 返回的是不同类型的错误！</strong></p>
+<p>因此，如果要能返回，我们需要对每一个错误进行转换，转为我们所定义的 Error 类型；</p>
+<p>例如：</p>
+<p>examples/1_error_convert.rs</p>
+<pre><code class="language-rust">fn read_file() -&gt; Result&lt;i64, MyError&gt; {
+    // Error: Could not get compiled!
+    // let content = fs::read_to_string("/tmp/id")?;
+    // let id = content.parse::&lt;i64&gt;()?;
+
+    // Method 1: Handling error explicitly!
+    let content = match std::fs::read_to_string("/tmp/id") {
+        Ok(content) =&gt; content,
+        Err(err) =&gt; {
+            return Err(MyError::ReadError(format!("read /tmp/id failed: {}", err)));
+        }
+    };
+    let content = content.trim();
+    println!("read content: {}", content);
+
+    // Method 2: Use map_err to transform error type
+    let id = content
+        .parse::&lt;i64&gt;()
+        .map_err(|err| MyError::ParseError(format!("parse error: {}", err)))?;
+
+    Ok(id)
+}
+</code></pre>
+<p>上面展示了两种不同的转换 Error 的方法：</p>
+<p>方法一通过 match 匹配手动的对 <code>read_to_string</code> 函数的返回值进行处理，如果发生了 Error，则将错误转为我们指定类型的错误；</p>
+<p>方法二通过 <code>map_err</code> 的方式，如果返回的是错误，则将其转为我们指定的类型，这时就可以使用 <code>?</code> 返回了；</p>
+<p>相比之下，使用 map_err 的方式，代码会清爽很多！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>From Trait</strong></h3>
+<p>上面处理错误的方法，每次都要对错误的类型进行转换，比较麻烦；</p>
+<p>Rust 中提供了 From Trait，在进行类型匹配时，如果提供了从一个类型转换为另一个类型的方法（实现了某个类型的 From Trait），则在编译阶段，编译器会调用响应的函数，直接将其转为相应的类型！</p>
+<p>例如：</p>
+<p>examples/2_from_trait.rs</p>
+<pre><code class="language-rust">#[derive(Debug)]
+pub enum MyError {
+    ReadError(String),
+    ParseError(String),
+}
+
+impl From&lt;std::io::Error&gt; for MyError {
+    fn from(source: std::io::Error) -&gt; Self {
+        MyError::ReadError(source.to_string())
+    }
+}
+
+impl From&lt;std::num::ParseIntError&gt; for MyError {
+    fn from(source: std::num::ParseIntError) -&gt; Self {
+        MyError::ParseError(source.to_string())
+    }
+}
+
+fn read_file() -&gt; Result&lt;i64, MyError&gt; {
+    let _content = fs::read_to_string("/tmp/id")?;
+    let content = _content.trim();
+    let id = content.parse::&lt;i64&gt;()?;
+    Ok(id)
+}
+
+fn main() -&gt; Result&lt;(), MyError&gt; {
+    let id = read_file()?;
+    println!("id: {}", id);
+    Ok(())
+}
+</code></pre>
+<p>在上面的代码中，我们为 MyError 类型的错误分别实现了转换为 <code>std::io::Error</code> 和 <code>std::num::ParseIntError</code> 类型的 From Trait；</p>
+<p><strong>因此，在 read_file 函数中就可以直接使用 <code>?</code> 向上返回错误了！</strong></p>
+<p>但是上面的方法需要为每个错误实现 From Trait 还是有些麻烦，因此出现了 <a href="https://docs.rs/thiserror/latest/thiserror/">thiserror</a> 以及 <a href="https://docs.rs/anyhow/latest/anyhow/">anyhow</a> 库来解决这些问题；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>其他第三方库</strong></h2>
+<h3><strong>thiserror</strong></h3>
+<p>上面提到了我们可以为每个错误实现 From Trait 来直接转换错误类型，<code>thiserror</code> 库就是使用这个逻辑；</p>
+<p>我们可以使用 thiserror 库提供的宏来帮助我们生成到对应类型的 Trait；</p>
+<p>例如：</p>
+<p>examples/3_thiserror.rs</p>
+<pre><code class="language-rust">#[derive(thiserror::Error, Debug)]
+pub enum MyError {
+    #[error("io error.")]
+    IoError(#[from] std::io::Error),
+    #[error("parse error.")]
+    ParseError(#[from] std::num::ParseIntError),
+}
+
+fn read_file() -&gt; Result&lt;i64, MyError&gt; {
+    // Could get compiled!
+    let content = fs::read_to_string("/tmp/id")?;
+    let id = content.parse::&lt;i64&gt;()?;
+    Ok(id)
+}
+
+fn main() -&gt; Result&lt;(), MyError&gt; {
+    let id = read_file()?;
+    println!("id: {}", id);
+    Ok(())
+}
+</code></pre>
+<p>我们只需要对我们定义的类型进行宏标注，在编译时这些宏会自动展开并实现对应的 Trait；</p>
+<p>展开后的代码如下：</p>
+<pre><code class="language-rust">#![feature(prelude_import)]
+#[prelude_import]
+use std::prelude::rust_2018::*;
+#[macro_use]
+extern crate std;
+use std::fs;
+pub enum MyError {
+    #[error("io error.")]
+    IoError(#[from] std::io::Error),
+    #[error("parse error.")]
+    ParseError(#[from] std::num::ParseIntError),
+}
+#[allow(unused_qualifications)]
+impl std::error::Error for MyError {
+    fn source(&amp;self) -&gt; std::option::Option&lt;&amp;(dyn std::error::Error + 'static)&gt; {
+        use thiserror::__private::AsDynError;
+        #[allow(deprecated)]
+        match self {
+            MyError::IoError { 0: source, .. } =&gt; std::option::Option::Some(source.as_dyn_error()),
+            MyError::ParseError { 0: source, .. } =&gt; {
+                std::option::Option::Some(source.as_dyn_error())
+            }
+        }
+    }
+}
+#[allow(unused_qualifications)]
+impl std::fmt::Display for MyError {
+    fn fmt(&amp;self, __formatter: &amp;mut std::fmt::Formatter) -&gt; std::fmt::Result {
+        #[allow(unused_variables, deprecated, clippy::used_underscore_binding)]
+        match self {
+            MyError::IoError(_0) =&gt; {
+                let result =
+                    __formatter.write_fmt(::core::fmt::Arguments::new_v1(&amp;["io error."], &amp;[]));
+                result
+            }
+            MyError::ParseError(_0) =&gt; {
+                let result =
+                    __formatter.write_fmt(::core::fmt::Arguments::new_v1(&amp;["parse error."], &amp;[]));
+                result
+            }
+        }
+    }
+}
+#[allow(unused_qualifications)]
+impl std::convert::From&lt;std::io::Error&gt; for MyError {
+    #[allow(deprecated)]
+    fn from(source: std::io::Error) -&gt; Self {
+        MyError::IoError { 0: source }
+    }
+}
+#[allow(unused_qualifications)]
+impl std::convert::From&lt;std::num::ParseIntError&gt; for MyError {
+    #[allow(deprecated)]
+    fn from(source: std::num::ParseIntError) -&gt; Self {
+        MyError::ParseError { 0: source }
+    }
+}
+#[automatically_derived]
+#[allow(unused_qualifications)]
+impl ::core::fmt::Debug for MyError {
+    fn fmt(&amp;self, f: &amp;mut ::core::fmt::Formatter) -&gt; ::core::fmt::Result {
+        match (&amp;*self,) {
+            (&amp;MyError::IoError(ref __self_0),) =&gt; {
+                ::core::fmt::Formatter::debug_tuple_field1_finish(f, "IoError", &amp;&amp;*__self_0)
+            }
+            (&amp;MyError::ParseError(ref __self_0),) =&gt; {
+                ::core::fmt::Formatter::debug_tuple_field1_finish(f, "ParseError", &amp;&amp;*__self_0)
+            }
+        }
+    }
+}
+fn read_file() -&gt; Result&lt;i64, MyError&gt; {
+    let content = fs::read_to_string("/tmp/id")?;
+    let id = content.parse::&lt;i64&gt;()?;
+    Ok(id)
+}
+#[allow(dead_code)]
+fn main() -&gt; Result&lt;(), MyError&gt; {
+    let id = read_file()?;
+    {
+        ::std::io::_print(::core::fmt::Arguments::new_v1(
+            &amp;["id: ", "\n"],
+            &amp;[::core::fmt::ArgumentV1::new_display(&amp;id)],
+        ));
+    };
+    Ok(())
+}
+#[rustc_main]
+pub fn main() -&gt; () {
+    extern crate test;
+    test::test_main_static(&amp;[])
+}
+</code></pre>
+<p>可以看到实际上就是为 MyError 实现了对应错误类型的 From Trait；</p>
+<p>thiserror 库的这种实现方式，还需要为类型指定要转换的错误类型；</p>
+<p>而下面看到的 anyhow 库，可以将错误类型统一为同一种形式；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>anyhow</strong></h3>
+<p>如果你对 Go 中的错误类型不陌生，那么你就可以直接上手 anyhow 了！</p>
+<p>来看下面的例子：</p>
+<p>examples/4_anyhow.rs</p>
+<pre><code class="language-rust">use anyhow::Result;
+use std::fs;
+
+fn read_file() -&gt; Result&lt;i64&gt; {
+    // Could get compiled!
+    let content = fs::read_to_string("/tmp/id")?;
+    let id = content.parse::&lt;i64&gt;()?;
+    Ok(id)
+}
+
+fn main() -&gt; Result&lt;()&gt; {
+    let id = read_file()?;
+    println!("id: {}", id);
+    Ok(())
+}
+</code></pre>
+<p><strong>注意到，上面的 Result 类型为 <code>anyhow::Result</code>，而非标准库中的 Result 类型！</strong></p>
+<p><code>anyhow</code> 为 <code>Result&lt;T, E&gt;</code> 实现了 <code>Context</code> Trait：</p>
+<pre><code class="language-rust">impl&lt;T, E&gt; Context&lt;T, E&gt; for Result&lt;T, E&gt; where
+    E: ext::StdError + Send + Sync + 'static,
+{
+    fn context&lt;C&gt;(self, context: C) -&gt; Result&lt;T, Error&gt;
+    where
+        C: Display + Send + Sync + 'static,
+    {
+        // Not using map_err to save 2 useless frames off the captured backtrace
+        // in ext_context.
+        match self {
+            Ok(ok) =&gt; Ok(ok),
+            Err(error) =&gt; Err(error.ext_context(context)),
+        }
+    }
+
+    fn with_context&lt;C, F&gt;(self, context: F) -&gt; Result&lt;T, Error&gt;
+    where
+        C: Display + Send + Sync + 'static,
+        F: FnOnce() -&gt; C,
+    {
+        match self {
+            Ok(ok) =&gt; Ok(ok),
+            Err(error) =&gt; Err(error.ext_context(context())),
+        }
+    }
+}
+</code></pre>
+<p>在 <code>Context</code> 中提供了 <code>context</code> 函数，并且将原来的 <code>Result&lt;T, E&gt;</code> 转成了 <code>Result&lt;T, anyhow::Error&gt;</code>；</p>
+<p>因此，最终将错误类型统一为了 <code>anyhow::Error</code> 类型；</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/error</li>
+</ul>
+<p>文档：</p>
+<ul>
+<li>https://rustwiki.org/zh-CN/rust-by-example/error/multiple_error_types.html</li>
+<li>https://doc.rust-lang.org/book/ch09-00-error-handling.html</li>
+<li>https://nick.groenen.me/posts/rust-error-handling/</li>
+<li>https://docs.rs/thiserror/latest/thiserror/</li>
+<li>https://docs.rs/anyhow/latest/anyhow/</li>
+</ul>
+<p>&lt;br/&gt;</p>

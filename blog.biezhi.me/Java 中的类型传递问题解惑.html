@@ -1,0 +1,132 @@
+<h2>原文：<a href="https://blog.biezhi.me/2018-11-07-java-pass-by-value.html">Java 中的类型传递问题解惑</a></h2>
+<hr/>
+<h2>layout: post
+title: Java 中的类型传递问题解惑
+tags: ["Java"]</h2>
+<p>我之前一直犯了一个错误，认为 Java 中是有引用传递的，其实不然，写这篇文章一方面是纠正自己的理解，另一个是希望看到文章的人不要犯同样的错。</p>
+<h1>类型传递有什么蹊跷？</h1>
+<p>要讨论 Java 中是值传递还是引用传递，先来看看如何定义值传递和引用传递。</p>
+<ul>
+<li><strong>值传递（pass by value）</strong>：在调用函数时将实际参数拷贝一份传递到函数中，这样在函数中如果对参数进行修改，将不会影响到实际参数。</li>
+<li><strong>引用传递（pass by reference）</strong>：在调用函数时将实际参数的地址直接传递到函数中，那么在函数中对参数所进行的修改，将影响到实际参数。</li>
+</ul>
+<p>它们都是在发生函数调用时的一种参数求值策略，这是对调用函数时，求值和传值的方式的描述，而非传递的内容类型（内容指：是值类型还是引用类型，是值还是指针）。值类型/引用类型，是用于区分两种内存分配方式，值类型在栈上分配，引用类型在堆上分配。一个描述内存分配方式，一个描述参数求值策略，两者之间无任何依赖或约束关系。下面通过一些代码来理解这些话。</p>
+<h1>Java 代码的味道</h1>
+<p>在 Java 中有基本类型如 <code>int</code>、<code>boolean</code>、<code>char</code>，也有对象类型如 <code>Object</code>、<code>HashMap</code>、<code>Integer</code> 等。</p>
+<h2>最简单的例子</h2>
+<pre><code class="language-java">public static void swap(int a, int b) {
+    int x = a;
+    a = b;
+    b = x;
+    System.out.println("swap a: " + a);
+    System.out.println("swap b: " + b);
+}
+
+public static void main(String[] args) {
+    int a = 3;
+    int b = 4;
+    swap(a, b);
+    System.out.println("a = " + a);
+    System.out.println("b = " + b);
+}
+</code></pre>
+<p>对于这段代码的输出是：</p>
+<pre><code class="language-shell">swap a: 4
+swap b: 3
+a = 3
+b = 4
+</code></pre>
+<p><code>int</code> 是一个基本类型，我们将 2 个变量的值传入到 <code>swap</code> 方法中，它们实际的结构是这样的：</p>
+<p>&lt;img src='{{ "/public/images/2018/11/pass_by_value_1.png" | prepend: site.cdnurl }}'  alt="iTerm2 设置" width="350px"/&gt;</p>
+<h2>引用类型的例子</h2>
+<pre><code class="language-java">static class Foo {
+    String name;
+
+    public Foo(String name) {
+        this.name = name;
+    }
+}
+
+static void change(Foo myfoo) {
+    System.out.println("change input myfoo.name: " + myfoo.name);
+
+    myfoo.name = "FiFi";
+    System.out.println("change new   myfoo.name: " + myfoo.name);
+}
+
+public static void main(String[] args) {
+    Foo foo = new Foo("Jerry");
+    change(foo);
+
+    System.out.println(foo.name);
+}
+</code></pre>
+<p>对于这样一段代码的输出是：</p>
+<pre><code class="language-shell">change input myfoo.name: Jerry
+change new   myfoo.name: FiFi
+FiFi
+</code></pre>
+<p>对于 <code>change</code> 方法接收到的 <code>name</code> 是 Jerry 我们可以理解，修改后方法内输出的 FiFi 也可以理解，因为在同一函数体内，变量的修改必然是可见的。需要解释的就是外部的修改也会发生变化，这是为啥呢？</p>
+<p>&lt;img src='{{ "/public/images/2018/11/pass_by_value_2.png" | prepend: site.cdnurl }}'  alt="iTerm2 设置" width="600px"/&gt;</p>
+<p>看了这幅图你大概就明白了，我们 <code>new Foo("Jerry")</code> 这句话会在堆上开辟一块内存空间，假设叫它 <code>0xabcd</code> 好了，把这块内存赋值给一个名为 <code>foo</code> 的引用类型。进入 <code>change</code> 方法的时候就会传递一份 <code>foo</code> 引用类型的拷贝（参数入栈），我故意把这个变量名写为 <code>myfoo</code> 防止大家理解错误，<code>myfoo</code> 和 <code>foo</code> 这 2 个引用类型都指向同一块堆内存空间，在 <code>change</code> 方法内通过 <code>myfoo</code> 修改的值也会影响到其他指向这块内存的引用类型。</p>
+<blockquote>
+<p>结论：对于引用类型，是通过传值的方式传引用（引用类型）。这句话可能会有点儿绕，不要死记硬背它。</p>
+</blockquote>
+<p>上面的例子都是演示了 Java 中的值传递，假设 Java 里有引用传递会是什么样子呢？来看看这段代码</p>
+<pre><code class="language-java">static void change(Foo myfoo) {
+    System.out.println("change input myfoo.name: " + myfoo.name);
+
+    // 改变 foo 的指向，让它指向一个新的内存
+    myfoo = new Foo("biezhi");
+    System.out.println("change new   myfoo.name: " + myfoo.name);
+}
+
+public static void main(String[] args) {
+    Foo foo = new Foo("Jerry");
+    change(foo);
+
+    System.out.println(foo.name);
+}
+</code></pre>
+<p>这段代码的输出是</p>
+<pre><code class="language-shell">change input myfoo.name: Jerry
+change new   myfoo.name: biezhi
+Jerry
+</code></pre>
+<p>可能你看到这里已经恍然大悟了，如果 Java 中可以传递引用意味着 <code>myfoo = new Foo("biezhi");</code> 这行代码的修改会影响到之前的 <code>foo</code> 变量，会让 <code>foo</code> 和 <code>myfoo</code> 指向同一块新的地址，然后导致外部的 <code>foo.name</code> 会输出 biezhi。</p>
+<p>我们看到结果不是这样的，正因为是传值（拷贝了一份）。这行代码会创建一个新对象，让 <code>myfoo</code> 指向新内存，而 <code>foo</code> 指向的还是旧的内存，所以 <code>myfoo</code> 的是不会影响到外部的。</p>
+<h2>biezhi 的新疑问</h2>
+<p>看到上面其实值传递的概念和理解已经比较清晰了，之前又遇到一个问题，来看看代码吧</p>
+<pre><code class="language-java">static void change(Integer num) {
+    System.out.println("change input num: " + num);
+    num = 2333;
+    System.out.println("change new   num: " + num);
+}
+
+public static void main(String[] args) {
+    Integer num = 1;
+
+    change(num);
+    System.out.println(num);
+}
+</code></pre>
+<p>我当时的疑问，<code>Integer</code> 是引用类型吗？传递给 <code>change</code> 方法的参数修改后会影响外部吗？</p>
+<ul>
+<li><code>Integer</code> 创建出来的是一个对象（自动装箱），所以是引用类型</li>
+<li>不会影响到外部</li>
+</ul>
+<p>第二个问题为什么就不会影响到外部呢？原因是这样的，<code>Integer</code> 这个类（还有 <code>String</code>、<code>Double</code>、<code>Long</code> 等）比较特殊，它是 <code>final</code> 的，是不可变的。当我们使用 <code>num = 2333;</code> 这行代码去赋值的时候发生了什么？</p>
+<p>这里我就不画图描述了，这行代码意味着给 <code>num</code> 又创建一个新的对象，所以方法内的 <code>num</code> 引用类型指向了 2333 所处的内存。当我们使用 <code>=</code> 进行操作时候修改的是引用，而不是一个单纯的赋值操作，相当于前面例子中的 <code>myfoo = new Foo("biezhi")</code>。如果你想实现 <code>Integer</code> 数值的修改可以试试 <code>AtomicInteger</code> 这个类。</p>
+<h1>小结</h1>
+<ul>
+<li>一个方法不能修改一个基本数据类型的参数</li>
+<li>一个方法可以修改一个对象参数的状态</li>
+<li>一个方法不能实现让对象参数引用一个新对象</li>
+</ul>
+<p>之前对 Java 中值传递理解不够的原因是没有分清 <strong>引用</strong> 和 <strong>引用传递</strong> 是什么，只是在 Java 中理解起来有点绕，通过上面的小示例分析了这些问题出现的原因，如果你还有些模糊也可以参考我下方给出的链接学习，有什么疑问可以留言告诉我。</p>
+<h1>参考</h1>
+<ul>
+<li><a href="https://stackoverflow.com/questions/40480/is-java-pass-by-reference-or-pass-by-value">Is Java “pass-by-reference” or “pass-by-value”?</a>{:target="_blank"}</li>
+<li><a href="http://www.cs.toronto.edu/~reid/web/javaparams.html">Java Method Arguments</a>{:target="_blank"}</li>
+<li><a href="https://www.zhihu.com/question/31203609">Java 到底是值传递还是引用传递？</a>{:target="_blank"}</li>
+</ul>

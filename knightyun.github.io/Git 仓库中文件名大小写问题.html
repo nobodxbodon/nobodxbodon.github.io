@@ -1,0 +1,54 @@
+<h2>原文：<a href="https://knightyun.github.io/2021-01-18-git-ignorecase.html">Git 仓库中文件名大小写问题</a></h2>
+<hr/>
+<h2>title: Git 仓库中文件名大小写问题
+layout: post
+categories: Git
+tags: git 大小写 ignorecase
+excerpt: 关于 git 中的文件名大小写识别问题与解决方法</h2>
+<p>首先，Windows 下 git 默认配置是对文件/文件夹名称的大小写不敏感：</p>
+<pre><code class="language-shell">git config --get core.ignorecase
+
+# true
+</code></pre>
+<p>这就导致了一些时候的难以预料问题的产生，针对这个配置，先引用一下官方帮助文档的原话：</p>
+<blockquote>
+<p>The default is <code>false</code>, except <code>git-clone</code> or <code>git-init</code> will probe and set core.ignoreCase <code>true</code> if appropriate when the repository is created.</p>
+</blockquote>
+<p>即 git 默认对大小写敏感，但是会在仓库克隆或初始化时，根据当前系统来设置是否忽略大小写，比如 Windows 下会设置为 <code>true</code>，即不敏感，而 Linux 中不会忽略；相信有不少开发者的项目开发与协同工作都是在 <strong>Windows</strong> 系统下进行的，下面就列出 git 的这种机制会导致的问题与解决思路；</p>
+<h3>规范重命名</h3>
+<p>如果分支上直接在编辑器或资源管理器上修改项目中的文件名（只变更大小写），本地虽然可以调试通过，但是 git 并不会识别和记录这个修改，所以下一次提交推送时并不会带上这个重命名修改，远程仓库中这个文件名还是保持不变；</p>
+<p>因此，如果检出其他分支或者其他协作者拉取代码，项目就会报错，因为一个本地文件的名称如果由小写变成了大写，使用这个文件的代码部分也改成了大写，推送到远程后，远程的这个文件依然是小写，但远程上使用该文件的代码却成功变成了大写，那边启动项目就多半会提示文件不存在了；</p>
+<p>对于这种情况 git 提供了一种规范的做法，使用 <code>git mv</code> 命令：</p>
+<pre><code class="language-shell">git mv test.txt TEST.txt
+</code></pre>
+<p>以此来实现对文件的重命名，同时 git 也会将其识别为 <code>Rename</code> 的变更类型，然后正常提交推送就能同步到远程仓库了；如果是重命名文件夹，由于 Windows 下对文件夹的大小写也不敏感（-_-），所以直接使用上面的方法会失败：</p>
+<pre><code class="language-shell">git mv test-dir TEST-DIR
+
+# Rename from 'test-dir' to 'Test-dir/test-dir' failed.
+</code></pre>
+<p>这里就只有迂回一下，先把文件夹命名成其他名称，然后再命名为大写就行了：</p>
+<pre><code class="language-shell">git mv test-dir tmp
+git mv tmp TEST-DIR
+</code></pre>
+<h3>修改配置</h3>
+<p>可以选择直接修改 git 配置为不忽略大小写：</p>
+<pre><code class="language-shell">git config core.ignorecase false
+</code></pre>
+<p>然后直接在资源管理器或编辑器中修改文件名大小写，git 就会识别到了，而且是被识别为 <code>untracked</code> 类型的变更，这依然是 Windows 下对文件名大小写不敏感导致的（=_=），如果直接推送到远程的话，那么远程仓库就会同时存在大小写<strong>两个版本</strong>的文件（github/gitlab 服务器通常都是 Linux 系统），为后期维护添加隐患，本地在分支间切换时也可能出现以下报错：</p>
+<pre><code>error: The following untracked working tree files would be overwritten by checkout:
+        test.txt
+Please move or remove them before you switch branches.
+Aborting
+</code></pre>
+<p>这种情况下依然需要使用一些迂回的办法，就是先把要重命名的文件改成其他临时名称，提交一次（<code>git commit</code>），然后再把临时名称改成想要的名称，再提交一次，最后推送到远程，这样本地和远程都只保留下一个文件了；</p>
+<pre><code class="language-shell"># rename test.txt --&gt; tmp
+git add .
+git commit -m "..."
+
+# rename tmp --&gt; TEST.TXT
+git add .
+git commit -m "..."
+
+git push
+</code></pre>
+<p>所以不管是 Windows 还是其他系统下，还是不要轻易修改 git 默认的 <code>core.ignorecase</code> 配置，使用规范的 <code>git mv</code> 做法就好；</p>

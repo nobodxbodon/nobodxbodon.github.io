@@ -1,0 +1,199 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1Nginx-%E4%B8%80%E4%BA%9B%E5%B8%B8%E8%A7%81%E7%9A%84%E9%97%AE%E9%A2%98.html">负载均衡Nginx-一些常见的问题</a></h2>
+<hr/>
+<h2>title: 负载均衡Nginx-一些常见的问题
+cover: https://img.paulzzh.com/touhou/random?76
+date: 2020-04-13 09:33:35
+categories: 分布式
+toc: true
+tags: [分布式, 负载均衡, Nginx]
+description: 前一篇文章简要讲述了Nginx的配置. 本篇再此基础之上, 讲述使用Nginx时可能会出现的一些问题;</h2>
+<p>前一篇文章简要讲述了Nginx的配置.</p>
+<p>本篇再此基础之上, 讲述使用Nginx时可能会出现的一些问题;</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>&lt;!-- **目录:** --&gt;</p>
+<p>&lt;!-- toc --&gt;</p>
+<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+<h2>负载均衡Nginx-Session一致性</h2>
+<h3>https请求跳转</h3>
+<p>如下面的配置:</p>
+<pre><code>location /test {
+    proxy_pass http://www.baidu.com/;
+}
+</code></pre>
+<p>在访问URI为<code>/test</code>时会跳转到百度;</p>
+<p>但此时浏览器中的url也会发生变化;</p>
+<p>这是因为:</p>
+<p>向<code>http://www.baidu.com/</code>发送请求后, Nginx返回的是一个跳转的响应;</p>
+<p>此后, 客户端会重新向<code>https://www.baidu.com/</code>发送请求<strong>(此过程不在经历Nginx)</strong></p>
+<p>所以最终浏览器发生了跳转, 而非Nginx的负载均衡;</p>
+<p><strong>问题解决</strong></p>
+<p>将配置中的http改为https即可;</p>
+<p>&lt;br/&gt;</p>
+<h3>Session一致性</h3>
+<p>在使用Nginx做反向代理时, 如果后端服务器是Tomcat等动态服务器, 则可能会出现Session一致性问题;</p>
+<p>即: 无法确保同一个Session一定对应同一个Server;</p>
+<h4>配置网络</h4>
+<p>下面使用Docker来演示;</p>
+<p>配置IP地址:</p>
+<p>| Server  |      IP      |
+| :-----: | :----------: |
+|  Nginx  | 172.20.1.10  |
+| Server1 | 172.20.1.101 |
+| Server2 | 172.20.1.102 |</p>
+<p>并在Server1和Server2上启动Tomcat;</p>
+<hr/>
+<h4>配置Server</h4>
+<p>在Server端创建jsp页面:</p>
+<p>Server1</p>
+<pre><code class="language-bash">[root@c5477d71795c ROOT]# pwd
+/var/lib/tomcat/webapps/ROOT
+[root@c5477d71795c ROOT]# cat index.jsp 
+from 172.20.1.101
+&lt;br/&gt;
+session=&lt;%=session.getId()%&gt;
+</code></pre>
+<p>Server2</p>
+<pre><code class="language-bash">[root@c5477d71795c ROOT]# pwd
+/var/lib/tomcat/webapps/ROOT
+[root@c5477d71795c ROOT]# cat index.jsp 
+from 172.20.1.102
+&lt;br/&gt;
+session=&lt;%=session.getId()%&gt;
+</code></pre>
+<p>然后访问<code>http://172.20.1.101:8080/</code>和<code>http://172.20.1.102:8080/</code>;</p>
+<p>可分别显示来自哪个Server和对应的SessionId, 并且刷新页面时SessionId不会变化;<strong>(即使是使用<code>Ctrl+F5</code>刷新)</strong></p>
+<hr/>
+<h4>配置Nginx</h4>
+<p>修改Nginx的配置文件, 加入新的upstream配置和server配置;</p>
+<pre><code class="language-bash">upstream tomcat {
+    server 172.20.1.101:8080;
+    server 172.20.1.102:8080;
+}
+
+server {
+    ......
+    location /cat {
+        proxy_pass http://tomcat/;
+    }
+}
+</code></pre>
+<p>重启Nginx:</p>
+<pre><code>[root@ce12b3b4ce00 sbin]# ./nginx -s reload
+</code></pre>
+<p>访问<code>http://172.20.1.10/cat</code>, 并刷新;</p>
+<p>发现from 172.20.1.10x一直在变化, 并且session=xxx也变化;</p>
+<p><strong>说明此时Nginx的配置无法保证Session一致性!</strong></p>
+<p>&lt;br/&gt;</p>
+<h4>解决方案</h4>
+<p>在Tomcat后面部署Redis, MemCached等内存数据库来保存Session相关信息;</p>
+<p>本例中在Nginx服务器上安装memcached来解决Session一致性问题;</p>
+<p><strong>安装memcached</strong></p>
+<p>在Nginx容器中使用yum安装:</p>
+<pre><code class="language-bash">yum install -y memcached
+</code></pre>
+<p><strong>启动memcached</strong></p>
+<p>使用memcached命令启动:</p>
+<pre><code class="language-bash">memcached -d -m 128m -p 11211 -l 172.20.1.10 -u root -P /tmp/
+</code></pre>
+<p>参数说明:</p>
+<ul>
+<li>-d: 后台启动;</li>
+<li>-m: 缓存大小;</li>
+<li>-p: 端口;</li>
+<li>-l: IP地址;</li>
+<li>-P: 服务启动后系统进程ID存储文件的目录;</li>
+<li>-u: 服务器以哪个用户作为管理用户;</li>
+</ul>
+<p><strong>修改tomcat配置</strong></p>
+<p>在两台Server中修改tomcat的配置:</p>
+<pre><code class="language-bash">[root@3a53f7504511 ROOT]# vi /etc/tomcat/context.xml 
+
+# context标签中加入下面的内容
+&lt;Manager 
+className="de.javakaffee.web.msm.MemcachedBackupSessionManager"
+        memcachedNodes="n1:172.20.1.10:11211"
+        sticky="false"
+        sessionBackupAsync="false"
+        lockingMode="auto"
+        requestUriIgnorePattern=".*\.(ico|png|gif|jpg|css|js)$"
+        sessionBackupTimeout="1000"          
+        transcoderFactoryClass="de.javakaffee.web.msm.serializer.kryo.KryoTranscoderFactory" /&gt;
+
+</code></pre>
+<p><strong>导入jar包</strong></p>
+<p>使用yum安装的tomcat可将jar包放在<code>/usr/share/java/tomcat/</code>目录下;</p>
+<p>需要的jar包:</p>
+<p><img alt="img" src="https://images2015.cnblogs.com/blog/851491/201704/851491-20170418180524774-779206311.png"/></p>
+<p>maven下依赖如下：</p>
+<pre><code class="language-xml">&lt;dependency&gt;
+    &lt;groupId&gt;asm&lt;/groupId&gt;
+    &lt;artifactId&gt;asm&lt;/artifactId&gt;
+    &lt;version&gt;3.2&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;com.couchbase.client&lt;/groupId&gt;
+    &lt;artifactId&gt;couchbase-client&lt;/artifactId&gt;
+    &lt;version&gt;1.4.11&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;com.googlecode&lt;/groupId&gt;
+    &lt;artifactId&gt;kryo&lt;/artifactId&gt;
+    &lt;version&gt;1.04&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;de.javakaffee&lt;/groupId&gt;
+    &lt;artifactId&gt;kryo-serializers&lt;/artifactId&gt;
+    &lt;version&gt;0.11&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;de.javakaffee.msm&lt;/groupId&gt;
+    &lt;artifactId&gt;memcached-session-manager&lt;/artifactId&gt;
+    &lt;version&gt;1.8.2&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;de.javakaffee.msm&lt;/groupId&gt;
+    &lt;artifactId&gt;memcached-session-manager-tc7&lt;/artifactId&gt;
+    &lt;version&gt;1.8.2&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;com.googlecode&lt;/groupId&gt;
+    &lt;artifactId&gt;minlog&lt;/artifactId&gt;
+    &lt;version&gt;1.2&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;de.javakaffee.msm&lt;/groupId&gt;
+    &lt;artifactId&gt;msm-kryo-serializer&lt;/artifactId&gt;
+    &lt;version&gt;1.8.2&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;com.esotericsoftware&lt;/groupId&gt;
+    &lt;artifactId&gt;reflectasm&lt;/artifactId&gt;
+    &lt;version&gt;1.01&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;dependency&gt;
+    &lt;groupId&gt;net.spy&lt;/groupId&gt;
+    &lt;artifactId&gt;spymemcached&lt;/artifactId&gt;
+    &lt;version&gt;2.11.4&lt;/version&gt;
+&lt;/dependency&gt;
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>注: 如果依赖和tomcat版本不对应可能会什么也不显示, 此时响应码为500</strong>&lt;/font&gt;</p>
+</blockquote>
+<p><strong>验证</strong></p>
+<p>上述步骤都正确配置之后, 再次访问<code>http://172.20.1.10/cat</code>并刷新会发现SessionId不再变化;</p>
+<p>&lt;br/&gt;</p>
+<h2>附录</h2>
+<p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
+<p>内容和博客同步更新~</p>
+<p>&lt;br/&gt;</p>

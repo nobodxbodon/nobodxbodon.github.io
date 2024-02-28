@@ -1,0 +1,243 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Cargo%E5%91%BD%E4%BB%A4%E5%8F%8A%E5%85%B6%E6%89%A9%E5%B1%95.html">Cargo命令及其扩展</a></h2>
+<hr/>
+<h2>title: Cargo命令及其扩展
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?43'
+date: 2022-11-23 10:14:05
+categories: Rust
+tags: [Rust, Cargo]
+description: 用过Rust中Cargo工具的，都会对其赞叹不已；Cargo 不光支持代码格式化、构建、项目管理，还具备良好的可扩展性，同时也支持第三方的插件工具；本文讲述了一些常见的Cargo命令，同时讲述了如何编写一个Cargo扩展插件；</h2>
+<p>用过Rust中Cargo工具的，都会对其赞叹不已；</p>
+<p>Cargo 不光支持代码格式化、构建、项目管理，还具备良好的可扩展性，同时也支持第三方的插件工具；</p>
+<p>本文讲述了一些常见的Cargo命令，同时讲述了如何编写一个Cargo扩展插件；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/cargo</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Cargo命令及其扩展</strong></h1>
+<h2><strong>Cargo概述</strong></h2>
+<p>具体Cargo相关内容的学习，可以通过下面的网站学习：</p>
+<ul>
+<li>https://doc.rust-lang.org/cargo/index.html</li>
+<li>https://course.rs/cargo/intro.html</li>
+</ul>
+<p>在阅读本文之前，强烈建议你先完成上面的学习或至少了解Rust中Cargo的基本使用；</p>
+<p>Cargo不仅支持内建(built-in)的子命令，比如最常用的：</p>
+<ul>
+<li><strong>cargo new</strong></li>
+<li><strong>cargo build</strong></li>
+<li><strong>cargo run</strong></li>
+<li><strong>cargo clippy</strong></li>
+</ul>
+<p>同时，Cargo 也支持第三方的插件工具，下面罗列了些比较常用的cargo plugin：</p>
+<ul>
+<li><strong>cargo-expand：</strong>在编译时展开标准宏和继承宏(derive，过程宏的一种)展开信息，便于调试宏；</li>
+<li><strong>cargo-update：</strong>更新你所安装的cargo插件；</li>
+<li><strong>cargo-graph：</strong>生成工程的依赖关系图；</li>
+<li><strong>cargo-deb：</strong>把当前工程编译成deb包，Debian/Ubuntu；</li>
+<li>…</li>
+</ul>
+<p>这些插件都可以通过如下命令来安装到本地，比如：</p>
+<pre><code class="language-bash">$ cargo install cargo-expand
+</code></pre>
+<p>官方列出了一些常用的第三方插件：</p>
+<ul>
+<li>https://github.com/rust-lang/cargo/wiki/Third-party-cargo-subcommands</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>Cargo常用插件(Plugins)</strong></h2>
+<p>这里推荐一些常用的 Cargo 插件；</p>
+<h3><strong>cargo-update</strong></h3>
+<p>更新 <code>Cargo.lock</code> 中定义的依赖包的版本；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-vendor</strong></h3>
+<p>和 go 中的 vendor 模式一样，将项目的依赖包都缓存到本项目的 <code>vendor</code> 目录下；</p>
+<blockquote>
+<p>这个特性对于 <code>CI/CD</code> 很有用处，不再需要每次自动编译时重新从 crates.io 下载源代码；</p>
+</blockquote>
+<p>使用方法也很简单：只需要在根目录运行 <code>cargo vendor</code> 命令即可；</p>
+<p>然后该命令会提醒我们修改本项目的 <code>cargo config</code> 文件：</p>
+<pre><code class="language-bash">$ mkdir .cargo
+$ echo &gt; .cargo/config &lt;&lt; EOF
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+EOF
+</code></pre>
+<p>但是，如果项目中依赖的包比较多，最终 <code>vendor/</code> 可能会比较大；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-edit</strong></h3>
+<p>这个插件提供了三个命令：</p>
+<ul>
+<li><strong>cargo add：</strong>向 <code>Cargo.toml</code> 加入新的包；</li>
+<li><strong>cargo rm</strong>：从 <code>Cargo.toml</code> 中移除包；</li>
+<li><strong>cargo upgrade：</strong>升级 <code>Cargo.toml</code> 中的包到最新版，同时会修改 <code>Cargo.toml</code> 中定义的依赖包的版本号；与之相对应的 <code>cargo update</code> 命令只会更新 <code>Cargo.lock</code> 这个文件中定义的版本；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-outdated</strong></h3>
+<p>用于展示工作区中有哪些依赖包是过期的；</p>
+<pre><code class="language-bash">$ cargo outdated
+Name                            Project  Compat  Latest  Kind    Platform
+----                            -------  ------  ------  ----    --------
+miniz_oxide_c_api-&gt;miniz_oxide  0.2.2    0.2.3   0.2.3   Normal  ---
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-script</strong></h3>
+<p>直接以脚本的方式运行 rust 程序，安装：</p>
+<pre><code class="language-bash">$ cargo install cargo-script
+</code></pre>
+<p>比如，<code>time.rs</code> 文件的内容是：</p>
+<pre><code class="language-rust">use std::time::SystemTime;
+
+fn main() {
+  println!("now: {:?}"，SystemTime::now());
+}
+</code></pre>
+<p>现在执行这个文件：</p>
+<pre><code class="language-bash">$ cargo script time
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-watch</strong></h3>
+<p>用于监控源码目录的更改，并运行指定的 cargo 命令；</p>
+<p>比如，代码更改后自动重新编译并运行服务器代码：</p>
+<pre><code class="language-bash">$ cargo watch -x 'run --bin http_server'
+</code></pre>
+<p>该命令可以方便地与 vim/emacs 以及其它 IDE 集成；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-audit</strong></h3>
+<p>audit 工具可以检测 rust 项目中的依赖包是否有已知安全漏洞；</p>
+<p>安装：</p>
+<pre><code class="language-bash">$ cargo install cargo-audit
+</code></pre>
+<p>然后在 rust 项目根目录运行一下：</p>
+<pre><code class="language-bash">$ cargo audit
+</code></pre>
+<p>即可扫描项目中的包依赖安全问题，并生成报告；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-tree</strong></h3>
+<p><code>tree</code> 命令可以树形输入 crate 依赖关系；</p>
+<p>安装：</p>
+<pre><code class="language-bash">$ cargo install cargo-tree
+</code></pre>
+<p>然后在项目根目录运行：</p>
+<pre><code class="language-bash">$ cargo tree                 
+cargo-date v0.1.0 (/Users/kylinkzhang/self-workspace/rust-learn)
+└── chrono v0.4.23
+    ├── iana-time-zone v0.1.53
+    │   └── core-foundation-sys v0.8.3
+    ├── num-integer v0.1.45
+    │   └── num-traits v0.2.15
+    │       [build-dependencies]
+    │       └── autocfg v1.1.0
+    │   [build-dependencies]
+    │   └── autocfg v1.1.0
+    ├── num-traits v0.2.15 (*)
+    └── time v0.1.44
+        └── libc v0.2.137
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-count</strong></h3>
+<p><code>count</code> 命令用于统计 rust 源代码行数，安装：</p>
+<pre><code class="language-bash">$ cargo install cargo-count
+</code></pre>
+<p>查看一下当前项目：</p>
+<pre><code class="language-bash">$ cargo count --all
+Gathering information...
+         Language  Files  Lines  Blanks  Comments  Code
+         --------  -----  -----  ------  --------  ----
+         TOML      1      14     2       1         11
+         D         4      30     6       0         24
+         Rust      29     10994  1104    956       8934
+         Python    2      79     24      8         47
+         --------  -----  -----  ------  --------  ----
+Totals:            36     11117  1136    965       9016
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>cargo-fix</strong></h3>
+<p>常用的代码自动修正工具，基于 Rust 编译器以及像 clippy 这样的工具的提示.</p>
+<pre><code class="language-bash">$ cargo install cargo-fix
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>其他插件</strong></h3>
+<p>还有一些其他插件：</p>
+<ul>
+<li><strong>cargo-asm：</strong>展示 rust 函数生成的汇编代码；</li>
+<li><strong>cargo-bloat：</strong>计算 rust 各部分代码在可执行文件中占的空间大小；</li>
+<li><strong>cargo-sweep：</strong>清除没用的编译结果文件；</li>
+<li><strong>cargo-geiger：</strong>检测所使用crate中的 unsafe 代码；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>开发一个Cargo插件</strong></h2>
+<p>上面分享了一些第三方 Cargo 插件，那么我们如何编写自己的 Cargo 插件呢？</p>
+<p>官方文档中是有说明的：</p>
+<ul>
+<li>https://doc.rust-lang.org/cargo/reference/external-tools.html#custom-subcommands</li>
+</ul>
+<p>当我们输入：</p>
+<pre><code class="language-bash">cargo ${command}
+</code></pre>
+<p><strong>实际上Cargo 会在 <code>$PATH</code> 下面寻找 <code>cargo-${command}</code> 可执行文件；</strong></p>
+<p><strong>因此，开发一个 Cargo 插件非常简单，我们只需要将该可执行文件命名为 <code>cargo-${command}</code> 即可！</strong></p>
+<p>下面来看一个例子，<code>cargo-date</code> 用于打印当前的系统时间；</p>
+<p>首先，使用 Cargo 创建一个项目：</p>
+<pre><code class="language-bash">$ cargo new cargo-date
+</code></pre>
+<p>并增加配置：</p>
+<p>Cargo.toml</p>
+<pre><code class="language-diff">[package]
+name = "cargo-date"
+version = "0.1.0"
+edition = "2018"
+
++ [[bin]]
++ name = "cargo-date"
++ path = "src/main.rs"
+
++ [dependencies]
++ chrono = "0.4"
+</code></pre>
+<p>随后修改 main.rs 增加实现：</p>
+<p>src/main.rs</p>
+<pre><code class="language-bash">use chrono::Local;
+
+fn main() {
+    let date = Local::now();
+    println!("{}"，date.format("[%Y-%m-%d] [%H:%M:%S]"));
+}
+</code></pre>
+<p>最后，编译并安装：</p>
+<pre><code class="language-bash">$ cargo install --path .
+</code></pre>
+<p>默认安装在：<code>~/.cargo/bin</code> 目录下：</p>
+<pre><code class="language-bash">$ ll ~/.cargo/bin 
+total 270224
+drwxr-xr-x  19 kylinkzhang  staff   608B 11 23 10:54 .
+-rwxr-xr-x   1 kylinkzhang  staff   596K 11 23 10:54 cargo-date
+-rwxr-xr-x   1 kylinkzhang  staff   4.1M 11 23 10:22 cargo-install-update
+-rwxr-xr-x   1 kylinkzhang  staff   1.4M 11 23 10:22 cargo-install-update-config
+-rwxr-xr-x   1 kylinkzhang  staff   7.0M  8 14 14:31 cargo-expand
+...
+</code></pre>
+<p>之后，我们就可以执行这个插件了：</p>
+<pre><code class="language-bash">$ cargo date
+[2022-11-23] [11:52:09]
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/cargo</li>
+</ul>
+<p>文章参考：</p>
+<ul>
+<li>https://doc.rust-lang.org/cargo/index.html</li>
+<li>https://course.rs/cargo/intro.html</li>
+<li>https://github.com/rust-lang/cargo/wiki/Third-party-cargo-subcommands</li>
+<li>https://blog.biofan.org/2019/07/cargo-commands/</li>
+<li>https://dengjianping.github.io/2019/02/22/%E5%A6%82%E4%BD%95%E4%B8%BAcargo%E5%86%99%E4%B8%80%E4%B8%AAplugin.html</li>
+</ul>
+<p>&lt;br/&gt;</p>

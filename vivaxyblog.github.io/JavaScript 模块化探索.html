@@ -1,0 +1,127 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2015-04-06-object-oriented-module-view-in-javascript.html">JavaScript 模块化探索</a></h2>
+<hr/>
+<h2>layout: post
+title: JavaScript 模块化探索
+tags: [javascript]</h2>
+<p>前端模块化的实现意味着要将一个模块中的数据，逻辑和渲染合并在一个单元中，往往这个单元是一个 JS 文件。本文采用的方法也是如此。</p>
+<h2><a href="https://github.com/facebook/react">React.js</a> 的实现</h2>
+<p>React.js 采用单向的数据流：通过 mudule 层上的数据更新，触发 view 层的更新。使用 <code>state</code> 保存数据状态。React.js 会算出那些 view 需要重新渲染，然后再做 DOM 上的重绘。</p>
+<h2><a href="https://github.com/youngjay/crystal-template">crystal</a> 的实现</h2>
+<p>采用 Knockout.js 作为 MVVM，使用 browserify 作为模块管理器。页面状态由 hash 记录。html 方式书写 view，<code>&lt;script&gt;&lt;/script&gt;</code>中书写 module，然后编译成 JS 文件，模块化加载到应用中。</p>
+<h2>原生 JS 的实现</h2>
+<p>基于事件机制的 <code>on</code> 和 <code>fire</code> 方法传递数据，JS 的渲染方式实现 view，原型链方式继承。</p>
+<h3>基础类：<code>Base</code></h3>
+<pre><code class="language-js">/*
+ * @author: vivaxy
+ * @date:   2015-04-06 15:52:47
+ * @last modified by:   vivaxy
+ * @last modified time: 2015-04-06 17:35:10
+ */
+
+'use strict';
+
+var Base = function () {
+
+    },
+    p = {};
+Base.prototype = p;
+
+p.on = function (event, callback) {
+    if (!this.hasOwnProperty('events')) throw new Error('`events` not defined in object');
+    if (!this.events[event]) {
+        this.events[event] = [];
+    }
+    this.events[event].push(callback);
+    return this;
+};
+
+p.off = function (event, callback) {
+    if (!this.hasOwnProperty('events')) throw new Error('`events` not defined in object');
+    var callbacks = this.events[event];
+    if (callbacks &amp;&amp; callback) {
+        callbacks = callbacks.filter(function (cb) {
+            return cb !== callback;
+        });
+    } else {
+        callbacks = [];
+    }
+    return this;
+};
+
+p.fire = function (event) {
+    if (!this.hasOwnProperty('events')) throw new Error('`events` not defined in object');
+    var callbacks = this.events[event],
+        _this = this,
+        _arguments = arguments;
+    if (callbacks) {
+        callbacks.forEach(function (callback) {
+            callback.apply(_this, Array.prototype.slice.call(_arguments, 1));
+        });
+    }
+    return this;
+};
+
+p.render = function () {
+    if (!this.hasOwnProperty('container')) throw new Error('`container` not defined in object');
+    if (!this.hasOwnProperty('data')) throw new Error('`data` not defined in object');
+    this.container.appendChild(this.template(this.data));
+    return this;
+};
+
+p.template = function () {
+    if (!this.hasOwnProperty('data')) throw new Error('`data` not defined in object');
+    var fragment = document.createDocumentFragment();
+    return fragment;
+};
+
+p.update = function (data) {
+    if (!this.hasOwnProperty('data')) throw new Error('`data` not defined in object');
+    this.data = data;
+    var _this = this;
+    Array.prototype.slice.call(this.container.children).forEach(function (child) {
+        _this.container.removeChild(child);
+    });
+    this.render();
+    return this;
+};
+</code></pre>
+<p>包含 <code>on</code>, <code>off</code>, <code>fire</code> 的事件方法，和 <code>render</code>, <code>template</code>, <code>update</code> 的渲染方法。</p>
+<p>其中事件方法需要用到 module 中的 <code>events</code> 对象，而渲染方法需要用到 module 中的 <code>container</code>, <code>data</code> 对象。</p>
+<h3>组件类 <code>Module</code></h3>
+<pre><code class="language-js">var Module = function(options){
+        this.events = {};
+
+        this.data = options.data;
+        this.container = options.container;
+
+        this.render();
+    },
+    p = new Base();
+
+Module.prototype = p;
+
+// @Override
+p.template = function(){
+    // ...
+};
+</code></pre>
+<p>继承了基础类的中的事件方法和渲染方法，同时可以在原型上重写两类方法中的具体方法。</p>
+<p>组件需要定义 <code>this.events = {}</code>, <code>this.data</code>, <code>this.container</code> 以使用基础类中的方法。</p>
+<p>组件需要调用 <code>this.render()</code> 实现渲染。</p>
+<p>组件中可以包含其他自定义方法，只需要在原型 <code>p</code> 上添加对象即可。</p>
+<h3>继承</h3>
+<p><code>var module = new Module({});</code></p>
+<p><code>module.render</code> 将寻找 <code>module</code> 构造函数上的 <code>render</code> 方法；如果没有找到，会寻找 <code>module</code> 原型链上的 <code>render</code> 方法，由于 <code>module</code> 原型链是基础类的实体 <code>base</code>，所以相当于在 <code>base</code> 中找字面量 <code>render</code>；如果没有找到，会寻找 <code>base</code> 原型链上的 <code>render</code> 方法。这样继承能最大化 JS 原型链的使用，复用相同的函数，以减少内存开销；同时，还保证了方法重写的可能性，提高了方便性，可以在继承的对象中的任意一个构造函数上重写。</p>
+<h3>渲染</h3>
+<p>可以根据不同试用场景修改 <code>render</code> 方法的具体实现方式，如：<code>innerHTML</code>, <code>appendChild</code>, jQuery 的 <code>html</code> 等。</p>
+<p>可以根据更改内容的影响范围修改 <code>update</code> 方法，实现局部渲染，以减少浏览器重绘，提高性能。</p>
+<h3>事件</h3>
+<p>父级对象中使用 <code>new</code> 方式构造子对象，并且可以在子对象上使用 <code>on</code> 方法添加事件监听。</p>
+<p>子对象内采用底层的事件监听方式，如 <code>addEventListener</code>, jQuery的 <code>on</code> 等方法监听用户输入等触发事件后，执行 <code>fire</code> 方法，就可以把响应数据传递到父级对象中。</p>
+<p>子对象在任何过程中都可以执行 <code>fire</code> 方法，并传递数据。</p>
+<p><code>off</code> 可以去掉采用函数名绑定的事件。</p>
+<h3>数据流</h3>
+<p>父级对象将拿到的数据用 <code>options</code> 的方式在 <code>new</code> 子对象的时候传入。</p>
+<p>子对象将完整数据，或者变化的数据用 <code>fire</code> 的形式传递到父级对象中。</p>
+<p>如果修改的是用一个对象，则在任何时候拿到的数据都是完整的，并且实时的。子对象内的修改数据操作会反馈到父级对象中！</p>
+<h2><a href="https://vivaxy.github.io/samples/javascript/module-view/#">例子</a></h2>

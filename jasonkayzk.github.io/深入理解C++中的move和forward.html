@@ -1,0 +1,514 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3C++%E4%B8%AD%E7%9A%84move%E5%92%8Cforward.html">深入理解C++中的move和forward</a></h2>
+<hr/>
+<h2>title: 深入理解C++中的move和forward
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?66'
+date: 2022-05-08 13:44:48
+categories: C++
+tags: [C++]
+description: 在C++11标准之前，C++中默认的传值类型均为Copy语义，即：不论是指针类型还是值类型，都将会在进行函数调用时被完整的复制一份！对于非指针而言，开销及其巨大！因此在C++11以后，引入了右值和Move语义，极大的提高了效率；本文介绍了在此场景下了两个常用的标准库函数：move和forward；</h2>
+<p>在C++11标准之前，C++中默认的传值类型均为Copy语义，即：不论是指针类型还是值类型，都将会在进行函数调用时被完整的复制一份！</p>
+<p>对于非指针而言，开销及其巨大！</p>
+<p>因此在C++11以后，引入了右值和Move语义，极大的提高了效率；</p>
+<p>本文介绍了在此场景下了两个常用的标准库函数：move和forward；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/value</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>C++中move和forward的区别</strong></h1>
+<h2><strong>特性背景</strong></h2>
+<h3><strong>Copy语义简述</strong></h3>
+<p>C++中默认为Copy语义，因此存在大量开销；</p>
+<p>以下面的代码为例：</p>
+<p>0_copy_semantics.cc</p>
+<pre><code class="language-C++">#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+class Object {
+public:
+    Object() {
+        std::cout &lt;&lt; "build this object!" &lt;&lt; std::endl;
+    }
+
+    virtual ~Object() {
+        std::cout &lt;&lt; "destruct this object!" &lt;&lt; std::endl;
+    }
+};
+
+void f(const Object obj) {}
+
+int main() {
+    Object obj{};
+
+    // function calling
+    f(obj);
+
+    // vector
+    std::vector&lt;Object&gt; v;
+    v.push_back(obj);
+}
+
+</code></pre>
+<p>最终的输出结果为：</p>
+<pre><code>build this object!
+destruct this object!
+destruct this object!
+destruct this object!
+</code></pre>
+<p>第一个为显式调用构造函数创建 obj 时的输出；</p>
+<p>后面的输出说明存在三个对象，因此调用了三次析构函数；</p>
+<p>即：<strong>除了我们显式构造的函数之外，我们在调用函数、将对象加入 vector 的时候，也创建了新的对象！</strong></p>
+<p><strong>并且这个对象不是通过构造函数创建的，事实上是通过<code>复制构造函数</code>创建的！</strong></p>
+<p><strong>当尝试将复制构造函数禁用后，上面的代码将无法编译：</strong></p>
+<pre><code class="language-c++">Object (const Object&amp; object) = delete;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>临时值（右值）简述</strong></h3>
+<p>Copy 语义虽然用起来很方便，但是很多时候我们并不想将值（尤其是一些临时变量） Copy 一遍再使用！</p>
+<p>例如：</p>
+<pre><code class="language-C++">func("some temporary string"); // 尽管直接将一个常量传入函数中, C++还是大概率会创建一个string的复制
+v.push_back(X()); // 初始化了一个临时X, 然后被复制进了vector
+a = b + c; // b+c是一个临时值, 然后被赋值给了a
+x++; // x++操作也有临时变量的产生（++x则不会产生）
+a = b + c + d; //c+d是一个临时变量, b+(c+d)是另一个临时变量
+</code></pre>
+<p>另外还有函数在返回时：</p>
+<pre><code class="language-c++">vector&lt;string&gt; str_split(const string&amp; s) {
+  vector&lt;string&gt; v;
+  // ...
+  return v; // v是左值，但优先移动，不支持移动时仍可复制
+}
+</code></pre>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注意：上面的函数在返回时，实际上编译器会对返回值进行优化，并不会先析构v，再在str_split 函数的调用栈中对整个v进行Copy；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>但是之前的C++的确是这么做的，因此会出现类似于下面的代码：</strong>&lt;/font&gt;</p>
+<pre><code class="language-c++">void str_split(const string&amp; s, vector&lt;string&gt;* vec); 
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>即：将返回值也作为一个输入参数；</strong>&lt;/font&gt;</p>
+<p><strong>上面编译器的优化有一个非常学术的名字：<code>RVO (Return Value Optimization)，返回值优化</code>；</strong></p>
+<p>感兴趣的可以看看下面的文章：</p>
+<ul>
+<li><a href="https://www.yhspy.com/2019/09/01/C-%E7%BC%96%E8%AF%91%E5%99%A8%E4%BC%98%E5%8C%96%E4%B9%8B-RVO-%E4%B8%8E-NRVO/">C++ 编译器优化之 RVO 与 NRVO</a></li>
+</ul>
+</blockquote>
+<p>上面的这些临时值，在C++中被统一定义为：<code>右值(rvalue)</code>，因为在编译器的角度，实际上并没有对应的变量名存储这些变量值；</p>
+<p>对面上面提到的一些临时值的场景都有一些共性：</p>
+<ul>
+<li><strong>临时变量的内容先被复制一遍；</strong></li>
+<li><strong>被复制的内容覆盖到成员变量指向的内存；</strong></li>
+<li><strong>临时变量用完了再被回收；</strong></li>
+</ul>
+<p>其实这里是可以优化的：</p>
+<p><strong>临时变量其实最终都是要被回收的，如果能把临时变量的内容直接<code>“移入”</code>成员变量中，此时就不需要调用复制构造函数了！</strong></p>
+<p>即：</p>
+<ul>
+<li><strong>成员变量内部的指针指向”temporary str1”所在的内存；</strong></li>
+<li><strong>临时变量内部的指针指向成员变量以前所指向的内存；</strong></li>
+<li><strong>最后临时变量指向的那块内存再被回收；</strong></li>
+</ul>
+<p>上面的操作即可避免一次对象Copy的发生，实际上它就是所谓的 <code>Move</code>语义；</p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>对于使用过 Rust 的开发者来说，这里他们是非常熟悉的；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>因为 Rust 丧心病狂的将所有赋值操作都默认定义为了 <code>Move</code> 语义！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>使用 move 函数</strong></h2>
+<h3><strong>move函数的基本使用</strong></h3>
+<p>对比之前的例子，这里我们使用 move 语义对其进行优化：</p>
+<p>1_move_semantics.cc</p>
+<pre><code class="language-c++">#include &lt;iostream&gt;
+#include &lt;utility&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+class Object {
+public:
+    explicit Object(std::string str) : _str(std::move(str)) {
+        std::cout &lt;&lt; "build this object, address: " &lt;&lt; this &lt;&lt; std::endl;
+    }
+
+    virtual ~Object() {
+        std::cout &lt;&lt; "destruct this object, address: " &lt;&lt; this &lt;&lt; std::endl;
+    }
+
+    Object(const Object &amp;object) : _str(object._str) {
+        std::cout &lt;&lt; "copy this object, address: " &lt;&lt; this &lt;&lt; std::endl;
+    }
+
+    Object(Object &amp;&amp;object) noexcept: _str(std::move(object._str)) {
+        std::cout &lt;&lt; "move this object!" &lt;&lt; std::endl;
+    }
+
+    std::string _str;
+};
+
+void f_copy(Object obj) {
+    std::cout &lt;&lt; "copy function, address: " &lt;&lt; &amp;obj &lt;&lt; std::endl;
+}
+
+void f_move(Object &amp;&amp;obj) {
+    Object a_obj(std::move(obj));
+    std::cout &lt;&lt; "move function, address: " &lt;&lt; &amp;a_obj &lt;&lt; std::endl;
+}
+
+int main() {
+    Object obj{"abc"};
+
+    // function calling
+    f_copy(obj);
+    f_move(std::move(obj));
+
+//    std::cout &lt;&lt; obj._str &lt;&lt; std::endl; // danger!
+
+    std::cout &lt;&lt; "============== end ================" &lt;&lt; std::endl;
+
+    return 0;
+}
+</code></pre>
+<blockquote>
+<p><strong>这里的用法其实是没有意义的，只是为了演示强行使用了 move</strong></p>
+</blockquote>
+<p>为了方便演示，这里给 Object 类增加了一个 string 类型的成员，并且输出了 Object 的内存地址；</p>
+<p>代码输出：</p>
+<pre><code>build this object, address: 000000FD546FF5A8 // Object obj{"abc"}
+copy this object, address: 000000FD546FF620 // f_copy(obj)
+copy function, address: 000000FD546FF620 // Object(const Object &amp;object)
+destruct this object, address: 000000FD546FF620 // f_copy(obj) End
+move this object! // Object a_obj(std::move(obj));
+move function, address: 000000FD546FF508 // f_move(Object &amp;&amp;obj)
+destruct this object, address: 000000FD546FF508 // f_move(Object &amp;&amp;obj) End
+============== end ================
+destruct this object, address: 000000FD546FF5A8 // main End
+</code></pre>
+<p><strong>可以看到，相比于 Copy，我们直接使用了 move 函数将变量移入了函数中，此时是没有调用复制构造函数的！</strong></p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>实际上，C++中的 move 函数只是做了类型转换，并不会真正的实现值的移动！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>因此，对于自定义的类来说，如果要实现真正意义上的 “移动”，还是要手动重载移动构造函数和移动复制函数</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>即：我们需要在自己的类中实现移动语义，避免深拷贝，充分利用右值引用和std::move的语言特性；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>实际上，通常情况下C++编译器会默认在用户自定义的<code>class</code>和<code>struct</code>中生成移动语义函数；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>但前提是：用户没有主动定义该类的<code>拷贝构造</code>等函数！</strong>&lt;/font&gt;</p>
+</blockquote>
+<blockquote>
+<p><strong>同时也要注意到：使用一个已经被 move 过的函数是非常危险的事情！</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>move 语义下的析构函数</strong></h3>
+<p>在上面的测试在，可能你也注意到了一点就是：</p>
+<pre><code>destruct this object, address: 000000FD546FF508 // f_move(Object &amp;&amp;obj) End
+============== end ================
+destruct this object, address: 000000FD546FF5A8 // main End
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>对象被move了之后，仍然会在其离开作用域之后调用他的析构函数？</strong>&lt;/font&gt;</p>
+<p>这是因为：</p>
+<ul>
+<li><strong>虽然将 <code>obj</code> 的资源给了 <code>a_obj</code> ，但是<code>obj</code>并没有立刻析构，只有在 <code>obj</code> 离开了自己的作用域的时候才会析构；因此，如果继续使用<code>str2</code>的<code>m_data</code>变量，可能会发生意想不到的错误；</strong></li>
+<li><strong>也正因为如此，在自己实现移动构造函数的时候，需要将原对象中的值手动置为空，以防止同一片内存区域被多次释放！</strong></li>
+</ul>
+<blockquote>
+<p>此外还需要注意：</p>
+<ul>
+<li><strong>如果我们没有提供移动构造函数，只提供了拷贝构造函数，<code>std::move()</code>会失效但是不会发生错误，因为编译器找不到移动构造函数就去寻找拷贝构造函数，这也是拷贝构造函数的参数是<code>const T&amp;</code>常量左值引用的原因！</strong></li>
+<li><strong><code>c++11</code> 中的所有容器都实现了<code>move</code>语义，<code>move</code>只是转移了资源的控制权，本质上是将左值强制转化为右值使用，以用于移动拷贝或赋值，避免对含有资源的对象发生无谓的拷贝；</strong></li>
+<li><strong><code>move</code> 对于拥有如内存、文件句柄等资源的成员的对象有效，如果是一些基本类型，如int和char[10]数组等，如果使用move，仍会发生拷贝（因为没有对应的移动构造函数），所以说<code>move</code>对含有资源的对象说更有意义；</strong></li>
+</ul>
+</blockquote>
+<p>上面的例子只是对 move 语义的简单介绍，下面给出了一个真正需要自己手动管理资源（内存地址）的例子：</p>
+<p>1_move_and_destructor.cc</p>
+<pre><code class="language-c++">#include &lt;iostream&gt;
+#include &lt;utility&gt;
+#include &lt;vector&gt;
+
+class MyString {
+public:
+    // Constructor
+    explicit MyString(const char *data) {
+        if (data != nullptr) {
+            _data = new char[strlen(data) + 1];
+            strcpy(_data, data);
+        } else {
+            _data = new char[1];
+            *_data = '\0';
+        }
+
+        std::cout &lt;&lt; "built this object, address: " &lt;&lt; this &lt;&lt; std::endl;
+    }
+
+    // Destructor
+    virtual ~MyString() {
+        std::cout &lt;&lt; "destruct this object, address: " &lt;&lt; this &lt;&lt; std::endl;
+        delete[] _data;
+    }
+
+    // Copy constructor
+    MyString(const MyString &amp;str) {
+        std::cout &lt;&lt; "copy this object, address: " &lt;&lt; this &lt;&lt; std::endl;
+        _data = new char[strlen(str._data) + 1];
+        strcpy(_data, str._data);
+    }
+
+    // Move constructor
+    MyString(MyString &amp;&amp;str) noexcept
+            : _data(str._data) {
+        std::cout &lt;&lt; "move this object" &lt;&lt; std::endl;
+        str._data = nullptr; // Very important!
+    }
+
+    // Copy assignment
+    MyString&amp; operator=(const MyString&amp; str){
+        if (this == &amp;str) // 避免自我赋值!!
+            return *this;
+
+        delete[] _data;
+        _data = new char[ strlen(str._data) + 1 ];
+        strcpy(_data, str._data);
+        return *this;
+    }
+
+    // Move assignment
+    MyString&amp; operator=(MyString&amp;&amp; str) noexcept{
+        if (this == &amp;str) // 避免自我赋值!!
+            return *this;
+
+        delete[] _data;
+        _data = str._data;
+        str._data = nullptr; // 不再指向之前的资源了
+        return *this;
+    }
+
+public:
+    char *_data;
+};
+
+void f_move(MyString &amp;&amp;obj) {
+    MyString a_obj(std::move(obj));
+    std::cout &lt;&lt; "move function, address: " &lt;&lt; &amp;a_obj &lt;&lt; std::endl;
+}
+
+int main() {
+    MyString obj{"abc"};
+
+    f_move(std::move(obj));
+
+//    std::cout &lt;&lt; obj._data &lt;&lt; std::endl; // danger!
+
+    std::cout &lt;&lt; "============== end ================" &lt;&lt; std::endl;
+
+    return 0;
+}
+</code></pre>
+<p>最终输出：</p>
+<pre><code>built this object, address: 000000843D0FFD78
+move this object
+move function, address: 000000843D0FFD08
+destruct this object, address: 000000843D0FFD08
+============== end ================
+destruct this object, address: 000000843D0FFD78
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>这里需要注意，在移动构造函数和移动赋值函数中，我们将当前待移动对象的资源赋值为了空（<code>str._data = nullptr</code>），这里就是我们手动实现了 <code>资源的移动</code>！</strong>&lt;/font&gt;</p>
+<p>下面我们尝试修改两个地方，来导致报错：</p>
+<ul>
+<li><strong>使用资源被 move 后的对象；</strong></li>
+<li><strong>在实现移动构造函数时不赋值为nullptr；</strong></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h4><strong>使用资源被 move 后的对象</strong></h4>
+<p>将注释打开：</p>
+<pre><code class="language-c++">//    std::cout &lt;&lt; obj._data &lt;&lt; std::endl; // danger!
+</code></pre>
+<p>此时执行代码会疯狂报错：</p>
+<pre><code>Exception: Exception 0xc0000005 encountered at address 0x7ff62a4f245a: Access violation reading location 0x00000000
+</code></pre>
+<p>因为此时obj中的内容已经为空了！</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>在实现移动构造函数时不赋值为nullptr</strong></h4>
+<p>将这里注释掉：</p>
+<pre><code class="language-c++">MyString(MyString &amp;&amp;str) noexcept
+    : _data(str._data) {
+        std::cout &lt;&lt; "move this object" &lt;&lt; std::endl;
+        // str._data = nullptr; // Very important!
+    }
+</code></pre>
+<p>此时再执行代码，整个程序会直接崩溃，因为：<strong>我们未将已经move掉的资源设置为空值，最终会导致这里的资源被释放两次！</strong></p>
+<p>&lt;br/&gt;</p>
+<h2><strong>什么又是 forward 函数？</strong></h2>
+<p>有了 move 函数之后，我们又遇到了一个新的问题：</p>
+<p>按照上面的写法，处理临时变量用右值引用<code>T &amp;&amp;</code>，处理普通变量用const引用<code>const T &amp;</code>，我们需要分别建立两个函数，然后入参使用不同的类型，每个函数都要写两遍；</p>
+<p>那么能不能避免重复，将 <code>T &amp;&amp;</code> 类型和 <code>const T &amp;</code> 类型合二为一呢？</p>
+<p>答案就是：<code>forward</code> 函数，<code>std::forward</code> 也被称为<strong>完美转发</strong>，即：<strong>保持原来的 值 属性不变：</strong></p>
+<ul>
+<li>如果原来的值是左值，经std::<strong>forward</strong>处理后该值还是左值；</li>
+<li>如果原来的值是右值，经std::<strong>forward</strong>处理后它还是右值；</li>
+</ul>
+<p>这样一来，我们就可以使用 forward 函数对入参进行封装，从而保证了入参的统一性，从而可以实现一个方法处理两种类型！</p>
+<blockquote>
+<p><strong>正因为如此，forward 函数被大量用在了入参值类型情况不确定的C++模板中！</strong></p>
+</blockquote>
+<p>2_forward.cc</p>
+<pre><code class="language-c++">template&lt;typename T&gt;
+void f_forward(T &amp;&amp;t) {
+
+    Object a = std::forward&lt;T&gt;(t);
+
+    std::cout &lt;&lt; "forward this object, address: " &lt;&lt; &amp;a &lt;&lt; std::endl;
+}
+
+int main() {
+    Object obj{"abc"};
+    f_forward(obj);
+
+    f_forward(Object("def"));
+
+    return 0;
+}
+</code></pre>
+<p>紧接着上面的例子，我们构建了一个模板函数 <code>f_forward</code>；</p>
+<p>在里面我们调用了 <code>std::forward&lt;T&gt;(t)</code> 来创建一个新的对象；</p>
+<p>在 main 函数中，我们分别使用一个左值和一个右值调用了该模板函数；</p>
+<p>结果如下：</p>
+<pre><code class="language-c++">build this object, address: 000000CFAE8FFC78
+copy this object, address: 000000CFAE8FFBD8
+forward this object, address: 000000CFAE8FFBD8
+destruct this object, address: 000000CFAE8FFBD8
+build this object, address: 000000CFAE8FFCB8
+move this object!
+forward this object, address: 000000CFAE8FFBD8
+destruct this object, address: 000000CFAE8FFBD8
+destruct this object, address: 000000CFAE8FFCB8
+destruct this object, address: 000000CFAE8FFC78
+</code></pre>
+<p>一个调用了 复制构造函数，另一个调用了移动构造函数；</p>
+<p>forward 函数成功的识别到了我们的入参，并完成了转发，即：</p>
+<ul>
+<li><strong>如果外面传来了右值临时变量，它就转发右值并且启用move语义；</strong></li>
+<li><strong>如果外面传来了左值，它就转发左值并且启用copy，同时它也还能保留const；</strong></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>move 和 forward 函数的区别</strong></h2>
+<p>从上面的分析我们可以看出，基本上 forward 可以 cover 所有的需要 move 的场景，毕竟 forward 函数左右值通吃；</p>
+<p>那为什么还要使用 move 呢？原因主要有两点：</p>
+<ul>
+<li>首先，forward函数常用于模板函数这种入参情况不确定的场景中，在使用的时候必须要多带一个模板参数<code>forward&lt;T&gt;</code>，代码略复杂；</li>
+<li>此外，明确只需要 move 临时值的情况下如果使用了 forward，会导致代码意图不清晰，其他人看着理解起来比较费劲；</li>
+</ul>
+<p>实际上从实现的角度上来说，他们都可以被 <code>static_cast</code> 替代；</p>
+<blockquote>
+<p><strong>为什么不用 static_cast 呢？也是为了阅读和使用起来更方便；</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>move 和 forward 函数的实现</strong></h2>
+<h3><strong>C++11后加入的一些新规则</strong></h3>
+<h4><strong>引用折叠规则</strong></h4>
+<p><strong>如果间接的创建一个引用的引用，则这些引用就会“折叠”，在所有情况下（除了一个例外），引用折叠成一个普通的左值引用类型；</strong></p>
+<p><strong>一种特殊情况下，引用会折叠成右值引用，即右值引用的右值引用：<code>T&amp;&amp; &amp;&amp;</code>；</strong></p>
+<p>即：</p>
+<ul>
+<li><code>X&amp; &amp;</code>、<code>X&amp; &amp;&amp;</code>、<code>X&amp;&amp; &amp;</code>都折叠成<code>X&amp;</code>；</li>
+<li><code>X&amp;&amp; &amp;&amp;</code>折叠为<code>X&amp;&amp;</code>；</li>
+</ul>
+<h4><strong>右值引用的特殊类型推断规则</strong></h4>
+<p>当将一个左值传递给一个参数是右值引用的函数，且此右值引用指向<strong>模板类型参数(<code>T&amp;&amp;</code>)</strong>时，编译器推断模板参数类型为实参的左值引用，如：</p>
+<pre><code class="language-C++">template&lt;typename T&gt; 
+void f(T&amp;&amp;);
+
+int i = 42;
+f(i)
+</code></pre>
+<p>上述的模板参数类型<code>T&amp;&amp;</code>最终将被推断为<code>int&amp;</code>类型，而非 int！</p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>若将这两个规则结合起来，则意味着可以传递一个左值 <code>int i</code> 给f，编译器将推断出T的类型为int&amp;；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>再根据引用折叠规则 void f(int&amp; &amp;&amp;)将推断为void f(int&amp;)，因此，f将被实例化为: void f&lt;int&amp;&gt;(int&amp;)；</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>从上述两个规则可以得出结论：<strong>如果一个函数形参是一个指向模板类型的右值引用，则该参数可以被绑定到一个左值上；</strong></p>
+<p>即类似下面的定义：</p>
+<pre><code class="language-c++">template&lt;typename T&gt; 
+void f(T&amp;&amp;);
+</code></pre>
+<h4><strong>可以通过static_cast显式地将一个左值转换为一个右值</strong></h4>
+<p>虽然不能隐式的将一个左值转换为右值引用，但是可以通过static_cast显式地将一个左值转换为一个右值；</p>
+<blockquote>
+<p>C++11中为static_cast新增的转换功能；</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>move函数解析</strong></h3>
+<p>标准库中move的定义如下：</p>
+<pre><code class="language-cpp">template &lt;class _Ty&gt;
+_NODISCARD constexpr remove_reference_t&lt;_Ty&gt;&amp;&amp; move(_Ty&amp;&amp; _Arg) noexcept { // forward _Arg as movable
+    return static_cast&lt;remove_reference_t&lt;_Ty&gt;&amp;&amp;&gt;(_Arg);
+}
+</code></pre>
+<p>move 函数的参数<code>T&amp;&amp;</code>是一个指向模板类型参数的右值引用（见上方新规则），通过引用折叠，此参数可以和任何类型的实参匹配！</p>
+<p>因此 move 函数的入参既可以传递一个左值，也可以传递一个右值！</p>
+<p>右值情况，<code>std::move(string("hello"))</code>调用解析：</p>
+<ul>
+<li>首先，根据模板推断规则，确地T的类型为string，<code>typename remove_reference_t&lt;_Ty&gt;&amp;&amp;</code> 的结果为 <code>string &amp;&amp;</code>，因此，move 函数的返回值参数类型为<code>string&amp;&amp;</code>；</li>
+<li>同时，对于 <code>static_cast&lt;string &amp;&amp;&gt;(_Arg)</code>来说，<code>_Arg</code> 已经是 <code>string&amp;&amp;</code>，于是类型转换什么都不做，直接返回<code>string &amp;&amp;</code>；</li>
+</ul>
+<p>左值情况，<code>string s1("hello"); std::move(s1);</code> 调用解析：</p>
+<ul>
+<li>首先，根据模板推断规则，确定T的类型为<code>string&amp;</code>，<code>typename remove_reference_t&lt;_Ty&gt;&amp;&amp;</code> 的结果为 <code>string&amp;</code>，因此 move 函数的参数类型为 <code>string&amp; &amp;&amp;</code>，<strong>引用折叠之后为<code>string&amp;</code>；</strong></li>
+<li>同时，对于 <code>static_cast&lt;string &amp;&amp;&gt;(_Arg)</code>来说，<code>_Arg</code> 是 <code>string&amp;</code>，经过<code>static_cast</code>之后转换为<code>string&amp;&amp;</code>，返回<code>string &amp;&amp;</code>；</li>
+</ul>
+<blockquote>
+<p><strong>因此，从 move 函数的实现可以看出，move 自身除了做一些参数的推断之外，返回右值引用本质上还是靠<code>static_cast&lt;T&amp;&amp;&gt;</code>完成的；</strong></p>
+</blockquote>
+<p>因此<strong>下面两个调用是等价的</strong>，std::move就是个语法糖；</p>
+<pre><code class="language-cpp">void func(int&amp;&amp; a) {
+    cout &lt;&lt; a &lt;&lt; endl;
+}
+
+int a = 6;
+func(std::move(a));
+
+int b = 10;
+func(static_cast&lt;int&amp;&amp;&gt;(b)); 
+</code></pre>
+<p><strong>需要注意的是：<code>std::move</code> 函数仅仅执行到右值类型的无条件转换；就其本身而言，它没有“move”任何东西；</strong></p>
+<p>&lt;br/&gt;</p>
+<h3><strong>forward函数解析</strong></h3>
+<p>标准库中 forward 函数的定义如下：</p>
+<pre><code class="language-cpp">template &lt;class _Ty&gt;
+_NODISCARD constexpr remove_reference_t&lt;_Ty&gt;&amp;&amp; move(_Ty&amp;&amp; _Arg) noexcept { // forward _Arg as movable
+    return static_cast&lt;remove_reference_t&lt;_Ty&gt;&amp;&amp;&gt;(_Arg);
+}
+</code></pre>
+<p>当传递一个 <code>lvalue</code> 或者 <code>const lvaue</code> 时：</p>
+<ul>
+<li>传递一个lvalue，模板推导之后 <code>_Ty = _Ty&amp;</code>；</li>
+<li>传递一个const lvaue, 模板推导之后<code>_Ty = const _Ty&amp;</code>；</li>
+<li>随后，<code>_Ty&amp; &amp;&amp;</code> 将折叠为<code>_Ty&amp;</code>，即<code>_Ty&amp; &amp;&amp; 折叠为 _Ty&amp;</code>，即最终返回 <code>_Ty&amp;</code>类型；</li>
+<li><code>std::forward&lt;_Ty&amp;&gt;(_Arg)</code>将返回一个左值，最终调用拷贝构造函数；</li>
+</ul>
+<p>类似的，当传递一个<code>rvalue</code>时：</p>
+<ul>
+<li><code>remove_reference_t&lt;_Ty&gt;&amp;&amp; move(_Ty&amp;&amp; _Arg)</code> 将返回一个右值，最终调用移动构造函数；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>总结</strong></h2>
+<p>首先，<code>std::move</code>和<code>std::forward</code>本质都是转换：</p>
+<ul>
+<li>&lt;font color="#f00"&gt;<strong><code>std::move</code>执行强制到右值的无条件转换；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;<strong><code>std::forward</code>只有在它的参数绑定到一个右值上的时候，才转换它的参数到一个右值；</strong>&lt;/font&gt;</li>
+</ul>
+<p>&lt;font color="#f00"&gt;<strong><code>std::move</code> 没有move任何东西，std::forward没有转发任何东西；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>整个类型转变的实现是在编译期完成的，在运行期，它们没有做任何事情；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>它们没有为<code>移动</code>或者<code>复制</code>产生需要执行的代码，一byte都没有；（换言之，我们需要通过重载移动相关操作函数来自己处理move语义）</strong>&lt;/font&gt;</p>
+<p>在使用场景方面：</p>
+<ul>
+<li><strong>一般在模板元编程里面，由于入参的值类型不确定，因此对于forward使用比较多；</strong></li>
+<li><strong>在一般的函数中，如果可以确定传入的一定是右值（临时值），可以直接使用 move 函数，强调使用场景；</strong></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h1><strong>Appendix</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/value</li>
+</ul>
+<p>文章参考：</p>
+<ul>
+<li>https://wendeng.github.io/2019/05/14/c++%E5%9F%BA%E7%A1%80/c++11move%E5%92%8Cforword/</li>
+<li>https://www.jianshu.com/p/b90d1091a4ff</li>
+<li><a href="https://www.cnblogs.com/chenny7/p/11984699.html">C++ 右值引用与move</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

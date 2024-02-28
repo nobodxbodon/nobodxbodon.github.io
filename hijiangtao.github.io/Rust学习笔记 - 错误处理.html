@@ -1,0 +1,97 @@
+<h2>原文：<a href="https://hijiangtao.github.io/2019-06-04-Rust-learning-notes-with-Rustlings-5.html">Rust学习笔记 - 错误处理</a></h2>
+<hr/>
+<h2>title: Rust学习笔记 - 错误处理
+layout: post
+thread: 224
+date: 2019-06-04
+author: Joe Jiang
+categories: Document
+tags: [2019, Rust, WebAssembly, 笔记]
+excerpt: Rust 学习笔记，错误处理。</h2>
+<p>Rust 将错误组合成两个主要类别：可恢复错误（recoverable）和不可恢复错误（unrecoverable）。可恢复错误比如未找到文件。不可恢复错误比如尝试访问超过数组结尾的位置。</p>
+<p>当不使用 <code>--release</code> 参数运行 <code>cargo build</code> 或 <code>cargo run</code> 时 Rust 的 debug 标识会默认启用。</p>
+<p><code>panic!</code> 用于不可恢复的错误，<code>Result</code> 用于可恢复的错误。</p>
+<p>使用 Result 处理错误的一个基本示例如下：</p>
+<pre><code class="language-rust">use std::fs::File;
+
+fn main() {
+    let f = File::open("hello.txt");
+
+    let f = match f {
+        Ok(file) =&gt; file,
+        Err(error) =&gt; {
+            panic!("There was a problem opening the file: {:?}", error)
+        },
+    };
+}
+</code></pre>
+<p>而为了匹配不同的错误，一个更详细的示例如下所示：</p>
+<pre><code class="language-rust">use std::fs::File;
+use std::io::ErrorKind;
+
+fn main() {
+    let f = File::open("hello.txt");
+
+    let f = match f {
+        Ok(file) =&gt; file,
+        Err(error) =&gt; match error.kind() {
+            ErrorKind::NotFound =&gt; match File::create("hello.txt") {
+                Ok(fc) =&gt; fc,
+                Err(e) =&gt; panic!("Tried to create file but there was a problem: {:?}", e),
+            },
+            other_error =&gt; panic!("There was a problem opening the file: {:?}", other_error),
+        },
+    };
+}
+</code></pre>
+<p>如上示例的另一种写法（可以消除大量处理错误时嵌套的 <code>match</code> 表达式）如下：</p>
+<pre><code class="language-rust">use std::fs::File;
+use std::io::ErrorKind;
+
+fn main() {
+    let f = File::open("hello.txt").map_err(|error| {
+        if error.kind() == ErrorKind::NotFound {
+            File::create("hello.txt").unwrap_or_else(|error| {
+                panic!("Tried to create file but there was a problem: {:?}", error);
+            })
+        } else {
+            panic!("There was a problem opening the file: {:?}", error);
+        }
+    });
+}
+</code></pre>
+<p>失败时 <code>panic</code> 还有两种简写 <code>unwrap</code> 以及 <code>expect</code>。如果 <code>Result</code> 值是成员 <code>Ok</code>，<code>unwrap</code> 会返回 <code>Ok</code> 中的值，否则 <code>unwrap</code> 会调用 <code>panic!</code>；<code>expect</code> 用来调用 <code>panic!</code> 的错误信息将会作为参数传递给 <code>expect</code>。</p>
+<p>而传播错误的一个示例如下：</p>
+<pre><code class="language-rust">use std::io;
+use std::io::Read;
+use std::fs::File;
+
+fn read_username_from_file() -&gt; Result&lt;String, io::Error&gt; {
+    let f = File::open("hello.txt");
+
+    let mut f = match f {
+        Ok(file) =&gt; file,
+        Err(e) =&gt; return Err(e),
+    };
+
+    let mut s = String::new();
+
+    match f.read_to_string(&amp;mut s) {
+        Ok(_) =&gt; Ok(s),
+        Err(e) =&gt; Err(e),
+    }
+}
+</code></pre>
+<p>若是用 <code>?</code> 简写，示例可以改为：</p>
+<pre><code class="language-rust">use std::io;
+use std::io::Read;
+use std::fs::File;
+
+fn read_username_from_file() -&gt; Result&lt;String, io::Error&gt; {
+    let mut f = File::open("hello.txt")?;
+    let mut s = String::new();
+    f.read_to_string(&amp;mut s)?;
+    Ok(s)
+}
+</code></pre>
+<p>但需要注意 <code>?</code> 只能被用于返回 <code>Result</code> 的函数。</p>

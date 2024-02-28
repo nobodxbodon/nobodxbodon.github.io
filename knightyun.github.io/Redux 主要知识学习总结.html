@@ -1,0 +1,362 @@
+<h2>原文：<a href="https://knightyun.github.io/2020-11-29-js-redux-summary.html">Redux 主要知识学习总结</a></h2>
+<hr/>
+<h2>title: Redux 主要知识学习总结
+layout: post
+categories: JavaScript
+tags: redux state store 状态
+excerpt: 总结Redux 的一些主要知识内容与特性</h2>
+<h2>概念</h2>
+<p><strong>Redux</strong> 作为一个状态管理器，可以应用于多种 web 技术或框架中，React 只是其中之一；Redux 的特点在于，多个页面或组件使用同一个状态（store，用于管理应用的 state），可以实现各模块或组件之间的数据共享，应用的任何部分都能进行状态修改，避免了传统的组件间深层次传值问题；</p>
+<h2>使用</h2>
+<h3>创建状态（store）</h3>
+<p><code>Redux.createStore()</code> 方法用于创建一个 <code>store</code>，其接收 <strong><code>reducer</code></strong> 作为第一个参数；</p>
+<p><code>reducer</code> 为一个自定义函数，接收 <code>state</code> 作为第一个参数，同时返回一个值作为新的 <code>state</code>；</p>
+<p>reduce 有缩减，减少的意思，可以理解为一个缩减器，不断将新得到的状态覆盖原状态，以实现 <code>store</code> 的单一状态更新，其名字也是根据 <code>Array</code> 的 <code>.reduce()</code> 方法而来的；</p>
+<pre><code class="language-js">import Redux from 'redux';
+
+// 为 state 设置默认值
+const reducer = (state = 1, action) =&gt; {
+    return state;
+}
+const store = Redux.createStore(reducer);
+</code></pre>
+<p><code>createStore()</code> 方法还接收第二个参数 <strong><code>initialState</code></strong>，作为 <code>state</code> 的初始化值，即下面两种写法效果相同：</p>
+<pre><code class="language-js">import Redux from 'redux';
+
+const store1 = Redux.createStore((state = 1) =&gt; {
+    return state;
+});
+const store2 = Redux.createStore((state) =&gt; {
+    return state;
+}, 1);
+
+const state1 = store1.getState();
+const state2 = store2.getState();
+
+console.log(state1); // 1
+console.log(state2); // 1
+</code></pre>
+<h3>读取状态</h3>
+<p><code>getState()</code>，是所创建的 <code>store</code> 对象的一个方法，用于获取创建的状态；</p>
+<pre><code class="language-js">const store = Redux.createStore(
+    (state = 1) =&gt; state;
+);
+const state = store.getState();
+
+console.log(state); // 1
+</code></pre>
+<h3>改变状态（action）</h3>
+<h4>触发更新</h4>
+<p><code>state</code> 的更新需要通过触发 <code>action</code> 来实现，<code>actoin</code> 是前面的 <code>reducer</code> 函数接收的第二个参数，一个 <code>action</code> 是一个包含操作信息的对象，同时也可以携带要传递的额外数据；</p>
+<p>触发 <code>action</code> 使用 <code>dispatch</code> 实现，<code>dispatch</code> 是 <code>store</code> 对象的一个方法，其接收参数为 <code>action</code> 对象，是更新状态的唯一途径；</p>
+<p>这里之所以多加一层 <code>action</code>，而不直接修改状态，是为了追踪某一状态为何更新，或者调试时进行操作复现等目的，而 <code>action</code> 中的 <code>type</code> 就相当于为了被追踪而留下的痕迹；</p>
+<pre><code class="language-js">const store = Redux.createStore(
+    (state=1, action) =&gt; {
+        if (action.type === 'myAction') {
+            return action.myData;
+        } else {
+            return state;
+        }
+    }
+);
+
+const action = {
+    type: 'myAction', // type 属性为必填项
+    myData: 'myContent.', // 自定义携带数据
+}
+
+store.dispatch(action);
+console.log(store.getState()); // "myContent."
+</code></pre>
+<p>在模块较多的复杂应用中，为了辨识操作，方便理解，通常 <code>type</code> 的格式会定义为 <code>模块/操作</code> 的形式，<code>模块</code>一般和对应的 <code>reducer</code> 相关，例如：</p>
+<pre><code class="language-js">const todoReducer = (state, action) =&gt; state;
+const userReducer = (state, action) =&gt; state;
+
+const addTodo = { type: 'todo/add' };
+const renameUser = { type: 'user/rename' };
+</code></pre>
+<h4>响应更新</h4>
+<p>更新 <code>state</code> 的 <code>action</code> 被触发了，还需要定义一些操作对其进行响应，在 <code>action</code> 触发时执行，即指定如何更新 <code>state</code>；</p>
+<p>这里更新 <code>state</code> 的逻辑写在之前创建 <code>store</code> 时传入的 <code>reducer</code> 函数中，由于 Redux 中的 <code>state</code> 是只读的（并未强制，但需自行在代码中遵守），所以 <code>reducer</code> 每次返回的 <code>state</code> 都是新的；</p>
+<pre><code class="language-js">const myState = {
+    num: 0
+}
+const myReducer = (state=myState, action) =&gt; {
+    if (action.type === 'add') {
+        return {
+            num: state.num + 1
+        };
+    } else {
+        return state; // 非指定状态需要考虑返回原状态
+    }
+}
+const store = Redux.createStore(myReducer);
+const myAction = {
+    type: 'add'
+}
+
+store.dispatch(myAction);
+
+console.log(store.getState().num); // 1
+</code></pre>
+<p>Redux 并未强制 <code>reducer</code> 中的 <code>state</code> 为只读的，其实是可以对其进行修改，例如：</p>
+<pre><code class="language-js">const defaultState = { num: 0 };
+const store = Redux.createStore(
+    (state=defaultState, action) =&gt; {
+        if (action.type === 'add') {
+            state.num += 1;
+            return state;
+        } else {
+            return state;
+        }
+    }
+);
+
+console.log(store.getState()); // { num: 0 }
+
+store.dispatch({ type: 'add'});
+
+console.log(store.getState()); // { num: 1 }
+</code></pre>
+<p>但官方并不建议这么做，这有可能导致页面数据得不到及时更新的 bug，所以需要开发者考虑自行维护其<strong>不可变性（Immutability）</strong>，这也能实现更好的状态追踪，问题追溯等开发体验，如官网提到的一项叫 <code>time traveling debugging</code> 技术；并且，Redux 官网对该框架的介绍也是 <code>Redux is a predictable state container</code>，即具有预见性的状态管理器；</p>
+<h3>订阅状态</h3>
+<p><code>subscribe()</code> 是 store 对象的方法之一，它接收一个函数作为参数，用于设置监听器以订阅状态的更新，即指定 <code>state</code> 更新时应该做什么；</p>
+<pre><code class="language-js">const store = Redux.createStore((state=0, action) =&gt; {
+    if (action.type === 'add') {
+        return state + 1;
+    } else {
+        return state;
+    }
+});
+
+store.subscribe(() =&gt; {
+    // 指定每次更新状态就打印当前值
+    console.log('dispatch', store.getState());
+})
+store.dispatch({ type: 'add' }); // 'dispatch' 1
+store.dispatch({ type: 'add' }); // 'dispatch' 2
+</code></pre>
+<h2>拓展</h2>
+<h3>状态合成</h3>
+<p>虽然 Redux 为了管理方便而设置单一的 <code>store</code> 对所有 <code>state</code> 进行统一管理，但是状态量的增长会使得书写变得复杂，所以 Redux 对象提供了一个 <code>combineReducers()</code> 方法，将所有声明的分工不同（不同组件、页面或子应用）的 <code>reducer</code> 合并为一个总的 <code>reducer</code>；</p>
+<p>该方法接收一个对象作为参数，不同的属性名用于标识不同作用的 <code>reducer</code>，以及状态更新后从 <code>store</code> 中取回状态值，属性值为声明的 <code>reducer</code> 函数；</p>
+<pre><code class="language-js">const calcReducer = (state=1, action) =&gt; {
+    switch (action.type) {
+        case 'add':
+            return state + 1;
+        case 'minus':
+            return state - 1;
+        default:
+            return state;
+    }
+}
+const countReducer = (state=0, action) =&gt; {
+    if (action.type === 'add') return state + 1;
+    else return state;
+}
+const rootReducer = Redux.combineReducers({
+    calc: calcReducer,
+    count: countReducer,
+});
+const store = Redux.createStore(rootReducer);
+
+
+console.log(store.getState()); // { calc: 1, count: 0, }
+
+store.dispatch({ type: 'add' });
+
+console.log(store.getState()); // { calc: 2, count: 1 }
+</code></pre>
+<p><code>combineReducers()</code> 参数对象中指定的属性名用于存储该 reducer 的所有状态值；</p>
+<h3>Enhancer</h3>
+<p><code>Redux.createStore()</code> 方法还可以接收第三个参数 <strong><code>enhancer</code></strong>，用于自定义 <code>store</code> 的功能或强化其能力（例如魔改），比如改变 <code>dispatch()</code>, <code>getState()</code>, <code>subscribe()</code> 等方法的默认行为；</p>
+<p><code>enhancer</code> 参数为一个自定义函数，其接收 <code>Redux.createStore</code> 这个方法作为参数，并返回一个新的 <code>createStore</code> 方法；</p>
+<p>下面是一个为 <code>dispatch</code> 添加功能的简单示例：</p>
+<pre><code class="language-js">const myReducer = (state=1, action) =&gt; {
+    if (action.type === 'add') {
+        return state + 1;
+    } else {
+        return state;
+    }
+}
+// enhancer 接收一个参数，即 Redux.createStore 这个方法，
+// 用于执行创建 store 的默认行为；
+const myEnhancer = (createStore) =&gt; {
+    // enhancer 需要返回一个函数，其参数与 Redux.createStore 的相同，
+    // 可以理解为返回另一个新的 createStore 函数；
+    return (reducer, initialState, enhancer) =&gt; {
+        // 需要执行一次 Redux.createStore 的默认行为，并获取 store
+        const store = createStore(reducer, initialState, enhancer);
+
+        // 修改 store 中的默认 dispatch 方法
+        store.dispatch = (action) =&gt; {
+            // 新加的功能
+            console.log('dispatched.');
+            // 最后仍需执行一次 dispatch 的默认行为
+            return store.dispatch(action);
+        }
+        
+        // 修改默认的 getState 方法
+        store.getState = () =&gt; {
+            return store.getState() + 1;
+        }
+
+        // 返回的新 createStore 方法还需要返回一个对象，即整个 store 对象；
+        return store; 
+        }
+    }
+}
+
+const store = Redux.createStore(myReducer, undefined, myEnhancer);
+
+store.dispatch({ type: 'add' }); // "dispatched."
+
+console.log(store.getState()); // 3
+</code></pre>
+<p>需要同时使用多个 <code>enhancer</code> 时，需要进行合成，可以使用 <code>Redux.compose()</code> 方法：</p>
+<pre><code class="language-js">const enhancers = Redux.compose(enhancer1, enhancer2); // 可以传入多个参数作 enhancer
+const store = Redux.createStore(myReducer, undefined, enhancers);
+</code></pre>
+<h3>Middleware</h3>
+<p>大多数时候，我们只希望自定义 <code>dispatcch</code> 方法的逻辑，所以官方专门提供了一个叫 <strong><code>middleware</code></strong> 的特性，翻译过来就是<strong>中间件</strong>，即在触发 <code>action</code> 和调用 <code>reducer</code> 执行响应之间，给用户提供一个可操作空间，如用于日志记录，问题报告，或者处理异步操作等；</p>
+<p><code>middleware</code> 是一个自定义函数，其接收一个对象作为参数，该参数对象有两个方法，分别是 <code>dispatch</code> 和 <code>getState</code>，逻辑都与 <code>store</code> 对象中的两个同名方法相同；</p>
+<p><code>middleware</code> 函数还需要返回另一个函数作为包装（自定义）后的 <code>dispatch</code> 方法，由于逻辑层次较多，下面会通过代码说明；</p>
+<p>Redux 中内置了一个叫做 <code>applyMiddleware</code> 的 <code>enhancer</code> 方法，用于添加 <code>middleware</code>，它可以接收多个参数以传入多个 <code>middleware</code>；</p>
+<p>具体实现通过举例说明：</p>
+<pre><code class="language-js">const myReducer = (state, action) =&gt; {
+    if (action.type === 'add') {
+        return state + 1;
+    } else {
+        return state;
+    }
+}
+
+// 自定义的中间件函数
+const myMiddleware1 = ({ dispatch, getState }) =&gt; {
+    // 中间件需要返回一个函数，即新的 dispatch 逻辑，
+    // 该函数又接收一个参数 next，用于执行下一个 middleware，
+    // 当然如果有下一个中间件就执行，没有了就执行原始的 dispatch，
+    // 其实这个参数 next 也就是原始的那个 store.dispatch 方法；
+    return (next) =&gt; {
+        // 该函数也需要返回一个函数，用于处理 action，
+        // 接收一个 acction 作参数，即 store 触发的 action；
+        return (action) =&gt; {
+            // 自定义逻辑
+            console.log('mid 1', getState());
+
+            // 这个函数还需要返回一个函数，即用之前的 next 方法
+            // 将 action 传递给下一个 middleware 继续处理；
+            return next(action);
+        }
+    }
+}
+
+// 也可以使用简写方式
+const myMiddleware2 = ({ getState }) =&gt; next =&gt; action =&gt; {
+    console.log('mid 2', getState());
+    const result = next(action);
+    console.log('mid 2 new', getState());
+
+    return result;
+}
+
+// 使用中间件
+const myEnhancer = Redux.applyMiddleware(myMiddleware1, myMiddleware2);
+
+const store = Redux.createStore(myReducer, 1, myEnhancer);
+
+store.dispatch({ type: 'add' });
+// "mid 1" 1
+// "mid 2" 1
+// "mid 2 new" 2
+
+console.log(store.getState());
+// 2
+</code></pre>
+<p>总结一下整个执行过程就是：</p>
+<ul>
+<li>用户调用了 <code>store.dispatch()</code> 触发 <code>action</code>；</li>
+<li>Redux 按 <code>applyMiddleware()</code> 方法中参数的传入顺序，挨个执行自定义的 <code>middleware</code> 逻辑；</li>
+<li>然后再调用原始的 <code>store.dispatch()</code> 方法触发 <code>action</code>；</li>
+<li>最终执行 <code>reducer</code> 中的逻辑；</li>
+</ul>
+<p>整个过程有些类似函数的链式调用：</p>
+<pre><code class="language-sh">dispatch -&gt; middleware1 -&gt; middleware2 ... -&gt; dispatch -&gt; reducer
+</code></pre>
+<p>此外，由于 <code>middleware</code> 的执行逻辑，其特性还包括对 <code>action</code> 中数据的修改、中断甚至彻底停止 <code>action</code>，的触发，例如上例中最后不返回 <code>next(action)</code>，那么整个过程执行完第一个 <code>middleware</code> 就结束了，<code>state</code> 也不会发生预期的改变；</p>
+<h3>处理异步逻辑</h3>
+<p>Redux 内部并不知道如何处理异步逻辑，只会同步的触发 action，然后调用 reducer 更新 state，所以任何异步逻辑需要我们在外部自己实现；而 Redux 的宗旨是 recuder 不要有任何<strong>副作用</strong>，最好是一个<strong>纯函数</strong>，即不要有多余的外部联系，如控制台打印，异步请求等；</p>
+<p>而 <code>middleware</code> 就是 Redux 专为<strong>副作用</strong>逻辑需求而设计的，这里以异步操作为例用代码进行简单实现：</p>
+<pre><code class="language-js">const reducer = (state, action) =&gt; {
+    if (action.type === 'add') {
+        return state + 1;
+    } else if (action.type === 'asyncAdd') {
+        return action.data;
+    } else {
+        return state;
+    }
+}
+const asyncMiddleware = _store =&gt; next =&gt; action =&gt; {
+    if (action.type === 'asyncAdd') {
+        setTimeout(() =&gt; {
+            action.data = 'some data.';
+            next(action);
+        }, 2000);
+    } else {
+        next(action);
+    }
+}
+const enhancer = Redux.applyMiddleware(asyncMiddleware);
+const store = Redux.createStore(reducer, 0, enhancer);
+
+
+store.dispatch({ type: 'add' });
+console.log(store.getState()); // 1
+
+store.dispatch({ type: 'asyncAdd' });
+console.log(store.getState()); // 1
+
+setTimeout(() =&gt; {
+    console.log(store.getState());
+}, 2000);
+// 2 秒后输出：
+// some data.
+</code></pre>
+<p>结果显示异步操作获取的数据，可以成功被 <code>reducer</code> 拿到并实现相应的逻辑，所以把 <code>setTimeout</code> 换成 <code>Ajax</code> 请求也同样可以从服务器获取到数据，然后传递给 Redux 进行下一步处理；</p>
+<p>由于上面的异步逻辑的原生写法不太方便，Redux 官方就提供了一款 <code>redux-thunk</code> 工具，封装好了一个 <code>middleware</code>，应用之后就可以将 <code>action</code> 声明为一个函数（以前是一个对象），其接收 <code>dispatch</code> 和 <code>getState</code> 两个参数；具体用法如下：</p>
+<pre><code class="language-js">import Redux from 'redux';
+import ReduxThunk from 'redux-thunk';
+
+const reducer = (state, action) =&gt; {
+    if (action.type === 'add') {
+        return state + 1;
+    } else if (action.type === 'asyncAdd') {
+        return action.data;
+    } else {
+        return state;
+    }
+}
+
+// 直接应用该工具
+const middlewareEnhancer = Redux.applyMiddleware(ReduxThunk.default);
+
+const store = Redux.createStore(reducer, 1, middlewareEnhancer);
+
+// 这里 action 声明为函数，处理异步逻辑
+const asyncAction = (dispatch, getState) =&gt; {
+    console.log('old state:', getState());
+    setTimeout(() =&gt; {
+        dispatch({ type: 'asyncAdd', data: 'some data.' });
+    }, 2000);
+}
+
+store.dispatch(asyncAction);
+// "old state:" 1
+
+setTimeout(() =&gt; {
+    console.log(store.getState());
+}, 2000);
+// 2 秒后输出：
+// "some data."
+</code></pre>
+<p>需要<strong>注意</strong>的是，一些教程上（包括 Redux 官网）介绍 <code>Redux Thunk</code> 的用法时，仍然使用的 <code>Redux.applyMiddleware(ReduxThunk)</code> 写法，这是该工具 <code>1.x</code> 版本的写法，现在 <code>2.x</code> 版本需要加上 <code>.default</code>，即 <code>Redux.applyMiddleware(ReduxThunk.default)</code>，不然程序会出现问题；</p>

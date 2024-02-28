@@ -1,0 +1,81 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2020-05-08-sync-time-zone.html">Synchronize time and time zone between client and server</a></h2>
+<hr/>
+<h2>key: 31
+title: Synchronize time and time zone between client and server
+tag: [lua, experience, english]</h2>
+<p>The time in online games is generally based on the server time, which include the time used by the client for calculation and display, since the time in the client may be incorrect. In addition, my game project'll be released globally, so it's important to synchronize time zone between client and server. I have to deal with the time zone problems manually since the game is written in Lua and there are no related functions in Lua.</p>
+<h3>Synchronize time</h3>
+<p>Since the function <code>os.time()</code> always returns a UTC timestamp, as long as your clock is accurate, the function <code>os.time()</code> always returns a same value at the same moment regardless of the time zone. So, when the client calls <code>os.time()</code>, it only needs to consider the accuracy of the clock, not the time zone.</p>
+<p>The server returns the server's timestamp <code>server_timestamp</code> to the client when the client logs in, and client calculates the difference between server's time and client's time <code>time_diff = os.time() - server_timestamp</code>. Next, the server's timestamp will be periodically sent by the server to the client and the client will calibrate the time difference continuously.</p>
+<p>If the client wants to get current accurate timestamp, it should execute <code>os.time() - time_diff</code>. Since the client should always use server time, we rewrite <code>os.time()</code> as:</p>
+<pre><code class="language-lua">local os_time = os.time
+local time_diff = 0
+
+function calibrate_time(server_timestamp)
+    time_diff = os_time() - server_timestamp
+end
+
+function os.time()
+    return os_time() - time_diff
+end
+</code></pre>
+<h3>Synchronize time zone</h3>
+<p>Synchronization of the time zone is more complicated compared with synchronization of time. If the client uses timestamps only, we don't need to care about time zone, since the timestamp is independent of time zone. However, a readable time, i.e. consists of year, month, day, hour, minute, second, is time zone related. If we discuss about converting a timestamp to a readable time or converting a readable time to a timestamp, the premise is that in a certain time zone.</p>
+<p>In Lua, call <code>os.time</code> and pass in a argument describing the readable time to convert the readable time to a timestamp; call <code>os.date</code> and pass the format string and timestamp to convert the timestamp to a readable time. However, Lua will use the local time zone(i.e. the machine time zone) for these conversions, which is not what we want. Therefore, we must calculate the time zone conversion.</p>
+<p>To converting a specific readable time such as <code>yyyy-MM-dd HH:mm:ss</code> to a timestamp, first, we can calculate how many days have passed since January 1, 1970, according to the leap year rule; then count the number of seconds, and get a "timestamp". However, it is incorrect, because the readable time <code>yyyy-MM-dd HH:mm:ss</code> includes time zone. The correct way is to subtract the time zone after counting the number of seconds to eliminate the time zone effect.</p>
+<p>Therefore, to converting time <code>yyyy-MM-dd HH:mm:ss</code> to a timestamp in server time zone, we should:</p>
+<pre><code class="language-lua">count_number_of_seconds_since_1970(yyyy-MM-dd HH:mm:ss) - SERVER_TIMEZONE
+</code></pre>
+<p>However, when we call <code>os.time</code> and pass the time, the result is:</p>
+<pre><code class="language-lua">os.time(yyyy-MM-dd HH:mm:ss) = count_number_of_seconds_since_1970(yyyy-MM-dd HH:mm:ss) - CLIENT_TIMEZONE
+</code></pre>
+<p>So, to get the timestamp in server time zone, we should:</p>
+<pre><code class="language-lua">os.time(yyyy-MM-dd HH:mm:ss) + CLIENT_TIMEZONE - SERVER_TIMEZONE
+</code></pre>
+<p>Similarly, to converting a specific timestamp <code>n</code> to a readable time, we can calculate the year, month, day and time after <code>n</code> seconds have passed since January 1, 1970. This result is incorrect either since it's the conversion in UTC time zone. To get the correct time, we should:</p>
+<pre><code class="language-lua">calculate_the_datetime_since_1970(n + SERVER_TIMEZONE)
+</code></pre>
+<p>However, when we call <code>os.date</code> and pass the format string and <code>n</code>, the result is:</p>
+<pre><code class="language-lua">os.date("%Y-%m-%d %H:%M:%S", n) = calculate_the_datetime_since_1970(n + CLIENT_TIMEZONE)
+</code></pre>
+<p>So, to get the readable time in server time zone, we should:</p>
+<pre><code class="language-lua">os.date("%Y-%m-%d %H:%M:%S", n - CLIENT_TIMEZONE + SERVER_TIMEZONE)
+</code></pre>
+<h3>Put Them Together</h3>
+<p>After the client logs in, server tells the client its time and timezone. Server will also tell clients its time periodically. We rewrite <code>os.time</code> and <code>os.date</code>:</p>
+<pre><code class="language-lua">local os_time = os.time
+local os_date = os.date
+local time_diff = 0
+local now = os_time()
+local CLIENT_TIMEZONE = math.floor(os.difftime(now, os_time(os_date("!*t", now))))
+local SERVER_TIMEZONE = CLIENT_TIMEZONE
+
+-- call it when the client loged in
+function init_time(server_timezone, server_timestamp)
+    SERVER_TIMEZONE = server_timezone
+    time_diff = os_time() - server_timestamp
+end
+
+-- call it periodically
+function calibrate_time(server_timestamp)
+    time_diff = os_time() - server_timestamp
+end
+
+function os.time(date)
+    if date != nil then
+        return os_time(date) + CLIENT_TIMEZONE - SERVER_TIMEZONE
+    else
+        return os_time() - time_diff
+    end
+end
+
+function os.date(format, time)
+    if time == nil then
+        time = os.time()
+    end
+    return os_date(format, time - CLIENT_TIMEZONE + SERVER_TIMEZONE)
+end
+</code></pre>
+<hr/>
+<p><strong>Updated on October 29, 2020:</strong></p>
+<p><code>local CLIENT_TIMEZONE = math.floor(os.difftime(now, os_time(os_date("!*t", now))))</code> is not a correct way to calculate the client timezone. see <a href="/2020/10/29/lua-dst.html">Lua 夏令时时区问题</a>.</p>

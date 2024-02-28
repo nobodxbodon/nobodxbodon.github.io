@@ -1,0 +1,135 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2019-10-11-pass-fd-over-domain-socket.html">通过 UNIX domain socket 在进程间传递文件描述符</a></h2>
+<hr/>
+<h2>key: 13
+title: 通过 UNIX domain socket 在进程间传递文件描述符
+tag: linux</h2>
+<p>Linux 提供了一系列系统调用使我们能在进程间传递文件描述符. 这里的 "传递文件描述符" 不是简单地传递文件描述符这个32位整数, 而是真正地把这个文件句柄传递给目标进程, 使目标进程可以对文件执行读写操作. 现在假设 进程B 要给 进程A 发送文件描述符, 我们来看具体做法.</p>
+<h3>1. UNIX domain socket</h3>
+<p>要想传递文件描述符, 首先需要建立进程间通信. 这里我们需要用到 UNIX domain socket. UNIX domain socket 是一种进程间通信的方式, 它和普通的 socket 类似, 不同的是不需要用到 ip 地址, 而是使用一个 socket 文件. 我们要利用它发送控制信息, 从而传递文件描述符. 首先我们让进程A先创建一个 socket:</p>
+<pre><code class="language-c">/*code of process A*/
+int socket_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+</code></pre>
+<p>注意 <code>socket</code> 函数的参数. <code>AF_UNIX</code> 便是指定协议族为 UNIX domain socket. 这里我们使用数据报套接字 <code>SOCK_DGRAM</code>, 这与 UDP 类似, 不需要建立链接, 直接通过地址发送. 当然也可以使用 <code>SOCK_STREAM</code>, 这与就与 TCP 类似. 这里就不列举了.</p>
+<p>接下来我们绑定地址:</p>
+<pre><code class="language-c">/*code of process A*/
+struct sockaddr_un un;
+un.sun_family = AF_UNIX;
+unlink("process_a");
+strcpy(un.sun_path, "process_a");
+
+if (bind(socket_fd, (struct sockaddr*)&amp;un, sizeof(un)) &lt; 0) {
+    printf("bind failed\n");
+    return 1;
+}
+</code></pre>
+<p>注意这里的地址就不再是一个 ip 地址了, 而是一个文件路径. 在这里我们指定地址为 <code>process_a</code>, 然后调用 <code>bind</code> 绑定地址, 这时就会创建一个名为 <code>process_a</code> 的 socket 文件.</p>
+<p>这样一来, 其他的进程就可以通过 <code>process_a</code> 这样一个特殊的地址跟这个进程发送消息了. 就跟发送 UDP 消息一样, 不同的是使用 <code>struct sockaddr_un</code> 来定义地址, 而不是 <code>struct sockaddr_in</code> 或 <code>struct sockaddr_in6</code>. 除此之外, 重要的是, 其他进程还可以通过发送控制信息向这个进程传递文件描述符.</p>
+<h3>2. sendmsg</h3>
+<p>Linux 提供了一对系统调用: <code>sendmsg</code> 和 <code>recvmsg</code>. 与我们平时用的 <code>send</code> 和 <code>recv</code> 不同, 它们除了可以发送或接收常规数据之外, 还可以用来发送或接收控制信息, 这是传递文件描述符的关键; 此外它们还可以用来发送或接收一段不连续的数据.</p>
+<p>我们来看这两个系统调用的声明</p>
+<pre><code class="language-c">#include &lt;sys/types.h&gt;
+#include &lt;sys/socket.h&gt;
+
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags);
+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
+</code></pre>
+<p><code>sendmsg</code> 和 <code>recvmsg</code> 使用一个结构体 <code>struct msghdr</code> 来描述发送的数据. 结构体定义如下:</p>
+<pre><code class="language-c">struct iovec {                    /* Scatter/gather array items */
+    void  *iov_base;              /* Starting address */
+    size_t iov_len;               /* Number of bytes to transfer */
+};
+
+struct msghdr {
+    void         *msg_name;       /* optional address */
+    socklen_t     msg_namelen;    /* size of address */
+    struct iovec *msg_iov;        /* scatter/gather array */
+    size_t        msg_iovlen;     /* # elements in msg_iov */
+    void         *msg_control;    /* ancillary data, see below */
+    size_t        msg_controllen; /* ancillary data buffer len */
+    int           msg_flags;      /* flags on received message */
+};
+</code></pre>
+<ul>
+<li><code>msg_name</code> 目标地址. 这个是可选的, 如果协议是面向连接的, 就不需要指定地址; 否则就需要指定地址. 这就类似于 <code>send()</code> 和 <code>sendto()</code>.</li>
+<li><code>msg_iov</code> 要发送的数据. 这是一个数组, 数组的长度由 <code>msg_iovlen</code> 指定, 数组的元素是一个 <code>struct iovec</code> 结构体, 这个结构体指定一段连续数据的起始地址(<code>iov_base</code>)和长度(<code>iov_len</code>). 也就是说, 它可以发送多段连续数据; 或者说, 可以发送一段不连续的数据.</li>
+<li><code>msg_control</code> 控制信息. 这就是我们今天的主角. 我们不能直接设置它, 必须使用一系列的宏来设置它.</li>
+</ul>
+<p><code>msg_control</code> 指向一个由 <code>struct cmsghdr</code> 结构体及其附加数据构成的序列. <code>struct cmsghdr</code> 的定义如下:</p>
+<pre><code class="language-c">struct cmsghdr {
+    socklen_t cmsg_len;    /* data byte count, including header */
+    int       cmsg_level;  /* originating protocol */
+    int       cmsg_type;   /* protocol-specific type */
+/* followed by
+    unsigned char cmsg_data[]; */
+};
+</code></pre>
+<p><code>struct cmsghdr</code> 实际上定义的是数据的头部, 后面应该紧跟着一个 <code>unsigned char</code> 数组, 存放控制信息的实际数据. 也就是大家常说的 "变长结构体". <code>msg_control</code> 便是指向一个由这样的变长结构体构成的序列. 内存结构如下图所示:</p>
+<p><img alt="control data" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/pass-fd-over-domain-socket_1.gif"/></p>
+<p>我们需要用到以下几个宏:</p>
+<pre><code class="language-c">#include &lt;sys/socket.h&gt;
+
+struct cmsghdr *CMSG_FIRSTHDR(struct msghdr *msgh);
+size_t CMSG_SPACE(size_t length);
+size_t CMSG_LEN(size_t length);
+unsigned char *CMSG_DATA(struct cmsghdr *cmsg);
+</code></pre>
+<ul>
+<li><code>CMSG_FIRSTHDR()</code> 返回 <code>msg_control</code> 指向的序列的第一个元素</li>
+<li><code>CMSG_SPACE()</code> 传入控制信息的实际数据的长度, 返回变长结构体需要占用的空间</li>
+<li><code>CMSG_LEN()</code> 传入控制信息的实际数据的长度, 返回变长结构体的长度</li>
+<li><code>CMSG_DATA()</code> 返回存放控制信息的实际数据的首地址.</li>
+</ul>
+<blockquote>
+<p>需要注意 <code>CMSG_SPACE()</code> 和 <code>CMSG_LEN()</code> 的区别: 前者包含 padding 的长度, 是实际占用的空间; 后者则不包含 padding 的长度, 用于赋值给 <code>cmsg_len</code>.</p>
+</blockquote>
+<p>接下来我们来让进程B传递文件描述符给进程A. 首先设置进程A的地址, 也就是 "process_a":</p>
+<pre><code class="language-c">/*code of process B*/
+struct sockaddr_un ad;
+ad.sun_family = AF_UNIX;
+strcpy(ad.sun_path, "process_a");
+</code></pre>
+<p>我们只需要发送控制信息, 不需要发送常规数据, 所以把常规数据置空:</p>
+<pre><code class="language-c">/*code of process B*/
+struct iovec e = {NULL, 0};
+</code></pre>
+<p>接下来为控制数据分配空间, 因为我们只传递一个文件描述符, 所以长度是 <code>sizeof(int)</code>:</p>
+<pre><code class="language-c">/*code of process B*/
+char cmsg[CMSG_SPACE(sizeof(int))];
+</code></pre>
+<p>然后就可以设置 <code>struct msghdr</code> 结构体:</p>
+<pre><code class="language-c">/*code of process B*/
+struct msghdr m = {(void*)&amp;ad, sizeof(ad), &amp;e, 1, cmsg, sizeof(cmsg), 0};
+</code></pre>
+<p>接下来获取我们获取 <code>struct cmsghdr</code> 并设置它:</p>
+<pre><code class="language-c">/*code of process B*/
+struct cmsghdr *c = CMSG_FIRSTHDR(&amp;m);
+c-&gt;cmsg_level = SOL_SOCKET;
+c-&gt;cmsg_type = SCM_RIGHTS;
+c-&gt;cmsg_len = CMSG_LEN(sizeof(int));
+*(int*)CMSG_DATA(c) = cfd; // set file descriptor
+</code></pre>
+<p>最后发送出去即可:</p>
+<pre><code class="language-c">/*code of process B*/
+sendmsg(mfd, &amp;m, 0)
+</code></pre>
+<h3>3. recvmsg</h3>
+<p>现在我们让进程A接收传递过来的文件描述符. 这里我们调用 <code>recvmsg</code>.</p>
+<pre><code class="language-c">/*code of process A*/
+char buf[512];
+struct iovec e = {buf, 512};
+char cmsg[CMSG_SPACE(sizeof(int))];
+struct msghdr m = {NULL, 0, &amp;e, 1, cmsg, sizeof(cmsg), 0};
+
+int n = recvmsg(socket_fd, &amp;m, 0);
+printf("Receive: %d\n", n);
+
+struct cmsghdr *c = CMSG_FIRSTHDR(&amp;m);
+int cfd = *(int*)CMSG_DATA(c); // receive file descriptor
+</code></pre>
+<p>这样, 进程A 就收到了进程B传递过来的文件描述符, 并且进程B打开着这个文件, 可以对其执行读写操作.</p>
+<hr/>
+<p><strong>参考资料</strong>:</p>
+<ul>
+<li><a href="https://linux.die.net/man/3/cmsg">cmsg(3) - Linux man page</a></li>
+<li><a href="http://www.masterraghu.com/subjects/np/introduction/unix_network_programming_v1.3/ch14lev1sec6.html">Ancillary Data</a></li>
+</ul>

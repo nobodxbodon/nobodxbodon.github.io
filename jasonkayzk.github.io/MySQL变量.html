@@ -1,0 +1,191 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/MySQL%E5%8F%98%E9%87%8F.html">MySQL变量</a></h2>
+<hr/>
+<h2>title: MySQL变量
+toc: true
+date: 2019-12-04 20:25:48
+cover: https://img.paulzzh.com/touhou/random?16
+categories: 数据库
+tags: [MySQL]
+description: 上一篇讲解了MySQL中的触发器, 本篇讲解MySQL中的变量</h2>
+<p>上一篇讲解了MySQL中的触发器, 本篇讲解MySQL中的变量</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2>变量</h2>
+<p>Mysql本质是一种编程语言，需要很多变量来保存数据。Mysql中很多的属性控制都是通过mysql中固有的变量来实现的</p>
+<h3>系统变量</h3>
+<p><strong>系统内部定义的变量，系统变量针对所有用户（MySQL客户端）有效</strong></p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>查看系统所有变量：<code>show variables [like 'pattern'];</code></strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>Mysql允许用户使用select查询变量的数据值（系统变量）</strong></p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>基本语法：<code>select @@变量名;</code></strong></p>
+</blockquote>
+<p>例如:</p>
+<pre><code class="language-mysql">select @@autocommit;
+
++--------------+
+| @@autocommit |
++--------------+
+|            1 |
++--------------+
+1 row in set (0.00 sec)
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>修改系统变量：分为两种修改方式</p>
+<p><strong>① 局部修改（会话级别）</strong></p>
+<p>只针对当前自己客户端当次连接有效</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>基本语法：<code>set 变量名 = 新值;</code></strong></p>
+</blockquote>
+<p>例如:</p>
+<pre><code class="language-mysql">mysql&gt; set autocommit = 0;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql&gt; select @@autocommit;
++--------------+
+| @@autocommit |
++--------------+
+|            0 |
++--------------+
+1 row in set (0.00 sec)
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>② 全局修改</strong></p>
+<p>针对所有的客户端，“所有时刻”都有效</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>基本语法：<code>set global 变量名 = 值; 或 set @@global.变量名 = 值;</code></strong></p>
+</blockquote>
+<p>全局修改之后：所有连接的客户端并没发现改变？</p>
+<p>&lt;font color="#ff0000"&gt;<strong>注意: 全局修改只针对新客户端生效（正在连着的无效）</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;<strong>如果想要本次连接对应的变量修改有效，那么不能使用全局修改，只能使用会话级别修改（set 变量名 = 值）;&lt;/font&gt;</strong></p>
+<p>&lt;br/&gt;</p>
+<h3>会话变量</h3>
+<p>会话变量也称之为用户变量，<strong>会话变量跟mysql客户端是绑定的，设置的变量，只对当前用户使用的客户端生效</strong></p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>定义用户变量：<code>set @变量名 := 值;</code></strong></p>
+<p>&lt;font color="#ff0000"&gt;<strong>注意: <code>set @变量名 = 值;</code>是错误写法</strong>&lt;/font&gt;</p>
+<p>在<strong>mysql中因为没有比较符号==</strong>，所以是用=代替比较符号, 有时候在使用=赋值的时候，会报错</p>
+<p><strong>mysql为了避免系统分不清是赋值还是比较：特定增加一个变量的赋值符号：  :=</strong></p>
+</blockquote>
+<p>例如:</p>
+<pre><code class="language-mysql">mysql&gt; set @age := 57;
+Query OK, 0 rows affected (0.00 sec)
+</code></pre>
+<p>&lt;font color="#ff0000"&gt;<strong>Mysql允许将数据从表中取出存储到变量中：但查询得到的数据必须只能是一行数据（一个变量对应一个字段值）, 且Mysql没有数组</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<p>关于会话变量的一些易错的操作:</p>
+<p><strong>① 赋值且查看赋值过程</strong></p>
+<pre><code class="language-mysql">select @变量1 := 字段1，@变量2 := 字段2 from 数据表 where 条件；
+</code></pre>
+<p>错误语法：就是<strong>因为使用=，系统会当做比较符号来处理</strong></p>
+<pre><code class="language-mysql">mysql&gt; select @name = cnname, @sex = sex from mybatis.t_student limit 1;
++----------------+------------+
+| @name = cnname | @sex = sex |
++----------------+------------+
+|           NULL |       NULL |
++----------------+------------+
+1 row in set (0.00 sec)
+
+</code></pre>
+<p>正确处理：使用:=</p>
+<pre><code class="language-mysql">mysql&gt; select @name := cnname, @sex := sex from mybatis.t_student limit 1;
++-----------------+-------------+
+| @name := cnname | @sex := sex |
++-----------------+-------------+
+| Mouse           |           1 |
++-----------------+-------------+
+1 row in set (0.00 sec)
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>② 只赋值，不看过程</strong></p>
+<pre><code class="language-mysql">select 字段1，字段2… from 数据源 where 条件 into @变量1，@变量2…
+</code></pre>
+<p>例如:</p>
+<pre><code class="language-mysql">mysql&gt; select cnname, sex from mybatis.t_student limit 1 into @name, @sex;
+Query OK, 1 row affected (0.00 sec)
+</code></pre>
+<p>查看变量：select @变量名;</p>
+<pre><code class="language-mysql">mysql&gt; select @name, @sex;
++-------+------+
+| @name | @sex |
++-------+------+
+| Mouse |    1 |
++-------+------+
+1 row in set (0.00 sec)
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>局部变量</h3>
+<p><strong>作用范围在begin到end语句块之间,</strong> 在该语句块里设置的变量，<strong>declare语句专门用于定义局部变量</strong></p>
+<ul>
+<li><p><strong>局部变量是使用declare关键字声明</strong></p>
+</li>
+<li><p><strong>局部变量declare语句出现的位置一定是在begin和end之间（beginend是在大型语句块中使用：函数/存储过程/触发器）</strong></p>
+</li>
+</ul>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>声明语法：<code>declare 变量名 数据类型 [属性];</code></strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>变量作用域</h3>
+<p>变量作用域即: 变量能够使用的区域范围</p>
+<p>&lt;br/&gt;</p>
+<p><strong>局部作用域</strong></p>
+<p>&lt;font color="#ff0000"&gt;使用declare关键字声明（在结构体内：函数/存储过程/触发器），而且只能在结构体内部使用&lt;/font&gt;</p>
+<p>declare关键字声明的<strong>变量没有任何符号修饰，就是普通字符串</strong>，如果<strong>在外部访问该变量，系统会自动认为是字段</strong></p>
+<p>&lt;br/&gt;</p>
+<p><strong>会话作用域</strong></p>
+<p>&lt;font color="#ff0000"&gt;用户定义的，使用@符号定义的变量，使用set关键字&lt;/font&gt;</p>
+<p>会话作用域：&lt;font color="#ff0000"&gt;<strong>在当前用户当次连接有效，只要在本连接之中，任何地方都可以使用（可以在结构内部，也可以跨库）</strong>&lt;/font&gt;</p>
+<p>例:</p>
+<p><strong>① 会话变量可以在函数内部使用</strong></p>
+<pre><code class="language-mysql">-- 定义会话变量@name
+mysql&gt; set @name = 'Tom';
+Query OK, 0 rows affected (0.00 sec)
+
+-- 定义自定义函数my_func(), 并在函数中直接返回会话变量@name
+mysql&gt; create function my_func() returns char(4)
+    -&gt; return @name;
+Query OK, 0 rows affected (0.00 sec)
+
+-- 调用my_func(), 返回了Tom
+mysql&gt; select my_func();
++-----------+
+| my_func() |
++-----------+
+| Tom       |
++-----------+
+1 row in set (0.00 sec)
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>② 会话变量可以跨库</strong></p>
+<pre><code class="language-mysql">mysql&gt; use exam;
+Database changed
+
+mysql&gt; select @name;
++-------+
+| @name |
++-------+
+| Tom   |
++-------+
+1 row in set (0.00 sec)
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>全局作用域</strong></p>
+<p>&lt;font color="#ff0000"&gt;所有的客户端所有的连接都有效: 需要使用全局符号来定义&lt;/font&gt;</p>
+<pre><code class="language-mysql">set global 变量名 = 值;
+或
+set @@global.变量名 = 值;
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>备注: 通常，在SQL编程的时候，不会使用自定义变量来控制全局。一般都是定义会话变量或者在结构中使用局部变量来解决问题</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>

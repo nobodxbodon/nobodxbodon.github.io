@@ -1,0 +1,709 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%9C%A8K8S%E4%B8%AD%E9%83%A8%E7%BD%B2SpringBoot%E9%A1%B9%E7%9B%AE.html">在K8S中部署SpringBoot项目</a></h2>
+<hr/>
+<h2>title: 在K8S中部署SpringBoot项目
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?2'
+date: 2023-12-19 20:27:56
+categories: Kubernetes
+tags: [Kubernetes, Spring, Java, Kafka]
+description: 在前几篇文章中，我们在Kubernetes中部署了StorageClass、StatefulSet等等；在这篇文章中，我们会部署实际的SpringBoot项目，来利用这些有状态的服务；</h2>
+<p>在前几篇文章中，我们在Kubernetes中部署了StorageClass、StatefulSet等等；</p>
+<p>在这篇文章中，我们会部署实际的SpringBoot项目，来利用这些有状态的服务；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/kubernetes-learn/tree/proj/springboot-deploy-demo</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>在K8S中部署SpringBoot项目</strong></h1>
+<h2><strong>部署第一个SpringBoot-Web项目</strong></h2>
+<h3><strong>编写服务</strong></h3>
+<p>作为开始，我们先来部署一个最简单的 SpringBoot HelloWorld 级别的项目；</p>
+<p>代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/kubernetes-learn/tree/proj/springboot-deploy-demo/ch01-hello</li>
+</ul>
+<blockquote>
+<p><strong>使用K8S部署Go项目，参考：</strong></p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2021/10/31/%E4%BD%BF%E7%94%A8K8S%E9%83%A8%E7%BD%B2%E6%9C%80%E7%AE%80%E5%8D%95%E7%9A%84Go%E5%BA%94%E7%94%A8/">《使用K8S部署最简单的Go应用》</a></li>
+</ul>
+</blockquote>
+<p>代码非常简单：</p>
+<p>src/main/java/io/jasonkayzk/github/controller/HelloController.java</p>
+<pre><code class="language-java">@RestController
+public class HelloController {
+    @GetMapping("/")
+    public String index() throws UnknownHostException {
+        return "Greetings from Spring Boot on: " + InetAddress.getLocalHost().getHostName() + "\n";
+    }
+}
+</code></pre>
+<p>访问 <code>/</code> 就会输出当前机器的 HostName；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>构建镜像</strong></h3>
+<p>打包项目：</p>
+<pre><code class="language-shell">mvn clean package
+</code></pre>
+<p>打包结果输出到 target 下面：</p>
+<pre><code>➜  target git:(proj/springboot-deploy-demo) tree -L 1
+.
+├── ch01-hello-1.0.0.jar
+├── ch01-hello-1.0.0.jar.original
+├── classes
+├── generated-sources
+├── maven-archiver
+└── maven-status
+
+5 directories, 2 files
+</code></pre>
+<p>编写 Dockerfile：</p>
+<pre><code class="language-dockerfile">FROM openjdk:8-jre-slim
+MAINTAINER jasonkayzk@gmail.com
+RUN mkdir /app
+COPY target/*.jar /app/app.jar
+EXPOSE 8080
+ENTRYPOINT [ "sh", "-c", "java $JAVA_OPTS -jar /app/app.jar" ]
+</code></pre>
+<p>在 Dockerfile 中我们定义了容器镜像，为 OpenJDK 官方提供的 JRE-8；</p>
+<p>然后创建了 <code>/app</code> 目录，并将打包的 <code>jar</code> 复制进镜像中：<code>/app/app.jar</code>；</p>
+<p>最后对外暴露服务端口 8080（<strong>注意：这个是在 K8S 中为Pod在集群中访问的端口，并非K8S对外的端口！</strong>）</p>
+<p>最后使用 <code>java -jar</code> 启动服务；</p>
+<p>Dockerfile 编写完成后，可以打包并上传镜像了：</p>
+<pre><code class="language-shell">docker build -t jasonkay/java-deploy-app:v1.0.0 .
+
+docker push jasonkay/java-deploy-app:v1.0.0
+</code></pre>
+<blockquote>
+<p><strong>实际开发中，上面几步基本上是由 CI 组件做的，比如：Github Actions、Jenkins、Spinnaker 等等；</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>部署服务到 K8S 中</strong></h3>
+<p>编写 YAML 配置：</p>
+<p>deploy/deployment.yaml</p>
+<pre><code class="language-yaml">---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-deploy-app
+  namespace: workspace # 声明工作空间，默认为default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      name: java-deploy-app
+  template:
+    metadata:
+      labels:
+        name: java-deploy-app
+    spec:
+      containers:
+        - name: java-deploy-container
+          image: jasonkay/java-deploy-app:v1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080 # containerPort是声明容器内部的port
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-deploy-app-service
+  namespace: workspace # 声明工作空间，默认为default
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 18888 # Service暴露在cluster-ip上的端口，通过&lt;cluster-ip&gt;:port访问服务,通过此端口集群内的服务可以相互访问
+      targetPort: 8080 # Pod的外部访问端口，port和nodePort的数据通过这个端口进入到Pod内部，Pod里面的containers的端口映射到这个端口，提供服务
+      nodePort: 32080 # Node节点的端口，&lt;nodeIP&gt;:nodePort 是提供给集群外部客户访问service的入口
+  selector:
+    name: java-deploy-app
+</code></pre>
+<p>主要是 Deployment 和 Service 两个部分；</p>
+<p>Deployment 中定义：</p>
+<ul>
+<li>部署名称；</li>
+<li>部署用到的镜像；</li>
+<li>部署镜像拉取策略；</li>
+<li>容器暴露的端口；</li>
+</ul>
+<p>Service 定义：</p>
+<ul>
+<li>服务暴露的方式：NodePort；</li>
+<li>暴露的端口配置：<ul>
+<li><strong><code>port: 18888</code>：Service暴露在cluster-ip上的端口，通过<code>&lt;cluster-ip&gt;:port</code>访问服务,通过此端口集群内的服务可以相互访问；</strong></li>
+<li><strong><code>targetPort: 8080</code>：Pod的外部访问端口，port和nodePort的数据通过这个端口进入到Pod内部，Pod里面的containers的端口映射到这个端口，提供服务；</strong></li>
+<li><strong><code>nodePort: 32080</code>：Node节点的端口，<code>&lt;nodeIP&gt;:nodePort</code> 是提供给集群外部客户访问service的入口；</strong></li>
+</ul>
+</li>
+</ul>
+<p><strong>端口的配置比较多，不要搞混了！</strong></p>
+<p>定义好之后，就可以部署了：</p>
+<pre><code class="language-shell">kubectl apply -f deploy/deployment.yaml
+</code></pre>
+<p>查看结果：</p>
+<pre><code>➜  kubernetes-learn git:(proj/springboot-deploy-demo) k get pods -n workspace
+
+NAME                               READY   STATUS    RESTARTS      AGE
+java-deploy-app-7475c6f558-mzcbq   1/1     Running   0 (95m ago)   16h
+java-deploy-app-7475c6f558-x7prr   1/1     Running   0 (96m ago)   16h
+java-deploy-app-7475c6f558-zvcc7   1/1     Running   0 (94m ago)   16h
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>测试服务</strong></h3>
+<p>最后通过 Curl 来测试我们的服务：</p>
+<pre><code class="language-shell"># curl &lt;k8s-node-ip&gt;:32080
+
+curl 192.168.31.201:32080
+Greetings from Spring Boot on: java-deploy-app-7475c6f558-zvcc7
+
+curl 192.168.31.202:32080
+Greetings from Spring Boot on: java-deploy-app-7475c6f558-zvcc7
+
+curl 192.168.31.203:32080
+Greetings from Spring Boot on: java-deploy-app-7475c6f558-zvcc7
+
+curl 192.168.31.203:32080
+Greetings from Spring Boot on: java-deploy-app-7475c6f558-mzcbq
+
+curl 192.168.31.203:32080
+Greetings from Spring Boot on: java-deploy-app-7475c6f558-x7prr
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>连接有状态StatefulSet服务</strong></h2>
+<p>上一小节中，我们在 K8S 中部署了一个非常简单的服务；</p>
+<p>接下来，将会将我们的服务连接到之前我们部署的 Kafka 集群；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>EmbeddedKafka</strong></h3>
+<p>在开始之前，先说一下，Kafka 为开发者提供了 <code>@EmbeddedKafka</code> 测试；</p>
+<p>在开发过程中下，我们可以使用它来测试我们的代码；</p>
+<p>ch02-kafka-integrate/src/test/java/ApplicationTests.java</p>
+<pre><code class="language-java">import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.test.context.junit4.SpringRunner;
+
+import java.io.IOException;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest(classes = ApplicationTests.class)
+@EmbeddedKafka(count = 3, ports = {9092, 9093, 9094})
+public class ApplicationTests {
+    @Test
+    public void contextLoads() throws IOException {
+        System.in.read();
+    }
+}
+</code></pre>
+<p>只需要声明：<code>@EmbeddedKafka(count = 3, ports = {9092, 9093, 9094})</code> 即可！</p>
+<p>执行测试即可创建 Kafka 集群！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建环境配置文件</strong></h3>
+<p>在 SpringBoot 项目中，基本上都会用 <code>application-{env}</code> 来区分环境；</p>
+<p>总配置入口：</p>
+<p>ch02-kafka-integrate/src/main/resources/application.yaml</p>
+<pre><code class="language-yaml">spring:
+  profiles:
+    active: dev
+</code></pre>
+<p>Dev 环境：</p>
+<pre><code class="language-yaml">server:
+  port: 8080
+
+spring:
+  kafka:
+    bootstrap-servers: 'localhost:9092'
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      auto-offset-reset: earliest
+
+# custom kafka topic config
+kafka:
+  sasl-enable: false
+  topic:
+    my-topic: my-topic
+    my-topic2: my-topic2
+  topics:
+    - name: topic0
+      num-partitions: 3
+      replication-factor: 1
+    - name: topic1
+      num-partitions: 1
+      replication-factor: 1
+    - name: topic2
+      num-partitions: 2
+      replication-factor: 1
+</code></pre>
+<p>上面的配置文件声明了开发环境的配置：</p>
+<ul>
+<li>服务端口：8080（默认）；</li>
+<li>Spring Kafka 配置：<ul>
+<li><code>bootstrap-servers: 'localhost:9092'</code>：配置地址；</li>
+<li>生产者：<ul>
+<li><code>value-serializer</code>：Value 序列化方式；</li>
+</ul>
+</li>
+<li>消费者：<ul>
+<li><code>auto-offset-reset: earliest</code>：从最早的消息开始消费；</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>在 <code>kafka</code> 中：自定义了我们的 Topic，这里会用两种方法创建 Topic：</p>
+<ul>
+<li><strong><code>sasl-enable: false</code> 表示 Kafka 连接使用 SASL 认证，开发环境连接不需要，但是在连接部署在 K8S 中的 Kafka 集群需要；</strong></li>
+</ul>
+<p>Prod 环境：</p>
+<pre><code class="language-yaml">server:
+  port: 8080
+
+spring:
+  kafka:
+    bootstrap-servers: 'kafka-broker-0.kafka-broker-headless.workspace.svc.cluster.local:9092,kafka-broker-1.kafka-broker-headless.workspace.svc.cluster.local:9092,kafka-broker-2.kafka-broker-headless.workspace.svc.cluster.local:9092'
+
+# custom kafka topic config
+kafka:
+  sasl-enable: true
+  topic:
+    my-topic: my-topic
+    my-topic2: my-topic2
+  topics:
+    - name: topic0
+      num-partitions: 3
+      replication-factor: 1
+    - name: topic1
+      num-partitions: 1
+      replication-factor: 1
+    - name: topic2
+      num-partitions: 2
+      replication-factor: 1
+</code></pre>
+<p>生产环境中的配置主要是通过 Spring 提供的配置类的形式配置；</p>
+<p>这里只配置了 Kafka server 在集群中的地址；</p>
+<blockquote>
+<p><strong>这里能够使用 Kafka 的服务名是因为我们的应用和 Kafka 服务在同一个 K8S 集群中；</strong></p>
+</blockquote>
+<p>同时，将 <code>sasl-enable</code> 开启；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建Kafka配置类</strong></h3>
+<p>Kafka 整体配置：</p>
+<p>ch02-kafka-integrate/src/main/java/io/jasonkayzk/github/configure/kafka/KafkaConfigure.java</p>
+<pre><code class="language-java">package io.jasonkayzk.github.configure.kafka;
+
+import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.common.security.plain.PlainLoginModule;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.*;
+import org.springframework.kafka.support.converter.RecordMessageConverter;
+import org.springframework.kafka.support.converter.StringJsonMessageConverter;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.JsonSerializer;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * @author zk
+ */
+@Configuration
+public class KafkaConfigure {
+
+    @Value("${spring.kafka.bootstrap-servers}")
+    private List&lt;String&gt; bootstrapAddresses;
+
+    @Value("${kafka.sasl-enable}")
+    private boolean saslEnable;
+
+    @Value("${KAFKA_USER}")
+    private String kafkaUsername;
+
+    @Value("${KAFKA_PASSWORD}")
+    private String kafkaPassword;
+
+    /**
+     * Use Config in application.yaml
+     */
+    @Value("${kafka.topic.my-topic}")
+    String myTopic;
+    @Value("${kafka.topic.my-topic2}")
+    String myTopic2;
+
+    /**
+     * Kafka connection config
+     */
+    @Bean
+    public KafkaAdmin kafkaAdmin() {
+        Map&lt;String, Object&gt; configs = new HashMap&lt;&gt;(8);
+        configs.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddresses);
+
+        if (saslEnable) {
+            configs.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
+            configs.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
+
+            configs.put(SaslConfigs.SASL_JAAS_CONFIG, String.format(
+                    "%s required username=\"%s\" " + "password=\"%s\";", PlainLoginModule.class.getName(), kafkaUsername, kafkaPassword
+            ));
+        }
+
+        return new KafkaAdmin(configs);
+    }
+
+    @Bean
+    public ProducerFactory&lt;Object, Object&gt; producerFactory() {
+        Map&lt;String, Object&gt; configs = new HashMap&lt;&gt;(8);
+        configs.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddresses);
+        configs.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        configs.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+
+        if (saslEnable) {
+            configs.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
+
+            configs.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
+            configs.put(SaslConfigs.SASL_JAAS_CONFIG, String.format(
+                    "%s required username=\"%s\" " + "password=\"%s\";", PlainLoginModule.class.getName(), kafkaUsername, kafkaPassword
+            ));
+        }
+
+        return new DefaultKafkaProducerFactory&lt;&gt;(configs);
+    }
+
+    @Bean(name = "bookContainerFactory")
+    public ConcurrentKafkaListenerContainerFactory&lt;String, Object&gt; kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory&lt;String, Object&gt; factory = new ConcurrentKafkaListenerContainerFactory&lt;&gt;();
+        factory.setConsumerFactory(consumerFactory());
+        return factory;
+    }
+
+    public ConsumerFactory&lt;String, Object&gt; consumerFactory() {
+        Map&lt;String, Object&gt; configs = new HashMap&lt;&gt;(8);
+        configs.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
+        configs.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddresses);
+        configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        configs.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+
+        if (saslEnable) {
+            configs.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
+            configs.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
+            configs.put(SaslConfigs.SASL_JAAS_CONFIG, String.format(
+                    "%s required username='%s' " + "password='%s';", PlainLoginModule.class.getName(), kafkaUsername, kafkaPassword
+            ));
+        }
+
+        return new DefaultKafkaConsumerFactory&lt;&gt;(configs);
+    }
+
+    /**
+     * JSON消息转换器
+     */
+    @Bean
+    public RecordMessageConverter jsonConverter() {
+        return new StringJsonMessageConverter();
+    }
+
+    /**
+     * 通过注入一个 NewTopic 类型的 Bean 来创建 topic，如果 topic 已存在，则会忽略。
+     */
+    @Bean
+    public NewTopic myTopic() {
+        return new NewTopic(myTopic, 2, (short) 1);
+    }
+
+    @Bean
+    public NewTopic myTopic2() {
+        return new NewTopic(myTopic2, 1, (short) 1);
+    }
+}
+</code></pre>
+<p>配置属性：</p>
+<ul>
+<li><code>bootstrapAddresses</code>：Kafka 服务地址，由 Yaml 配置提供；</li>
+<li><code>saslEnable</code>：Kafka 服务连接是否开启SASL，由 Yaml 配置提供；</li>
+<li><code>myTopic、myTopic2</code>：自定义topic名称，由 Yaml 配置提供；</li>
+<li><code>kafkaUsername</code>：Kafka 连接 Username，由环境变量提供；</li>
+<li><code>kafkaPassword</code>：Kafka 连接 Password，由环境变量提供；</li>
+</ul>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注：Kafka 部署在 K8S 后，集群的连接密码会存储在 Secrets 中；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>在实际使用时，我们可以将 Secrets 中的变量挂载到我们 Pod 的环境变量中来使用！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>此外配置了：</p>
+<ul>
+<li><strong>kafkaAdmin</strong>：Kafka 管理总配置；</li>
+<li><strong>producerFactory</strong>：生产者配置；</li>
+<li><strong>consumerFactory</strong>：消费者配置；</li>
+<li><strong>kafkaListenerContainerFactory</strong>：Kafka Listener 配置；</li>
+<li><strong>jsonConverter</strong>：消息序列化转换器；</li>
+</ul>
+<p>此外还创建了两个 Bean：<strong>myTopic、myTopic2</strong>；</p>
+<p>通过注入一个 NewTopic 类型的 Bean 来直接创建 topic，如果 topic 已存在，则会忽略；</p>
+<p>&lt;br/&gt;</p>
+<p>Kafka Topic 配置：</p>
+<p>除了通过注入一个 NewTopic 类型的 Bean 来创建 topic 的方式，还可以使用配置类来创建；</p>
+<p>ch02-kafka-integrate/src/main/java/io/jasonkayzk/github/configure/kafka/KafkaTopicConfigure.java</p>
+<pre><code class="language-java">package io.jasonkayzk.github.configure.kafka;
+
+import lombok.Data;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.context.support.GenericWebApplicationContext;
+
+import javax.annotation.PostConstruct;
+import java.util.List;
+
+@Configuration
+public class KafkaTopicConfigure {
+
+    private final TopicConfiguration configuration;
+
+    private final GenericWebApplicationContext context;
+
+    public KafkaTopicConfigure(TopicConfiguration configuration, GenericWebApplicationContext genericContext) {
+        this.configuration = configuration;
+        this.context = genericContext;
+    }
+
+    @PostConstruct
+    public void init() {
+        initializeBeans(configuration.getTopics());
+    }
+
+    private void initializeBeans(List&lt;TopicConfiguration.Topic&gt; topics) {
+        topics.forEach(t -&gt; context.registerBean(t.name, NewTopic.class, t::toNewTopic));
+    }
+}
+
+@Data
+@Configuration
+@ConfigurationProperties(prefix = "kafka")
+class TopicConfiguration {
+    private List&lt;Topic&gt; topics;
+
+    @Data
+    static class Topic {
+        String name;
+        Integer numPartitions = 3;
+        Short replicationFactor = 1;
+
+        NewTopic toNewTopic() {
+            return new NewTopic(this.name, this.numPartitions, this.replicationFactor);
+        }
+    }
+}
+</code></pre>
+<p>TopicConfiguration 类用来解析 <code>kafka.topics</code> 配置；</p>
+<p>在 KafkaTopicConfigure 中，通过 <code>@PostConstruct</code> 来创建多个 NewTopic；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>编写生产者、消费者</strong></h3>
+<p>编写 Book 模型：</p>
+<p>ch02-kafka-integrate/src/main/java/io/jasonkayzk/github/entity/Book.java</p>
+<pre><code class="language-java">@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Book {
+    private Long id;
+
+    private String name;
+}
+</code></pre>
+<p>生产者：</p>
+<p>ch02-kafka-integrate/src/main/java/io/jasonkayzk/github/kafka/BookProducer.java</p>
+<pre><code class="language-java">@Service
+public class BookProducer {
+
+    private static final Logger logger = LoggerFactory.getLogger(BookProducer.class);
+
+    private final KafkaTemplate&lt;String, Object&gt; kafkaTemplate;
+
+    public BookProducer(KafkaTemplate&lt;String, Object&gt; kafkaTemplate) {
+        this.kafkaTemplate = kafkaTemplate;
+    }
+
+    public void sendMessage(String topic, Object o) {
+        // 分区编号最好为 null，交给 kafka 自己去分配
+        ProducerRecord&lt;String, Object&gt; producerRecord = new ProducerRecord&lt;&gt;(topic, null, System.currentTimeMillis(), String.valueOf(o.hashCode()), o);
+
+        ListenableFuture&lt;SendResult&lt;String, Object&gt;&gt; future = kafkaTemplate.send(producerRecord);
+        future.addCallback(result -&gt; {
+                    if (result != null) {
+                        logger.info("生产者成功发送消息到topic:{} partition:{}的消息", result.getRecordMetadata().topic(), result.getRecordMetadata().partition());
+                    }
+                },
+                ex -&gt; logger.error("生产者发送消失败，原因：{}", ex.getMessage()));
+    }
+}
+</code></pre>
+<p>消费者：</p>
+<p>ch02-kafka-integrate/src/main/java/io/jasonkayzk/github/kafka/BookConsumer.java</p>
+<pre><code class="language-java">@Service
+public class BookConsumer {
+
+    @Value("${kafka.topic.my-topic}")
+    private String myTopic;
+    @Value("${kafka.topic.my-topic2}")
+    private String myTopic2;
+
+    private final Logger logger = LoggerFactory.getLogger(BookConsumer.class);
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @KafkaListener(topics = {"${kafka.topic.my-topic}"}, groupId = "group1", containerFactory = "bookContainerFactory")
+    public void consumeMessage(ConsumerRecord&lt;String, String&gt; bookConsumerRecord) {
+        try {
+            Book book = objectMapper.readValue(bookConsumerRecord.value(), Book.class);
+            logger.info("消费者消费topic:{} partition:{}的消息 -&gt; {}", bookConsumerRecord.topic(), bookConsumerRecord.partition(), book.toString());
+        } catch (JsonProcessingException e) {
+            logger.error(e.toString());
+        }
+    }
+
+    @KafkaListener(topics = {"${kafka.topic.my-topic2}"}, groupId = "group2", containerFactory = "bookContainerFactory")
+    public void consumeMessage2(Book book) {
+        logger.info("消费者消费topic:{} 的消息 -&gt; {}", myTopic2, book.toString());
+    }
+}
+</code></pre>
+<p>逻辑比较简单，这里不再赘述；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>编写服务</strong></h3>
+<p>最后来编写一个 Web 接口：</p>
+<p>ch02-kafka-integrate/src/main/java/io/jasonkayzk/github/controller/BookController.java</p>
+<pre><code class="language-java">@RestController
+@RequestMapping(value = "/book")
+public class BookController {
+
+    @Value("${kafka.topic.my-topic}")
+    String myTopic;
+    @Value("${kafka.topic.my-topic2}")
+    String myTopic2;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final BookProducer producer;
+
+    private final AtomicLong atomicLong = new AtomicLong();
+
+    BookController(BookProducer producer) {
+        this.producer = producer;
+    }
+
+    @PostMapping
+    public void sendMessageToKafkaTopic(@RequestParam("name") String name) throws JsonProcessingException {
+        this.producer.sendMessage(myTopic, objectMapper.writeValueAsString(new Book(atomicLong.addAndGet(1), name)));
+        this.producer.sendMessage(myTopic2, new Book(atomicLong.addAndGet(1), name));
+    }
+}
+</code></pre>
+<p>接收到 <code>/book</code> 的 Post 请求之后，分别向 myTopic、myTopic2 发送一条消息；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>构建镜像</strong></h3>
+<p>创建 Dockerfile：</p>
+<p>ch02-kafka-integrate/Dockerfile</p>
+<pre><code class="language-dockerfile">FROM openjdk:8-jre-slim
+MAINTAINER jasonkayzk@gmail.com
+RUN mkdir /app
+COPY target/*.jar /app/app.jar
+EXPOSE 8080
+ENTRYPOINT [ "sh", "-c", "java $JAVA_OPTS -jar /app/app.jar --spring.profiles.active=prod" ]
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>这里需要注意，我们需要指定 Spring Profile 使用 <code>prod</code>，来使用生产环境的配置！</strong>&lt;/font&gt;</p>
+<p>构建镜像：</p>
+<pre><code class="language-shell">docker build -t jasonkay/java-deploy-app:v1.0.1 .
+
+docker push jasonkay/java-deploy-app:v1.0.1
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>部署服务到K8S集群中</strong></h3>
+<p>编写 Deployment：</p>
+<p>ch02-kafka-integrate/deploy/deployment.yaml</p>
+<pre><code class="language-yaml">---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-deploy-app
+  namespace: workspace # 声明工作空间，默认为default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      name: java-deploy-app
+  template:
+    metadata:
+      labels:
+        name: java-deploy-app
+    spec:
+      containers:
+        - name: java-deploy-container
+          image: jasonkay/java-deploy-app:v1.0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080 # containerPort是声明容器内部的port
+          env: # 将Secrets挂载为环境变量
+            - name: KAFKA_USER
+              value: 'user1'
+            - name: KAFKA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-user-passwords
+                  key: client-passwords
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-deploy-app-service
+  namespace: workspace # 声明工作空间，默认为default
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 18888 # Service暴露在cluster-ip上的端口，通过&lt;cluster-ip&gt;:port访问服务,通过此端口集群内的服务可以相互访问
+      targetPort: 8080 # Pod的外部访问端口，port和nodePort的数据通过这个端口进入到Pod内部，Pod里面的containers的端口映射到这个端口，提供服务
+      nodePort: 32080 # Node节点的端口，&lt;nodeIP&gt;:nodePort 是提供给集群外部客户访问service的入口
+  selector:
+    name: java-deploy-app
+</code></pre>
+<p>Service 的部分没有改变；</p>
+<p>在 Deploment 部分，我们通过 env 将 Kafka 连接的 Secrets 配置挂载到了容器的环境变量中，这样上面的 Kafka 配置类就能获取到相关配置并正确连接！</p>
+<p>部署：</p>
+<pre><code class="language-shell">kubectl apply -f ch02-kafka-integrate/deploy/deployment.yaml
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>服务测试</strong></h3>
+<p>通过 Curl 命令测试服务：</p>
+<pre><code class="language-shell">curl -X POST -F 'name=Java' http://&lt;k8s-node-ip&gt;:32080/book
+
+# 查看日志
+k logs -n workspace java-deploy-app-578668888d-5m5dm | tail -n 20
+
+2023-12-20 00:35:23.090  INFO 7 --- [ntainer#1-0-C-1] o.s.k.l.KafkaMessageListenerContainer    : group1: partitions assigned: [my-topic-0]
+2023-12-20 00:35:23.102  INFO 7 --- [ntainer#1-0-C-1] io.jasonkayzk.github.kafka.BookConsumer  : 消费者消费topic:my-topic partition:0的消息 -&gt; Book(id=1, name=Java)
+2023-12-20 00:35:23.102  INFO 7 --- [ntainer#1-0-C-1] io.jasonkayzk.github.kafka.BookConsumer  : 消费者消费topic:my-topic partition:0的消息 -&gt; Book(id=1, name=Java)
+2023-12-20 00:35:23.102  INFO 7 --- [ntainer#1-0-C-1] io.jasonkayzk.github.kafka.BookConsumer  : 消费者消费topic:my-topic partition:0的消息 -&gt; Book(id=1, name=Java)
+
+
+k logs -n workspace java-deploy-app-578668888d-7hv9r | tail -n 20
+
+2023-12-20 00:35:10.977  INFO 7 --- [ad | producer-1] io.jasonkayzk.github.kafka.BookProducer  : 生产者成功发送消息到topic:my-topic2 partition:0的消息
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/kubernetes-learn/tree/proj/springboot-deploy-demo</li>
+</ul>
+<p>&lt;br/&gt;</p>

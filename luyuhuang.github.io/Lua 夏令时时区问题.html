@@ -1,0 +1,30 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2020-10-29-lua-dst.html">Lua 夏令时时区问题</a></h2>
+<hr/>
+<h2>key: 42
+title: Lua 夏令时时区问题
+tag: [lua, experience]</h2>
+<p>我之前的<a href="/2020/05/08/sync-time-zone.html">一篇文章</a>介绍了怎样在服务器和客户端之间同步时间和时区. 同步时间相对简单些, 本质就是一个时间差; 而时区相对复杂些. 那篇文章介绍的方法有一个问题: 在客户端的时区启用了夏令时的时候, 客户端得到的本地时间会比实际快一个小时. 原因是求客户端时区的方法不对. 例如, 太平洋时区本为 UTC-0800, 而当客户端处于太平洋时区的 2020 年 10 月 29 日, 此时太平洋时区启用夏令时, 时区应为 UTC-0700. 如果使用这样的方法</p>
+<pre><code class="language-lua">local now = os_time()
+local CLIENT_TIMEZONE = math.floor(os.difftime(now, os_time(os_date("!*t", now))))
+</code></pre>
+<p>求得的时区 <code>CLIENT_TIMEZONE</code> 的值为 <code>-28800</code>, 也就是负八小时, 比实际时区少了一小时, 导致求本地时间时</p>
+<pre><code class="language-lua">function os.date(format, time)
+    if time == nil then
+        time = os.time()
+    end
+    return os_date(format, time - CLIENT_TIMEZONE + SERVER_TIMEZONE)
+end
+</code></pre>
+<p>得到的时间比实际多一个小时. 为什么会有这个问题呢?</p>
+<p>首先, 这种求时区的思路是, 先调用 <code>os_date("!*t", now)</code> 获取当前 UTC 时区的本地时间, 然后再调用 <code>os_time(os_date("!*t", now))</code> 将 UTC 时区的本地时间视为本时区的本地时间, 再转换回时间戳. 这样一来, 这个时间戳与当前时间戳的差值 <code>os.difftime(now, os_time(os_date("!*t", now)))</code> 就是当前时区了.</p>
+<p>问题就出在 <code>os_time(os_date("!*t", now))</code> 这里. 首先我们知道调用 <code>os.date</code> 传入 <code>"*t"</code> 会得到一个表示本地时间的 table, 表示年月日时分秒等. 其中有一个不显眼的字段 <code>isdst</code>, 它的含义是当前是否启用夏令时. 而调用 <code>os_date("!*t", now)</code> 得到 UTC 时区的本地时间, 注意 UTC 时间是永远没有夏令时的, <code>isdst</code> 一定是 <code>false</code>. 而当我们把 UTC 时区的本地时间视为本时区的本地时间, 调用 <code>os_time(os_date("!*t", now))</code> 将其转换回时间戳时, 由于当前时区启用了夏令时, 这会导致其结果多出一个小时 (将非夏令时时间转换成夏令时时间, 需要加上一小时). 因此最后求的的时区就会比实际小一个小时.</p>
+<p>解决办法也很简单. 既然减数 <code>os_time(os_date("!*t", now))</code> 会多出一个小时, 那么我们让被减数也多出一个小时就好了.</p>
+<pre><code class="language-lua">local now = os_time()
+local utcdate = os_date("!*t", now)
+local localdate = os_date("*t", now)
+localdate.isdst = false
+local CLIENT_TIMEZONE = math.floor(os.difftime(os_time(localdate), os_time(utcdate)))
+</code></pre>
+<p>无论当前是否是夏令时, 我们都将 <code>localdate.isdst</code> 置为 <code>false</code>. 如果当前是夏令时, <code>os_time(localdate)</code> 和 <code>os_time(utcdate)</code> 都会多出一个小时; 如果当前不是夏令时, 它们都是准确的. 这样最终得出的时区就是准确的.</p>
+<hr/>
+<p><strong>参考:</strong> <a href="http://lua-users.org/wiki/TimeZone">lua-users wiki: Time Zone</a></p>

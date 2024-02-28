@@ -1,0 +1,184 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8Docker%E9%83%A8%E7%BD%B2zookeeper%E9%9B%86%E7%BE%A4.html">使用Docker部署zookeeper集群</a></h2>
+<hr/>
+<h2>title: 使用Docker部署zookeeper集群
+cover: https://img.paulzzh.com/touhou/random?99
+date: 2020-04-26 20:07:32
+categories: Docker
+toc: true
+tags: [Docker, Zookeeper]
+description: 本文讲解如何使用Docker部署Zookeeper集群;</h2>
+<p>本文讲解如何使用Docker部署Zookeeper集群;</p>
+<p>源代码:</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker_repo/tree/zookeeper-v3.4-cluster</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>&lt;!-- **目录:** --&gt;</p>
+<p>&lt;!-- toc --&gt;</p>
+<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+<h2>使用Docker部署zookeeper集群</h2>
+<h3>实现目标</h3>
+<ul>
+<li>各zookeeper处于同一子网段</li>
+<li>宿主机可以访问zookeeper集群</li>
+<li>docker重启时集群自动重启</li>
+<li>集群的数据文件映射到宿主机器目录中</li>
+<li>使用yml文件和<code>docker-compose up -d</code>命令创建或重建集群</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>拉取镜像</h3>
+<p>从zookeeper官方拉取3.4版本的镜像:</p>
+<pre><code class="language-bash">docker pull zookeeper:3.4
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3>创建子网段</h3>
+<pre><code class="language-bash">docker network create --subnet 172.30.0.0/24 --gateway 172.30.0.1 zookeeper
+</code></pre>
+<p>以三个zookeeper为例, 各个子容器的ip地址分配如下:</p>
+<p>| hostname | ip          | port      |
+| -------- | ----------- | --------- |
+| zoo1     | 172.30.0.11 | 2184:2181 |
+| zoo2     | 172.30.0.12 | 2185:2181 |
+| zoo3     | 172.30.0.13 | 2186:2181 |</p>
+<p>&lt;br/&gt;</p>
+<h3>创建compose文件</h3>
+<pre><code class="language-yaml">version: '3.4'
+
+services: 
+    zoo1:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo1
+        container_name: zoo1
+        ports:
+            - 2184:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo1/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo1/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 1
+            ZOO_SERVERS: server.1=0.0.0.0:2888:3888 server.2=zoo2:2888:3888 server.3=zoo3:2888:3888
+        networks:
+            zookeeper:
+                ipv4_address: 172.30.0.11
+
+    zoo2:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo2
+        container_name: zoo2
+        ports:
+            - 2185:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo2/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo2/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 2
+            ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=0.0.0.0:2888:3888 server.3=zoo3:2888:3888
+        networks:
+            zookeeper:
+                ipv4_address: 172.30.0.12
+        
+    zoo3:
+        image: zookeeper:3.4
+        restart: always
+        hostname: zoo3
+        container_name: zoo3
+        ports:
+            - 2186:2181
+        volumes: 
+            - "/home/zk/workspace/volumes/zkcluster/zoo3/data:/data"
+            - "/home/zk/workspace/volumes/zkcluster/zoo3/datalog:/datalog"
+        environment: 
+            ZOO_MY_ID: 3
+            ZOO_SERVERS: server.1=zoo1:2888:3888 server.2=zoo2:2888:3888 server.3=0.0.0.0:2888:3888
+        networks:
+            zookeeper:
+                ipv4_address: 172.30.0.13
+
+networks: 
+    zookeeper:
+        external: 
+            name: zookeeper 
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p>以上配置内容可以根据需求修改, 如:</p>
+<ul>
+<li>hostname: 容器主机名;</li>
+<li>ports:端口映射;</li>
+<li>networks: 容器ip地址;</li>
+<li>volumes: 文件目录映射</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>使用</h3>
+<h4>启动集群:</h4>
+<pre><code class="language-bash">docker-compose -f docker-compose.yml up -d
+Creating zoo3 ... done
+Creating zoo1 ... done
+Creating zoo2 ... done
+</code></pre>
+<hr/>
+<h4>测试</h4>
+<pre><code class="language-bash">$ docker exec -it zoo1 /bin/bash
+root@zoo1:/zookeeper-3.4.14# ./bin/zkServer.sh status
+ZooKeeper JMX enabled by default
+Using config: /conf/zoo.cfg
+Mode: follower
+root@zoo1:/zookeeper-3.4.14# exit
+exit
+$ docker exec -it zoo2 /bin/bash
+root@zoo2:/zookeeper-3.4.14# ./bin/zkServer.sh status
+ZooKeeper JMX enabled by default
+Using config: /conf/zoo.cfg
+Mode: follower
+root@zoo2:/zookeeper-3.4.14# exit
+exit
+$ docker exec -it zoo3 /bin/bash
+root@zoo3:/zookeeper-3.4.14# ./bin/zkServer.sh status
+ZooKeeper JMX enabled by default
+Using config: /conf/zoo.cfg
+Mode: leader
+</code></pre>
+<p>进入三个容器发现zoo1, zoo2, zoo3分别为从, 从, 主;</p>
+<hr/>
+<h4>停止</h4>
+<pre><code class="language-bash">$ docker-compose -f docker-compose.yml stop
+Stopping zoo2 ... done
+Stopping zoo3 ... done
+Stopping zoo1 ... done
+Removing zoo2 ... done
+Removing zoo3 ... done
+Removing zoo1 ... done
+Network zookeeper is external, skipping
+</code></pre>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p>可以使用docker-compose stop/down停止一个compose应用;</p>
+<p>区别在于:</p>
+<p><strong>docker-compose stop</strong></p>
+<p>停止 Compose 应用相关的所有容器，但不会删除它们。</p>
+<p>被停止的应用可以很容易地通过 docker-compose restart 命令重新启动。</p>
+<p><strong>docker-compose down</strong></p>
+<p>停止并删除运行中的 Compose 应用。</p>
+<p>它会删除容器和网络，但是不会删除卷和镜像。</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>其他</h3>
+<p>可以在volumes下挂载各个zookeeper容器各种的配置文件等;</p>
+<p>&lt;br/&gt;</p>
+<h2>附录</h2>
+<p>源代码:</p>
+<ul>
+<li>https://github.com/JasonkayZK/docker_repo/tree/zookeeper-v3.4-cluster</li>
+</ul>
+<p>参考文章:</p>
+<ul>
+<li><a href="https://blog.csdn.net/weixin_45778734/article/details/105689685">Docker快速搭建Zookeeper和kafka集群超详细</a></li>
+<li><a href="https://www.cnblogs.com/rwxwsblog/p/5806075.html">zookeeper部署及集群测试</a></li>
+</ul>
+<p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
+<p>内容和博客同步更新~</p>
+<p>&lt;br/&gt;</p>

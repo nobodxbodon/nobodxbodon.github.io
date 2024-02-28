@@ -1,0 +1,141 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2018-02-07-how-to-get-asynchronous-data-in-different-modules.html">如何在多个模块中共享异步数据</a></h2>
+<hr/>
+<h2>layout: post
+title: 如何在多个模块中共享异步数据
+tags: [javascript, promise, async]</h2>
+<h2>背景</h2>
+<pre><code class="language-html">&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;HTML&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;script src="./script1.js"&gt;&lt;/script&gt;
+        &lt;script src="./script2.js"&gt;&lt;/script&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p><code>script1</code> 中有一个异步请求，<code>script2</code> 也想使用请求得到的数据。</p>
+<h2>方案</h2>
+<h3>方案1：两个脚本中分别请求数据</h3>
+<p><code>script1.js</code>：</p>
+<pre><code class="language-js">const fetchRemoteData = () =&gt; {
+    return new Promise((resolve) =&gt; {
+        console.log('send request');
+        setTimeout(() =&gt; {
+            resolve({ message: 'OK' });
+        }, 3000);
+    });
+};
+
+fetchRemoteData().then((data) =&gt; {
+    console.log('Use data in script1', data);
+});
+</code></pre>
+<p><code>scripts.js</code>：</p>
+<pre><code class="language-js">fetchRemoteData().then((data) =&gt; {
+    console.log('Use data in script2', data);
+});
+</code></pre>
+<p>这里用 <code>fetchRemoteData</code> 表示接口请求。</p>
+<p>上述写法会导致请求发送两次。</p>
+<h3>方案2：<code>script2</code> 检查数据是否准备好</h3>
+<p><code>script1</code>：</p>
+<pre><code class="language-js">const fetchRemoteData = () =&gt; {
+    return new Promise((resolve, reject) =&gt; {
+        console.log('send request');
+        setTimeout(() =&gt; {
+            resolve({ message: 'OK' });
+        }, 3000);
+    });
+};
+
+let savedData = null;
+
+fetchRemoteData().then((data) =&gt; {
+    savedData = data;
+    console.log('Use data in script1', data);
+});
+</code></pre>
+<p><code>script2</code>：</p>
+<pre><code class="language-js">const checkInterval = setInterval(() =&gt; {
+    if (savedData) {
+        console.log('Use data in script2', savedData);
+        clearInterval(checkInterval);
+    }
+}, 100);
+</code></pre>
+<p>只发送一次请求，<code>script2</code> 中的数据获取性能较差。</p>
+<h3>方案3：数据检测和回调方式</h3>
+<p><code>script1</code>：</p>
+<pre><code class="language-js">const fetchRemoteData = () =&gt; {
+    return new Promise((resolve, reject) =&gt; {
+        console.log('send request');
+        setTimeout(() =&gt; {
+            resolve({ message: 'OK' });
+        }, 3000);
+    });
+};
+
+const whenDataReady = (() =&gt; {
+    let savedData = null;
+    let callbacks = [];
+    fetchRemoteData().then((data) =&gt; {
+        savedData = data;
+        while (callbacks.length) {
+            const callback = callbacks.pop();
+            callback(savedData);
+        }
+    });
+    return (callback) =&gt; {
+        if (savedData) {
+            callback(savedData);
+        } else {
+            callbacks.push(callback);
+        }
+    };
+})();
+
+whenDataReady((data) =&gt; {
+    console.log('Use data in script1', data);
+});
+</code></pre>
+<p><code>script2</code>：</p>
+<pre><code class="language-js">whenDataReady((savedData) =&gt; {
+    console.log('Use data in script2', savedData);
+});
+</code></pre>
+<p>只发送一次请求。</p>
+<h3>方案4：共享 promise 对象</h3>
+<p><code>script1</code>：</p>
+<pre><code class="language-js">const fetchRemoteData = () =&gt; {
+    return new Promise((resolve, reject) =&gt; {
+        console.log('send request');
+        setTimeout(() =&gt; {
+            resolve({ message: 'OK' });
+        }, 3000);
+    });
+};
+
+const fetchRemoteDataPromise = fetchRemoteData();
+
+fetchRemoteDataPromise.then((data) =&gt; {
+    console.log('Use data in script1', data);
+});
+</code></pre>
+<p><code>script2</code>：</p>
+<pre><code class="language-js">fetchRemoteDataPromise.then((data) =&gt; {
+    console.log('Use data in script2', data);
+});
+</code></pre>
+<p>只发送一次请求。</p>
+<h2>总结</h2>
+<h3>实际应用场景</h3>
+<ul>
+<li>模块化开发时，异步数据在模块之间共享。</li>
+<li>两个脚本依赖同一个异步数据。</li>
+<li>提供组件，组件中需要先请求到数据，再进行后面的操作。（建议使用方案3）</li>
+</ul>
+<h3>不适用的场景</h3>
+<ul>
+<li>数据实时性要求高，需要每次请求到新数据。</li>
+</ul>

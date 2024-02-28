@@ -1,0 +1,191 @@
+<h2>原文：<a href="https://www.barretlee.com/2019-08-03-vscode-source-code-reading-notes.html">VSCode 是怎么运行起来的？</a></h2>
+<hr/>
+<p>title: VSCode 是怎么运行起来的？
+description: 小胡子哥的个人网站
+warning: true
+author: 小胡子哥
+tags:</p>
+<ul>
+<li>VSCode
+categories:</li>
+<li>前端杂谈</li>
+<li>工具
+date: 2019-08-03 23:52:00</li>
+</ul>
+<hr/>
+<p>之前有基于 VSCode 做二次开发的经验，约摸全投入持续了 5 个多月，开发了一个 <a href="https://isv.taobao.com/ide">Editor</a>，算是超级魔改吧，虽然保留了 VSCode 的样子，但是整个板块都有比较大的调整，新增了 Webview 预览面板、Devtool 调试工具、顶部控制区、插件市场等等。</p>
+<p>当时由于需求的实现不需要了解全部的 VSCode 源码，但是也把大部分的源码啃得差不多了，包括：</p>
+<ul>
+<li>整个项目的工程部分，包括项目结构、软件构建、插件构建、持续集成等等</li>
+<li>Workbench 部分的所有逻辑，整个窗体 UI 部分的实现</li>
+<li>插件的实现，插件市场的逻辑，当时单独做了一个新的插件市场体系，插件的下载在自己的服务器管理</li>
+<li>Language Service Protocol 的基本原理</li>
+</ul>
+<p>但是也有很多内容没有掌握，应该说没有太多兴趣和时间了解，包括：</p>
+<ul>
+<li>功能模块的测试和 UI 自动化测试</li>
+<li>CommandRegistry 的内部机制，对应的是 IPCServer 的交互逻辑</li>
+<li>IoC 实现的详细逻辑</li>
+<li>SharedProcess 的基础逻辑</li>
+<li>ExtensionHost 的运行机制</li>
+</ul>
+<p>这两天突然来了兴致，把之前没了解的部分源码通读了一遍，当然，仍然有一些疑惑，也仍然有一些不感兴趣的部分，后续空了会有更多的梳理，下面先贴上这两天的阅读笔记。其实我应该画图来帮助读者理解，不过以下主要是个人笔记，就懒得整理了，感兴趣的读者将就着看。</p>
+<blockquote>
+<p>阅读的版本是 <code>v1.37.0</code>，是目前 VSCode 源码仓库 master 分支最新的代码。</p>
+</blockquote>
+<h3>InstantiationService</h3>
+<p>基本就是 IoC 的实现原理，以及 Service 的全局管理机制。</p>
+<h4>服务注册为可被使用的 Decorator</h4>
+<p>提供了一个泛型装饰器 <code>createDecorator</code>，入参是 ServiceName 和 IService，后者是泛型入参：</p>
+<pre><code class="language-typescript">function createDecorator&lt;IService&gt;('service'): ServiceIdentifier&lt;IService&gt; {}
+</code></pre>
+<p>内部对 <code>service</code> 的实际处理是：</p>
+<ul>
+<li>记录，下次请求，若存在直接从缓存送出</li>
+<li>记录的方式是：生成一个装饰器，装饰器的作用只判断入参是否是一个 <code>parameter</code>，意思是在类中 <code>method</code> 不允许被它装饰；并将装饰器的 toString 函数置为 <code>service</code> 这个 String</li>
+</ul>
+<p>返回的 <code>ServiceIdentifier</code>，格式为：</p>
+<pre><code class="language-typescript">export interface ServiceIdentifier&lt;T&gt; {
+    (...args: any[]): void;
+    type: T;
+}
+</code></pre>
+<h4>全局服务管理</h4>
+<ul>
+<li>注册一个管理服务的容器 <code>ServiceCollection</code>，它是一个 Map 类型，储存格式为：<code>&lt;ServiceIdentifier, instanceOrDescriptor&gt;[]</code></li>
+<li>然后将服务容器挂在到全局 <code>instantiationService</code> 服务上，实际上是挂在 <code>instantiationService</code> 的私有成员变量 <code>_services</code> 上</li>
+<li>同时也通过 <code>this._services.set(IInstantiationService, this)</code> 把自己装进了服务容器</li>
+</ul>
+<h4>服务的调用</h4>
+<ul>
+<li>提供了一个 <code>Trace</code> 方法，记录了每次调用的耗时</li>
+<li><strong>此处看的比较粗糙，InstantiationService.invokeFunction</strong>，通过分析 Service 的依赖，把所有的依赖项目都加载进来</li>
+<li>其中考虑到了循环依赖的问题，直接报错，检测方式是递归查询深度超过 100</li>
+<li>最终通过 <code>IdleValue</code> 类返回了一个 Proxy 对象，只有真正用到的时候才执行返回服务实例</li>
+</ul>
+<h3>入口分析</h3>
+<p>看看 VSCode 在启动前和启动时都做了哪些事情。</p>
+<h4>Code Application 启动之前</h4>
+<p>VSCode 的入口启动文件是 <code>./out/main.js</code>，对应源文件目录是 <code>./src/vs/main.ts</code>。</p>
+<ul>
+<li><code>vs/base/common/performance</code>，通过数组记录，每两项为一个数据单元，<code>[name, timestamp, ...]</code>，兼容 amd/cmd</li>
+<li><code>vs/base/node/languagePacks</code>，将大量 fs 操作 Promise 化后，提供一个查、写 <code>NLSConfiguration</code> 的方法，兼容 amd/cmd</li>
+<li><code>./bootstrap</code><ul>
+<li><code>injectNodeModuleLookupPath</code>，注入一个 node_modules 的查询路径</li>
+<li><code>enableASARSupport</code>，同上，注入 <code>.asar</code> 路径</li>
+<li><code>uriFromPath</code>，一个兼容 win/mac 的将 path 路径转换成磁盘 uri 的方法</li>
+</ul>
+</li>
+<li>AMD 方式加载入口文件<ul>
+<li><code>./bootstrap-amd</code><ul>
+<li>AMD Loader 配置，<code>github:Microsoft/vscode-loader</code>,</li>
+<li>将 Electron 的 fs 替换成 Node 原生的 fs</li>
+</ul>
+</li>
+<li><code>vs/code/electron-main/main</code><ul>
+<li><code>main</code><ul>
+<li><code>setUnexpectedErrorHandler</code>，避免 Electron 底层报错，上层进行劫持</li>
+<li><code>validatePaths</code> 入参验证</li>
+</ul>
+</li>
+<li><code>startup -&gt; createServices,doStartup</code><ul>
+<li>初始化一个日志服务，<code>bufferLogService</code></li>
+<li>初始化两个重要的服务：<code>instantiationService, instanceEnvironment</code><ul>
+<li>通过 <code>ServiceCollection</code> 记录所有注册的服务，它是一个单纯的 Map，记录的是 <code>&lt;ServiceIdentifier, instanceOrDescriptor&gt;[]</code></li>
+<li>初始化的服务包括：<code>environmentService/logService/configurationService/lifecycleService/stateService/requestService/themeMainService/signService</code></li>
+<li>将 <code>ServiceCollection</code> 挂载到 <code>instantiationService</code>，作为 <code>_services</code> 私有成员</li>
+<li>同时将 <code>instantiationService</code> 挂在到 <code>_services</code> 私有成员上，相当于依然使用 <code>ServiceCollection</code> 管理</li>
+</ul>
+</li>
+<li>完成 <code>environmentService/configurationService/stateService</code> 的初始化</li>
+<li>初始化 <code>mainIpcServer</code>，并连接 <code>sharedIpcServer</code><ul>
+<li>创建一个 <code>mainIpcServer</code>，入参是 <code>environmentService</code> 中记录的 <code>mainIPCHandle</code> 地址</li>
+<li>如果创建失败，非 <code>EADDRINUSE</code> 错误，检查是否已经存在了一个 IPCHandler，如果存在则直接连接，连接失败会重试 1 次</li>
+</ul>
+</li>
+<li>初始化 <strong>CodeApplication</strong>，将 mainIpcServer 和 instanceEnvironment 作为依赖服务挂载上去</li>
+<li>调用 CodeApplication 的 <code>startup</code> 方法启动</li>
+</ul>
+</li>
+<li>过程中如果有报错，则直接退出</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4>Code Application 启动</h4>
+<p>入口文件是 <code>./src/vs/code/electron-main/app.ts</code>，对应的类为 <code>CodeApplication</code>，实例化的时候做了两件事情</p>
+<ul>
+<li>注册一些与 Electron 相关的事件，大多都是禁用一些底层、涉及安全或影响 VSCode 上层交互的事件</li>
+<li>执行 <code>startup</code> 启动<ul>
+<li>启动一个 <code>ElectronIPCServer</code><ul>
+<li>通过 <code>ipcMain</code> 监听 <code>ipc:hello</code> 事件，通过 <code>webContents.id</code> 标记 Client 身份</li>
+<li>每次有一个新的 Client 进来都开始监听 <code>ipc:message</code> 和 <code>ipc:disconnect</code> 事件</li>
+</ul>
+</li>
+<li>获取 MachineId（其实就是 Mac Address 的 hash 处理，降级方案是 uuid），启动一个 <code>SharedProcess</code><ul>
+<li>创建一个不展示（show: false）的 <code>BrowserWindow</code>，启用了 <code>nodeIntegration</code></li>
+<li>加载 <code>vs/code/electron-browser/sharedProcess/sharedProcess.html?config=${config}</code>，通过 url 传参</li>
+<li>新 BrowserWindow 的 ipcRenderer 与 ipcMain 进行三次握手<ul>
+<li>ipcMain 将 <code>sharedIPCHandle</code> 的值传递给 <code>SharedProcess</code></li>
+<li><code>SharedProcess</code> 创建一个 IPCServer</li>
+<li>通过一个新的 CollectionService 生成服务容器，将各种服务通过新注册的 ipc channel 对接到 <code>IPCServer</code></li>
+</ul>
+</li>
+<li><code>MainProcess</code> 连接到 <code>SharedProcess</code> 的 IPCServer</li>
+</ul>
+</li>
+<li>将 Application 的附加 Service 作为 childService 添加到全局 <code>CollectionService</code> 容器</li>
+<li><strong>这里没看太懂</strong>，如果存在 <code>driverHandle</code>，则新建一个 Dirver 的 IPCServer</li>
+<li><strong>这里没看太懂</strong>，注入了一个 <code>ProxyAuth</code> 模块，不知道哪里会用到，内容很简单，就是一个输入账号密码的 <code>BrowserWindow</code> 弹窗</li>
+<li>然后调用 <code>openFirstWindow</code> 打开 VSCode 主界面<ul>
+<li>注册了主进程 IPC 服务：<code>launchService</code></li>
+<li>注册了 Electron IPC 服务：<code>updateChannel/issueChannel/workspaceChannel/windowsChannel/menubarChannel/urlChannel/storageChannel</code> 等</li>
+<li>通过 <code>windowsMainService(windowManager)</code> 打开界面</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3>MainIpcServer</h3>
+<p>IPCServer 的大致原理，细节非常多，下面只是列了提纲，主要是实现了一套序列化和反序列化的协议，以及 <code>call</code> 调用和 <code>listen</code> 监听的两大逻辑。</p>
+<h4>创建 Server</h4>
+<ul>
+<li>建立 <code>net server</code>，通过 <code>mainIPCHandle</code> 文件句柄进行监听</li>
+<li>基于 <code>netSocket</code> 封装了 <code>NodeSocket</code>，并绑定了通讯协议 <code>Protocol</code></li>
+<li>创建失败，说明 socket 已经存在，直接连接 Server</li>
+</ul>
+<pre><code>/-------------------------------|------\
+|             HEADER            |      |
+|-------------------------------| DATA |
+| TYPE | ID | ACK | DATA_LENGTH |      |
+\-------------------------------|------/
+</code></pre>
+<h4>连接 Server</h4>
+<ul>
+<li>连接到 <code>net socket</code> 后，将 <code>netSocket</code> 同上包装两层，<code>NodeSocket + Protocol </code></li>
+<li>指定 <code>ctx</code> 为 <code>main</code>，创建 <code>IPCClient</code>，<code>IPCClient</code> 既是一个  <code>client</code> 也是一个 <code>server</code>，共享一个 socket，通过 Protocol 协议进行通讯<ul>
+<li>创建 <code>ChannelClient</code>，维护一个通讯的 handlers 管理器<ul>
+<li>发起一个远程命令执行请求，将 <code>requestId</code> 和 <code>responseHandler</code> 写入管理器，通过 <code>protocal.send</code> 将请求发出</li>
+<li>监听 <code>protocal.onMessage</code>，通过 <code>requestId</code> 匹配 <code>responseHandler</code> 处理结果</li>
+</ul>
+</li>
+<li>创建 <code>ChannelServer</code>，指定 ctx 为 <code>main</code>（写入 ctx 的值）<ul>
+<li>通过 <code>onRawMessage</code> 监听消息，解析 header 和 body 后，选择对应的 <code>channel</code>，执行 <code>channel.call</code>，执行结果通过 <code>protocal.send</code> 返回</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3>小结</h3>
+<p>以上的分析过程，对读者的作用可能并不大，主要是逻辑过于冗长，防止自己读着读着开始迷失，把觉得比较核心的逻辑记录了下来。</p>
+<p>如果读者想了解 VSCode 的全盘代码，有几处是必须全部理解的：</p>
+<ol>
+<li>InstantiationService 设计</li>
+<li>IPC Protocol 设计</li>
+<li>ExtensionHost 设计</li>
+<li>Workbench Layout 设计</li>
+<li>VSCode 的打包机制</li>
+<li>Electron 的几乎所有 API</li>
+</ol>
+<p>后续空闲，我还会结合单测和自动化测试，熟悉 VSCode 整体架构，等有了内容再来分享。</p>

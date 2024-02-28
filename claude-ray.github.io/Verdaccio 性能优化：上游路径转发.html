@@ -1,0 +1,68 @@
+<h2>原文：<a href="https://claude-ray.github.io/optimize-verdaccio-package-route.html">Verdaccio 性能优化：上游路径转发</a></h2>
+<hr/>
+<h2>title: Verdaccio 性能优化：上游路径转发
+date: 2019-10-22 19:32:39
+tags: [Node.js,Verdaccio,private npm registry,npm]
+categories: Node.js</h2>
+<h2>背景</h2>
+<p>这里的 <a href="https://github.com/verdaccio/verdaccio">Verdaccio</a> 是指用于搭建轻量级 npm 私有仓库的开源解决方案，以下简称 npm 私服。</p>
+<p>近期观察发现，有些项目依赖了名为 <code>npm</code> 的 npm 包，每次项目部署时都会向私服 <code>/npm</code> 发起请求记录，并在监控曲线上呈明显的高耗时，这引起了我们的关注。</p>
+<p>有些项目依赖了 npm 自身的包，每次项目部署时都会产生对私服 <code>/npm</code> 路由的请求记录，并在监控曲线上呈明显的高耗时，这引起了我们的关注。</p>
+<p>&lt;!--more--&gt;</p>
+<h2>原因</h2>
+<p>Verdaccio 对公共（外网）npm 包的中转存在不小的性能损耗。</p>
+<p>其中一个问题，通过私服下载未经缓存的公共 npm 包，Verdaccio 都要等上游镜像的响应完整结束之后，才开始响应私服用户的请求。这导致 Verdaccio 的整体速度比直接用上游慢了一截。</p>
+<p>至于会慢多少呢，要提到另一个 npm 机制：一个依赖 package 下载之前，要先到镜像地址的 =/:package/:version?= 接口获取完整的包信息，之后才会下载所需的版本。而一个模块历史发布过的版本越多，信息量越大。尤其是 npm 自身这个包，访问一下 http://registry.npmjs.org/npm 便知。</p>
+<p>Verdaccio 慢就慢在获取包信息这一步，它必须等待上游接口响应完成，才能做相关 JSON 解析和逻辑处理。因此不仅仅是慢的问题了，还有内存和 CPU 的大量消耗。</p>
+<p>然而这一步对于 Verdaccio 又很重要，因为它的对于此接口的缓存策略基于文件，只有拿到完整的 JSON 返回值才能将其记录到文件中。只是默认仅 2 分钟的缓存时间，让这一步操作的性价比打了折扣。</p>
+<h2>思路</h2>
+<p>从上面看，私服接口性能优化空间还很大，哪怕只是将几个体积较大的“罪魁祸首” npm 包单独优化，也能缓解私服的压力。</p>
+<p>首先想到的是让 Verdaccio 不必等待上游全部返回就开始响应私服用户。其次是现有的缓存机制对部分低频率高开销的 package 请求形同虚设，小机器又经不起缓存扩充的资源消耗，网络带宽倒是相对不缺，降低计算成本、纯网络代理转发是一个可行的方向。</p>
+<p>Verdaccio 会对下载的 npm 包信息做解析和记录，但其实我们并不关心那些只属于上游的包，只希望它能承担好转发工作，甚至所有公共依赖都不经过私服处理。</p>
+<p>退一步讲，就是要弱化在私服中对这些公共依赖的处理，减少解析过程 —— 用 stream 或 buffer 完成请求转发。</p>
+<h2>实现</h2>
+<p>遗憾的是 Verdaccio 自身的接口难以复用，只好直接在其基础上增加路由(中间件)。简单粗暴，对项目的熵值影响不大。</p>
+<pre><code class="language-js">const _ = require('lodash');
+const createError = require('http-errors');
+const request = require('request');
+const URL = require('url');
+
+const Middleware = require('../../web/middleware');
+const Utils = require('../../../lib/utils');
+
+module.exports = function(route, auth, storage, config) {
+  const can = Middleware.allow(auth);
+
+  // 优化特定依赖的获取，以 `npm` 举例
+  route.get('/npm', (req, res) =&gt; {
+    // 拼接镜像地址
+    const upLinkUrl = _.get(config, 'uplinks.npmjs.url', 'https://registry.npm.taobao.org');
+    const packageUrl = URL.resolve(upLinkUrl, req.originalUrl);
+
+    // 利用 Verdaccio 定义的 res.report_error 来采集错误
+    const npmRes = request(packageUrl)
+      .on('error', res.report_error);
+
+    // 直接将上游结果转发，快速响应请求
+    req.pipe(npmRes).pipe(res);
+  });
+
+  route.get('/:package/:version?', can('access'), function(req, res, next) {
+    // ...
+  });
+  // ...
+};
+</code></pre>
+<p>上面是 stream 方式的修改，也可以把路由改写为中间件。stream 转发减轻了服务的内存压力（节省上百 MB 的临时缓冲），并减少这部分接口 50% 以上的 TTFB 响应时间，不过总体响应时间却因为 stream 有所延长。</p>
+<p>降低机器负载的目标达成了，但压力测试证明这会大大拖慢进程的处理效率，在并发较低的情况下才能采用。</p>
+<p>作为尝试，目前这个 patch 只用在了特定依赖。Verdaccio 可优化的方向很多，单进程可提升空间有限的情况，该把重心放在横向扩展上了。</p>
+<h2>待续</h2>
+<p>转发所有上游 npm 包的念想还未落地，虽然做起来应该很简单，但需要继续摸索 Verdaccio 结构，才好给出更合适的修改方案。</p>
+<p>现在能给出的最简单做法就是适当调高 Verdaccio 默认 2 分钟的缓存 TTL。提升最大的做法是扩展 Verdaccio 尚未支持的 Cluster 架构……</p>
+<pre><code class="language-js">request({ url: packageUrl, encoding: null }, (error, resp, body) =&gt; {
+  if (error) return res.report_error(error);
+  res.set('Content-Type', resp.headers['content-type']);
+  return res.send(body);
+})
+</code></pre>
+<p>再者，结合自身情况，可以尝试更多玩法。如果系统内存富足，把 stream 稍微改一改，变为回调形式。缺点和 Verdaccio 一样的是必须等 resp 完整返回，但 <code>encoding: null</code> 确保响应结果为 buffer，能省略 JSON 解析，优点是可以基于 buffer 做 LRU Cache。</p>

@@ -1,0 +1,182 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8K8S%E9%83%A8%E7%BD%B2%E6%9C%80%E7%AE%80%E5%8D%95%E7%9A%84Go%E5%BA%94%E7%94%A8.html">使用K8S部署最简单的Go应用</a></h2>
+<hr/>
+<h2>title: 使用K8S部署最简单的Go应用
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?33'
+date: 2021-10-31 16:46:39
+categories: Kubernetes
+tags: [Kubernetes]
+description: 本文介绍了如何部署一个简单的Go项目；</h2>
+<p>本文介绍了如何部署一个简单的Go项目；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/kubernetes-learn/tree/go-hello-deploy-demo</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>使用K8S部署最简单的Go应用</strong></h1>
+<h2><strong>项目简介</strong></h2>
+<p>本文构建的Go项目是一个非常简单的Web项目：</p>
+<p>main.go</p>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func index(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "&lt;h1&gt;Hello World&lt;/h1&gt;")
+}
+
+func check(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "&lt;h1&gt;Health check&lt;/h1&gt;")
+}
+
+func main() {
+	http.HandleFunc("/", index)
+	http.HandleFunc("/health_check", check)
+	fmt.Println("Server starting...")
+	http.ListenAndServe(":8080", nil)
+}
+</code></pre>
+<p>项目启动后分别访问：</p>
+<ul>
+<li><code>:8080/</code>: show <code>&lt;h1&gt;Hello World&lt;/h1&gt;</code></li>
+<li><code>:8080/health_check</code>: show <code>&lt;h1&gt;Health check&lt;/h1&gt;</code></li>
+</ul>
+<p>会显示如下内容：</p>
+<p><img alt="demo1" src="https://cdn.jsdelivr.net/gh/jasonkayzk/kubernetes-learn@go-hello-deploy-demo/images/demo1.png"/></p>
+<p>下面介绍如何在K8S中部署这个项目；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>构建镜像</strong></h2>
+<p>首先编写Dockerfile文件：</p>
+<p>Dockerfile</p>
+<pre><code class="language-dockerfile">FROM golang:1.17.2-alpine3.14
+MAINTAINER jasonkayzk@gmail.com
+RUN mkdir /app
+COPY . /app
+WORKDIR /app
+RUN go build -o main .
+CMD ["/app/main"]
+</code></pre>
+<p>随后构建镜像：</p>
+<pre><code class="language-bash">docker build -t jasonkay/go-hello-app:v0.0.1 .
+</code></pre>
+<p>最后，向DockerHub推送镜像；</p>
+<pre><code class="language-bash">docker push jasonkay/go-hello-app:v0.0.1
+</code></pre>
+<blockquote>
+<p><strong>当然，你也可以先在本地对镜像进行测试：</strong></p>
+<ul>
+<li><code>docker run -d -p 8080:8080 --rm --name go-hello-app-container jasonkay/go-hello-app:v0.0.1</code></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>部署应用至K8S中</strong></h2>
+<p>创建文件<code>deployment.yaml</code>：</p>
+<p>deploy/deployment.yaml</p>
+<pre><code class="language-yaml">---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-hello-app
+  namespace: my-workspace # 声明工作空间，默认为default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      name: go-hello-app
+  template:
+    metadata:
+      labels:
+        name: go-hello-app
+    spec:
+      containers:
+        - name: go-hello-container
+          image: jasonkay/go-hello-app:v0.0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080 # containerPort是声明容器内部的port
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-hello-app-service
+  namespace: my-workspace # 声明工作空间，默认为default
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 18080 # Service暴露在cluster-ip上的端口，通过&lt;cluster-ip&gt;:port访问服务,通过此端口集群内的服务可以相互访问
+      targetPort: 8080 # Pod的外部访问端口，port和nodePort的数据通过这个端口进入到Pod内部，Pod里面的containers的端口映射到这个端口，提供服务
+      nodePort: 31080 # Node节点的端口，&lt;nodeIP&gt;:nodePort 是提供给集群外部客户访问service的入口
+  selector:
+    name: go-hello-app
+</code></pre>
+<blockquote>
+<p><strong>注1：你可能需要修改上面的配置，尤其是：</strong></p>
+<ul>
+<li><strong>metadata.namespace;</strong></li>
+<li><strong>spec.spec.containers.image;</strong></li>
+</ul>
+</blockquote>
+<blockquote>
+<p><strong>注2：注意在Deployment中containerPort以及Service中port、targetPort和nodePort的区别：</strong></p>
+<ul>
+<li><code>Deployment.containerPort</code>：仅仅是声明容器中应用需要的Port；</li>
+<li><code>Service.port</code>：<strong>Service暴露在k8s-cluster-ip上的端口</strong>，可以通过<code>&lt;cluster-ip&gt;:port</code>访问服务，通过此端口集群内的服务可以相互访问；</li>
+<li><code>Service.targetPort</code>：<strong>Pod的外部访问端口</strong>，port和nodePort的数据通过这个端口进入到Pod内部，Pod里面的containers的端口映射到这个端口，提供服务；</li>
+<li><code>Service.nodePort</code>：Node节点的端口，<code>&lt;nodeIP&gt;:nodePort</code> 是<strong>提供给集群外部客户访问service的入口！</strong></li>
+</ul>
+</blockquote>
+<p>最后，通过下面的命令向K8S的ApiServer提交配置，部署应用：</p>
+<pre><code class="language-bash">kubectl create -f deploy/deployment.yaml
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>注意：此处使用的是<code>kubectl create</code>命令，也可以使用<code>kubectl apply</code>命令；</strong>&lt;/font&gt;</p>
+<p>两者的区别：</p>
+<p>| 序号 | <strong>kubectl apply</strong>                                            | <strong>kubectl create</strong>                                           |
+| ---- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 1    | 根据yaml文件中包含的字段（yaml文件可以只写需要改动的字段），直接升级集群中的现有资源对象 | 首先删除集群中现有的所有资源，然后重新根据yaml文件（必须是完整的配置信息）生成新的资源对象 |
+| 2    | yaml文件可以不完整，只写需要的字段                           | yaml文件必须是完整的配置字段内容                             |
+| 3    | kubectl apply只工作在yaml文件中的某些改动过的字段            | kubectl create工作在yaml文件中的所有字段                     |
+| 4    | 在只改动了yaml文件中的某些声明时，而不是全部改动，你可以使用kubectl apply | 在没有改动yaml文件时，使用同一个yaml文件执行命令kubectl replace，将不会成功（fail掉），因为缺少相关改动信息 |</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>部署校验</strong></h2>
+<p>首先，我们通过命令行查看Pod状态：</p>
+<pre><code class="language-shell">kubectl get po -n my-workspace
+ 
+NAME                            READY   STATUS    RESTARTS   AGE
+go-hello-app-555c69b994-zt9zf   2/2     Running   0          54m
+go-hello-app-555c69b994-zwdb7   2/2     Running   0          54m
+</code></pre>
+<p>随后，我们通过面板查看状态：</p>
+<p><img alt="demo2" src="https://cdn.jsdelivr.net/gh/jasonkayzk/kubernetes-learn@go-hello-deploy-demo/images/demo2.png"/></p>
+<p>最后，我们可以通过<code>&lt;k8s-node-ip:NodePort&gt;</code>的形式访问，即：</p>
+<ul>
+<li><a href="http://localhost:31080/">http://k8s-node-ip:31080/</a></li>
+</ul>
+<p>同样的，我们可以看到：</p>
+<p><img alt="demo1" src="https://cdn.jsdelivr.net/gh/jasonkayzk/kubernetes-learn@go-hello-deploy-demo/images/demo1.png"/></p>
+<p>&lt;br/&gt;</p>
+<h2><strong>卸载服务</strong></h2>
+<p>可以通过下面的命令卸载服务：</p>
+<pre><code class="language-shell">kubectl delete -f deploy/deployment.yaml
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>小结</strong></h2>
+<p>本文使用一个非常简单的Go项目展示了如何将项目部署在K8S中；</p>
+<p>从上面的示例可以看到，Go项目的部署可以和K8S很紧密的结合，或许这也是为什么Go越来越流行的原因之一吧！</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/kubernetes-learn/tree/go-hello-deploy-demo</li>
+</ul>
+<p>文章参考：</p>
+<ul>
+<li>https://segmentfault.com/a/1190000023072862</li>
+<li>https://www.cnblogs.com/huhyoung/p/13264242.html</li>
+</ul>
+<p>&lt;br/&gt;</p>

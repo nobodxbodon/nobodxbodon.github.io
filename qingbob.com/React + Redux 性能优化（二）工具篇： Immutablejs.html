@@ -1,0 +1,250 @@
+<h2>原文：<a href="https://qingbob.com/2018-02-26-redux-performance-02-immutablejs.html">React + Redux 性能优化（二）工具篇： Immutablejs</a></h2>
+<hr/>
+<h2>layout: post
+title: React + Redux 性能优化（二）工具篇： Immutablejs
+modified: 2018-03-21
+tags: [javascript, React, Redux, performance]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>建议在阅读完上一篇<a href="http://qingbob.com/redux-performance-01-basic/">React + Redux 性能优化（一）：理论篇</a>之后再开始本文的旅程，本文的很多概念和结论，都在上篇做了详细的讲解</p>
+<p>这会是一篇长文，我们首先会讨论使用 Immutable Data 的正当性；然后从功能上和性能上研究使用 Immutablejs 的技术的必要性</p>
+<p>我猜你更关心的是是否值得使用 Immutablejs，这里先放上结论：推荐使用；但不一定必须使用。如果推荐指数最低一分最高十分的话，那么打六分。</p>
+<h2>关于 Pure</h2>
+<p>无论是在 react 还是 redux 中，pure 都是非常重要的概念。理解什么是 pure 有助于我们理解我们为什么需要 Immutablejs</p>
+<p>首先我们要介绍什么是Pure function （纯函数）, <a href="https://en.wikipedia.org/wiki/Pure_function">来自维基百科：</a>：</p>
+<blockquote>
+<p>在程序设计中，若一个函数符合以下要求，则它可能被认为是纯函数：</p>
+<ul>
+<li>此函数在相同的输入值时，需产生相同的输出。函数的输出和输入值以外的其他隐藏信息或状态无关，也和由I/O设备产生的外部输出无关。</li>
+<li>该函数不能有语义上可观察的函数副作用，诸如“触发事件”，使输出设备输出，或更改输出值以外物件的内容等。</li>
+</ul>
+</blockquote>
+<p>简单来说纯函数的两个特征：1) 对于相同的输入总有相同的输出；2) 函数不依赖外部变量，也不会对外部产生影响（这种影响称之为“副作用（side effects）”）</p>
+<h3>Reducer</h3>
+<p>redux 中<strong><a href="https://redux.js.org/basics/reducers">规定</a> reducer 就是纯函数</strong>。它接收前一个 state 状态和 action 作为参数，返回下一个状态:</p>
+<pre><code>(previousState, action) =&gt; newState
+</code></pre>
+<p>保证 reducer 的“纯粹（pure）”非常重要，你永远不能在 reducer 中做以下三件事：</p>
+<ul>
+<li>修改参数</li>
+<li>执行任何具有副作用的操作，比如调用 API</li>
+<li>调用任何不纯粹的函数，比如<code>Math.random()</code>或者<code>Date.now()</code></li>
+</ul>
+<p>所以你会看到在 reducer 里返回状态是通过<code>Object.assign({}, state)</code>实现的（注意不要写成<code>Object.assign(state)</code>这样就修改了原状态）。而至于调用 API 等异步或者具有“副作用”的操作，则可以借助于<code>redux-thunk</code>或者<code>redux-saga</code>。</p>
+<h3>Pure Component</h3>
+<p>在上一篇中我们谈到过 Pure Component，准确说那是狭义上的<code>React.PureComponent</code>。广义上的 Pure Compnoent 指的是 Stateless Component，也就是无状态组件，也被称为 Dumb Component、 Presentational Component。从代码上它的特征是 1) 不维护自己的状态，2) 只有<code>render</code>函数:</p>
+<pre><code class="language-javascript">const HelloUser = ({userName}) =&gt; {
+  return &lt;div&gt;{`Hello ${userName}`}&lt;/div&gt;
+}
+</code></pre>
+<p>显而易见的是，这种形式的“纯组件”和“纯函数”有异曲同工之妙，即对于相同的属性传入，组件总是输出唯一的结果。</p>
+<p>当然这样形式的组件也丧失了一部分的能力，例如不再拥有生命周期函数。</p>
+<h2>性能</h2>
+<p>上篇中我们得出的一个很重要的结论是，只要组件的状态（<code>props</code>或者<code>state</code>）发生了改变，那么组件就会执行<code>render</code>函数进行重新渲染。除非你重写<code>shouldComponentUpdate</code>周期函数通过返回<code>false</code>来阻止这件事的发生；又或者直接让组件直接继承<code>PureComponent</code>。</p>
+<p>而继承<code>PureComponent</code>的原理也很简单，它只不过代替你实现了<code>shouldComponentUpdate</code>函数：在函数内对现在和过去的<code>props</code>/<code>state</code>进行“浅对比”（shallow comparision，即仅仅是比较对象的引用而不是比较对象每个属性的值），如果发现对象前后没有改变则不执行<code>render</code>函数对组件进行重新渲染</p>
+<p>其实这样一套相似逻辑在 Redux 中也多次存在，在 redux 中也会对数据进行“浅对比”</p>
+<p>首先是在<code>react-redux</code>中</p>
+<p>我们通常会使用<code>react-redux</code>中的<code>connect</code>函数将程序状态注入进组件中，例如:</p>
+<pre><code class="language-javascript">import {conenct} from 'react-redux'
+
+function mapStateToProps(state) {
+  return {
+    todos: state.todos,
+    visibleTodos: getVisibleTodos(state),
+  }
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(App)
+</code></pre>
+<p>代码中组件<code>App</code>是被 <code>react-redux</code> 封装的组件，<code>react-redux</code>会假设<code>App</code>是一个<code>Pure Component</code>，即对于唯一的<code>props</code>和<code>state</code>有唯一的渲染结果。
+所以<code>react-redux</code>首先会对根状态（即上述代码中<code>mapStateToProps</code>的第一个形参<code>state</code>）创建索引，进行浅对比，如果对比结果一致则不对组件进行重新渲染，否则继续调用<code>mapStateToProps</code>函数；同时继续对<code>mapStateToProps</code>返回的<code>props</code>对象里的每一个属性的值（即上述代码中的<code>state.todos</code>值和<code>getVisibleTodos(state)</code>值，而不是返回的<code>props</code>整个对象）创建索引。和<code>shouldComponentUpdate</code>类似，只有当浅对比失败，即索引发生更改时才会重新对封装的组件进行渲染</p>
+<p>就上面的代码例子来说，只要<code>state.todos</code>和<code>getVisibleTodos(state)</code>的值不发生更改，那么<code>App</code>组件就永远不会再一次进行渲染。但是请注意下面的陷阱模式：</p>
+<pre><code class="language-javascript">function mapStateToProps(state) {
+  return {
+    data: {
+      todos: state.todos,
+      visibleTodos: getVisibleTodos(state),
+    }
+  }
+}
+</code></pre>
+<p>即使<code>state.todos</code>和<code>getVisibleTodos(state)</code>同样不再发生变化，但是因为每次<code>mapStateToProps</code>返回结果<code>{ data: {...} }</code>中的<code>data</code>都创建新的（字面量）对象，导致浅对比总是失败，<code>App</code>依然会再次渲染</p>
+<p>其次是在 <code>combineReducers</code> 中。</p>
+<p>我们都知道 Redux Store 鼓励我们把状态对象划分为不同的碎片（slice）或者领域（domain，也可以理解为业务），并且为这些不同的领域分别编写 reducer 函数用于管理它们的状态，最后使用官方提供的<code>combineReducers</code>函数将这些领域以及它们的 reducer 函数关联起来，拼装成一个整体的<code>state</code></p>
+<p>举个例子</p>
+<pre><code class="language-javascript">combineReducers({ todos: myTodosReducer, counter: myCounterReducer })
+</code></pre>
+<p>上述代码中，程序的状态是由<code>{ todos, counter }</code>两个领域模型组成，同时<code>myTodosReducer</code>与<code>myCounterReducer</code>分别为各自领域的 reducer 函数</p>
+<p><code>combineReducers</code>会遍历每一“对”领域（key是领域名称、value是领域 reducer 函数），对于每一次遍历：</p>
+<ul>
+<li>它会创建一个对当前碎片数据的引用</li>
+<li>调用 reducer 函数计算碎片数据新的状态，并且返回</li>
+<li>为 reducer 函数返回的新的碎片数据创建新的引用，将新的引用和当前数据引用进行浅对比，如果对比失败了（同时意味着两次引用不一致，意味着 reducer 返回的是一个新的对象），那么将标识位<code>hasChanged</code>设置为<code>true</code></li>
+</ul>
+<p>在经过一轮（这里的一轮指的是把每一个领域都遍历了一遍）遍历之后，<code>combineReducer</code>就得到了一个新的状态对象，通过<code>hasChanged</code>标识位我们就能判断出整体状态是否发生了更改，如果为<code>true</code>，新的状态就会被返回给下游，如果是<code>false</code>，旧的当前状态就会被返回给下游。这里的下游指的是<code>react-redux</code>以及更下游的界面组件。</p>
+<p>我们已经知道了<code>react-redux</code>会对根状态进行浅对比，如果引用发生了改变，才重新渲染组件。<strong>所以当状态需要发生更改时，务必让相应的 reducer 函数始终返回新的对象！修改原有对象的属性值然后返回不会触发组件的重新渲染！</strong></p>
+<p>所以我们常看到的 reducer 函数写法是最终通过 <code>Object.assign</code> 复制原状态对象并且返回一个新的对象：</p>
+<pre><code class="language-javascript">function myCounterReducer(state = { count: 0 }, action) {
+  switch (action.type) {
+    case "add":
+      return Object.assign({}, state, { count: state.count + 1 });
+    default:
+      return state;
+  }
+}
+</code></pre>
+<p>错误的做法是仅仅修改原对象：</p>
+<pre><code class="language-javascript">function myCounterReducer(state = { count: 0 }, action) {
+  switch (action.type) {
+    case "add":
+      state.count++
+      return state
+    default:
+      return state;
+  }
+}
+</code></pre>
+<p>有趣的事情是如果你此时在<code>state.count++</code>之后打印 <code>state</code> 的结果，你会发现<code>state.count</code>确实在每次<code>add</code>之后都有自增，但是组件却始终不会渲染出来</p>
+<h2>Immutable Data 和 Immutablejs</h2>
+<p>结合以上两个知识点，无论是从 reducer 的定义上，还是从 redux 的工作机制上，我们都走上了同一条<code>Object.assign</code>的模式，即不修改原状态，只返回新状态。可见 state 天生就是不可被更改的（Immutable）</p>
+<p>但是使用<code>Object.assign</code>的方法却不能算优雅，甚至有 hack 的嫌疑，毕竟<code>Object.assign</code>的本意是用来复制一个对象的属性到另一个对象的。于是我们在这里引入 Immutablejs，它为我们实现了几类“不可更改”的数据结构，比如<code>Map</code>，<code>List</code>，我们举几个使用的例子。</p>
+<p>比如我们需要创建一个空对象，这里使用 Immutablejs 中的 <code>Map</code>数据结构：</p>
+<pre><code class="language-javascript">import {Map} from 'immutable'
+const person = Map()
+</code></pre>
+<p>好像没有什么特别的。接下来我们想给这个<code>person</code>实例添加<code>age</code>属性，这里需要使用<code>Map</code>自带的<code>set</code>方法：</p>
+<pre><code class="language-javascript">const personWithAge = person.set('age', 20)
+</code></pre>
+<p>接下来我们把<code>person</code>和<code>personWithAge</code>打印出来：</p>
+<pre><code class="language-javascript">console.log(person.toJS())
+console.log(personWithAge.toJS())
+</code></pre>
+<p>注意这里不能直接打印<code>person</code>，否则你会得到一个封装之后的数据结构；而是要先调用<code>toJS</code>方法，将<code>Map</code>数据结构转化为普通的原生对象。
+此时你得到的结果是：</p>
+<pre><code class="language-javascript">console.log(person.toJS()) // {}
+console.log(personWithAge.toJS()) // { age: 20 }
+</code></pre>
+<p>看出问题了吗？我们想更改<code>person</code>的属性，但<code>person</code>的属性却没有更改，而<code>set</code>方法返回的结果<code>personWithAge</code>却是我们想得到的。</p>
+<p>也就是说，在 Immutabejs 的数据结构中，当你想更改某个对象属性时，你得到的永远是一个新的对象，而原对象永远也不会发生更改。这与我们<code>Object.assign</code>的使用场景是契合的。那么当我们需要修改<code>state</code>而<code>state</code>是 Immutablejs 数据结构时，修改并且返回即可：</p>
+<pre><code class="language-javascript">function myCounterReducer(state = { count: 0 }, action) {
+  switch (action.type) {
+    case "add":
+      return state.set('count', state.get('count') + 1);
+    default:
+      return state;
+  }
+}
+</code></pre>
+<p>这只是 Immutablejs 的核心功能。基于它自己的封装的数据结构，它还给我们提供了其他好用的功能，比如<code>.getIn</code>方法或者<code>.setIn</code>方法，又或者可以约束数据结构的<code>Record</code>类型。Immutablejs 的使用技巧可以另说</p>
+<h3>Immutablejs 实现内幕</h3>
+<p>提到 Immutablejs，不得不提用于实现它的数据结构，这常常是被认为它性能高于原生对象的论据之一。这一小节的部分直接翻译自<a href="https://medium.com/@dtinth/immutable-js-persistent-data-structures-and-structural-sharing-6d163fbd73d2">Immutable.js, persistent data structures and structural sharing</a>，做了简化和删减</p>
+<p>假设你有这样的一个 Javascript 结构对象：</p>
+<pre><code class="language-javascript">const data = {
+  to: 7,
+  tea: 3,
+  ted: 4,
+  ten: 12,
+  A: 15,
+  i: 11,
+  in: 5,
+  inn: 9
+}
+</code></pre>
+<p>可以想象它在 Javscript 内存里的存储结构是这样的：</p>
+<p><img alt="01" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/immutablejs/01.png"/></p>
+<p>但我们还可以根据 key 使用到的字母作为索引，组织成字典查找树的结构：</p>
+<p><img alt="02" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/immutablejs/02.png"/></p>
+<p>在这种数据结构中，无论你想访问对象任意属性的值，从根节点出发都能够访问到</p>
+<p>当你想修改值时，只需要创建一棵新的字典查找树，并且最大限度的利用已有节点即可</p>
+<p>假设此时你想修改 <code>tea</code> 属性的值为<code>14</code>，首先需要找到访问到<code>tea</code>节点的关键路径:</p>
+<p><img alt="03" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/immutablejs/03.png"/></p>
+<p>然后将这些节点复制出来，构建一棵一摸一样结构的树，只不过新树的其他的节点均是对原树的引用：</p>
+<p><img alt="04" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/immutablejs/04.png"/></p>
+<p>最后将新构建的树的根节点返回</p>
+<p>这就是 Immutablejs 中 Map 的基本实现原理，这也当然只是 Immutablejs 的黑科技之一</p>
+<h3>实战测试</h3>
+<p>这样的数据结构能够带来多大性能上的提升？我们实际测试一下：</p>
+<p>假设我们有十万个<code>todos</code>数据，用原生的 Javascript 对象进行存储：</p>
+<pre><code class="language-javascript">const todos = {
+  '1': { title: `Task 1`, completed: false };
+  '2': { title: `Task 2`, completed: false };
+  '3': { title: `Task 3`, completed: false };
+  //...
+  '100000': { title: `Task 1`, completed: false };
+}
+</code></pre>
+<p>或者使用函数生成十万个<code>todos</code>:</p>
+<pre><code class="language-javascript">function generateTodos() {
+  let count = 100000;
+  const todos = {};
+  while (count) {
+    todos[count.toString()] = { title: `Task ${count}`, completed: false };
+    count--;
+  }
+  return todos;
+}
+</code></pre>
+<p>接下来我们准备一个 reducer 用于根据 id 切换单个 todo 的 <code>completed</code> 状态：</p>
+<pre><code class="language-javascript">function toggleTodo(todos, id) {
+  return Object.assign({}, todos, {
+    [id]: Object.assign({}, todos[id], {
+      completed: !todos[id].completed
+    })
+  });
+}
+</code></pre>
+<p>接下里我们测试一下修改单个<code>todo</code>所耗费的时间是多少：</p>
+<pre><code class="language-javascript">const startTime = performance.now();
+const nextState = toggleTodo(todos, String(100000 / 2));
+console.log(performance.now() - startTime);
+</code></pre>
+<p>在我的PC（配置 1700x ，32GB，  Chrome 64.0.3282.186）上执行的时间是 33ms</p>
+<p>接下来我们把<code>toggleTodo</code>换成 Immutablejs 版本（当然数据也要是 Immutablejs 中的<code>Map</code>数据类型，Immutablejs 提供了方法<code>fromJS</code>能够很方便的将原生 Javacript 数据类型转化为 Immutablejs 数据类型）再试试看：</p>
+<pre><code class="language-javascript">function toggleTodo(todos, id) {
+  return todos.set(id, !todos.getIn([id, "completed"]));
+}
+const startTime = performance.now();
+const nextState = toggleTodo(state, String(100000 / 2));
+console.log(performance.now() - startTime);
+</code></pre>
+<p>执行时间不超过 1ms，快了 30 倍！</p>
+<p>但是你有没有看出这个测试的问题：</p>
+<ul>
+<li>虽然两者之间相差了30倍，但是最慢也就是 33ms 而已，用户是感觉不到的。如果这也算是瓶颈的话，这个瓶颈不会造成太大的问题</li>
+<li>1ms vs 33ms 的成绩是在十万个 todo 的情况下测试出来的，但在实际的过程中，很少的场景会用到这么大的数据量。那如果在一千条数据下原生表现的情况如何呢？原生方法同样不会超过 1ms</li>
+<li>我们只观察到了 Immutablejs 在更改属性时高效，却忘了在原生数据转化为 Immutablejs 时（<code>fromJS</code>）或者从 Immutablejs 转化为原生对象时（<code>toJS</code>）也是需要代价的。如果你在<code>fromJS</code>的前后记录时间，你会发现时间大约是 300ms。你无法避免转化，因为第三方组件或者老旧代码很有可能不支持 Immutablejs</li>
+</ul>
+<p>所以综上，使用 Immutablejs 会带来性能上的提升，但性能并不会非常明显，同时还会有兼容性问题</p>
+<p>我还有其他的一些关于性能的的测试放在 <a href="https://github.com/hh54188/immutablejs-benchmark">github</a> 上，测试过程中也有一些很好玩的发现，就不一一赘述了。有兴趣的朋友可以拿去跑一跑，因为是一次性的以后不会再维护了，所以代码写得比较烂，请见谅</p>
+<h3>说一说使用 Immutablejs 可能带来的问题</h3>
+<ul>
+<li>学习成本。不仅仅是你个人的学习成本，整个团队都需要学习如何使用它。最可怕的是在大家都不熟悉但是又不得不使用它的情况下， 很容易的就会引入一些错误实践。这会给代码埋下隐患</li>
+<li>兼容性问题，绝大部分第三方代码都不支持这种数据结构，你也无法改造当前项目的每一个组件去适应它，所以务必要进行数据格式间的兼容和转化。如果只是在单个组件中使用 Immutablejs 还好，如果你想贯穿于整个应用使用，从 reducer 的 initialState 就开始使用它，那么可能会有更多的问题等着你处理，比如常用的<code>react-router-redux</code>就不支持 Immutablejs，你需要的不仅仅是<code>fromJS</code>和<code>toJS</code>，还需要额外的代码去支持它。</li>
+</ul>
+<h2>最后</h2>
+<p>其实关于 Immutablejs 还有很多的话题可以聊，比如最佳实践注意事项什么的。鉴于篇幅有限就先聊到这里。有机会再继续</p>
+<h2>参考文章集合</h2>
+<p><a href="https://www.site2share.com/folder/20020529">https://www.site2share.com/folder/20020529</a></p>
+<ul>
+<li><a href="https://redux.js.org/faq/immutable-data">Immutable Data</a></li>
+<li><a href="https://reactjs.org/docs/react-api.html#reactpurecomponent">React.PureComponent</a></li>
+<li><a href="https://medium.com/@dtinth/immutable-js-persistent-data-structures-and-structural-sharing-6d163fbd73d2">Immutable.js, persistent data structures and structural sharing</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Pure_function">Pure function</a></li>
+<li><a href="https://redux.js.org/basics/reducers">Reducers</a></li>
+<li><a href="https://www.slideshare.net/mohitthatte/a-deep-dive-into-clojures-data-structures-euroclojure-2015">A deep dive into Clojure's data structures - EuroClojure 2015</a></li>
+</ul>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/performance-metric-crisis">性能指标的信仰危机</a></li>
+<li><a href="https://www.v2think.com/redux-performance-01-basic">React + Redux 性能优化（一）：理论篇</a></li>
+<li><a href="https://www.v2think.com/redux-performance-02-immutablejs">React + Redux 性能优化（二）工具篇： Immutablejs</a></li>
+<li><a href="https://www.v2think.com/mobx-redux-performance">Mobx 与 Redux 的性能对比</a></li>
+<li><a href="https://www.v2think.com/trie">用 100 行代码提升 10 倍的性能</a></li>
+<li><a href="https://www.v2think.com/dashboard-optimize">仪表盘场景前端优化经验谈</a></li>
+<li><a href="https://www.v2think.com/let-us-talk-about-resource-load">让我们再聊聊浏览器资源加载优化</a></li>
+<li><a href="https://www.v2think.com/javascript-high-performance-animation-and-page-rendering">Javascript高性能动画与页面渲染</a></li>
+</ul>

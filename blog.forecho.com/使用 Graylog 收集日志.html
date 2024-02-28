@@ -1,0 +1,170 @@
+<h2>原文：<a href="https://blog.forecho.com/use-graylog.html">使用 Graylog 收集日志</a></h2>
+<hr/>
+<h2>title: "使用 Graylog 收集日志"
+date: 2020-03-21T20:20:26+08:00
+tags: ["经验分享", '编程']
+draft: false
+toc: true</h2>
+<h2>引言</h2>
+<p>随着项目越来越复杂，Bug 越来越难定位，一个专门的日志收集工具必不可少。于是花了两天时间玩了一下 Graylog，这篇文章就分享一下踩过的坑。</p>
+<h2>准备环境</h2>
+<p>自从用过 Docker 之后，我现在搭建环境第一步就去找 Docker 安装方式，其实他们官方文档写的非常清楚，但是我还是踩了一些坑，主要是网络问题，太慢，必须要换中国源。</p>
+<p>&lt;!--more--&gt;</p>
+<h3>安装 Docker 和 Docker compose</h3>
+<pre><code>curl -sSL https://get.daocloud.io/docker | sh
+
+curl -L https://get.daocloud.io/docker/compose/releases/download/1.25.4/docker-compose-`uname -s`-`uname -m` &gt; /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+docker-compose --version
+</code></pre>
+<h3>换中国源</h3>
+<pre><code>vim /etc/docker/daemon.json
+</code></pre>
+<p>添加代码：</p>
+<pre><code class="language-json">{
+    "registry-mirrors": [
+        "https://dockerhub.azk8s.cn",
+        "https://docker.mirrors.ustc.edu.cn"
+    ]
+}
+</code></pre>
+<p>重启服务（重启才生效）</p>
+<pre><code>sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart docker
+</code></pre>
+<h2>安装 Graylog</h2>
+<p>下载代码：</p>
+<pre><code>git clone https://github.com/forecho/graylog-docker.git
+cd graylog-docker
+</code></pre>
+<p>然后修改 <code>docker-compose.yml</code> 里的环境变量：</p>
+<ul>
+<li><strong><code>GRAYLOG_PASSWORD_SECRET</code></strong>: 密码密钥，至少16位数</li>
+<li><strong><code>GRAYLOG_ROOT_PASSWORD_SHA2</code></strong>: 加密过的密码，这里默认是 <code>admin</code>，如果要修改则执行下面命令，把生成的结果复制到这里。</li>
+</ul>
+<pre><code class="language-shell">echo -n "Enter Password: " &amp;&amp; head -1 &lt;/dev/stdin | tr -d '\n' | sha256sum | cut -d" " -f1
+</code></pre>
+<ul>
+<li><strong><code>GRAYLOG_HTTP_EXTERNAL_URI</code></strong>: 本地部署就不需要修改，如果是服务器部署，要改成服务器 IP。</li>
+</ul>
+<p>然后执行下面命令开始安装：</p>
+<pre><code class="language-shell">sudo docker-compose up -d
+</code></pre>
+<p>浏览器使用输入 <code>GRAYLOG_HTTP_EXTERNAL_URI</code> 环境变量的值就可以访问了，本地搭建默认是 <a href="http://127.0.0.1:9000/">http://127.0.0.1:9000/</a></p>
+<h2>测试</h2>
+<p>本地测试写入日志命令，根据需要修改最后的 IP 地址：</p>
+<pre><code class="language-shell">echo '{"version": "1.1","host":"example.org","short_message":"A short message that helps you identify what is going on","full_message":"Backtrace here\n\nmore stuff","level":1,"_user_id":9001,"_some_info":"foo","_some_env_var":"bar"}' | gzip | nc -u -w 1 127.0.0.1 12201
+</code></pre>
+<p>详情参考 <a href="https://github.com/forecho/graylog-docker">forecho/graylog-docker</a></p>
+<h2>在 Yii2 中使用</h2>
+<h3>安装扩展包：</h3>
+<pre><code class="language-shell">composer require --prefer-dist yiier/yii2-graylog-target "*"
+</code></pre>
+<h3>配置</h3>
+<p>然后修改配置文件：</p>
+<pre><code class="language-php">return [
+    'components' =&gt; [
+        'log' =&gt; [
+            'targets' =&gt; [
+                'graylog' =&gt; [
+                    'class' =&gt; yiier\graylog\Target::class,
+                    'levels' =&gt; ['error', 'warning', 'info'],
+                    // 'categories' =&gt; ['application', 'graylog'],
+                    // 'logVars' =&gt; ['_GET', '_POST', '_FILES', '_COOKIE', '_SESSION'],
+                    // 'facility' =&gt; 'facility-name',
+                    'transport' =&gt; [
+                        'class' =&gt; yiier\graylog\transport\UdpTransport::class,
+                        'host' =&gt; '127.0.0.1',
+                        'port' =&gt; '1231',
+                        'chunkSize' =&gt; 4321,
+                    ],
+                    'additionalFields' =&gt; [
+                        'user-ip' =&gt; function ($yii) {
+                            return ($yii instanceof \yii\console\Application) ? '' : $yii-&gt;request-&gt;userIP;
+                        },
+                        'tag' =&gt; 'tag-name'
+                    ],
+                ],
+            ],
+        ],
+    ],
+];
+</code></pre>
+<h3>使用</h3>
+<p>有两种方式：</p>
+<ul>
+<li>方式一：使用 Yii 自带的日志方式：</li>
+</ul>
+<pre><code class="language-php">&lt;?php
+// short_message will contain string representation of ['test1' =&gt; 123, 'test2' =&gt; 456],
+// no full_message will be sent
+Yii::info([
+    'test1' =&gt; 123,
+    'test2' =&gt; 456,
+]);
+
+// short_message will contain 'Test short message',
+// two additional fields will be sent,
+// full_message will contain all other stuff without 'short' and 'additional':
+// string representation of ['test1' =&gt; 123, 'test2' =&gt; 456]
+Yii::info([
+    'test1' =&gt; 123,
+    'test2' =&gt; 456,
+    'short' =&gt; 'Test short message',
+    'additional' =&gt; [
+        'additional1' =&gt; 'abc',
+        'additional2' =&gt; 'def',
+    ],
+]);
+ 
+// short_message will contain 'Test short message',
+// two additional fields will be sent,
+// full_message will contain 'Test full message', all other stuff will be lost
+Yii::info([
+    'test1' =&gt; 123,
+    'test2' =&gt; 456,
+    'short' =&gt; 'Test short message',
+    'full' =&gt; 'Test full message',
+    'additional' =&gt; [
+        'additional1' =&gt; 'abc',
+        'additional2' =&gt; 'def',
+    ],
+]);
+</code></pre>
+<ul>
+<li>方式二：使用 <code>\yiier\graylog\Log</code></li>
+</ul>
+<pre><code class="language-php">&lt;?php
+\yiier\graylog\Log::info(
+    'Test short message',
+    'Test full message'
+);
+
+
+\yiier\graylog\Log::info(
+    'Test short message',
+    'Test full message', 
+    [
+        'additional1' =&gt; 'abc',
+        'additional2' =&gt; 'def',
+    ],
+    'graylog'
+);
+</code></pre>
+<p>详情参考 <a href="https://github.com/yiier/yii2-graylog-target">yiier/yii2-graylog-target</a></p>
+<h2>与 EFK 对比</h2>
+<p>没有深度研究，不知道两种方法哪个好？我所知道的：</p>
+<ul>
+<li>Graylog 作为专门的 log 收集工具，自带日志报警功能（具体使用方法，以后再补充），而据我所知 EFK 自带是没有这个功能的，为此我们项目组同事还特意写了一个小项目实现这个日志报警功能。</li>
+<li>我们公司为了节省服务器开支把 EFK 换成 Graylog 了。</li>
+</ul>
+<h2>最后</h2>
+<p>最后说明一下为什么又重现造了一个 Yii 扩展的轮子？</p>
+<p>因为刚开始用 <a href="https://github.com/RomeroMsk/yii2-graylog2">RomeroMsk/yii2-graylog2</a>，照着文档使用，使用命令行调试，发现死活写不成功日志。而且这东西调试起来非常麻烦，因为这个库代码异常了，什么错误信息都看不到。</p>
+<p>最后才发现问题出现在文档里面 <code>return $yii-&gt;request-&gt;getUserIP();</code>，这段代码不支持命令行方式运行，更加严谨的方式是 <code>return ($yii instanceof \yii\console\Application) ? '' : $yii-&gt;request-&gt;userIP;</code>。</p>
+<p>当然上面那个结论我是最后才发现的，在这之前我不得已去找了其他库，找了半天，找到了 <a href="https://github.com/alexeevdv/yii2-graylog-target">alexeevdv/yii2-graylog-target</a>，然后发现这个库，文档安装方式写错了，这不是问题，我还热心的给他提了 <a href="https://github.com/alexeevdv/yii2-graylog-target/pull/1">PR</a>，因为他代码写的好，单元测试满分。但是这个库有两个坑
+：</p>
+<ul>
+<li>代码写的太『优雅』了，以至于按照文档方式使用 PhpStorm 却是提示代码异常。</li>
+<li>另外一个问题就是他不支持扩展标签，比分说 <code>tag</code>, 多项目使用一个日志收集肯定要用 <code>tag</code> 区分的。</li>
+</ul>
+<p>索性我就在他们两个的基础上重现造了轮子，并且增加了 <code>\yiier\graylog\Log</code> 使用方式。</p>

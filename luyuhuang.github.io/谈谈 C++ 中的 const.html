@@ -1,0 +1,130 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2022-05-10-cpp-const.html">谈谈 C++ 中的 const</a></h2>
+<hr/>
+<h2>key: 67
+title: 谈谈 C++ 中的 const
+tag: c/c++
+aside: false</h2>
+<p>C++ 用关键字 <code>const</code> 标识一个类型不可变. 这其实很容易理解. 不过, 对于 C++ 而言, 简单的概念也有很多可以讨论的. 我们来看一个问题.</p>
+<h3>问题</h3>
+<p>我们知道 <code>const</code> 可以用于修饰成员函数, 标识这个函数不能修改这个类的数据. 假设一个类有一个指针类型的成员 <code>T *p</code>, 我们希望通过 <code>get()</code> 方法获取 <code>p</code> 所指向的对象的引用. 如果 <code>get()</code> 被 <code>const</code> 修饰, 它应该返回什么类型, 是 <code>T&amp;</code> 还是 <code>const T&amp;</code> 呢?</p>
+<pre><code class="language-c++">class C {
+public:
+    ??? get() const { return *p; }
+private:
+    T *p;
+};
+</code></pre>
+<p>可能很多同学很自然地认为应该返回 <code>const T&amp;</code>, 因为 <code>get()</code> 不应该改变数据. 的确, 很多类就是这样处理的. 例如标准库的顺序容器都有 <code>front</code> 方法, 返回容器中第一个元素的引用. 如 <code>vector&lt;int&gt;::front()</code></p>
+<pre><code class="language-c++">vector&lt;int&gt; v = {1, 2, 3};
+v.front() = 10; // int &amp;
+
+const vector&lt;int&gt; cv = {1, 2, 3};
+v.front() = 10; // error: assignment of read-only location. const int &amp;
+</code></pre>
+<p>可以看到非 const 版本返回的是 <code>int&amp;</code>, 而 const 版本返回的是 <code>const int&amp;</code>.</p>
+<p>我们看另一个例子. 标准库的迭代器, 例如 <code>vector&lt;int&gt;::iterator</code>, 会重载解引用运算符 <code>operator*()</code>. 那么它的返回类型是什么呢?</p>
+<pre><code class="language-c++">vector&lt;int&gt; v = {1, 2, 3};
+const auto i = v.begin();
+*i = 10; // int &amp;
+</code></pre>
+<p>它返回了 <code>int&amp;</code> 而不是 <code>const int&amp;</code>, 即使这个 <code>operator*()</code> 是 const 版本的.</p>
+<h3>引用类型, 顶层 const 和底层 const</h3>
+<p>首先我们知道, C++ 的类型分为<strong>值类型</strong>和<strong>引用类型</strong>. 对于引用类型而言, 例如指针, 它有两层 const: <strong>顶层 (top-level) const</strong> 和<strong>底层 (low-level) const</strong>. 顶层 const 表示这个变量本身不可变.</p>
+<pre><code class="language-c++">int a, b;
+int *const p = &amp;a;
+p = &amp;b; // error: assignment of read-only variable
+*p = 10; // ok
+</code></pre>
+<p>而底层 const 表示这个变量引用的值不可变.</p>
+<pre><code class="language-c++">int a, b;
+const int *p = &amp;a;
+p = &amp;b; // ok
+*p = 10; // error: assignment of read-only location
+</code></pre>
+<p>对变量赋值或初始化时, 顶层 const 可以隐式加上或去除, 底层 const 可以隐式加上, 却不能去除.</p>
+<pre><code class="language-c++">int *p;
+int *const q = p; // int* -&gt; int *const
+p = q; // int *const -&gt; int*
+
+const int *cp;
+cp = p; // int* -&gt; const int*
+p = cp; // error error: invalid conversion from ‘const int*’ to ‘int*’
+</code></pre>
+<p>如果一个类的成员函数被 <code>const</code> 修饰, 则这个函数的 <code>this</code> 指针是底层 const 的, 也就是 <code>const T *this</code>. 那么通过 <code>this</code> 指针访问到的所有成员, 也就是这个函数能访问到的所有成员, 都是顶层 const 的.</p>
+<p>以本文开头的例子, <code>get()</code> 被 <code>const</code> 修饰, <code>get()</code> 中访问到的 <code>p</code> 的类型应该是 <code>T *const p</code>. 编译器并不阻止我们在 const 成员函数里修改指针成员指向的值, 那为什么有些类要禁止修改, 而有些类允许修改呢?</p>
+<h3>引用类型还是值类型</h3>
+<p>如果一个类有一个指针类型的成员 <code>T *p</code>, 那么我们在拷贝这个类的对象时, 是复制这个指针本身还是复制指针指向的值呢?</p>
+<pre><code class="language-c++">class C {
+public:
+    C(const C &amp;c) : p(c.p) { } // or
+    C(const C &amp;c) : p(new T(*c.p)) {}
+
+    C &amp;operator=(const C &amp;c) {
+        if (&amp;c == this) return *this;
+        p = c.p;
+        return *this;
+    } // or
+    C &amp;operator=(const C &amp;c) {
+        if (&amp;c == this) return *this;
+        delete p;
+        p = new T(*c.p);
+        return *this;
+    }
+
+private:
+    T *p;
+};
+</code></pre>
+<p>C++ 允许开发者控制对象拷贝时的行为. 我们可以仅拷贝指针, 让拷贝前后指向同一个对象; 也可以拷贝指针指向的值, 向用户隐藏这个类存在引用成员这一事实.</p>
+<p>当我们拷贝指针指向的值时, 这个类看起来就是个<strong>值类型</strong>. 例如 <code>std::vector</code>, 它的内存是动态分配的, <code>vector</code> 对象本身只记录指向分配内存的指针. 但是我们在拷贝 <code>vector</code> 时, 会复制其包含的所有对象. 因此对于用户来说它就是个值类型.</p>
+<p>既然是值类型, 就只有一层 const, 也就是顶层 const. 因此当一个 <code>vector</code> 是 const 的时候, <code>vector::front()</code> 也应该返回 const 的引用. 类需要负责将顶层的 const 传递到底层.</p>
+<p>当我们仅拷贝指针本身时, 这个类看起来就是个<strong>引用类型</strong>. 例如 <code>vector::iterator</code>, 它包含一个指向 <code>vector</code> 中元素的指针. 当拷贝迭代器时, 仅会拷贝指针本身, 拷贝前后的迭代器指向同一个元素. 因此对于用户来说它就是个引用类型.</p>
+<p>既然是引用类型, 就应该区分底层 const 和底层 const. 因此即使迭代器本身是 const 的, <code>operator*()</code> 也不会返回 const 的引用, 因为顶层 const 不会传递到底层. 怎样设置迭代器的底层 const? <code>vector</code> 提供了两个类, <code>vector::iterator</code> 和 <code>vector::const_iterator</code>. 后者无论迭代器本身是否是 const, <code>operator*()</code> 始终返回 const 的引用, 因为它是底层 const 的.</p>
+<h3>C++ 很强大</h3>
+<p>回到本文开头的问题. 标准答案是, 返回 <code>const T&amp;</code> 还是 <code>T&amp;</code> 取决于我们如何定义这个类. 如果 <code>class C</code> 的拷贝控制函数拷贝 (或移动) 了 <code>p</code> 指向的值, 则应当返回 <code>const T&amp;</code>; 如果只是拷贝指针本身, 则应当返回 <code>T&amp;</code>.</p>
+<p>更一般地总结一下, 对于包含引用类型成员 (如指针, 智能指针) 的类来说, 如果要将其视为值类型, 则</p>
+<ul>
+<li>拷贝控制函数需要拷贝引用类型成员所引用的数据</li>
+<li>对于访问所引用数据的方法, 应当提供 const 和非 const 两个版本</li>
+</ul>
+<pre><code class="language-c++">class C {
+public:
+    C(const T &amp;t) : p(new T(t)) {}
+    C(const C &amp;c) : p(new T(*c.p)) {}
+    ~C() { delete p; }
+    C &amp;operator=(const C &amp;c) {
+        if (&amp;c == this) return *this;
+        delete p;
+        p = new T(*c.p);
+        return *this;
+    }
+
+    T &amp;get() { return *p; }
+    const T &amp;get() const { return *p; }
+private:
+    T *p;
+};
+</code></pre>
+<p>反之, 如果将其视为引用类型, 则</p>
+<ul>
+<li>拷贝控制函数拷贝引用类型成员本身</li>
+<li>应当通过一些方式 (如模版) 设置底层 const</li>
+<li>对于访问所引用数据的方法, 只需要 const 版本. 如果是底层非 const, 则允许修改所引用数据.</li>
+</ul>
+<pre><code class="language-c++">template &lt;typename T&gt; class C {
+public:
+    C(T *p) : p(p) {}
+    C(const C &amp;c) : p(c.p) {}
+    C &amp;operator=(const C &amp;c) {
+        if (&amp;c == this) return *this;
+        p = c.p;
+        return *this;
+    }
+
+    T &amp;get() const { return *p; }
+private:
+    T *p;
+};
+</code></pre>
+<p>当然, 如果这个类是诸如某某管理器之类的单例类或不可拷贝的类, 就不需要考虑这么多了, 根据需求处理即可.</p>
+<p>与其他语言 (Java, Go, Python) 不同, C++ 的类既可以是值类型, 又可以是引用类型, 这取决于开发者怎样设计. C++ 希望开发者可以像用内置类型一样使用自定义类型, 因此它提供了运算符重载, 拷贝控制等一系列的机制, 这让 C++ 的类很强大, 同时也比较复杂. 这就要求我们能够理解这些概念, 而不是只是记住 <code>const</code> 有哪几种用法.</p>

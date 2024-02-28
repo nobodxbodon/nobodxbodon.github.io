@@ -1,0 +1,377 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/mini-redis%E9%A1%B9%E7%9B%AE-1-%E7%AE%80%E4%BB%8B.html">mini-redis项目-1-简介</a></h2>
+<hr/>
+<h2>title: mini-redis项目-1-简介
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?54'
+date: 2022-12-05 16:43:55
+categories: Rust
+tags: [Rust, 数据库, Redis]
+description: 最近看完了tokio，其中tokio官方提供的mini-redis项目非常的好，跟着教程完整的做了一遍，并且对很多地方根据自己的理解重新实现了（比如错误处理、文件组织等）；这里会分多篇文章进行总结，这里是第一篇；</h2>
+<p>最近看完了tokio，其中tokio官方提供的mini-redis项目非常的好，跟着教程完整的做了一遍，并且对很多地方根据自己的理解重新实现了（比如错误处理、文件组织等）；</p>
+<p>这里会分多篇文章进行总结，这里是第一篇；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/mini-redis</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-1-%E7%AE%80%E4%BB%8B/">《mini-redis项目-1-简介》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-2-%E5%AD%98%E5%82%A8%E5%B1%82/">《mini-redis项目-2-存储层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-3-%E8%BF%9E%E6%8E%A5%E5%B1%82/">《mini-redis项目-3-连接层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/06/mini-redis%E9%A1%B9%E7%9B%AE-4-%E6%9C%8D%E5%8A%A1%E7%AB%AF/">《mini-redis项目-4-服务端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-5-%E5%AE%A2%E6%88%B7%E7%AB%AF/">《mini-redis项目-5-客户端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-6-%E6%B5%8B%E8%AF%95%E4%B8%8E%E7%A4%BA%E4%BE%8B/">《mini-redis项目-6-测试与示例》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>mini-redis项目-1-简介</strong></h1>
+<h2><strong>前言</strong></h2>
+<p>tokio 官方文档如下：</p>
+<ul>
+<li>https://tokio.rs/tokio/tutorial</li>
+</ul>
+<p>mini-redis 项目地址：</p>
+<ul>
+<li>https://github.com/JasonkayZK/mini-redis</li>
+</ul>
+<p>项目的目录结构如下：</p>
+<pre><code class="language-bash">$ tree ./src/
+.
+├── bin
+│   ├── cli.rs
+│   └── server.rs
+├── client
+│   ├── cli.rs
+│   ├── cmd.rs
+│   ├── mod.rs
+│   └── subscriber.rs
+├── cmd
+│   ├── get.rs
+│   ├── mod.rs
+│   ├── ping.rs
+│   ├── publish.rs
+│   ├── set.rs
+│   ├── subscribe.rs
+│   ├── unknown.rs
+│   └── unsubscribe.rs
+├── config.rs
+├── connection
+│   ├── connect.rs
+│   ├── frame.rs
+│   ├── mod.rs
+│   └── parse.rs
+├── consts.rs
+├── error.rs
+├── lib.rs
+├── logger.rs
+├── server
+│   ├── handler.rs
+│   ├── listener.rs
+│   ├── mod.rs
+│   └── shutdown.rs
+└── storage
+    ├── db.rs
+    ├── mod.rs
+    ├── store.rs
+    └── traits.rs
+</code></pre>
+<p>其中：</p>
+<ul>
+<li><code>bin</code> 目录：server 和 cli 的命令行入口可执行文件；</li>
+<li><code>client</code> 目录：客户端具体实现逻辑；</li>
+<li><code>server</code> 目录：服务端具体实现逻辑；</li>
+<li><code>cmd</code> 目录：mini-redis 相关命令实现；</li>
+<li><code>connection</code> 目录：客户端、服务端异步连接实现；</li>
+<li><code>storage</code> 目录：kv、subscribe 存储实现（本例中直接使用 HashMap 实现，实际生产环境多用 LSM-Tree）；</li>
+<li><code>config.rs</code>：mini-redis 配置相关；</li>
+<li><code>consts.rs</code>：mini-redis 常量配置相关；</li>
+<li><code>error.rs</code>：mini-redis 错误定义；</li>
+<li><code>logger.rs</code>：mini-redis 日志配置；</li>
+<li><code>lib.rs</code>：mini-redis 库入口；</li>
+</ul>
+<p>总体分为下面几个部分：</p>
+<ul>
+<li><strong>存储实现；</strong></li>
+<li><strong>连接实现；</strong></li>
+<li><strong>具体命令实现</strong></li>
+<li><strong>客户端、服务端实现；</strong></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>基本使用</strong></h2>
+<p>首先启动server：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-server
+
+[ INFO]: mini_redis::server - mini-redis server started listen on: 0.0.0.0:6379
+[ INFO]: mini_redis::server::listener - server started, accepting inbound connections
+</code></pre>
+<p>随后可以使用 client：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli
+
+mini-redis-cli 0.1.0
+Issue Redis commands
+
+USAGE:
+    mini-redis-cli [OPTIONS] &lt;SUBCOMMAND&gt;
+
+OPTIONS:
+    -h, --help                   Print help information
+        --hostname &lt;hostname&gt;    [default: 127.0.0.1]
+        --port &lt;PORT&gt;            [default: 6379]
+    -V, --version                Print version information
+
+SUBCOMMANDS:
+    get          Get the value of key
+    help         Print this message or the help of the given subcommand(s)
+    ping         
+    publish      Publisher to send a message to a specific channel
+    set          Set key to hold the string value
+    subscribe    Subscribe a client to a specific channel or channels
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>ping命令测试：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli ping   
+"PONG"
+
+$ cargo run --bin mini-redis-cli ping abc
+"abc"
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>get/set 测试：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli get foo     
+(nil)
+
+$ cargo run --bin mini-redis-cli set foo 123
+OK
+
+$ cargo run --bin mini-redis-cli get foo    
+"123"
+</code></pre>
+<p>过期键测试，设置 5s 过期：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli set foo 123 5000
+</code></pre>
+<p>获取：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli get foo
+"123"
+
+$ cargo run --bin mini-redis-cli get foo
+(nil)
+</code></pre>
+<p>5s后，获取不到 key 值了！</p>
+<p>&lt;br/&gt;</p>
+<p>pub/sub 测试；</p>
+<p>启动三个 subscribe，订阅同一个 channel，ch1：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli subscribe ch1
+
+$ cargo run --bin mini-redis-cli subscribe ch1
+
+$ cargo run --bin mini-redis-cli subscribe ch1
+</code></pre>
+<p>向 ch1 发布消息：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli publish ch1 a-message
+Publish OK
+</code></pre>
+<p>其他订阅者均收到消息：</p>
+<pre><code>got message from the channel: ch1; message = b"a-message"
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>错误命令测试：</p>
+<pre><code class="language-bash">$ cargo run --bin mini-redis-cli ping get foo
+
+error: Found argument 'foo' which wasn't expected, or isn't valid in this context
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>项目配置</strong></h2>
+<h3><strong>日志配置</strong></h3>
+<p>日志使用 <code>log</code> 框架，进行了一些配置：</p>
+<p>logger.rs</p>
+<pre><code class="language-rust">use std::env;
+
+use log::{Level, LevelFilter, Metadata, Record};
+
+use crate::config::LOG_LEVEL;
+
+struct Logger;
+
+pub fn init() {
+    static LOGGER: Logger = Logger;
+    log::set_logger(&amp;LOGGER).unwrap();
+
+    let log_level: String = env::var(LOG_LEVEL).unwrap_or_else(|_| String::from("INFO"));
+    log::set_max_level(match log_level.as_str() {
+        "ERROR" =&gt; LevelFilter::Error,
+        "WARN" =&gt; LevelFilter::Warn,
+        "INFO" =&gt; LevelFilter::Info,
+        "DEBUG" =&gt; LevelFilter::Debug,
+        "TRACE" =&gt; LevelFilter::Trace,
+        _ =&gt; LevelFilter::Info,
+    });
+}
+
+impl log::Log for Logger {
+    fn enabled(&amp;self, _metadata: &amp;Metadata) -&gt; bool {
+        true
+    }
+
+    fn log(&amp;self, record: &amp;Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
+        let color = match record.level() {
+            Level::Error =&gt; 31, // Red
+            Level::Warn =&gt; 93,  // BrightYellow
+            Level::Info =&gt; 34,  // Blue
+            Level::Debug =&gt; 32, // Green
+            Level::Trace =&gt; 90, // BrightBlack
+        };
+
+        println!(
+            "\u{1B}[{}m[{:&gt;5}]: {} - {}\u{1B}[0m",
+            color,
+            record.level(),
+            record.target(),
+            record.args(),
+        );
+    }
+
+    fn flush(&amp;self) {}
+}
+</code></pre>
+<p>在初始化 logger 时会获取 <code>LOG_LEVEL</code> 环境变量，如果没有获得，则默认日志级别为 <code>INFO</code>；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>常量配置</strong></h3>
+<p>常量主要在 <code>config.rs</code> 和 <code>consts.rs</code> 中定义：</p>
+<pre><code class="language-rust">// src/config.rs
+
+/// Logger level
+pub static LOG_LEVEL: &amp;str = "LOG_LEVEL";
+
+
+// src/consts.rs
+
+/// Default port that a redis server listens on.
+///
+/// Used if no port is specified.
+pub const DEFAULT_PORT: u16 = 6379;
+
+/// Maximum number of concurrent connections the redis server will accept.
+///
+/// When this limit is reached, the server will stop accepting connections until
+/// an active connection terminates.
+pub const MAX_CONNECTIONS: usize = 1024;
+</code></pre>
+<p>定义了日志级别环境变量的常量、默认端口号、以及默认连接数；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>错误配置</strong></h3>
+<p>对于库而言，应当尽量使用能够保留错误层级的库，例如：thiserror；</p>
+<p>而anyhow更适用于业务、应用层场景；</p>
+<p>因此这里并没有使用更方便的 anyhow，而是使用了 thiserror；</p>
+<p>如下：</p>
+<p>src/error.rs</p>
+<pre><code class="language-rust">use std::io;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum MiniRedisServerError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+
+    #[error(transparent)]
+    Connect(#[from] MiniRedisConnectionError),
+
+    #[error(transparent)]
+    Parse(#[from] MiniRedisParseError),
+}
+
+#[derive(Error, Debug)]
+pub enum MiniRedisClientError {
+    #[error(transparent)]
+    Connect(#[from] MiniRedisConnectionError),
+
+    #[error(transparent)]
+    Parse(#[from] MiniRedisParseError),
+}
+
+/// Error encountered while parsing a frame.
+///
+/// Only `EndOfStream` errors are handled at runtime. All other errors result in
+/// the connection being terminated.
+#[derive(Error, Debug)]
+pub enum MiniRedisParseError {
+    #[error("invalid message encoding, parse failed")]
+    Parse(String),
+
+    /// Attempting to extract a value failed due to the frame being fully
+    /// consumed.
+    #[error("protocol error; unexpected end of stream")]
+    EndOfStream,
+
+    #[error("not enough data is available to parse a message")]
+    Incomplete,
+
+    #[error("unimplemented command")]
+    Unimplemented,
+
+    #[error("not an array frame")]
+    ParseArrayFrame,
+
+    #[error(transparent)]
+    ParseInt(#[from] std::num::TryFromIntError),
+    #[error(transparent)]
+    ParseUtf8(#[from] std::string::FromUtf8Error),
+}
+
+#[derive(Error, Debug)]
+pub enum MiniRedisConnectionError {
+    #[error("connection reset by peer")]
+    Disconnect,
+
+    #[error(transparent)]
+    ParseFrame(#[from] MiniRedisParseError),
+
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+
+    #[error("command execute error")]
+    CommandExecute(String),
+
+    #[error("received next message failed, invalid frame type")]
+    InvalidFrameType,
+
+    #[error("invalid argument")]
+    InvalidArgument(String),
+}
+</code></pre>
+<p>主要是通过 <code>#[error(transparent)]</code> 定义了错误层级：</p>
+<ul>
+<li>MiniRedisServerError、MiniRedisClientError：继承 MiniRedisConnectionError 和 MiniRedisParseError；</li>
+<li>MiniRedisConnectionError：继承 MiniRedisParseError，主要是连接错误；</li>
+<li>MiniRedisParseError：最底层错误，包装命令解析、IO中断不完整 等错误；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>小结</strong></h2>
+<p>本小节作为简介，主要是大体上讲解了 mini-redis 的实现，以及目录结构和主要功能；</p>
+<p>下面几个小节会具体对实现进行分析；</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/mini-redis</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-1-%E7%AE%80%E4%BB%8B/">《mini-redis项目-1-简介》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-2-%E5%AD%98%E5%82%A8%E5%B1%82/">《mini-redis项目-2-存储层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/05/mini-redis%E9%A1%B9%E7%9B%AE-3-%E8%BF%9E%E6%8E%A5%E5%B1%82/">《mini-redis项目-3-连接层》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/06/mini-redis%E9%A1%B9%E7%9B%AE-4-%E6%9C%8D%E5%8A%A1%E7%AB%AF/">《mini-redis项目-4-服务端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-5-%E5%AE%A2%E6%88%B7%E7%AB%AF/">《mini-redis项目-5-客户端》</a></li>
+<li><a href="https://jasonkayzk.github.io/2022/12/07/mini-redis%E9%A1%B9%E7%9B%AE-6-%E6%B5%8B%E8%AF%95%E4%B8%8E%E7%A4%BA%E4%BE%8B/">《mini-redis项目-6-测试与示例》</a></li>
+</ul>
+<p>参考文章：</p>
+<ul>
+<li>https://tokio.rs/tokio/tutorial</li>
+<li>https://redis.io/docs/reference/protocol-spec/</li>
+<li>https://rust-book.junmajinlong.com/ch100/00.html</li>
+</ul>
+<p>&lt;br/&gt;</p>

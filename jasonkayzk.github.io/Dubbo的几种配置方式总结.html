@@ -1,0 +1,479 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Dubbo%E7%9A%84%E5%87%A0%E7%A7%8D%E9%85%8D%E7%BD%AE%E6%96%B9%E5%BC%8F%E6%80%BB%E7%BB%93.html">Dubbo的几种配置方式总结</a></h2>
+<hr/>
+<h2>title: Dubbo的几种配置方式总结
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?55'
+date: 2023-03-23 14:02:19
+categories: Dubbo
+tags: [Dubbo]
+description: 本文讲解了Dubbo的几种配置方式，包括XML、API以及Annotation的方式；Dubbo版本基于2.x；</h2>
+<p>本文讲解了Dubbo的几种配置方式，包括XML、API以及Annotation的方式；Dubbo版本基于2.x；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/java-all/tree/main/dubbo2</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Dubbo的几种配置方式总结</strong></h1>
+<h2><strong>XML方式</strong></h2>
+<p>XML 方式和 Spring 框架中的 XML 配置方式一模一样；</p>
+<h3><strong>接口实现</strong></h3>
+<p>io/github/jasonkayzk/impl/BasicHelloServiceImpl.java</p>
+<pre><code class="language-java">public class BasicHelloServiceImpl implements HelloService {
+    @Override
+    public String sayHello(String name) {
+        System.out.println("[" + new SimpleDateFormat("HH:mm:ss").format(new Date())
+                + "] Hello " + name + ", request from consumer: "
+                + RpcContext.getContext().getRemoteAddress());
+        return "Hello " + name + ", response from provider: " + RpcContext.getContext().getLocalAddress();
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>Provider实现</strong></h3>
+<p>io/github/jasonkayzk/XmlProviderBootstrap.java</p>
+<pre><code class="language-java">public class XmlProviderBootstrap {
+
+    public static void main(String[] args) throws Exception {
+        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
+                new String[]{"spring/dubbo-demo-provider.xml"});
+        context.start();
+
+        System.in.read(); // press any key to exit
+    }
+  
+}
+</code></pre>
+<p>上面的代码读取了 resources 下的配置：</p>
+<p>spring/dubbo-demo-provider.xml</p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://dubbo.apache.org/schema/dubbo"
+       xmlns="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://dubbo.apache.org/schema/dubbo http://dubbo.apache.org/schema/dubbo/dubbo.xsd"&gt;
+
+    &lt;!-- provider's application name, used for tracing dependency relationship --&gt;
+    &lt;dubbo:application name="demo-provider"/&gt;
+
+    &lt;!-- use multicast registry center to export service --&gt;
+    &lt;dubbo:registry group="aaa" address="zookeeper://127.0.0.1:2181"/&gt;
+    &lt;dubbo:registry address="zookeeper://127.0.0.1:2181"/&gt;
+    &lt;!--&lt;dubbo:registry address="zookeeper://11.163.250.27:2181"/&gt;--&gt;
+
+    &lt;!-- use dubbo protocol to export service on port 20880 --&gt;
+    &lt;dubbo:protocol name="dubbo" port="20890"/&gt;
+
+    &lt;!-- service implementation, as same as regular local bean --&gt;
+    &lt;bean id="helloService" class="io.github.jasonkayzk.impl.BasicHelloServiceImpl"/&gt;
+
+    &lt;!-- declare the service interface to be exported --&gt;
+    &lt;dubbo:service interface="io.github.jasonkayzk.HelloService" ref="helloService"/&gt;
+
+&lt;/beans&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>Consumer配置</strong></h3>
+<p>Consumer实现：</p>
+<p>io/github/jasonkayzk/XmlConsumerBootstrap.java</p>
+<pre><code class="language-java">public class XmlConsumerBootstrap {
+
+    public static void main(String[] args) {
+        ClassPathXmlApplicationContext context = new ClassPathXmlApplicationContext(
+                new String[]{"spring/dubbo-demo-consumer.xml"});
+        context.start();
+
+        // get remote service proxy
+        HelloService helloService = (HelloService) context.getBean("demoService");
+
+        while (true) {
+            try {
+                Thread.sleep(1000);
+                String hello = helloService.sayHello("world"); // call remote method
+                System.out.println(hello); // get result
+            } catch (Throwable throwable) {
+                throwable.printStackTrace();
+            }
+        }
+    }
+}
+</code></pre>
+<p>配置：</p>
+<p>spring/dubbo-demo-consumer.xml</p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://dubbo.apache.org/schema/dubbo"
+       xmlns="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://dubbo.apache.org/schema/dubbo http://dubbo.apache.org/schema/dubbo/dubbo.xsd"&gt;
+
+    &lt;!-- consumer's application name, used for tracing dependency relationship (not a matching criterion),
+    don't set it same as provider --&gt;
+    &lt;dubbo:application name="demo-consumer"/&gt;
+
+    &lt;!-- use multicast registry center to discover service --&gt;
+    &lt;dubbo:registry group="aaa" address="zookeeper://127.0.0.1:2181"/&gt;
+
+    &lt;!-- generate proxy for the remote service, then demoService can be used in the same way as the
+    local regular interface --&gt;
+    &lt;dubbo:reference id="demoService" check="false" interface="io.github.jasonkayzk.HelloService"/&gt;
+
+&lt;/beans&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>API方式</strong></h2>
+<p>如果不想编写 XML，可以使用API的方式进行配置：</p>
+<h3><strong>Provider实现</strong></h3>
+<p>Provider实现如下：</p>
+<p>dubbo2/b-hello-dubbo-api/src/main/java/io/github/jasonkayzk/ApiProviderBootstrap.java</p>
+<pre><code class="language-java">public class ApiProviderBootstrap {
+
+    public static void main(String[] args) throws Exception {
+        // 服务实现
+        HelloService helloService = new ApiHelloServiceImpl();
+
+        // 当前应用配置
+        ApplicationConfig application = new ApplicationConfig();
+        application.setName("api-hello-provider");
+
+        // 连接注册中心配置
+        RegistryConfig registry = new RegistryConfig();
+        registry.setAddress("zookeeper://127.0.0.1:2181");
+
+        // 服务提供者协议配置
+        ProtocolConfig protocol = new ProtocolConfig();
+        protocol.setName("dubbo");
+        protocol.setPort(12345);
+        protocol.setThreads(20);
+
+        // 注意：ServiceConfig为重对象，内部封装了与注册中心的连接，以及开启服务端口
+
+        // 服务提供者暴露服务配置
+        // 此实例很重，封装了与注册中心的连接，请自行缓存，否则可能造成内存和连接泄漏
+        ServiceConfig&lt;HelloService&gt; service = new ServiceConfig&lt;&gt;();
+        service.setApplication(application);
+        service.setRegistry(registry); // 多个注册中心可以用setRegistries()
+        service.setProtocol(protocol); // 多个协议可以用setProtocols()
+        service.setInterface(HelloService.class);
+        service.setRef(helloService);
+        service.setVersion("1.0.0");
+
+        // 暴露及注册服务
+        service.export();
+
+        System.in.read(); // press any key to exit
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>Consumer实现</strong></h3>
+<p>dubbo2/b-hello-dubbo-api/src/main/java/io/github/jasonkayzk/ApiConsumerBootstrap.java</p>
+<pre><code class="language-java">public class ApiConsumerBootstrap {
+
+    public static void main(String[] args) {
+        // 当前应用配置
+        ApplicationConfig application = new ApplicationConfig();
+        application.setName("api-hello-consumer");
+
+        // 连接注册中心配置
+        RegistryConfig registry = new RegistryConfig();
+        registry.setAddress("zookeeper://127.0.0.1:2181");
+
+        // 注意：ReferenceConfig为重对象，内部封装了与注册中心的连接，以及与服务提供方的连接
+
+        // 引用远程服务
+        // 此实例很重，封装了与注册中心的连接以及与提供者的连接，请自行缓存，否则可能造成内存和连接泄漏
+        ReferenceConfig&lt;HelloService&gt; reference = new ReferenceConfig&lt;&gt;();
+        reference.setApplication(application);
+        reference.setRegistry(registry); // 多个注册中心可以用setRegistries()
+        reference.setInterface(HelloService.class);
+        reference.setVersion("1.0.0");
+
+        // 和本地bean一样使用xxxService
+        // 注意：此代理对象内部封装了所有通讯细节，对象较重，请缓存复用
+        HelloService helloService = reference.get();
+
+        // get remote service proxy
+//        HelloService helloService = (HelloService) context.getBean("helloService");
+
+        while (true) {
+            try {
+                Thread.sleep(1000);
+                String hello = helloService.sayHello("world"); // call remote method
+                System.out.println(hello); // get result
+            } catch (Throwable throwable) {
+                throwable.printStackTrace();
+            }
+        }
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>Annotation方式</strong></h2>
+<h3><strong>接口实现</strong></h3>
+<h4><strong>Provider中接口实现：</strong></h4>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/java/io/github/jasonkayzk/provider/impl/AnnotationHelloServiceImpl.java</p>
+<pre><code class="language-java">@Service
+public class AnnotationHelloServiceImpl implements HelloService {
+    @Override
+    public String sayHello(String name) {
+        System.out.println("[" + new SimpleDateFormat("HH:mm:ss").format(new Date())
+                + "] Hello " + name + ", request from consumer: "
+                + RpcContext.getContext().getRemoteAddress());
+        return "Hello " + name + ", response from annotation-provider: " + RpcContext.getContext().getLocalAddress();
+    }
+}
+</code></pre>
+<p>使用了 <code>@Service</code> 注解；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>Consumer中Action声明</strong></h4>
+<p>使用注解方式需要在 Consumer 中声明接口，从而将具体的实现注入；：</p>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/java/io/github/jasonkayzk/consumer/action/AnnotationHelloAction.java</p>
+<pre><code class="language-java">@Component("annotationHelloAction")
+public class AnnotationHelloAction {
+
+    @Reference
+    private HelloService helloService;
+
+    public String doSayHello(String name) {
+        return helloService.sayHello(name);
+    }
+
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>Annotation中使用Property配置</strong></h3>
+<h4><strong>Provider的配置及启动</strong></h4>
+<p>Property配置如下：</p>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/resources/spring/dubbo-provider.properties</p>
+<pre><code class="language-properties">dubbo.application.name=annotation-configuration-provider
+dubbo.registry.address=zookeeper://127.0.0.1:2181
+dubbo.protocol.name=dubbo
+dubbo.protocol.port=20880
+</code></pre>
+<p>启动实现：</p>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/java/io/github/jasonkayzk/provider/AnnotationPropertyProviderBootstrap.java</p>
+<pre><code class="language-java">@Configuration
+@EnableDubbo(scanBasePackages = "io.github.jasonkayzk.consumer.action")
+@ComponentScan(value = {"io.github.jasonkayzk.consumer.action"})
+@PropertySource("classpath:/spring/dubbo-consumer.properties")
+class AnnotationPropertyConsumerConfiguration {
+}
+
+public class AnnotationPropertyConsumerBootstrap {
+
+    public static void main(String[] args) throws InterruptedException {
+        AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext(AnnotationPropertyConsumerConfiguration.class);
+        context.start();
+
+        AnnotationHelloAction helloService = context.getBean(AnnotationHelloAction.class);
+
+        for (int i = 0; i &lt; 10; i++) {
+            String hello = helloService.doSayHello("annotation-config");
+            System.out.println("result: " + hello);
+            Thread.sleep(1000);
+        }
+    }
+
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h4><strong>Consumer的配置及启动</strong></h4>
+<p>Property配置如下：</p>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/resources/spring/dubbo-consumer.properties</p>
+<pre><code class="language-properties">dubbo.application.name=annotation-configuration-consumer
+dubbo.registry.address=zookeeper://127.0.0.1:2181
+dubbo.consumer.timeout=3000
+</code></pre>
+<p>启动如下：</p>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/java/io/github/jasonkayzk/consumer/AnnotationPropertyConsumerBootstrap.java</p>
+<pre><code class="language-java">@Configuration
+@EnableDubbo(scanBasePackages = "io.github.jasonkayzk.consumer.action")
+@ComponentScan(value = {"io.github.jasonkayzk.consumer.action"})
+@PropertySource("classpath:/spring/dubbo-consumer.properties")
+class AnnotationPropertyConsumerConfiguration {
+}
+
+public class AnnotationPropertyConsumerBootstrap {
+
+    public static void main(String[] args) throws InterruptedException {
+        AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext(AnnotationPropertyConsumerConfiguration.class);
+        context.start();
+
+        AnnotationHelloAction helloService = context.getBean(AnnotationHelloAction.class);
+
+        for (int i = 0; i &lt; 10; i++) {
+            String hello = helloService.doSayHello("annotation-config");
+            System.out.println("result: " + hello);
+            Thread.sleep(1000);
+        }
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>使用SpringBean注入</strong></h3>
+<p>除了从 Property 中配置，还可以使用 Spring Bean 注入的方式来进行配置；</p>
+<h4><strong>Provider配置</strong></h4>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/java/io/github/jasonkayzk/AnnotationProviderBootstrap.java</p>
+<pre><code class="language-java">@Configuration
+@EnableDubbo(scanBasePackages = "io.github.jasonkayzk.provider.impl")
+class ProviderConfiguration {
+    @Bean
+    public ProviderConfig providerConfig() {
+        ProviderConfig providerConfig = new ProviderConfig();
+        providerConfig.setTimeout(1000);
+        return providerConfig;
+    }
+
+    @Bean
+    public ApplicationConfig applicationConfig() {
+        ApplicationConfig applicationConfig = new ApplicationConfig();
+        applicationConfig.setName("dubbo-annotation-provider");
+        return applicationConfig;
+    }
+
+    @Bean
+    public RegistryConfig registryConfig() {
+        RegistryConfig registryConfig = new RegistryConfig();
+        registryConfig.setProtocol("zookeeper");
+        registryConfig.setAddress("localhost");
+        registryConfig.setPort(2181);
+        return registryConfig;
+    }
+
+    @Bean
+    public ProtocolConfig protocolConfig() {
+        ProtocolConfig protocolConfig = new ProtocolConfig();
+        protocolConfig.setName("dubbo");
+        protocolConfig.setPort(20880);
+        return protocolConfig;
+    }
+}
+
+public class AnnotationProviderBootstrap {
+
+    public static void main(String[] args) throws IOException {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ProviderConfiguration.class);
+        context.start();
+        System.in.read();
+    }
+
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h4><strong>Consumer配置</strong></h4>
+<p>dubbo2/c-hello-dubbo-annotation/src/main/java/io/github/jasonkayzk/AnnotationConsumerBootstrap.java</p>
+<pre><code class="language-java">@Configuration
+@EnableDubbo(scanBasePackages = "io.github.jasonkayzk.consumer.action")
+@ComponentScan(value = {"io.github.jasonkayzk.consumer.action"})
+class ConsumerConfiguration {
+    @Bean
+    public ApplicationConfig applicationConfig() {
+        ApplicationConfig applicationConfig = new ApplicationConfig();
+        applicationConfig.setName("dubbo-annotation");
+        return applicationConfig;
+    }
+
+    @Bean
+    public ConsumerConfig consumerConfig() {
+        ConsumerConfig consumerConfig = new ConsumerConfig();
+        consumerConfig.setTimeout(3000);
+        return consumerConfig;
+    }
+
+    @Bean
+    public RegistryConfig registryConfig() {
+        RegistryConfig registryConfig = new RegistryConfig();
+        registryConfig.setProtocol("zookeeper");
+        registryConfig.setAddress("localhost");
+        registryConfig.setPort(2181);
+        return registryConfig;
+    }
+}
+public class AnnotationConsumerBootstrap {
+
+    public static void main(String[] args) throws InterruptedException {
+        AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext(ConsumerConfiguration.class);
+        ctx.start();
+        AnnotationHelloAction greetingServiceConsumer = ctx.getBean(AnnotationHelloAction.class);
+
+        for (int i = 0; i &lt; 10; i++) {
+            String hello = greetingServiceConsumer.doSayHello("annotation-config");
+            System.out.println("result: " + hello);
+            Thread.sleep(1000);
+        }
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>使用YAML配置</strong></h2>
+<p>上面的配置主要是通过 XML 或者 Property 的方式，实际上阅读起来并没有那么容易；</p>
+<p>比较高版本的 SpringBoot 中可以使用 YAML 的方式进行配置；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>YAML配置转换工厂类</strong></h3>
+<p>创建一个工厂类用于将YAML配置转为Property配置：</p>
+<p>dubbo2/d-hello-dubbo-yaml/src/main/java/io/github/jasonkayzk/utils/YamlPropertySourceFactory.java</p>
+<pre><code class="language-java">public class YamlPropertySourceFactory extends DefaultPropertySourceFactory {
+
+    @Override
+    public PropertySource&lt;?&gt; createPropertySource(String name, EncodedResource resource) throws IOException {
+        List&lt;PropertySource&lt;?&gt;&gt; sources = new YamlPropertySourceLoader().load(resource.getResource().getFilename(),resource.getResource());
+        return sources.get(0);
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>Provider配置</strong></h3>
+<p>使用 YAML 配置 Provider：</p>
+<p>dubbo2/d-hello-dubbo-yaml/src/main/resources/dubbo-provider.yml</p>
+<pre><code class="language-yaml">dubbo:
+  application:
+    name: "yaml-configuration-provider"
+  registry:
+    address: "zookeeper://127.0.0.1:2181"
+  protocol:
+    name: "dubbo"
+    port: "20880"
+</code></pre>
+<p>配置 Bean 代码：</p>
+<p>dubbo2/d-hello-dubbo-yaml/src/main/java/io/github/jasonkayzk/provider/config/YamlConfigProviderConfig.java</p>
+<pre><code class="language-java">@Configuration
+@EnableDubbo(scanBasePackages = "io.github.jasonkayzk.provider.impl")
+@PropertySource(value = "classpath:dubbo-provider.yml", factory = YamlPropertySourceFactory.class)
+public class YamlConfigProviderConfig {
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>Consumer配置</strong></h3>
+<p>YAML 配置：</p>
+<p>dubbo2/d-hello-dubbo-yaml/src/main/resources/dubbo-consumer.yml</p>
+<pre><code class="language-yaml">dubbo:
+  application:
+    name: "yaml-configuration-consumer"
+  registry:
+    address: "zookeeper://127.0.0.1:2181"
+  consumer:
+    timeout: 3000
+</code></pre>
+<p>配置 Bean 代码：</p>
+<p>dubbo2/d-hello-dubbo-yaml/src/main/java/io/github/jasonkayzk/consumer/config/YamlConfigConsumerConfig.java</p>
+<pre><code class="language-java">@Configuration
+@EnableDubbo(scanBasePackages = "io.github.jasonkayzk.consumer.action")
+@ComponentScan(value = {"io.github.jasonkayzk.consumer.action"})
+@PropertySource(value = "classpath:dubbo-consumer.yml", factory = YamlPropertySourceFactory.class)
+public class YamlConfigConsumerConfig {
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/java-all/tree/main/dubbo2</li>
+</ul>
+<p>参考文章：</p>
+<ul>
+<li>https://cn.dubbo.apache.org/zh-cn/docsv2.7/user/configuration/</li>
+</ul>
+<p>&lt;br/&gt;</p>

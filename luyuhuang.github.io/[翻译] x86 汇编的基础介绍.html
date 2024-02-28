@@ -1,0 +1,183 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2022-01-18-x86-assembly.html">[翻译] x86 汇编的基础介绍</a></h2>
+<hr/>
+<h2>key: 63
+title: "[翻译] x86 汇编的基础介绍"
+tag: [translations, assembly, featured]</h2>
+<blockquote>
+<p>原文 <a href="https://www.nayuki.io/page/a-fundamental-introduction-to-x86-assembly-programming">A fundamental introduction to x86 assembly programming</a></p>
+</blockquote>
+<h2>0. 介绍</h2>
+<p>x86 指令集架构是近 20 年来我们家庭电脑和服务器所使用的 CPU 的核心. 能够阅读和编写低级汇编语言是一项很强大的技能, 这能够让你写出更高效的代码, 使用 C 语言中无法使用的机器特性, 以及对编译过的代码进行逆向工程.</p>
+<p>不过起步可能是一项令人生畏的任务. Intel 的官方文档手册足足有一千多页. 二十年间的演化需要不断地向后兼容, 产生了这样的景观: 不同年代设计原则的冲突, 各种过时的特性, 一层又一层的模式转换, 以及各种有例外的样式.</p>
+<p>在这个教程中, 我会帮助你深刻地理解 x86 架构的基础原则. 我会更多地专注在为正在发生的事情建立一个清晰的模型, 而不是详解每一个细节 (这会读起来又长又无聊). 如果你想使用这些知识, 你需要同时参考其他展示如何编写和编译简单函数的教程, 并参考 CPU 指令列表. 我的教程会从熟悉的领域开始并逐步增加复杂性 -- 不会像其他文档一样倾向于一次性列出所有的信息.</p>
+<p>阅读这个教程需要你熟悉二进制数字, 有中等程度的命令式语言 (C / C++ / Java / Python / 等) 的编程经验, 并且了解 C/C++ 的内存指针. 你不必需要知道 CPU 内部是如何工作的, 也不需要事先接触过汇编语言.</p>
+<h2>1. 工具和测试</h2>
+<p>阅读这个教程的时候, 编写并测试自己的汇编程序会很有帮助. 这在 Linux 上是最简单的 (Windows 也可以, 但是更麻烦). 这是一个简单的汇编语言函数的例子:</p>
+<pre><code>.globl myfunc
+myfunc:
+    retl
+</code></pre>
+<p>将它保存在一个名为 <code>my-asm.s</code> 的文件中, 然后使用命令 <code>gcc -m32 -c -o my-asm.o my-asm.s</code> 编译它. 目前我们还没法运行它, 因为这需要与 C 程序链接, 或者编写样板代码与操作系统交互以处理启动, 打印, 停止等. 不过编译代码至少能够让你校验你的汇编程序语法是否正确.</p>
+<p>注意我的教程使用 AT&amp;T 汇编语法而不是 Intel 语法. 它们在概念上是相同的, 只不过标记法有些不同. 它们之间可以从一种编译到另一种, 所以我们不需要太关心它.</p>
+<h2>2. 基本运行环境</h2>
+<p>x86 CPU 有八个 32 位通用寄存器. 由于历史原因, 这八个寄存器名为 <code>{eax, ecx, edx, ebx, esp, ebp, esi, edi}</code>. (其他 CPU 架构会简单地称它们为 <code>r0, r1, ..., r7</code>.) 每个寄存器可以存储任何 32 位整数值. x86 架构实际上有超过一百个寄存器, 但是我们只会在需要时介绍其中特定的一些.</p>
+<p>粗略地说, CPU 会按照源代码中列出的顺序, 按顺序一个接着一个地执行一系列指令. 稍后, 我们会看到代码执行路径可以是非线性的, 包括一些概念如 if-then, 循环, 以及函数调用.</p>
+<p><img alt="cpu-model" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/x86-assembly_1.svg"/>{width="500"}</p>
+<p>x86 实际上有八个 16 位和八个 8 位寄存器，它们是八个 32 位通用寄存器的一部分. 这些特性来源于 16 位时代的 x86 CPU, 但是在 32 位模式下偶尔还是会用. 八个 16 位寄存器名为 <code>{ax, cx, dx, bx, sp, bp, si, di}</code>, 代表相应的 32 位寄存器 <code>{eax, ecx, ..., edi}</code> 的低 16 位部分. (前缀 "e" 表示扩展 "extended"). 八个 8 位寄存器名为 <code>{al, cl, dl, bl, ah, ch, dh, bh}</code>, 代表寄存器 <code>{ax, cx, dx, bx}</code> 的高八位和低八位. 每当修改 16 位或 8 位寄存器的值时, 所属的 32 位寄存器的高位部分将保持不变.</p>
+<p><img alt="register-aliasing" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/x86-assembly_2.svg"/>{width="500"}</p>
+<h2>3. 基本算术指令</h2>
+<p>最基础的 x86 算术指令运行在两个 32 位寄存器上. 第一个操作数作为源, 第二个操作数既作为源又作为目标. 例如: <code>addl %ecx, %eax</code> -- 用 C 表示, 就是 <code>eax = eax + ecx;</code>, 其中 eax 和 ecx 的类型都是 <code>uint32_t</code>. 很多指令都符合这个重要的模式, 例如:</p>
+<ul>
+<li><code>xorl %esi, %ebp</code> 意为 <code>ebp = ebp ^ esi;</code>.</li>
+<li><code>subl %edx, %ebx</code> 意为 <code>ebx = ebx - edx;</code>.</li>
+<li><code>andl %esp, %eax</code> 意为 <code>eax = eax &amp; esp;</code>.</li>
+</ul>
+<p>有些算术指令只使用一个寄存器作为参数, 例如:</p>
+<ul>
+<li><code>notl %eax</code> 意为 <code>eax = ~eax;</code>.</li>
+<li><code>incl %ecx</code> 意为 <code>ecx = ecx + 1;</code>.</li>
+</ul>
+<p>位移和位旋转指令使用一个 32 位寄存器作为要位移的值, 并使用一个固定 8 位的寄存器 <code>cl</code> 作为位移数. 例如 <code>shll %cl, %ebx</code> 意为 <code>ebx = ebx &lt;&lt; cl;</code>.</p>
+<p>很多算数指令可以使用立即值 (immediate value) 作为第一个操作数. 立即值是固定的 (不可变) 且编码在指令中. 立即值以 <code>$</code> 开头. 例如:</p>
+<ul>
+<li><code>movl $0xFF, %esi</code> 意为 <code>esi = 0xFF;</code>.</li>
+<li><code>addl $-2, %edi</code> 意为 <code>edi = edi + (-2);</code>.</li>
+<li><code>shrl $3, %edx</code> 意为 <code>edx = edx &gt;&gt; 3;</code>.</li>
+</ul>
+<p>注意 <code>movl</code> 指令将第一个参数的值复制到第二个参数上 (这并不是严格意义上的 "移动 (move)", 但这是惯用的名称). 在使用寄存器时, 如 <code>movl %eax, %ebx</code>, 这意味着将 <code>eax</code> 寄存器的值复制到 <code>ebx</code> 中 (这会覆盖 <code>ebx</code> 原先的值).</p>
+<h3>题外话</h3>
+<p>现在很适合提一下汇编编程的一个原则: 并非所有你想要的操作都能够直接表达成一条指令. 在大多数人使用的编程语言中, 许多结构是可组合的并且可以适应不同的情况, 且算术表达式是可以嵌套的. 而在汇编语言中, 你只能写指令集允许的内容. 举几个例子说明:</p>
+<ul>
+<li>你不能将两个立即值常量相加, 即使在 C 里能这样做. 在汇编中你只能在编译的时候计算这个值, 或者用多个指令表示它.</li>
+<li>你可以用一条指令将两个 32 位寄存器相加, 但是你不能将三个寄存器相加 -- 你需要将它拆分成两条指令.</li>
+<li>你不能将 16 位寄存器与 32 位寄存器相加. 你需要先写一条将 16 位转换成 32 位的指令, 再写一条执行加法的指令.</li>
+<li>执行位移操作时, 位移数要么是硬编码的立即值, 要么放在寄存器 <code>cl</code> 中. 它不能放在其他寄存器里. 如果为位移数在其他寄存器中, 它必须先复制到 <code>cl</code> 中.</li>
+</ul>
+<p>总之需要记住的是你不能尝试猜测或者发明不存在的语法 (如 <code>addl %eax, %ebx, %ecx</code>); 而且, 如果你无法从支持的指令列表中找到想要的指令, 你就必须用一串别的指令手动实现它 (这可能需要分配一些临时的寄存器来存储中间值).</p>
+<h2>4. 标识寄存器和比较</h2>
+<p>很多指令会隐含地读写一个名为 <code>eflags</code> 的 32 位寄存器. 换句话说, 这个寄存器的值会在指令执行时用到, 但它不会写在汇编代码中.</p>
+<p><img alt="eflags" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/x86-assembly_3.svg"/>{width="600"}</p>
+<p>像 <code>addl</code> 这样的算术指令经常会根据计算的结果更新 <code>eflags</code>. 这个指令会设置或清除一些标志位, 如进位标志 (<code>CF</code>), 溢出标志 (<code>OF</code>), 符号标志 (<code>SF</code>), 奇偶标志 (<code>PF</code>), 零标志 (<code>ZF</code>) 等. 有些指令会读取标志 -- 例如, <code>adcl</code> 指令将两个数字相加并使用进位标志作为第三个操作数: <code>adcl %ebx, %eax</code> 意味 <code>eax = eax + ebx + cf;</code>. 有些指令根据标志位设置寄存器 -- 例如 <code>setz %al</code>, 如果设置了 <code>ZF</code> 标志位, 则把 8 位寄存器 <code>al</code> 置零. 有些指令直接操作单个标志位, 如 <code>cld</code> 指令会清除方向标志 (<code>DF</code>).</p>
+<p>比较指令不改变任何通用寄存器, 而是操作 <code>eflags</code>. 例如, <code>cmpl %eax, %ebx</code> 会比较两个寄存器的值, 将它们相减并根据差设置标志位. 所以无论在有符号还是无符号模式下它能告诉我们是 <code>eax &lt; ebx</code> 还是 <code>eax == ebx</code> 抑或是 <code>eax &gt; ebx</code>. 类似地, <code>testl %eax, %ebx</code> 计算 <code>eax &amp; ebx</code> 并根据结果设置标志位. 大多数情况下, 比较指令后面跟着一个条件跳转指令 (稍后介绍)</p>
+<p>到目前为止, 我们知道了一些标志位和算术运算相关. 其它的一些标志位则与 CPU 的行为相关 -- 如是否接受硬件中断, 虚拟 8086 模式, 和其他系统开发者 (而不是应用开发者) 关心的系统管理方面的东西. 大多数情况下, 系统标志位可以忽略; 除非涉及到比较和大整数运算, 算术标志位我们也不用关心.</p>
+<h2>5. 内存地址, 读和写</h2>
+<p>CPU 本身并不能成为非常有用的计算机. 只有 8 个数据寄存器严重限制了你能执行的运算, 因为你存不了多少信息. 为了增强 CPU, 我们有 RAM 作为大内存. 基本上, RAM 是一个巨大的字节数组 -- 例如, 128 Mib 的 RAM 有 134 217 728 个字节, 你可以用来存储任何数据.</p>
+<p><img alt="ram" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/x86-assembly_4.svg"/>{width="500"}</p>
+<p>当我们存储一个大于一字节的值时, 该值以小端编码. 例如一个 32 位寄存器的值为 0xDEADBEEF, 它需要存储在起始地址为 10 的内存中, 则字节 0xEF 存放在地址 10 中, 0xBE 存在地址 11 中, 0xAD 存在地址 12 中, 0xDE 存在地址 13 中. 当我们从内存中读取值时, 应用同样的规则 -- 低地址的字节装在在寄存器的低位部分.</p>
+<p><img alt="little-endian" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/x86-assembly_5.svg"/>{width="500"}</p>
+<p>显然, CPU 要有读写内存的指令. 具体地说, 你可以在内存的任意地址加载或存储一个或多个字节. 你能做的最简单的事就是读写单个字节:</p>
+<ul>
+<li><code>movb (%ecx), %al</code> 意为 <code>al = *ecx;</code>. (这会将内存地址 ecx 处的字节读取到 8 位寄存器 <code>al</code> 中)</li>
+<li><code>movb %bl, (%edx)</code> 意为 <code>*edx = bl;</code>; (这会将 <code>bl</code> 中的字节写到内存地址 edx 处的字节中)</li>
+<li>(在示例的 C 代码中, <code>al</code> 和 <code>bl</code> 的类型为 <code>uint8_t</code>, <code>ecx</code> 和 <code>edx</code> 的类型从 <code>uint32_t</code> 转换成 <code>uint8_t*</code>)</li>
+</ul>
+<p>很多算术指令允许其中一个操作数是地址 (不能两个都是). 例如:</p>
+<ul>
+<li><code>addl (%ecx), %eax</code> 意为 <code>eax = eax + (*ecx);</code>. (这将从内存中读取 32 位)</li>
+<li><code>addl %ebx, (%edx)</code> 意为 <code>*edx = (*edx) + ebx;</code>. (这会从内存中读写 32 位)</li>
+</ul>
+<h3>寻址模式</h3>
+<p>当我们写循环代码时, 通常会用一个寄存器保存数组的地址, 然后用另一个寄存器保存当前正在处理的索引. 尽管能够手动计算出当前处理的元素的地址, x86 指令集提供了一种更优雅的解决方案 -- 寻址模式. 它允许你你将一些寄存器相加或相乘. 举些例子可能会更清楚:</p>
+<ul>
+<li><code>movb (%eax,%ecx), %bh</code> 意为 <code>bh = *(eax + ecx);</code>.</li>
+<li><code>movb -10(%eax,%ecx,4), %bh</code> 意为 <code>bh = *(eax + (ecx * 4) - 10);</code>.</li>
+</ul>
+<p>地址的格式为 <code>offset(base, index, scale)</code>, 其中 <code>offset</code> 是一个整形常数 (可为正数, 负数, 或 0), <code>base</code> 和 <code>index</code> 是 32 位寄存器 (但是某些组合不允许), <code>scale</code> 为 <code>{1, 2, 4, 8}</code> 中的一个. 例如对于一个存储 64 位整数的数组, 我们使用 <code>scale = 8</code> 因为每个元素都是 8 字节长度.</p>
+<p>只要内存访问合法, 寻址模式就总是有效的. 因此如果你能写 <code>sbbl %eax, (%eax)</code>, 那么你也可以写 <code>sbbl %eax, (%eax,%eax,2)</code>, 如果你需要这么做的话. 此外注意计算出的地址是一个临时的值, 并不会存储在任何寄存器中. 这很方便, 因为如果要显式计算地址的话, 你还得为其分配一个寄存器; 只有 8 个通用寄存器相当紧张 , 特别是当你还有别的变量要存储的时候.</p>
+<h2>6. 跳转, 标签和机器码</h2>
+<p>每个汇编指令可以有零个或多个标签作为前缀. 当我们需要跳转到特定指令时, 这些标签会很有用. 例如:</p>
+<pre><code>foo:  /* A label */
+negl %eax  /* Has one label */
+
+addl %eax, %eax  /* Zero labels */
+
+bar: qux: sbbl %eax, %eax  /* Two labels */
+</code></pre>
+<p><code>jmp</code> 指令告诉 CPU 转到标签指定的指令作为下一个执行的指令, 而不是默认的执行接下来的那个指令. 下面的例子是一个简单的死循环:</p>
+<pre><code>top: incl %ecx
+jmp top
+</code></pre>
+<p>尽管 <code>jmp</code> 跳转是无条件的, x86 还是有其它的跳转指令, 它们检查 <code>eflags</code> 的状态, 根据条件是否满足决定是跳转到指定标签还是执行接下来的指令. 条件跳转指令包括: <code>ja</code> (大于则跳转), <code>jle</code> (小于等于则跳转), <code>jo</code> (溢出则跳转), <code>jnz</code> (非零则跳转), 等等. 它们总共有 16 种, 其中很多是等价的 -- 例如, <code>jz</code> (为零则跳转) 与 <code>je</code> (相等则跳转) 相同, <code>ja</code> (大于则跳转) 与 <code>jnbe</code> (不小于等于则跳转) 相同. 下面是一个使用条件跳转的例子:</p>
+<pre><code>jc skip  /* If carry flag is on, then jump away */
+/* Otherwise CF is off, then execute this stuff */
+notl %eax
+/* Implicitly fall into the next instruction */
+skip:
+adcl %eax, %eax
+</code></pre>
+<p>标签地址在编译的时候就固定了, 但是我们也有办法跳转到运行时计算出来的任意地址. 具体地说, 我们可以跳转到寄存器的值指定的位置: <code>jmp *%ecx</code> 实际意味着将 <code>ecx</code> 的值复制到指令指针寄存器 <code>eip</code>.</p>
+<p>现在是时候讨论一下第一节中忽略的概念: 指令与执行. 汇编语言的每个指令最终会转换成 1 至 15 字节的机器码, 这些机器码指令串在一起形成了可执行文件. CPU 有一个名为 <code>eip</code> (extended instruction pointer, 扩展指令指针) 的 32 位寄存器, 当程序运行的时候, 它会保存当前执行的指令的地址. 注意能够读写 <code>eip</code> 寄存器的方法很少, 因此它的行为与 8 个通用寄存器很不一样. 每当执行一个指令时, CPU 都知道它有多少个字节, 然后就会将 <code>eip</code> 增加一定值, 让它指向下一个指令.</p>
+<p><img alt="machine-code" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/x86-assembly_6.svg"/>{width="500"}</p>
+<p>当我们讨论到机器码的时候, 汇编语言并不是程序员能够到达的最底层; 原始二进制机器码才是. (Intel 内部人员甚至还能接触到更底层的, 例如流水线调试 (pipeline debugging) 和宏代码 (microcode) -- 但是普通的程序员接触不到) 手写机器码是很烦人的工作 (虽然汇编语言已经够烦人了), 但是你还是可以从中获得一些微小能力. 通过编写机器码, 你可以使用一些不一样的方式编码某些指令 (例如更长但是执行效率相同的字节序列), 或者故意生成一些无效的指令来测试 CPU 的行为 (不同的 CPU 处理错误的方式不一样).</p>
+<h2>7. 栈</h2>
+<p>栈在概念上是由 <code>esp</code> 寄存器指向的一段内存区域. x86 架构有一系列的指令用于操作栈. 尽管所有的这些功能可以通过 <code>movl</code>, <code>addl</code> 等指令和其它除 <code>esp</code> 外的寄存器实现, 但是使用栈指令会更简洁且更符合习惯.</p>
+<p>在 x86 中, 栈从高地址到低地址向下增长. 例如, 将一个 32 位值 "压入" 栈中意味着 <code>esp</code> 先减小 4, 然后再将这个 4 字节的值存储在地址 <code>esp</code> 处. 将一个值 "弹出" 则执行相反的操作 -- 在地址 <code>esp</code> 处加载 4 字节 (存储在寄存器或丢弃它), 然后 <code>esp</code> 增加 4.</p>
+<p>栈对于函数调用来说很重要. 调用指令 <code>call</code> 指令类似于 <code>jmp</code>, 不同的是它在跳转前会先将下一个指令的地址压入栈中. 这样的话, 我们能够通过执行 <code>retl</code> 指令跳转回来 -- 它会将地址弹出存入 <code>eip</code> 中. 此外, 标准的 C 调用会将一些 (或所有) 函数参数压入栈中.</p>
+<p>注意栈内存可以用来读写 <code>eflags</code> 寄存器, 或者用来读 <code>eip</code> 寄存器. 访问这两个寄存器很麻烦, 因为你不能用典型的 <code>movl</code> 指令或者算术指令.</p>
+<h2>8. 调用约定</h2>
+<p>当我们编译 C 代码时, 它会被翻译成汇编代码然后最终转换成机器码. 通过将值放入栈或寄存器中, 调用约定定义 C 函数如何接收参数以及如何返回值. 调用约定应用于 C 函数调用 C 函数, 或者一段汇编代码调用 C 函数, 或者 C 函数调用汇编函数. (它不适用于一段汇编代码调用另一段汇编代码; 汇编代码的调用没有什么限制.)</p>
+<p>在 32 位 x86 架构的 Linux 上, 调用约定被称为为 <a href="https://en.wikipedia.org/wiki/X86_calling_conventions#cdecl">cdecl</a>. 函数调用者 (父级) 将参数从右往左依次压入栈中, 然后调用目标函数 (被调用者/子级), 接着从 <code>eax</code> 中接收返回值, 最后弹出参数. 例如:</p>
+<pre><code class="language-c">int main(int argc, char **argv) {
+  print("Hello", argc);
+  /*
+  上面的调用会转换成类似这样的汇编代码:
+
+  pushl %registerContainingArgc
+  pushl $ADDRESS_OF_HELLO_STRING_CONSTANT
+  call print
+  // Receive result in %eax
+  popl %ecx  // Discard argument str
+  popl %ecx  // Discard argument foo
+  */
+}
+
+int print(const char *str, int foo) {
+  ....
+  /*
+  在汇编语言中, 栈上有这些 32 位值:
+    0(%esp) 存储调用者下一个指令的地址.
+    4(%esp) 存储参数 str 的值 (字符指针).
+    8(%esp) 存储参数 foo 的值 (有符号整数).
+  在函数执行 `retl` 前, 它需要在 %eax 中存入某个数值, 作为函数的返回值.
+  */
+}
+</code></pre>
+<h2>9. 可重复执行的字符串指令</h2>
+<p>有一些的指令可以更方便地处理字节 (或字) 的长序列, 这类指令非正式地称为 "字符串" 指令. 每个这类指令都使用 <code>esi</code> 和 <code>edi</code> 寄存器作为内存地址, 并且执行完后会自动增加或减少它们. 例如 <code>movsb %esi, %edi</code> 意为 <code>*edi = *esi; esi++; edi++;</code> (复制一个字节). (实际上, 如果方向标志位 (DF) 为 0 则 <code>esi</code> 和 <code>edi</code> 自增; 否则 DF 为 1 则自减.) 其他字符串指令例如有 <code>cmpsb</code>, <code>scasb</code>, <code>stosb</code>.</p>
+<p>在一个字符串指令前面加上 <code>rep</code> (另请参见 <code>repe</code> 和 <code>repne</code>) 可以改变它的行为, 让它执行 <code>ecx</code> 次 (<code>ecx</code> 会自动递减). 例如 <code>rep movsb %esi, %edi</code> 意为:</p>
+<pre><code class="language-c">while (ecx &gt; 0) {
+  *edi = *esi;
+  esi++;
+  edi++;
+  ecx--;
+}
+</code></pre>
+<p>字符串指令和 <code>rep</code> 前缀给汇编语言带来一些复合迭代操作. 它们代表了一些复杂指令集 (CISC) 设计的思维模式, 也就是程序员直接编写汇编代码是很正常的, 所以要提供一些高级特性让工作变得更简单 (但是现代的解决方案都是编写 C 甚者更高级的语言, 而让编译器来生成这些乏味的汇编代码)</p>
+<h2>10. 浮点数和 SIMD (单指令多数据流)</h2>
+<p>x87 数学协同处理器有 8 个 80 位浮点寄存器 (现如今所有的 x87 功能都已经整合到 x86 CPU 中了), 并且 x86 CPU 还有 8 个 128 位 <code>xmm</code> 寄存器用于 SEE (Streaming SIMD Extensions) 指令. 我并没有太多关于 FP/x87 多经验, 所以你需要参考网上的其它教程. x87 FP 栈的工作方式有些奇怪, 现在更好的方式是使用 xmm 寄存器和 SSE/SSE2 标量指令执行浮点数运算.</p>
+<p>至于 SSE, 一个 128 位 xmm 寄存器的含义取决于要执行哪种指令: 可以作为十六字节值, 可以作为八个 16 位字, 可以作为四个 32 位双字或者单精度浮点数, 或者作为两个 64 位四字或者双精度浮点数. 例如, 一个 SSE 指令可以将两个 xmm 寄存器相加, 每个寄存器视为八个独立的 16 位字. SIMD 背后的思路是执行一个指令一次性操作很多个数据, 这比单独操作每个值要快, 因为获取和执行每个指令都会有一定的开销.</p>
+<p>显然, 所有的 SSE/SIMD 操作都可以用更慢的基础标量操作模拟 (例如第 3 部分介绍的 32 位算术指令). 谨慎的程序员可能会选择先用标量操作写个原型, 验证其正确性, 然后再逐步将其转换成使用更快的 SSE 指令并确保它仍能计算出相同的结果.</p>
+<h2>11. 虚拟内存</h2>
+<p>到目前为止, 我们假设当指令请求读写一处内存地址时, 它正是 RAM 处理的地址. 但是如果我们在中间引入一个转换层, 我们可以做一些有趣的事情. 这个概念通常称为虚拟内存, 分页, 或其它名称.</p>
+<p>虚拟内存的基本思路是引入一个页表, 描述 32 位虚拟地址空间中的每个 4096 字节的页 (或块) 映射到哪儿. 例如, 如果一个页没有映射关系, 则读写这个页的任意地址都会导致陷入 (trap) / 中断 / 异常. 再比如, 在不同的进程中, 同样的虚拟地址 0x08000000 可能映射到物理内存的不同页中. 此外, 每个进程都有一套自己独立的页, 且看不到其它进程或内核的页内容. 分页的概念是系统开发者要最需要关心的, 但它的行为有时候也会影响到应用程序员, 因此他们也需要意识到它的存在.</p>
+<p>注意地址映射不一定是 32 位到 32 位. 例如, 32 位虚拟地址空间可以映射到 36 位的物理地址空间 (物理地址扩展 (Physical Address Extension, PAE)). 或者在只有 1 GiB 内存的计算机上, 64 位虚拟地址空间也可以映射到 32 位的物理地址空间.</p>
+<h2>12. 64 位模式</h2>
+<p>这里我只讨论 x86-64 模式, 并简要说明它有什么不同. 网上其它地方有很多文章和参考资料详细解释了其中的差异.</p>
+<p>显然, 8 个通用用途寄存器已经被扩展成 64 位长. 新的寄存器名为 <code>{rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi}</code>, 而老的 32 位寄存器 <code>{eax, ..., edi}</code> 占用这些 64 位寄存器的低 32 位. 此外还有 8 个新的 64 位寄存器 <code>{r8, r9, r10, r11, r12, r13, r14, r15}</code>, 这样现在一共有 16 个通用用途寄存器. 这大大缓解了处理多变量时多寄存器压力. 新的寄存器同样有子寄存器 -- 例如 64 位寄存器 <code>r9</code> 包含了 32 位的 <code>r9d</code>, 16 位的 <code>r9w</code>, 以及 8 位的 <code>r9l</code>. 此外, <code>{rsp, rbp, rsi, rdi}</code> 的低位现在也可以用 <code>{spl, bpl, sil, dil}</code> 访问了.</p>
+<p><img alt="64-bit" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/x86-assembly_7.svg"/>{width="500"}</p>
+<p>算术指令可以操作 8 位, 16 位, 32 位和 64 位寄存器. 当操作 32 位寄存器时, 高 32 位会被清零 -- 但是更窄的操作宽度会保持高位不变. 64 位指令集中删除了很多不常用的指令, 例如 BCD (binary-code decimal, 二进码十进数) 相关的指令, 大多数涉及到 16 位段寄存器的指令, 以及 32 位值压栈/弹出栈的指令.</p>
+<p>对于应用程序员来说, x86-64 编程与老的 x86-32 比起来并没有太多不同. 一般来说, x86-64 的体验更好, 因为有更多的寄存器可以用, 而且只移除了少量用不到的特性. 所有的内存指针必须是 64 位的 (这可能需要一段时间适应), 而数据的值根据不同的场景可以是 32 位, 64 位, 8 位等等 (不会强制你用 64 位数据). 修改后的调用约定使得在汇编代码中检索函数参数变得更加容易, 因为前 6 左右的参数会放入寄存器而不是栈中. 除了这几点之外, 体验都差不多. (尽管对于系统程序员来说, x86-64 带来了新的模式, 新的特性, 需要关系的新问题, 以及需要处理的新情况.)</p>
+<h2>13. 对比其他架构</h2>
+<p>精简指令集 (RISC) CPU 架构做一些与 x86 不同的事情. 只有明确的加载/存储指令能接触到内存; 普通的算数指令不行. 指令的长度是固定的, 例如每个指令 2 字节或 4 字节. 内存操作通常需要对齐, 例如, 加载一个 4 字节字必须用一个值为 4 的倍数的地址. 相比之下, x86 架构的算数指令里内嵌了内存操作, 指令编码成变长的字节序列, 且大多数情况允许不对齐的内存访问. 此外, x86 有一整套的 8 位, 16 位和 32 位的算数运算, 因为它的向后兼容设计, 而精简指令集架构通常是纯 32 位的. 对于更小的值, 它们会将内存中的字节或字扩展并放入一个完整的 32 位寄存器中, 然后执行 32 位算数运算, 最后将寄存器的低 8 位或低 16 位存入内存中. 流行的精简指令集架构有 ARM, MIPS 和 RISC-V.</p>
+<p>超长指令集架构 (VLIW architectures) 允许你显式并行执行多个子指令; 例如你可以在一行中写 <code>add a, b; sub c, d</code> 因为 CPU 有两个同时工作的独立运算单元. x86 CPU 也可以一次执行多个指令 (称为超标量处理 (superscalar processing)), 但是指令不能显式地写成这样 -- CPU 内部会分析指令流的并行性, 并将可接受的指令分配到多个执行单元.</p>
+<h2>14. 总结</h2>
+<p>我们从将 CPU 视为一台拥有若干寄存器, 按顺序执行指令的简单机器开始讨论. 我们介绍了这些寄存器能够执行基础算术操作. 然后我们学习了如何跳转到代码的其它地方, 比较, 和条件跳转. 接下来，我们了解了 RAM 作为一个巨大的可寻址数据存储的概念, 以及如何使用 x86 寻址模式来简洁地计算地址. 最后我们简要介绍了堆栈, 调用约定, 高级指令, 虚拟内存地址转换以及 x86-64 模式的差异.</p>
+<p>我希望这个教程足够让你了解到 x86 指令集架构的一般工作原理. 在这片介绍级别的文章中, 我还有很多很多细节没有介绍到 -- 例如如何编写一个基础函数, 调试常见错误, 高效地使用 SSE/AVX, 使用分段, 介绍诸如页表和中断描述符表之类的系统数据结构, 讨论权限和安全, 等等. 不过当你弄清楚了 x86 CPU 运作的思维模式, 你可以更好地去搜索一些进阶的教程资料, 尝试编写一些代码, 了解会发生什么以及为什么会这样; 甚至可以尝试浏览英特尔那数千页极其详细的 CPU 手册.</p>
+<h2>15. 扩展阅读</h2>
+<ul>
+<li><a href="http://www.cs.virginia.edu/~evans/cs216/guides/x86.html">University of Virginia CS216: x86 Assembly Guide</a></li>
+<li><a href="https://en.wikipedia.org/wiki/X86_instruction_listings">Wikipedia: x86 instruction listings</a></li>
+<li><a href="https://software.intel.com/content/www/us/en/develop/articles/intel-sdm.html">Intel® 64 and IA-32 Architectures Software Developer Manuals</a></li>
+<li><a href="https://www.cs.cmu.edu/afs/cs/academic/class/15213-f20/www/lectures/05-machine-basics.pdf">Carnegie Mellon University: Introduction to Computer Systems: Machine-Level Programming I: Basics</a></li>
+<li><a href="https://www.cs.cmu.edu/afs/cs/academic/class/15213-f20/www/lectures/06-machine-control.pdf">Carnegie Mellon University: Introduction to Computer Systems: Machine-Level Programming II: Control</a></li>
+</ul>

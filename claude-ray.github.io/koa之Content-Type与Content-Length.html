@@ -1,0 +1,118 @@
+<h2>原文：<a href="https://claude-ray.github.io/koa-content.html">koa之Content-Type与Content-Length</a></h2>
+<hr/>
+<h2>title: koa之Content-Type与Content-Length
+date: 2018-10-18 22:16:05
+tags: [Node.js,JavaScript,Koa]
+categories: Node.js
+description: 透过ctx.body setter的执行过程，分析koa如何设置响应头content-type和content-length，以及一些注意事项。</h2>
+<h1>Content-Type</h1>
+<p>众所周知，koa可以方便地通过<code>ctx.type=</code>来设置响应头的<code>Content-Type</code>。</p>
+<p>但下面这段代码，当响应体ctx.body为<code>object</code>时，无论怎么设置ctx.type，收到的Content-Type都是<code>application/json</code>。</p>
+<pre><code class="language-js">ctx.type = 'text/html';
+ctx.body = { type: 'json' };
+
+// 得到的content-type依然为application/json
+</code></pre>
+<p>为什么设置被覆盖了，要通过一小段koa源码来解释。</p>
+<pre><code class="language-js">// koa/lib/response.js
+
+set body(val) {
+  const original = this._body;
+  this._body = val;
+
+  if (this.res.headersSent) return;
+
+  // no content
+  if (null == val) {
+    if (!statuses.empty[this.status]) this.status = 204;
+    this.remove('Content-Type');
+    this.remove('Content-Length');
+    this.remove('Transfer-Encoding');
+    return;
+  }
+
+  // set the status
+  if (!this._explicitStatus) this.status = 200;
+
+  // set the content-type only if not yet set
+  const setType = !this.header['content-type'];
+
+  // string
+  if ('string' == typeof val) {
+    if (setType) this.type = /^\s*&lt;/.test(val) ? 'html' : 'text';
+    this.length = Buffer.byteLength(val);
+    return;
+  }
+
+  // buffer
+  if (Buffer.isBuffer(val)) {
+    if (setType) this.type = 'bin';
+    this.length = val.length;
+    return;
+  }
+
+  // stream
+  if ('function' == typeof val.pipe) {
+    onFinish(this.res, destroy.bind(null, val));
+    ensureErrorHandler(val, err =&gt; this.ctx.onerror(err));
+
+    // overwriting
+    if (null != original &amp;&amp; original != val) this.remove('Content-Length');
+
+    if (setType) this.type = 'bin';
+    return;
+  }
+
+  // json
+  this.remove('Content-Length');
+  this.type = 'json';
+}
+</code></pre>
+<p>熟悉koa源码的同学可能还记得，如果ctx.type未设置，会根据传给body的值类型赋予<code>Content-Type</code>默认值。</p>
+<ul>
+<li><code>null/undefined</code>：type什么的不存在的，即使有也会被删掉，并设置'No Content' 204状态码</li>
+<li><code>string</code>：正则<code>/^\s*&lt;/</code>匹配，分情况设为html或text</li>
+<li><code>Buffer</code>：如果未设置type，那么会被改为<code>bin</code>(application/octet-stream)</li>
+<li><code>Stream</code>：同Buffer，当然逻辑上会多个绑定结束时destroy和异常处理，如果和旧body不同，还会删掉content-length</li>
+<li>以上都不是：即使设置过<code>ctx.type</code>，也会重新标记为json，并删除content-length</li>
+</ul>
+<p>可想而知，既然已经过每一步判断，body的内容一般就是<code>boolean</code>、<code>object</code>或<code>number</code>之流，标记为<code>json</code>合情合理。当然没忘<code>symbol</code>，它是无法被JSON序列化的，会抛出TypeError。</p>
+<p>综上，如果接口返回值满足上述几个json类型，又想更改响应头的content-type，最简单的方法其实是<code>ctx.type=</code>放在<code>ctx.body=</code>之后，以重新覆盖响应头的内容。但一些路由中间件封装的时候没有考虑这层面，把接口返回值作为ctx.body，添加这种在body后设置type的操作可能会遇到困难。</p>
+<p>另一种常规方法是调整数据格式后再对ctx.body赋值，例如对object进行JSON.stringify处理后，之前设置的content-type才不会被覆盖为<code>application/json</code>。</p>
+<blockquote>
+<p>ctx.type的设置支持各类缩略词，每次set前都会通过<code>mime-types</code>和<code>mime-db</code>依赖匹配完整名称，并挂上charset。</p>
+</blockquote>
+<blockquote>
+<p>除了设置，还需要注意的点是ctx.type的getter会过滤掉<code>charset</code>部分，因此<strong>ctx.type的setter和getter不是完全对等的</strong>。如果想获取之前设置过的完整信息，需要通过<code>ctx.res.getHeader('Content-Type')</code>到头部获取。</p>
+</blockquote>
+<p>Wait，好像还漏了什么？</p>
+<p>content-type既然在最后给定为json，为什么执行了一个<code>this.remove('Content-Length')</code>？且听下面分解。</p>
+<h1>Content-Length</h1>
+<p>在<code>set body</code>的string和Buffer步骤，都会主动判断字节长度（不是字符，所以string用Buffer.byteLength判断），并对this.length即content-length赋值。而json和stream则相反，不但没有设置length，反而把设置过的删掉了。</p>
+<p>简单分析一下，stream步骤的删除不难理解，二进制数据流只有传输完毕才能计算长度，不需要从响应头判断length。另一方面，content-length是允许胡乱设置的，koa为了避免它被设置一个错误的值，所以才有了的重新赋值与删除。甚至在异常捕获中也加上了这个fix：<a href="https://github.com/koajs/koa/issues/199">Content-Length not reset if error is thrown after body is set</a>。</p>
+<p>那么json返回值的length被删掉之后，它是从哪里重新被设置呢？</p>
+<blockquote>
+<p>最初我错想为交给了node底层处理，而且确实在http模块中有对content-length的设置，但它只有在完全未指定headers时才会添加。[https://github.com/nodejs/node/blob/master/lib/_http_outgoing.js]</p>
+</blockquote>
+<p>实际对json类型的值判断字节长度非常容易，JSON.stringify加Buffer.byteLength即可。目录内搜索一下对this.length或ctx.length的赋值，果然，在响应的最终res.end()之前看到了该处理。</p>
+<pre><code class="language-js">// koa/lib/application.js
+function respond(ctx) {
+  // ...
+
+  // responses
+  if (Buffer.isBuffer(body)) return res.end(body);
+  if ('string' == typeof body) return res.end(body);
+  if (body instanceof Stream) return body.pipe(res);
+
+  // body: json
+  body = JSON.stringify(body);
+  if (!res.headersSent) {
+    ctx.length = Buffer.byteLength(body);
+  }
+  res.end(body);
+}
+</code></pre>
+<p>因此，一般我们对 json 类型的返回值显式更改 <code>ctx.length</code> 是没实际意义的，koa 的默认在 res.end 前强制把 length 覆盖。这个处理可以避免使用者错误地认为 body.length 就是响应数据的长度。</p>
+<p>如果非要修改，去使用 ctx.res.writeHead 吧，如此一来，res.headersSent 内的处理就被会跳过了。</p>
+<h2>小结</h2>
+<p>koa的源码解析文章实在太多了，所以早先没有打算像express那样写一篇逐句分析，而且确实简单易读，~~恐怕没写完就太监了~~。但时间一久，很多细节就忘掉了，会遇到此类问题说明对其底层不够熟悉。就此写一篇笔记，发出来加深记忆。[真香.jpg]</p>

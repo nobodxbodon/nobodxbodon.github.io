@@ -1,0 +1,507 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8Go%E6%89%93%E5%8C%85%E4%BA%8C%E8%BF%9B%E5%88%B6React%E5%8D%95%E9%A1%B5%E9%9D%A2%E5%BA%94%E7%94%A8.html">使用Go打包二进制React单页面应用</a></h2>
+<hr/>
+<h2>title: 使用Go打包二进制React单页面应用
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?77'
+date: 2021-03-28 20:59:08
+categories: Golang
+tags: [Golang, SPA, React]
+description: Golang在1.16中加入了embed包，可以将文件直接打包为二进制；除此之外，github的开源库rakyll/statik也提供了类似的功能，并且使用起来也很方便；本文使用rakyll/statik库，以一个TODO List应用为例，打包了一个二进制的React SPA应用；</h2>
+<p>Golang在1.16中加入了embed包，可以将文件直接打包为二进制；除此之外，github的开源库rakyll/statik也提供了类似的功能，并且使用起来也很方便；</p>
+<p>本文使用<a href="https://github.com/rakyll/statik">rakyll/statik</a>库，以一个TODO List应用为例，打包了一个二进制的React SPA应用；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/go-spa-demo</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>使用Go打包二进制React单页面应用</strong></h2>
+<h3><strong>前言</strong></h3>
+<p>在微服务 + 云上部署大行其道的今天，其实<strong>把所有的静态资源全部打包到一个二进制文件是相当不明智的（类似于Java Web项目打包到一整个jar包或者war包）；</strong></p>
+<p>但是对于二进制来说，可以在<strong>一定程度上降低软件分发的难度，以及用户的使用难度；</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>想象一下，整个项目只有一个二进制，双击打开就好，完全的纯净版是多么的爽！</strong>&lt;/font&gt;</p>
+<p><strong>Golang在1.16中加入了embed包，可以将文件直接打包为二进制；</strong></p>
+<p>除此之外，github的开源库rakyll/statik也提供了类似的功能，并且使用起来也很方便；</p>
+<p>所有，本文使用<a href="https://github.com/rakyll/statik">rakyll/statik</a>库，以一个TODO List应用为例，打包了一个二进制的React SPA应用；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>构建React SPA应用</strong></h3>
+<p>在项目根目录使用命令<code>create-react-app</code>创建一个React项目：</p>
+<pre><code class="language-bash">create-react-app web
+</code></pre>
+<blockquote>
+<p>如果没有安装这个命令，可以使用npm直接安装：</p>
+<pre><code class="language-bash">npm install -g create-react-app
+</code></pre>
+</blockquote>
+<p>项目创建完成后，依赖会自动下好；</p>
+<p>下面我们使用React进行进行TODO List的开发；</p>
+<p>首先添加Todo.js作为Todo List中单个项的组件：</p>
+<p>web/Todo.js</p>
+<pre><code class="language-javascript">import React, {useState} from 'react'
+
+export const Todo = ({handleAdd}) =&gt; {
+    const [description, setDescription] = useState('')
+
+    return (&lt;form onSubmit={x =&gt; handleAdd({description})}&gt;
+        &lt;input type="text" value={description} onChange={x =&gt; setDescription(x.target.value)}&gt;&lt;/input&gt;
+        &lt;button disabled={description.length &lt; 1}&gt;Add&lt;/button&gt;
+    &lt;/form&gt;)
+}
+</code></pre>
+<p>其次，添加整个TODO List的列表项<code>Todos.js</code>和<code>Todos.css</code>：</p>
+<p>web/Todos.js</p>
+<pre><code class="language-javascript">import React, {Component, Fragment} from 'react'
+import {Todo} from './Todo'
+
+import './Todos.css'
+
+export class Todos extends Component {
+    constructor() {
+        super()
+        this.state = {
+            todos: [],
+            waiting: false
+        }
+        this.handleAdd = this.handleAdd.bind(this)
+    }
+
+    componentDidMount() {
+        this.setState({waiting: true})
+        fetch('/todo')
+            .then(response =&gt; {
+                this.setState({waiting: true})
+                if (response.status === 200) {
+                    return response.json()
+                }
+            })
+            .then(todos =&gt; {
+                this.setState({todos})
+            })
+            .finally(() =&gt;{
+                this.setState({waiting: false})
+            })
+    }
+
+    handleAdd(todo) {
+        if (!todo.description) return
+        this.setState({waiting: true})
+        fetch('/todo', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(todo)
+        })
+            .then(response =&gt; {
+                this.setState({waiting: true})
+                if (response.status === 200) {
+                    return response.json()
+                }
+            })
+            .then(todos =&gt; {
+                this.setState({todos})
+            })
+            .finally(() =&gt;{
+                this.setState({waiting: false})
+            })
+    }
+
+    render() {
+        const renderInput = () =&gt; {
+            const {waiting} = this.state
+            if (!waiting) {
+                return (
+                    &lt;Todo handleAdd={this.handleAdd}/&gt;
+                )
+            }
+            return (&lt;div&gt;Waiting...&lt;/div&gt;)
+        }
+
+        return (
+            &lt;Fragment&gt;
+                &lt;ul className="Todos"&gt;
+                    {this.state.todos != null ? (
+                        this.state.todos.map(x =&gt; (&lt;li&gt;
+                        {x.description}
+                        &lt;/li&gt;))) : null
+                    }
+                &lt;/ul&gt;
+                {renderInput()}
+            &lt;/Fragment&gt;
+        )
+    }
+}
+</code></pre>
+<p>web/Todos.css</p>
+<pre><code class="language-css">.Todos {
+    list-style-type: none;
+}
+
+.Todos li {
+    padding: 16px;
+    border-width: 0 0 1px 0;
+    border-color: #eee;
+    border-style: solid;
+}
+</code></pre>
+<p>接下来我们还要修改<code>App.js</code>，让他加载我们的Todos组件：</p>
+<p>web/App.js</p>
+<pre><code class="language-javascript">import React, { Component } from 'react'
+import {Todos} from './Todos'
+import logo from './logo.svg';
+import './App.css';
+
+export default class App extends Component {
+  render() {
+    return (
+      &lt;div className="App"&gt;
+        &lt;header className="App-header"&gt;
+          Todo App
+        &lt;/header&gt;
+
+        &lt;Todos/&gt;
+      &lt;/div&gt;
+    )
+  }
+}
+</code></pre>
+<p>这时候的样式比较奇怪（因为还是原来React欢迎页的样式）；</p>
+<p>修改<code>App.css</code>：</p>
+<p>web/App.css</p>
+<pre><code class="language-css">.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+  padding: 16px;
+}
+
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+</code></pre>
+<p>最后，使用<code>yarn start</code>启动；</p>
+<p>效果如下：</p>
+<p><img alt="demo1.png" src="https://cdn.jsdelivr.net/gh/jasonkayzk/go-spa-demo@main/image/demo1.png"/></p>
+<p>&lt;font color="#f00"&gt;<strong>尝试添加几个Todo项，会发现此时是无法添加的，因为我们的App需要和后端进行交互！</strong>&lt;/font&gt;</p>
+<p>至此，我们的React SPA应用开发完毕！</p>
+<p>下面进行后台Go项目；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建Go项目</strong></h3>
+<p>在根目录下使用<code>go mod</code>命令创建项目：</p>
+<pre><code class="language-bash">go mod init github.com/jasonkayzk/go-spa-demo
+</code></pre>
+<p>随后创建main.go</p>
+<p>main.go</p>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	_ "github.com/jasonkayzk/go-spa-demo/statik"
+	"github.com/labstack/echo"
+	"github.com/rakyll/statik/fs"
+)
+
+var e = echo.New()
+
+// Todo is a representation of a todo object for JSON
+type Todo struct {
+	Description string `json:"description"`
+}
+
+// Validate that he object is sufficient
+func (t *Todo) Validate() error {
+	if t.Description == "" {
+		return fmt.Errorf("Item is missing it's description")
+	}
+	return nil
+}
+
+// ErrorJSON returns an error text in json
+type ErrorJSON struct {
+	Message string `json:"message"`
+}
+
+type todoController struct {
+	get  func(c echo.Context) error
+	post func(c echo.Context) error
+}
+
+func newTodoController() *todoController {
+	todos := []*Todo{
+		&amp;Todo{
+			Description: "Default todo",
+		},
+	}
+
+	return &amp;todoController{
+		get: func(c echo.Context) error {
+			e.Logger.Printf("Handle get")
+			return c.JSON(http.StatusOK, todos)
+		},
+		post: func(c echo.Context) error {
+			e.Logger.Printf("Handle post")
+			t := &amp;Todo{}
+			if err := c.Bind(t); err != nil {
+				e.Logger.Printf("Could not parse request")
+				return c.JSON(http.StatusBadRequest, err)
+			}
+
+			if err := t.Validate(); err != nil {
+				e.Logger.Printf("Validation failed")
+				return c.JSON(http.StatusBadRequest, ErrorJSON{Message: err.Error()})
+			}
+
+			todos = append(todos, t)
+
+			return c.JSON(http.StatusOK, todos)
+		},
+	}
+}
+
+func main() {
+	addr := ":8080"
+
+	statikFS, err := fs.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	staticHandler := http.FileServer(statikFS)
+	tc := newTodoController()
+
+	e.GET("/*", echo.WrapHandler(http.StripPrefix("/", staticHandler)))
+
+	e.GET("/todo", tc.get)
+	e.POST("/todo", tc.post)
+
+	e.Logger.Fatal(e.Start(addr))
+}
+
+</code></pre>
+<p>这里有必要解释一下代码；</p>
+<blockquote>
+<p>首先，go项目使用<a href="https://github.com/labstack/echo">labstack/echo</a>，作为服务器后端的web框架；</p>
+<blockquote>
+<p>因为这个库是一个高性能，并且极简的web框架：</p>
+<p><strong>High performance, minimalist Go web framework</strong></p>
+</blockquote>
+<p>其次，代码引入了<a href="https://github.com/rakyll/statik">rakyll/statik</a>依赖；</p>
+<p>&lt;font color="#f00"&gt;<strong>并且<code>_ "github.com/jasonkayzk/go-spa-demo/statik"</code>这个包，即statik目录目前是不存在的，需要后期通过statik命令生成！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>首先通过<code>echo.New()</code>创建了一个echo Web服务器；</p>
+<p>随后定义了一个Todo类，用于存放React中的单个Todo条目；并给Todo类添加了一个Validate方法，用于检测内容是否为空；</p>
+<p>随后创建了todoController类，包括了get和post两个方法；</p>
+<p>在newTodoController类中，完成了创建一个todoController类，并创建get和post两个函数的逻辑；</p>
+<ul>
+<li>get函数：返回todos的json列表；</li>
+<li>post函数：实现添加一个todo条目的逻辑；</li>
+</ul>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>由于例子比较简单，所以每次get或者post都会返回整个todo list的内容；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>但是这样效率是比较低的，感兴趣的同学可以尝试优化；</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>最后在main函数中：</p>
+<p>首先创建了statikFS（即通过statik编译后的二进制文件系统）；</p>
+<p>随后使用<code>http.FileServer</code>将statikFS转换为一个静态文件目录的handler（前端页面）；</p>
+<p>随后，初始化了controller，并使用echo声明了：</p>
+<ul>
+<li><code>/*</code>：根目录为前端静态页面入口；</li>
+<li><code>/todo</code>：前端get和post接口路由；</li>
+</ul>
+<p>最后，启动web服务器；</p>
+<p>至此整个go项目后台编写完毕；</p>
+<p>接下来编译整个项目！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>使用statik编译二进制并编译项目</strong></h3>
+<h4><strong>statik编译二进制概述</strong></h4>
+<p><a href="https://github.com/rakyll/statik">rakyll/statik</a>官方仓库地址如下：</p>
+<ul>
+<li>https://github.com/rakyll/statik</li>
+</ul>
+<p>使用前可能需要安装：</p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>clone源码，go build，并把编译出的statik二进制加入系统变量Path即可！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>statik的使用方式也很简单：</p>
+<pre><code class="language-bash">statik -src=/path/to/your/project/public
+</code></pre>
+<p>使用<code>-src</code>直接指定静态文件所在目录即可；</p>
+<blockquote>
+<p><strong>当然，也可以使用<code>-include=*.jpg,*.txt,*.html,*.css,*.js</code>指定需要编译的文件类型；</strong></p>
+<p>更多使用方式可以查看官方文档；</p>
+</blockquote>
+<blockquote>
+<p><strong>例如：在项目的根目录下编译：</strong></p>
+<pre><code class="language-bash">statik.exe -src=./web/build
+</code></pre>
+<p><strong>会在根目录下生成<code>statik</code>目录以及<code>statik/statik.go</code>文件；</strong></p>
+<p><strong>文件中的data即编译后的二进制数据；</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h4><strong>编译整个项目</strong></h4>
+<p>在编译时，首先我们应该先编译前端项目，并生成静态文件；</p>
+<p>随后，使用statik编译前端的静态项目；</p>
+<p>最后，再编译整个go项目，生成二进制文件；</p>
+<p>即命令如下：</p>
+<pre><code class="language-bash"># 编译前端
+cd web &amp;&amp; yarn &amp;&amp; yarn build &amp;&amp; cd ..
+# 编译静态文件
+statik -f -src=./web/build # use `-f` to override statik build
+# 编译go项目
+go build -o app main.go
+</code></pre>
+<p>为了方便起见，我们可以编写一个Makefile文件，这样就不需要每次都输入这么多命令了；</p>
+<p>Makefile</p>
+<pre><code class="language-makefile">all:
+	cd web &amp;&amp; yarn &amp;&amp; yarn build &amp;&amp; cd ..
+	statik -f -src=./web/build # use `-f` to override statik build
+	go build -o app main.go
+
+.ONESHELL:
+statik:
+	cd web &amp;&amp; yarn &amp;&amp; yarn build &amp;&amp; cd ..
+	statik -src=./web/build
+
+dev:
+	watcher -startcmd -cmd="go run main.go"
+
+clean:
+	rm app
+
+setup:
+	go get github.com/rakyll/statik
+	go get github.com/canthefason/go-watcher
+	go get github.com/mitchellh/gox
+
+
+cross-platform:
+	gox -output="build/{{.Dir}}_{{.OS}}_{{.Arch}}"
+
+
+.PHONY: all clean statik dev cross-platform
+</code></pre>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>在Windows下使用make可能需要安装mingw等GNU套件；</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>最后，让我们试一下效果：</p>
+<pre><code class="language-bash">D:\workspace\go-spa-demo&gt;make
+cd web &amp;&amp; yarn &amp;&amp; yarn build &amp;&amp; cd ..
+statik -f -src=./web/build # use `-f` to override statik build
+go build -o app main.go
+yarn install v1.22.5
+[1/4] Resolving packages...
+success Already up-to-date.
+Done in 0.46s.
+yarn run v1.22.5
+$ react-scripts build
+Creating an optimized production build...
+Compiled with warnings.
+
+src\App.js
+  Line 3:8:  'logo' is defined but never used  no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+File sizes after gzip:
+
+  42.19 KB  build\static\js\2.55a8d793.chunk.js
+  1.57 KB   build\static\js\3.01417940.chunk.js
+  1.17 KB   build\static\js\runtime-main.08b54c47.js
+  1.04 KB   build\static\js\main.d5c45919.chunk.js
+  624 B     build\static\css\main.668855c6.chunk.css
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  yarn global add serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+
+Done in 4.67s.
+</code></pre>
+<p>编译成功，并且项目根目录下生成<code>app</code>二进制文件！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>测试项目</strong></h3>
+<p>运行编译生成的二进制文件；</p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注：如果是在windows环境下，可能需要修改文件名为<code>app.exe</code></strong>&lt;/font&gt;</p>
+</blockquote>
+<p>打开后端服务器：</p>
+<pre><code class="language-powershell">D:\workspace\go-spa-demo&gt;.\app.exe
+
+   ____    __
+  / __/___/ /  ___
+ / _// __/ _ \/ _ \
+/___/\__/_//_/\___/ v3.3.10-dev
+High performance, minimalist Go web framework
+https://echo.labstack.com
+____________________________________O/_______
+                                    O\
+⇨ http server started on [::]:8080
+</code></pre>
+<p>访问<code>localhost:8080</code>，结果如下：</p>
+<p><img alt="demo1.png" src="https://cdn.jsdelivr.net/gh/jasonkayzk/go-spa-demo@main/image/demo1.png"/></p>
+<p>添加多个Todo项，结果：</p>
+<p><img alt="demo2.png" src="https://cdn.jsdelivr.net/gh/jasonkayzk/go-spa-demo@main/image/demo2.png"/></p>
+<p>同时后端输出日志：</p>
+<pre><code class="language-json">{"time":"2021-03-28T21:26:30.6609505+08:00","level":"-","prefix":"echo","file":"main.go","line":"53","messa
+ge":"Handle get"}
+{"time":"2021-03-28T21:27:49.7780022+08:00","level":"-","prefix":"echo","file":"main.go","line":"57","messa
+ge":"Handle post"}
+{"time":"2021-03-28T21:27:52.6052245+08:00","level":"-","prefix":"echo","file":"main.go","line":"57","messa
+ge":"Handle post"}
+{"time":"2021-03-28T21:27:54.2510517+08:00","level":"-","prefix":"echo","file":"main.go","line":"57","messa
+ge":"Handle post"}
+</code></pre>
+<p>成功！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>附录</strong></h2>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/go-spa-demo</li>
+</ul>
+<p>项目参考：</p>
+<ul>
+<li>https://github.com/divanvisagie/go-spa-example</li>
+</ul>
+<p>&lt;br/&gt;</p>

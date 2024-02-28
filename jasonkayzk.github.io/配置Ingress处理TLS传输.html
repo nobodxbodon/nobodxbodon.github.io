@@ -1,0 +1,214 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E9%85%8D%E7%BD%AEIngress%E5%A4%84%E7%90%86TLS%E4%BC%A0%E8%BE%93.html">配置Ingress处理TLS传输</a></h2>
+<hr/>
+<h2>title: 配置Ingress处理TLS传输
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?55'
+date: 2021-05-31 08:47:34
+categories: Kubernetes
+tags: [Kubernetes, minikube, Ingress]
+description: 在上一篇文章《国内在minikube中添加ingress-nginx插件》中，讲述了如何在国内网络环境安装Ingress-Nginx，并且对NodePort、LoadBalancer和Ingress分别进行了测试；但是在实际项目中，我们只会用到HTTPS的连接，因此还需要为Ingress配置TLS证书；本文讲述了如何在Ingress中配置TLS证书；</h2>
+<p>在上一篇文章《国内在minikube中添加ingress-nginx插件》中，讲述了如何在国内网络环境安装Ingress-Nginx，并且对NodePort、LoadBalancer和Ingress分别进行了测试；</p>
+<p>但是在实际项目中，我们只会用到HTTPS的连接，因此还需要为Ingress配置TLS证书；</p>
+<p>本文讲述了如何在Ingress中配置TLS证书；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/kubernetes-learn/tree/book-learn/chapter5/ingress-nginx</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="/2021/05/30/%E5%9B%BD%E5%86%85%E5%9C%A8minikube%E4%B8%AD%E6%B7%BB%E5%8A%A0ingress-nginx%E6%8F%92%E4%BB%B6/">《国内在minikube中添加ingress-nginx插件》</a></li>
+<li><a href="/2021/05/31/%E9%85%8D%E7%BD%AEIngress%E5%A4%84%E7%90%86TLS%E4%BC%A0%E8%BE%93/">《配置Ingress处理TLS传输》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>配置Ingress处理TLS传输</strong></h2>
+<p>2021年的今天，如果网站不用HTTPS，基本上整个网站都要被Ban了；</p>
+<p>所以TLS是非常重要的；</p>
+<p>对于K8S而言：</p>
+<p>&lt;font color="#f00"&gt;<strong>当客户端创建到Ingress的控制器的TLS连接时，控制器将终止TLS连接！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>客户端和Ingress控制器之间的通信是加密的，而控制器和后端的Pod通信是非加密的（也无需加密）</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>因此，运行在Pod中的应用程序不需要支持TLS，只需接收正常的HTTP通信，并让Ingress处理和TLS相关的所有内容即可！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>要在Ingress控制器中配置TLS相关内容，需要将证书和私钥附加至Ingress中；</strong>&lt;/font&gt;</p>
+<p>下面我们开始为Ingress配置TLS；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建证书并配置Secrets</strong></h3>
+<p>创建TLS证书：</p>
+<p>chapter5/create-cert.sh</p>
+<pre><code class="language-bash">openssl genrsa -out tls.key 2048
+
+openssl req -new -x509 -key tls.key -out tls.cert -days 360 -subj /CN=kubia.example.com
+</code></pre>
+<p>添加证书至Secrets：</p>
+<pre><code class="language-bash">kubectl create secret tls tls-secret --cert=tls.cert --key=tls.key
+</code></pre>
+<p>查看：</p>
+<pre><code class="language-bash">[root@localhost chapter5]# kubectl get secrets
+NAME                  TYPE                                  DATA   AGE
+default-token-97zwj   kubernetes.io/service-account-token   3      46h
+tls-secret            kubernetes.io/tls                     2      41m
+</code></pre>
+<p>创建成功；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>配置Ingress</strong></h3>
+<p>为Ingress添加TLS配置：</p>
+<p>chapter5/kubia-ingress-tls.yaml</p>
+<pre><code class="language-yaml"># k8s: v1.18.17
+# info: https://kubernetes.io/blog/2019/07/18/api-deprecations-in-1-16/
+apiVersion: networking.k8s.io/v1beta1
+#apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: kubia-tls
+spec:
+  tls:
+    - hosts:
+      - kubia.example.com
+      secretName: tls-secret
+  rules:
+    - host: kubia.example.com
+      http:
+        paths:
+          - backend:
+              serviceName: kubia-nodeport
+              servicePort: 80
+            path: /
+</code></pre>
+<p>在配置中添加了TLS相关的配置：</p>
+<ul>
+<li>hosts：指定后方Ingress的域名地址；</li>
+<li>secretName：所配置TLS证书的Secrets名称；</li>
+</ul>
+<p>最后使用<code>kubectl apply</code>更新配置；</p>
+<pre><code class="language-bash">kubectl apply -f kubia-ingress-tls.yaml
+</code></pre>
+<p>查看配置：</p>
+<pre><code class="language-bash">[root@localhost chapter5]# kubectl describe ingress kubia-tls 
+Name:             kubia-tls
+Namespace:        default
+Address:          192.168.49.3
+Default backend:  default-http-backend:80 (&lt;error: endpoints "default-http-backend" not found&gt;)
+TLS:
+  tls-secret terminates kubia.example.com
+Rules:
+  Host               Path  Backends
+  ----               ----  --------
+  kubia.example.com  
+                     /   kubia-nodeport:80 (10.244.0.12:8080,10.244.1.25:8080,10.244.2.26:8080)
+Annotations:         &lt;none&gt;
+Events:
+  Type    Reason  Age   From                      Message
+  ----    ------  ----  ----                      -------
+  Normal  CREATE  34m   nginx-ingress-controller  Ingress default/kubia-tls
+  Normal  UPDATE  34m   nginx-ingress-controller  Ingress default/kubia-tls
+</code></pre>
+<p>从<code>Rules</code>中，可以看到我们的Ingress已经正确的被配置，并且解析到了服务地址；</p>
+<p>配置完成；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>测试TLS连接</strong></h3>
+<p>最后，我们做一下测试吧；</p>
+<p>首先查看我们Ingress-Nginx服务的端口映射情况：</p>
+<pre><code class="language-bash">[root@localhost chapter5]# kubectl get svc -n ingress-nginx
+NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+ingress-nginx-controller             NodePort    10.104.211.117   &lt;none&gt;        80:31904/TCP,443:30310/TCP   15h
+ingress-nginx-controller-admission   ClusterIP   10.101.176.66    &lt;none&gt;        443/TCP
+</code></pre>
+<p>可以看到端口映射是：</p>
+<ul>
+<li>HTTP： 80:31904/TCP；</li>
+<li>HTTPS：443:30310/TCP；</li>
+</ul>
+<p>下面我们进行测试；</p>
+<p>首先先测试HTTP连接：</p>
+<pre><code class="language-bash">[root@localhost chapter5]# curl -k -v https://kubia.example.com:31904/kubia
+* About to connect() to kubia.example.com port 31904 (#0)
+*   Trying 192.168.49.3...
+* Connected to kubia.example.com (192.168.49.3) port 31904 (#0)
+* Initializing NSS with certpath: sql:/etc/pki/nssdb
+* NSS error -12263 (SSL_ERROR_RX_RECORD_TOO_LONG)
+* SSL received a record that exceeded the maximum permissible length.
+* Closing connection 0
+curl: (35) SSL received a record that exceeded the maximum permissible length.
+</code></pre>
+<p>由于我们没有配置非HTTP连接的情况，因此如果直接使用HTTP进行连接，会报错；</p>
+<p>下面测试HTTPS连接：</p>
+<pre><code class="language-bash">[root@localhost chapter5]# curl -k -v https://kubia.example.com:30310/kubia
+* About to connect() to kubia.example.com port 30310 (#0)
+*   Trying 192.168.49.3...
+* Connected to kubia.example.com (192.168.49.3) port 30310 (#0)
+* Initializing NSS with certpath: sql:/etc/pki/nssdb
+* skipping SSL peer certificate verification
+* SSL connection using TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+* Server certificate:
+*       subject: CN=kubia.example.com
+*       start date: May 31 00:33:42 2021 GMT
+*       expire date: May 26 00:33:42 2022 GMT
+*       common name: kubia.example.com
+*       issuer: CN=kubia.example.com
+&gt; GET /kubia HTTP/1.1
+&gt; User-Agent: curl/7.29.0
+&gt; Host: kubia.example.com:30310
+&gt; Accept: */*
+&gt; 
+&lt; HTTP/1.1 200 OK
+&lt; Server: nginx/1.19.1
+&lt; Date: Mon, 31 May 2021 01:24:02 GMT
+&lt; Transfer-Encoding: chunked
+&lt; Connection: keep-alive
+&lt; Strict-Transport-Security: max-age=15724800; includeSubDomains
+&lt; 
+You've hit kubia-replicaset-rl7tm
+* Connection #0 to host kubia.example.com left intact
+
+[root@localhost chapter5]# curl -k -v https://kubia.example.com:30310/kubia
+* About to connect() to kubia.example.com port 30310 (#0)
+*   Trying 192.168.49.3...
+* Connected to kubia.example.com (192.168.49.3) port 30310 (#0)
+* Initializing NSS with certpath: sql:/etc/pki/nssdb
+* skipping SSL peer certificate verification
+* SSL connection using TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+* Server certificate:
+*       subject: CN=kubia.example.com
+*       start date: May 31 00:33:42 2021 GMT
+*       expire date: May 26 00:33:42 2022 GMT
+*       common name: kubia.example.com
+*       issuer: CN=kubia.example.com
+&gt; GET /kubia HTTP/1.1
+&gt; User-Agent: curl/7.29.0
+&gt; Host: kubia.example.com:30310
+&gt; Accept: */*
+&gt; 
+&lt; HTTP/1.1 200 OK
+&lt; Server: nginx/1.19.1
+&lt; Date: Mon, 31 May 2021 01:24:10 GMT
+&lt; Transfer-Encoding: chunked
+&lt; Connection: keep-alive
+&lt; Strict-Transport-Security: max-age=15724800; includeSubDomains
+&lt; 
+You've hit kubia-replicaset-l99pk
+* Connection #0 to host kubia.example.com left intact
+</code></pre>
+<p>从上面打出的日志可以看出，成功通过HTTPS建立了连接；</p>
+<p>并且服务的负载均衡也正确的作用了；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>后记</strong></h3>
+<p>HTTPS作为现代服务最重要的基本配置之一，不得不学习；</p>
+<p>上面的各种配置可以进行优化：</p>
+<ul>
+<li><strong>在配置证书时可以使用CertificateSigningRequest（CSR）资源签署；</strong></li>
+</ul>
+<p>此外需要注意的是：</p>
+<ul>
+<li><strong>对于Ingress功能的支持因不同的Ingress控制器的实现而异；</strong></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>附录</strong></h2>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/kubernetes-learn/tree/book-learn/chapter5/ingress-nginx</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="/2021/05/30/%E5%9B%BD%E5%86%85%E5%9C%A8minikube%E4%B8%AD%E6%B7%BB%E5%8A%A0ingress-nginx%E6%8F%92%E4%BB%B6/">《国内在minikube中添加ingress-nginx插件》</a></li>
+<li><a href="/2021/05/31/%E9%85%8D%E7%BD%AEIngress%E5%A4%84%E7%90%86TLS%E4%BC%A0%E8%BE%93/">《配置Ingress处理TLS传输》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

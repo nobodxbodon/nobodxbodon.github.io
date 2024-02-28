@@ -1,0 +1,63 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2017-02-27-ftp-upload-type.html">FTP 上传模式</a></h2>
+<hr/>
+<h2>layout: post
+title: FTP 上传模式
+tags: [tools]</h2>
+<p>在使用 Node.js 实现 FTP 文件上传的过程中，我发现文本文件可以正常上传，但是图片文件则不行。图片被上传后，文件内容被更改了，无法正常打开了，文件大小也不一致了。</p>
+<p>使用的是 <a href="https://github.com/sergi/jsftp">jsftp</a> 包。参考了 <a href="https://github.com/rickbergfalk/ftp-deploy">ftp-deploy</a> 包。</p>
+<p>尝试了几个可能的问题：</p>
+<ul>
+<li>useList</li>
+<li>文件系统编码，有问题的 ftp 的编码是 GBK，而 nodejs 默认编码是 utf8</li>
+<li>上传模式：ASCII 还是 binary</li>
+</ul>
+<p>在尝试后发现问题是由上传模式导致的，上传非文本文件时应该是用 binary 模式，即在登录后键入 <code>type I</code>。</p>
+<p>使用命令行时，登录后默认会开启 binary 模式，可能是 FTP 服务器配置的，但是通过 jsftp 客户端登录时却没有默认开启，所以需要手动指定一下。</p>
+<p>简单的代码如下：</p>
+<pre><code class="language-js">import JSFtp from 'jsftp';
+
+const ftp = new JSFtp({
+    host,
+    port,
+});
+
+ftp.raw(`user ${user}`, (err, {code}) =&gt; {
+    if (err) {
+        throw err;
+    }
+    if (code === 331) {
+        ftp.raw(`pass ${pass}`, (_err, {code}) =&gt; {
+            if (_err) {
+                throw _err;
+            }
+            if (code === 230) {
+                ftp.raw('type I', (__err) =&gt; {
+                    if (__err) {
+                        throw __err;
+                    }
+                    ftp.put(localFilPath, remoteFilePath, (___err) =&gt; {
+                        if (___err) {
+                            throw ___err;
+                        }
+                        ftp.raw('quit', (____err) =&gt; {
+                            if (____err) {
+                                throw ____err;
+                            } else {
+                                ftp.destroy();
+                            }
+                        });
+                    })
+                });
+            } else {
+                throw _err;
+            }
+        });
+    } else {
+        throw err;
+    }
+});
+</code></pre>
+<h2>参考资料</h2>
+<ul>
+<li><a href="http://stackoverflow.com/questions/31955406/why-do-i-get-200-type-set-to-i-netftpreplyerror">ruby - why do I get &amp;quot;200 Type set to I. (Net::FTPReplyError)&amp;quot; - Stack Overflow</a></li>
+</ul>

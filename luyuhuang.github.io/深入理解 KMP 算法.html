@@ -1,0 +1,98 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2021-12-25-kmp.html">深入理解 KMP 算法</a></h2>
+<hr/>
+<h2>key: 61
+title: 深入理解 KMP 算法
+tag: algorithms
+aside: false</h2>
+<p>字符串匹配是非常常用的算法. 它要做的是, 对于模式串 <code>t</code>, 找到它在目标串 <code>s</code> 中第一个出现的位置. 例如 <code>t = "abcab", s = "ababcabd"</code>, 算法就应该返回 2. 说起字符串匹配, 不得不提到 KMP 算法. KMP 是一个很厉害的算法, 它非常巧妙, 能在线性时间复杂度内完成字符串匹配. 本文我们来了解它.</p>
+<p>本文会用到 Python 的切片语法表示子串. 如果你不熟悉 Python, 只需要记住: <code>s[:k]</code> 表示 <code>s</code> 长度为 <code>k</code> 的前缀, <code>s[-k:]</code> 表示 <code>s</code> 长度为 <code>k</code> 的后缀. 此外字符串的下标从 0 开始, 因此 <code>s[:k]</code> 的最后一个字符为 <code>s[k-1]</code>.</p>
+<h3>匹配算法</h3>
+<p>粗略地说, KMP 算法利用了字符串的一个性质: 字符串的尾部有可能与自己的首部相匹配. 比如说字符串 <code>abcab</code>, 它的尾部有两个字符可以与自己的首部相匹配:</p>
+<pre><code>   abcab
+   ||
+abcab
+</code></pre>
+<p>用形式化的语言描述: 对于一个字符串 <code>t</code>, 存在一个最大的数 <code>0 &lt;= m &lt; len(t)</code>, 使得 <code>t[:m] == t[-m:]</code> 成立. 我们称 <code>m</code> 为<strong>最大首尾匹配长度</strong>. 注意 <code>m</code> 必须小于 <code>t</code> 的长度, 不然没有意义 -- 任何字符串总是与自身相等.</p>
+<p>KMP 首先会为模式串的所有前缀求得最大首尾匹配长度, 存储在数组 <code>pi</code> 中. 前缀 <code>t[:i]</code> 的最大首尾匹配长度为 <code>pi[i-1]</code>. 例如字符串 <code>p = "abcab"</code> 的 <code>pi</code> 数组为 <code>[0, 0, 0, 1, 2]</code>, 因为:</p>
+<ul>
+<li><code>p[:1] = "a"</code>, 最大首尾匹配长度为 0, <code>pi[0] = 0</code></li>
+<li><code>p[:2] = "ab"</code>, 最大首尾匹配长度为 0, <code>pi[1] = 0</code></li>
+<li><code>p[:3] = "abc"</code>, 最大首尾匹配长度为 0, <code>pi[2] = 0</code></li>
+<li><code>p[:4] = "abca"</code>, 最大首尾匹配长度为 1, <code>pi[0] = 1</code>, 因为有<pre><code>   abca
+   |
+abca
+</code></pre>
+</li>
+<li><code>p[:5] = "abcab"</code>, 最大首尾匹配长度为 2, <code>pi[0] = 2</code>, 因为<pre><code>   abcab
+   ||
+abcab
+</code></pre>
+</li>
+</ul>
+<p>我们先不管 KMP 是怎样求 <code>pi</code> 数组的, 先看看 KMP 是怎样利用 <code>pi</code> 数组做匹配的.</p>
+<p>假设字符串 <code>s</code> 与模式串 <code>t</code> 匹配. 我们从第 0 个字符开始匹配, 接着是第 1 个, 第 2 个, 一直到第 k 个字符, 都匹配成功了; 然而第 k + 1 个字符匹配失败了.</p>
+<p><img alt="kmp_1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kmp_1.svg"/></p>
+<p>匹配失败了, 那怎么办呢? 重点来了. 第 0 至 k 个字符匹配成功了, 这段子串等于 <code>t[:k+1]</code>. <code>pi</code> 数组告诉我们, 这段子串的后 <code>pi[k]</code> 个字符正好等于它的前 <code>pi[k]</code> 个字符.</p>
+<p><img alt="kmp_2" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kmp_2.svg"/></p>
+<p>这样下一步我们就让 <code>s[k+1]</code> 与 <code>t[pi[k]]</code> 相比较, 如果相等, 就继续匹配后面的字符; 如果不相等 -- 没关系, <code>t[:pi[k]]</code> 已经匹配成功, 我们再去查询 <code>pi</code> 数组得到这段子串的最大首尾匹配长度, 再按照同样的方式比较相应的字符即可.</p>
+<p>有了这个思路, 我们就不难写出 KMP 算法的代码了:</p>
+<pre><code class="language-py">def kmp(s, t):
+    pi = calc_pi(t) # 先不管如何计算 pi
+    j = 0
+    for i, c in enumerate(s):
+        while j &gt; 0 and t[j] != c: # t[j] 匹配失败, 但是 t[:j] 匹配成功
+            j = pi[j-1] # t[:j] 的后 pi[j-1] 个字符与前 pi[j-1] 个字符相等, 下一步匹配 t[pi[j-1]]
+        if t[j] == c:
+            j += 1
+        if j == len(t):
+            return i - j + 1 # 返回起始位置
+
+    return -1
+</code></pre>
+<h3>求 pi 数组</h3>
+<p>既然 <code>pi</code> 数组这么好用, 怎么求它呢? 首先很容易想到 <code>pi[0] = 0</code>, 因为最大首尾匹配长度需小于字符串长度. 如果我们能够用 <code>pi[0], pi[1], ..., pi[k]</code> 推出 <code>pi[k+1]</code>, 我们就能求出整个 <code>pi</code> 数组了.</p>
+<p>假设我们求出了 <code>pi[k]</code>, 也就是 <code>t[:k+1]</code> 的最大首尾匹配长度.</p>
+<p><img alt="kmp_3" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kmp_3.svg"/></p>
+<p>那么 <code>pi[k+1]</code> 也就是 <code>t[:k+2]</code> 的最大首位匹配长度是多少呢? 这需要分两种情况讨论. 假设 <code>t[k+1] == t[pi[k]]</code>, 这种情况很简单, <code>pi[k+1] = pi[k] + 1</code>.</p>
+<p><img alt="kmp_4" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kmp_4.svg"/></p>
+<p>要是不相等呢? 没关系, 前面那几个字符, 也就是 <code>t[:pi[k]]</code>, 不是匹配上了么? 根据前面刚求出来的 <code>pi</code> 数组, 我们知道对于 <code>t[:pi[k]]</code> 这个子串, 后 <code>pi[pi[k]-1]</code> 个字符与前 <code>pi[pi[k]-1]</code> 个字符相等! 这就回到前面匹配算法的情况了.</p>
+<p><img alt="kmp_5" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kmp_5.svg"/></p>
+<p>接下来我们只需要让 <code>t[k+1]</code> 与 <code>t[pi[pi[k]-1]]</code> 相比较. 如果相等, 那么 <code>pi[k+1] = pi[pi[k]-1] + 1</code>; 如果不相等, 那就再重复这个操作: 查询 <code>pi</code> 数组, 获得前面相等部分的最大首尾匹配长度, 然后再比较相应的字符即可.</p>
+<p>这样, 计算 <code>pi</code> 数组的代码也不难理解了.</p>
+<pre><code class="language-py">def calc_pi(t):
+    pi = [0] * len(t) # pi[0] = 0
+    j = 0 # j 等于 pi[-1]
+    for i in range(1, len(t)):
+        while j &gt; 0 and t[i] != t[j]: # t[j] 匹配失败, 但是 t[:j] 匹配成功. 注意这里 j = pi[i-1]
+            j = pi[j-1] # t[:j] 的后 pi[j-1] 个字符与前 pi[j-1] 个字符相等, 下一步匹配 t[pi[j-1]]
+        if t[i] == t[j]:
+            j += 1
+        pi[i] = j
+
+    return pi
+</code></pre>
+<p>计算 <code>pi</code> 的代码与 KMP 匹配算法非常像. 匹配算法是将模式串与目标串匹配, 而计算 <code>pi</code> 则是将模式串与模式串自己匹配. 在与自己匹配的过程中只会依赖之前已经计算好的 <code>pi</code> 值, 所以说这是一个动态规划算法.</p>
+<h3>总结</h3>
+<p>下面的代码将算法的两部分写在了一起. 概括一下, KMP 利用匹配算法, 逐渐推导出 <code>pi</code> 数组, 然后再使用同样的匹配算法, 利用前面求出的 <code>pi</code> 匹配模式串与目标串. 所以说 KMP 算法是一个非常厉害的算法.</p>
+<pre><code class="language-py">def kmp(s, t):
+    if not t: return 0
+    pi = [0] * len(t)
+    j = 0
+    for i in range(1, len(t)):
+        while j &gt; 0 and t[i] != t[j]:
+            j = pi[j-1]
+        if t[i] == t[j]:
+            j += 1
+        pi[i] = j
+
+    j = 0
+    for i, c in enumerate(s):
+        while j &gt; 0 and t[j] != c:
+            j = pi[j-1]
+        if t[j] == c:
+            j += 1
+        if j == len(t):
+            return i - j + 1
+
+    return -1
+</code></pre>

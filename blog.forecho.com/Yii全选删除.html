@@ -1,0 +1,89 @@
+<h2>原文：<a href="https://blog.forecho.com/yii-quan-xuan-shan-chu.html">Yii全选删除</a></h2>
+<hr/>
+<h2>title: "Yii全选删除"
+date: 2013-05-30T20:10:00+08:00
+tags: ["yii1"]
+draft: false
+toc: true</h2>
+<p>目前功能还是能用，但是删除不是Ajax操作的。等待下次完善。 <strong>Views：</strong></p>
+<pre><code class="language-php">&lt;form action="/member/msglog/deleteordmsg" method="post" id="deleteForm"&gt;
+	&lt;?php
+	    $this-&gt;widget('zii.widgets.CListView', array(
+	        'dataProvider'=&gt;$dataProvider,
+	        'itemView'=&gt;'_view',
+	        'emptyText'=&gt;'暂时没有数据',
+	       	'template'=&gt;'{items}{pager}',
+	        'pager'=&gt;array('class'=&gt;'CLinksPager'),
+	        'itemsTagName'=&gt;'table',
+	        'itemsOptions'=&gt;array('class'=&gt;'list_table', 'width'=&gt;'100%'),
+	        'buttonCssClass'=&gt;'bg btn_page',
+	        'batchItemOptions'=&gt;array('class'=&gt;"filter f_l"),
+	        'batchItem'=&gt;array(
+	            //删除
+	            '&lt;input id="allcheckbox1" onchange="checkAll(\'select-on-check\',\'allcheckbox1\');" class="chk select-on-check" type="checkbox" name=""&gt;全选
+                 &lt;button class="mem_bgx link_btn mr5" onclick="$(\'#deleteForm\').submit();" title=""&gt;删除选中&lt;/button&gt;'			        ),
+	    ));
+	?&gt;
+&lt;/form&gt;
+</code></pre>
+<p><strong>_view.php文件：</strong></p>
+<pre><code class="language-html">&lt;tr&gt;
+	&lt;td width="6%"&gt;&lt;input class="select-on-check chk f_l" type="checkbox" name="ids[]" value="&lt;?php echo $data-&gt;id; ?&gt;" /&gt;&lt;/td&gt;
+    &lt;td width="15%"&gt;&lt;?php echo $data-&gt;fromMember-&gt;name;?&gt;&lt;/td&gt;
+    &lt;td width="58%"&gt;&lt;p class="pub_tit02"&gt;&lt;?php echo CHtml::link($data-&gt;title, array('/member/msgLog/inboxDetail', 'id'=&gt;$data-&gt;id));?&gt;&lt;/p&gt;&lt;/td&gt;
+    &lt;td&gt;&lt;?php echo date("Y-m-d H:i:m", $data-&gt;inputtime);?&gt;&lt;/td&gt;
+&lt;/tr&gt;
+</code></pre>
+<p>*jQuery验证是否有选择：**</p>
+<pre><code class="language-javascript">&lt;script type="text/javascript"&gt;
+//表单验证
+$('#deleteForm').bind('submit',function(){
+	var data=new Array();
+	$("input:checkbox[name='ids[]']").each(function ()
+    	{
+		if($(this).attr("checked")=='checked')
+		{
+			data.push($(this).val());
+		}
+	});
+	if(data.length &gt; 0)
+	{
+	return true;
+    }else{
+        return false;
+    }
+})
+&lt;/script&gt;
+</code></pre>
+<p><strong>jQuery全选：</strong></p>
+<pre><code class="language-javascript">/*全选
+classs:被选框class
+selfid：全选框id
+*/
+function checkAll(classs,selfid){
+	$('.'+classs).attr('checked',$('#'+selfid).attr('checked')?'checked':false);
+}
+</code></pre>
+<p><strong>Controller：</strong></p>
+<pre><code class="language-php">//删除选中
+public function actionDeleteordmsg()
+{
+	if (Yii::app()-&gt;request-&gt;isPostRequest)
+	{
+		$criteria= new CDbCriteria;
+		$criteria-&gt;addInCondition('id', $_POST['ids']);
+		MsgLog::model()-&gt;deleteAll($criteria);
+
+		if(isset(Yii::app()-&gt;request-&gt;isAjaxRequest)) {
+			$message = '删除成功。';
+			$path = '../index/success';
+		} else{
+			$message = '删除失败。';
+			$path = '../index/error';
+		}
+	}
+	$this-&gt;render($path,array(
+			'message'=&gt;$message,
+		));
+}
+</code></pre>

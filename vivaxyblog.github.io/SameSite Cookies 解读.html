@@ -1,0 +1,83 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2021-03-07-samesite-cookies-explained-cn.html">SameSite Cookies 解读</a></h2>
+<hr/>
+<h2>layout: post
+title: SameSite Cookies 解读
+tags: [samesite, csrf, schemeful samesite, cross site, cross origin]</h2>
+<h2>背景知识</h2>
+<h3>SameSite 属性</h3>
+<p>SameSite 属性是 HTTP 响应头 <code>Set-Cookie</code> 的属性之一，允许服务端控制该 Cookie 是否仅限于同站。</p>
+<p>同站（跨站）是与常见的同域（跨域）相似的概念，下面是两者的区别。</p>
+<h3>同域（Same Origin）和跨域（Cross Origin）</h3>
+<p>域（Origin）由协议（Scheme）、主机名（Hostname）和端口（Port）组成。其中任何一个不同都会被认为是跨域。</p>
+<h3>同站（Same Site）和跨站（Cross Site）</h3>
+<p>顶级域名（Top-level domains）（TLDs）是如 <code>.com</code> 等的一系列域名列表。
+在大部分场景下，站（Site）的定义是 TLDs+1，如 <code>.com</code> 的下一级，如 <code>github.com</code>。
+但 Github 也会为不同的开发者提供不同的 <code>github.io</code> 域名，如 <code>a.github.io</code> 和 <code>b.github.io</code>，为了区分这两个域名，Mozilla 引入了有效顶级域名（Effective top-level domains）（eTLDs）的概念。
+因此，站（Site）是有效顶级域名的下一级域名，即 eTLDs+1。
+比如：<code>a.web.dev</code> 和 <code>b.web.dev</code> 属于同站，而 <code>a.github.io</code> 和 <code>b.github.io</code> 属于跨站。</p>
+<h3>Schemeful SameSite</h3>
+<p>由于 Cookie 与协议无关，HTTP 协议的页面也可以写入 Cookie。因此，为了提高安全性，在相同站（Site）的要求下，增加了协议（Scheme）检查。避免对 HTTP 站点的攻击影响到 HTTPS 站点。</p>
+<h2>SameSite 值</h2>
+<p><code>Set-Cookie</code> 中的 SameSite 值有 3 种。</p>
+<h3>Lax</h3>
+<p>Cookie 无法被第三方站点发出的请求携带，但可以在向第三方站点导航后，第三方站点的请求可以携带（如链接跳转）。为了避免 CSRF 攻击，Chrome 84 开始成为 SameSite 的默认值。</p>
+<h3>Strict</h3>
+<p>只能在第一方站点上发送的请求上携带。</p>
+<h3>None</h3>
+<p>在任何站点都可以被携带。如果 <code>SameSite=None</code>，那么必须指定 <code>Secure</code> 属性，否则会无法写入。部分历史版本浏览器对 <code>SameSite=None</code> 不兼容，会表现为忽略 Cookie 或 Cookie 被当做 <code>SameSite=Strict</code> 被限制，参见 <a href="https://www.chromium.org/updates/same-site/incompatible-clients">SameSite=None: Known Incompatible Clients</a>。</p>
+<h3>Secure 属性</h3>
+<p>与 <code>SameSite=None</code> 需要同时设置的 Secure 属性表示当前 Cookie 只能在 HTTPS 的请求中写入和携带。</p>
+<h2>历史和未来</h2>
+<h3>引入 SameSite 策略的原因</h3>
+<ul>
+<li>Cookie 被用来做用户追踪，带来用户隐私问题。</li>
+<li>美国部分州颁布了法律法规，要求网站在设置和使用 Cookie 前需要获得用户同意。</li>
+<li>Cookie 存在 CSRF 安全漏洞</li>
+</ul>
+<h3>兼容性</h3>
+<p>SameSite 相关的策略主要分为两个阶段实施。</p>
+<p>第一个阶段：SameSite 默认为 Lax，如果 SameSite 为 None，则必须设置 Secure。</p>
+<ul>
+<li>Chrome：76 版本可以通过 flag 开启，2020-08-11 在 80 及以上版本全量。</li>
+<li>安卓：从安卓 12 开始实施</li>
+<li>Firefox：69 版本可以通过 flag 开启</li>
+<li>Safari：未实现</li>
+</ul>
+<p>第二个阶段：Schemeful SameSite</p>
+<p>Chrome：88 版本开始灰度，参见：<a href="https://docs.google.com/document/d/1gTQAljDySGAY9P52zXHqJsnAgYB_38YT2CiKmcl4elg/edit#heading=h.f171hlz1z0aw">Schemeful Same-Site Design Doc</a></p>
+<h3>未来</h3>
+<p>IETF 正在寻找一种替代 Cookie 的请求状态管理方案，来解决 Cookie 一些问题：</p>
+<ul>
+<li>安全问题。</li>
+<li>增加了请求的体积。</li>
+<li>用户行为追踪带来的隐私问题。</li>
+</ul>
+<p>IEFT 希望 Cookie 可以有下面的一些特性：</p>
+<ul>
+<li>客户端决定值。</li>
+<li>只能在网络请求中获取，不能通过 JavaScript（包括 Service Worker）获取。</li>
+<li>每个域名下生成一个值，这个值只能在本域名下访问。</li>
+<li>不在非安全的域名下生成和发送值。</li>
+<li>默认只能在同站请求中携带，只能在同站请求中生成。</li>
+<li>每个值在生成后，默认保存 1 小时。</li>
+</ul>
+<p>为什么要采用一种新方案，而不是在现在的 Cookie 只上进行扩展？</p>
+<ul>
+<li>Cookie 的规则复杂，理解成本高。</li>
+<li>Cookie 的新规则使用率低。</li>
+</ul>
+<h2>应用</h2>
+<p>短期方案：添加 SameSite=None; Secure; 升级到 HTTPS。
+长期方案：尝试细分 Cookie 的使用场景，针对不同的 Cookie 设置不同的 SameSite 值。</p>
+<h2>参考资料</h2>
+<ul>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite">SameSite cookies</a></li>
+<li><a href="https://web.dev/same-site-same-origin/">Understanding "same-site" and "same-origin”</a></li>
+<li><a href="https://web.dev/samesite-cookies-explained/">SameSite cookies explained</a></li>
+<li><a href="https://web.dev/samesite-cookie-recipes/">SameSite cookie recipes</a></li>
+<li><a href="https://web.dev/schemeful-samesite/">Schemeful Same-Site</a></li>
+<li><a href="https://www.chromium.org/updates/same-site/incompatible-clients">SameSite=None: Known Incompatible Clients</a></li>
+<li><a href="https://tools.ietf.org/html/draft-west-http-state-tokens-00">HTTP State Tokens</a></li>
+<li><a href="https://clutcher.github.io/post/hybris/same_site_login_issue/">Java 兼容代码</a></li>
+<li><a href="https://docs.google.com/document/d/1gTQAljDySGAY9P52zXHqJsnAgYB_38YT2CiKmcl4elg/edit">Schemeful Same-Site Design Doc</a></li>
+</ul>

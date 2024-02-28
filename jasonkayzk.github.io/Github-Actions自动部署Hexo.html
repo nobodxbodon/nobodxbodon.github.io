@@ -1,0 +1,168 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Github-Actions%E8%87%AA%E5%8A%A8%E9%83%A8%E7%BD%B2Hexo.html">Github-Actions自动部署Hexo</a></h2>
+<hr/>
+<h2>title: Github-Actions自动部署Hexo
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?99'
+date: 2021-05-08 08:25:39
+categories: [Github]
+tags: [技术杂谈, Github]
+description: 最近换上了Linux系统，安装的Node版本是14.x，在使用Hexo Deploy部署时，因为Node版本过高，导致无法通过部署了！与其切换Node版本，不如索性直接用Github-Actions远程部署算了。Github-Actions是 GitHub 官方 CI 工具，与 GitHub 无缝集成；本文记录了使用 GitHub-Actions 部署Hexo的全部流程。</h2>
+<p>最近换上了Linux系统，安装的Node版本是14.x，在使用Hexo Deploy部署时，因为Node版本过高，导致无法通过部署了！与其切换Node版本，不如索性直接用Github-Actions远程部署算了。</p>
+<p>Github-Actions是 GitHub 官方 CI 工具，与 GitHub 无缝集成；</p>
+<p>本文记录了使用 GitHub-Actions 部署Hexo的全部流程。</p>
+<p>Github-Actions相关总结：</p>
+<ul>
+<li><a href="/2020/08/28/Github-Actions%E6%80%BB%E7%BB%93/">Github-Actions总结</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>Github-Actions自动部署Hexo</strong></h2>
+<h3><strong>前言</strong></h3>
+<p>关于Github-Actions，之前我已经写过一篇相关的文章，详细介绍了如何使用；</p>
+<p>不熟悉Github-Actions的同学可以先去看看这篇：</p>
+<ul>
+<li><a href="/2020/08/28/Github-Actions%E6%80%BB%E7%BB%93/">Github-Actions总结</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>步骤0：博客仓库准备</strong></h3>
+<p>GitHub 博客创建步骤非本文重点，网上一搜一大堆，请自行搜索；</p>
+<p>推荐使用 <code>master</code> 分支作为最终部署分支，源码分支可以根据自己喜好创建，我使用的是 <code>save</code>分支；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>步骤1：生成ssh-key</strong></h3>
+<p><strong>源码分支中</strong>通过下面命令生成公钥和私钥：</p>
+<pre><code class="language-bash">cd workspace/jasonkayzk.github.io 
+git checkout save
+ssh-keygen -t rsa -b 4096 -C "$(git config user.email)" -f github-deploy-key -N ""
+</code></pre>
+<p>目录中生成两个文件：</p>
+<ul>
+<li><code>github-deploy-key.pub</code> — 公钥文件</li>
+<li><code>github-deploy-key</code> — 私钥文件</li>
+</ul>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>公钥和私钥切记要添加到 <code>.gitignore</code> 中！！！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>步骤2：博客仓库添加公钥</strong></h3>
+<p>在 GitHub 中博客工程中根据 <code>Settings -&gt; Deploye keys -&gt; Add deploy key</code> 找到对应的页面，然后进行公钥添加；</p>
+<p>该页面中：</p>
+<ul>
+<li><code>Title</code> 自定义即可，我添加的是<code>hexo_deploy_pub</code>；</li>
+<li><code>Key</code> 中添加 <code>github-deploy-key.pub</code> 文件中的内容；</li>
+</ul>
+<p><img alt="github_deploy_key.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/github_deploy_key.png"/></p>
+<blockquote>
+<p><strong>注意：</strong></p>
+<ul>
+<li><p>&lt;font color="#f00"&gt;<strong>切记不要多复制空格；</strong>&lt;/font&gt;</p>
+</li>
+<li><p>&lt;font color="#f00"&gt;<strong>切记要勾选 <code>Allow write access</code>，否则会出现无法部署的情况；</strong>&lt;/font&gt;</p>
+</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>步骤3：博客仓库添加Secrets私钥</strong></h3>
+<p>在 GitHub 中博客工程中按照 <code>Settings -&gt; Secrets -&gt; Add a new secrets</code> 找到对应的页面，然后进行私钥添加；</p>
+<p><img alt="github_secret_key_1.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/github_secret_key_1.png"/></p>
+<p>和上一步类似，该页面中：</p>
+<ul>
+<li><code>Name</code> 自定义即可，这里我使用的是<code>hexo_deploy_pri</code>；</li>
+<li><code>Value</code> 中添加 <code>github-deploy-key</code> 文件中的内容；</li>
+</ul>
+<p><img alt="github_secret_key_2.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/github_secret_key_2.png"/></p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注意：切记不要多复制空格!!!</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>步骤4：创建Gtihub-Actions Workflow配置</strong></h3>
+<p>在博客源码分支(我这里是save分支)中创建 <code>.github/workflows/deploy.yml</code> 文件，内容如下：</p>
+<pre><code class="language-yaml">name: Build &amp; Deploy Blog
+
+on:
+  workflow_dispatch:
+  # push:
+  #     branches:
+  #       - save
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v1
+        with:
+          ref: save
+      - name: Use Node.js ${{ matrix.node_version }}
+        uses: actions/setup-node@v1
+        with:
+          version: ${{ matrix.node_version }}
+      - name: Setup hexo
+        env:
+          ACTION_DEPLOY_KEY: ${{ secrets.hexo_deploy_pri }}
+        run: |
+          mkdir -p ~/.ssh/
+          echo "$ACTION_DEPLOY_KEY" &gt; ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan github.com &gt;&gt; ~/.ssh/known_hosts
+          git config --global user.email "jasonkayzk@gmail.com"
+          git config --global user.name "jasonkayzk"
+          npm install hexo-cli -g
+          npm install
+      - name: Hexo deploy
+        run: |
+          hexo clean
+          hexo d
+</code></pre>
+<p>其中：</p>
+<ul>
+<li><code>name</code>：所设置workflow在Github Actions中显示的名称，可自行设置；</li>
+<li><code>on</code>：Github Actions触发条件；<ul>
+<li>workflow_dispatch表示手动触发；</li>
+<li>push（注释掉了）：对应分支push时自动触发；</li>
+</ul>
+</li>
+</ul>
+<p><code>jobs</code>中声明了具体的workflow流程；</p>
+<p>在使用时你需要修改：</p>
+<ul>
+<li>&lt;font color="#f00"&gt;<strong>第17行：替换为你的源码分支，我这里是<code>save</code>；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;<strong>第24行：替换为你所创建secrets的名称，我这里是<code>hexo_deploy_pri</code>；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;<strong>第30、31行：替换为你的Git邮箱和用户名信息；</strong>&lt;/font&gt;</li>
+</ul>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>创建的配置文件必须在仓库根目录下的<code>.github/workflows</code>目录下！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>至此，Github Actions配置完成；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>步骤5：Hexo项目配置</strong></h3>
+<p>在项目根目录中修改 <code>_config.yml</code> ，增加部署相关内容：</p>
+<pre><code class="language-yaml">deploy:
+  type: git
+  repo: git@github.com:jasonkayzk/jasonkayzk.github.io.git
+  branch: master
+
+&gt;   **注：**
+&gt;
+&gt;   -   &lt;font color="#f00"&gt;**这里的repo必须要填写ssh的形式，使用https形式可能会有问题！**&lt;/font&gt;
+&gt;   -   &lt;font color="#f00"&gt;**branch为部署分支，通常为master（或者main）分支；**&lt;/font&gt;
+
+&lt;br/&gt;
+
+### **部署测试**
+
+现在 Hexo 已经和 GitHub Actions 已经集成了，接下来在博客源码分支上推送代码即可自动/手动编译部署；
+
+具体执行过程可以在仓库的 `Actions` 中查看；
+
+&lt;br/&gt;
+
+## **附录**
+
+文章参考：
+
+-   [GitHub Actions 自动部署 Hexo](https://blog.csdn.net/xinruodingshui/article/details/105499161)
+
+
+&lt;br/&gt;
+</code></pre>

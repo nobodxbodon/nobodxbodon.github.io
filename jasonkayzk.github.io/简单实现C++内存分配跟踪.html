@@ -1,0 +1,239 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E7%AE%80%E5%8D%95%E5%AE%9E%E7%8E%B0C-%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E8%B7%9F%E8%B8%AA.html">简单实现C++内存分配跟踪</a></h2>
+<hr/>
+<h2>title: 简单实现C++内存分配跟踪
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?55'
+date: 2022-11-12 10:27:10
+categories: C++
+tags: [C++, 技术杂谈]
+description: 有的时候我们想要跟踪我们的代码到底分配了多少的内存，一个常用的方法是使用 Valgrind 工具进行内存分析；但是对于一些场景，我们不想这么麻烦，那么此时我们可以通过简单的覆盖 malloc、free 等函数实现！</h2>
+<p>有的时候我们想要跟踪我们的代码到底分配了多少的内存，一个常用的方法是使用 Valgrind 工具进行内存分析；</p>
+<p>但是对于一些场景，我们不想这么麻烦，那么此时我们可以通过简单的覆盖 malloc、free 等函数实现！</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/track-memory</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>简单实现C++内存分配跟踪</strong></h1>
+<h2><strong>简单实现</strong></h2>
+<p>我们知道，C、C++ 中主要是通过 <code>malloc</code>、<code>free</code> 函数以及 <code>new</code>、<code>delete</code>、<code>new[]</code>、<code>delete[]</code> 等运算符进行内存分配；</p>
+<p>对于 <code>malloc</code>、<code>free</code> 函数而言：</p>
+<p><strong>虽然他们是在编译时通过链接到 <code>glibc</code> 库加入的，但是我们可以通过<code>宏定义</code>来替换他们，从而实现自己的逻辑；</strong></p>
+<p>对于 <code>new</code>、<code>delete</code> 等运算符，可以通过全局覆盖（<code>override</code>）他们来实现 Hook；</p>
+<p>具体实现的代码很简单，如下：</p>
+<p><a href="https://github.com/JasonkayZK/cpp-learn/blob/track-memory/track_memory.h">track_memory.h</a></p>
+<pre><code class="language-c++">#ifndef TRACK_MEMORY_H_
+#define TRACK_MEMORY_H_
+
+/**
+ * Implements simple memory tracking for use in C++ applications.
+ * Define: TRACK_MEMORY to enable during debug and unit testing, and undef for production.
+ * Define: PRINT_MEMORY_TRACKING to print memory tracking
+ */
+
+#include &lt;cassert&gt;
+#include &lt;cstdio&gt;
+#include &lt;cstdlib&gt;
+
+#ifdef TRACK_MEMORY
+#include &lt;map&gt;
+
+size_t gAllocatedMemory = 0;
+bool gTrackAllocation = true;
+typedef std::map&lt;void *, size_t&gt; AllocationMap;
+static AllocationMap gAllocationMapStandard;
+static AllocationMap gAllocationMapArray;
+
+/**
+ * Allocates using a map to keep track of sizes.
+ */
+inline void *wrap_malloc(size_t size,
+                         const char *file,
+                         int line,
+                         const char *func,
+                         AllocationMap &amp;map = gAllocationMapStandard) {
+
+  assert(size != 0);
+  void *ptr;
+
+  if (gTrackAllocation) {
+    gAllocatedMemory += size;
+    ptr = malloc(size);
+
+    gTrackAllocation = false;
+    map[ptr] = size;
+    gTrackAllocation = true;
+
+#ifdef PRINT_MEMORY_TRACKING
+    printf("[Malloc %s:%d:%s] Allocated mem 0x%8.8lx: %8ld (%ld)\n",
+           file, line, func, (unsigned long) ptr, gAllocatedMemory, size);
+#endif
+  } else {
+    ptr = malloc(size);
+  }
+
+  if (ptr == nullptr)
+    throw std::bad_alloc();
+  else
+    return ptr;
+}
+
+/**
+ * Deletes stuff allocated with tracked_new.
+ */
+inline void wrap_free(void *ptr,
+                      const char *file,
+                      int line,
+                      const char *func,
+                      AllocationMap &amp;map = gAllocationMapStandard) {
+
+  if (gTrackAllocation) {
+    size_t size = map[ptr];
+    assert(size != 0);
+    gAllocatedMemory -= size;
+
+#ifdef PRINT_MEMORY_TRACKING
+    printf("[Delete %s:%d:%s] Deallocated mem 0x%8.8lx: %8ld (-%ld)\n",
+           file, line, func, (unsigned long) ptr,
+           gAllocatedMemory,
+           size);
+#endif
+
+    gTrackAllocation = false;
+    map.erase(ptr);
+    gTrackAllocation = true;
+  }
+
+  free(ptr);
+}
+
+#define malloc(X) wrap_malloc(X, __FILE__, __LINE__, __FUNCTION__)
+#define free(X) wrap_free(X, __FILE__, __LINE__, __FUNCTION__)
+
+void *operator new(size_t size) noexcept(false) {
+  return wrap_malloc(size, __FILE__, __LINE__, __FUNCTION__, gAllocationMapStandard);
+}
+
+void *operator new[](size_t size) noexcept(false) {
+  return wrap_malloc(size, __FILE__, __LINE__, __FUNCTION__, gAllocationMapArray);
+}
+
+void operator delete(void *ptr) noexcept {
+  wrap_free(ptr, __FILE__, __LINE__, __FUNCTION__, gAllocationMapStandard);
+}
+
+void operator delete[](void *ptr) noexcept {
+  wrap_free(ptr, __FILE__, __LINE__, __FUNCTION__, gAllocationMapArray);
+}
+
+#endif /* TRACK_MEMORY */
+
+#endif // TRACK_MEMORY_H_
+</code></pre>
+<p>为了使用起来更加方便，我定义了：</p>
+<ul>
+<li><strong><code>TRACK_MEMORY</code>：启用内存监控的总开关；</strong></li>
+<li><strong><code>PRINT_MEMORY_TRACKING</code>：是否打印内存分配内容；</strong></li>
+</ul>
+<p>同时，定义了：<code>gAllocationMapStandard</code>  和 <code>gAllocationMapArray</code> 来保存分配的内存空间；</p>
+<p>并且使用 <code>gAllocatedMemory</code> 来记录当前已分配的字节数；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>覆盖<code> malloc</code> 和 <code>free</code></strong></h3>
+<p>代码中，<code>wrap_malloc</code> 和 <code>wrap_free</code> 包装了在 <code>glibc</code> 中的 <code> malloc</code> 和 <code>free</code> 函数；</p>
+<p>随后，通过宏覆盖了原来的 <code> malloc</code> 和 <code>free</code>：</p>
+<pre><code class="language-c++">#define malloc(X) wrap_malloc(X, __FILE__, __LINE__, __FUNCTION__)
+#define free(X) wrap_free(X, __FILE__, __LINE__, __FUNCTION__)
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>注意：这里必须要先定义函数，再进行宏替换，否则会将 wrapper 函数中的 malloc 也给替换掉！</strong>&lt;/font&gt;</p>
+<blockquote>
+<p><strong>这里实现的是单线程的内存分配跟踪，对于多线程的实现，需要使用 Lock 将上面共享的内容保护起来！</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>覆盖<code>new</code>和<code>delete</code></strong></h3>
+<p>上面的代码完成了对 <code> malloc</code> 和 <code>free</code> 函数的覆盖；</p>
+<p>那么对于 <code>new</code>和<code>delete</code> 等运算符来说，我们只需要调用上面已经实现的包装函数即可：</p>
+<pre><code class="language-c++">void *operator new(size_t size) noexcept(false) {
+  return wrap_malloc(size, __FILE__, __LINE__, __FUNCTION__, gAllocationMapStandard);
+}
+
+void *operator new[](size_t size) noexcept(false) {
+  return wrap_malloc(size, __FILE__, __LINE__, __FUNCTION__, gAllocationMapArray);
+}
+
+void operator delete(void *ptr) noexcept {
+  wrap_free(ptr, __FILE__, __LINE__, __FUNCTION__, gAllocationMapStandard);
+}
+
+void operator delete[](void *ptr) noexcept {
+  wrap_free(ptr, __FILE__, __LINE__, __FUNCTION__, gAllocationMapArray);
+}
+</code></pre>
+<p><strong>这里需要注意的是：</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>由于运算符重载函数是无法 inline 的，因此 <code>__LINE__</code>、<code>__FILE__</code> 实际上只能获取到这个文件的路径；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>并且，由于我们在重载时，无法实现在和原来的 <code>void *operator new(size_t size)</code> 函数签名完全相同下、增加入参的重载（否则会不知道究竟使用哪个实现！）</strong>&lt;/font&gt;</p>
+<blockquote>
+<p><strong>如果有小伙伴们知道怎么做，可以在下方留言评论～</strong></p>
+</blockquote>
+<blockquote>
+<p>关于重写库函数或系统调用：</p>
+<ul>
+<li><a href="https://irgb.github.io/%E5%A6%82%E4%BD%95%E9%87%8D%E5%86%99%E5%BA%93%E5%87%BD%E6%95%B0%E6%88%96%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8/">重写库函数或系统调用</a></li>
+</ul>
+</blockquote>
+<p>至此，我们的功能编写完成！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>测试用例</strong></h2>
+<p>在使用时，我们在源代码的开头引入这个头文件，并定义对应的宏开启功能即可！</p>
+<p>即：</p>
+<pre><code class="language-c++">#define TRACK_MEMORY
+#define PRINT_MEMORY_TRACKING
+
+#include "track_memory.h"
+</code></pre>
+<p>例如：</p>
+<p><a href="https://github.com/JasonkayZK/cpp-learn/blob/track-memory/main.cc">main.cc</a></p>
+<pre><code class="language-c++">#define TRACK_MEMORY
+#define PRINT_MEMORY_TRACKING
+
+#include "track_memory.h"
+
+int main() {
+  char *buf = new char[100];
+  delete[] buf;
+
+  struct TestStruct {
+    long a;
+    long b;
+  };
+
+  auto *testStruct = new TestStruct;
+  delete testStruct;
+
+  auto *ptr = malloc(sizeof(TestStruct));
+  free(ptr);
+}
+</code></pre>
+<p>执行后输出：</p>
+<pre><code>[Malloc /root/data/cpp-learn/track_memory.h:94:operator new []] Allocated mem 0x01b0f260:      100 (100)
+[Delete /root/data/cpp-learn/track_memory.h:102:operator delete []] Deallocated mem 0x01b0f260:        0 (-100)
+[Malloc /root/data/cpp-learn/track_memory.h:90:operator new] Allocated mem 0x01b0f720:       16 (16)
+[Delete /root/data/cpp-learn/track_memory.h:98:operator delete] Deallocated mem 0x01b0f720:        0 (-16)
+[Malloc /root/data/cpp-learn/main.cc:18:main] Allocated mem 0x01b0f720:       16 (16)
+[Delete /root/data/cpp-learn/main.cc:19:main] Deallocated mem 0x01b0f720:        0 (-16)
+</code></pre>
+<p>即可完成对内存分配的跟踪，非常方便！</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/track-memory</li>
+</ul>
+<p>文章参考：</p>
+<ul>
+<li>http://joshcarter.com/software/easy_cpp_allocation_tracking/</li>
+<li>https://stackoverflow.com/questions/438515/how-to-track-memory-allocations-in-c-especially-new-delete</li>
+<li><a href="https://irgb.github.io/%E5%A6%82%E4%BD%95%E9%87%8D%E5%86%99%E5%BA%93%E5%87%BD%E6%95%B0%E6%88%96%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8/">https://irgb.github.io/%E5%A6%82%E4%BD%95%E9%87%8D%E5%86%99%E5%BA%93%E5%87%BD%E6%95%B0%E6%88%96%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8/</a></li>
+<li>https://stackoverflow.com/questions/1094532/problem-in-overriding-malloc</li>
+</ul>
+<p>&lt;br/&gt;</p>

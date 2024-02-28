@@ -1,0 +1,285 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%BD%BF%E7%94%A8Java%E7%BC%96%E5%86%99Cli%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7.html">使用Java编写Cli命令行工具</a></h2>
+<hr/>
+<h2>title: 使用Java编写Cli命令行工具
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?11'
+date: 2023-03-20 13:45:36
+categories: Java
+tags: [Java, Cli, picocli, Maven]
+description: 兜兜转转，最近又用回了Java。最近在写mini-redis的Java版来学习Netty，需要用到Java的命令行工具框架picocli。发现通过Java来实现命令行还是挺麻烦的，尤其是打包部分，这里简单总结一下；</h2>
+<p>兜兜转转，最近又用回了Java；</p>
+<p>最近在写mini-redis的Java版来学习Netty，需要用到Java的命令行工具框架picocli；</p>
+<p>发现通过Java来实现命令行还是挺麻烦的，尤其是打包部分，这里简单总结一下；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/remkop/picocli</li>
+<li>https://github.com/JasonkayZK/java-all/tree/main/cli/picocli</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2023/03/20/%E4%BD%BF%E7%94%A8Java%E7%BC%96%E5%86%99Cli%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7/">《使用Java编写Cli命令行工具》</a></li>
+<li><a href="https://jasonkayzk.github.io/2023/03/20/GraalVM%E4%BD%BF%E7%94%A8%E5%88%9D%E4%BD%93%E9%AA%8C/">《GraalVM使用初体验》</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>使用Java编写Cli命令行工具</strong></h1>
+<h2><strong>前言</strong></h2>
+<p>试了一下，还是不推荐使用 Java 来开发 Cli 的，毕竟不会有人为了这个东西去装 JRE，而且 GraalVM 目前还不能完全支持（各种平台上各种缺动态链接库）；</p>
+<p>只是用于学习的项目即可！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>代码</strong></h2>
+<p>这里以 picocli 框架提供的 CheckSum 工具为例：</p>
+<p>项目的 Maven 配置如下：</p>
+<pre><code class="language-xml">&lt;dependencies&gt;
+  &lt;dependency&gt;
+    &lt;groupId&gt;info.picocli&lt;/groupId&gt;
+    &lt;artifactId&gt;picocli&lt;/artifactId&gt;
+    &lt;version&gt;4.7.1&lt;/version&gt;
+  &lt;/dependency&gt;
+&lt;/dependencies&gt;
+
+&lt;build&gt;
+  &lt;plugins&gt;
+    &lt;!-- Enabling Annotation Processor --&gt;
+    &lt;plugin&gt;
+      &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+      &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+      &lt;!-- annotationProcessorPaths requires maven-compiler-plugin version 3.5 or higher --&gt;
+      &lt;version&gt;3.8.1&lt;/version&gt;
+      &lt;configuration&gt;
+        &lt;annotationProcessorPaths&gt;
+          &lt;path&gt;
+            &lt;groupId&gt;info.picocli&lt;/groupId&gt;
+            &lt;artifactId&gt;picocli-codegen&lt;/artifactId&gt;
+            &lt;version&gt;4.7.1&lt;/version&gt;
+          &lt;/path&gt;
+        &lt;/annotationProcessorPaths&gt;
+        &lt;compilerArgs&gt;
+          &lt;arg&gt;-Aproject=${project.groupId}/${project.artifactId}&lt;/arg&gt;
+        &lt;/compilerArgs&gt;
+      &lt;/configuration&gt;
+    &lt;/plugin&gt;
+  &lt;/plugins&gt;
+&lt;/build&gt;
+</code></pre>
+<p>主要是 picocli 依赖以及注解处理插件；</p>
+<p>代码如下：</p>
+<p>cli/picocli/a-checksum/src/main/java/io/github/jasonkayzk/CheckSum.java</p>
+<pre><code class="language-java">package io.github.jasonkayzk;
+
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
+
+import java.io.File;
+import java.math.BigInteger;
+import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.util.concurrent.Callable;
+
+@Command(name = "checksum", mixinStandardHelpOptions = true, version = "checksum 4.0",
+        description = "Prints the checksum (SHA-256 by default) of a file to STDOUT.")
+public class CheckSum implements Callable&lt;Integer&gt; {
+
+    @Parameters(index = "0", description = "The file whose checksum to calculate.")
+    private File file;
+
+    @Option(names = {"-a", "--algorithm"}, description = "MD5, SHA-1, SHA-256, ...")
+    private String algorithm = "SHA-256";
+
+    @Override
+    public Integer call() throws Exception { // your business logic goes here...
+        byte[] fileContents = Files.readAllBytes(file.toPath());
+        byte[] digest = MessageDigest.getInstance(algorithm).digest(fileContents);
+        System.out.printf("%0" + (digest.length * 2) + "x%n", new BigInteger(1, digest));
+        return 0;
+    }
+
+    // this example implements Callable, so parsing, error handling and handling user
+    // requests for usage help or version help can be done with one line of code.
+    public static void main(String... args) {
+        int exitCode = new CommandLine(new CheckSum()).execute(args);
+        System.exit(exitCode);
+    }
+}
+</code></pre>
+<p>命令行框架的代码还是很容易理解的；</p>
+<p>在 IDEA 中执行的话要配置对应的命令行参数才行；</p>
+<p>那么如果打包成 Jar 呢？</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>Maven配置</strong></h2>
+<h3><strong>指定Jar包主清单属性</strong></h3>
+<p>如果我们不使用其他的 Maven 插件来打包，打包后执行：</p>
+<pre><code class="language-bash">$ java -jar target/a-checksum-1.0-SNAPSHOT.jar \
+  --algorithm SHA-256 hello.txt
+
+target/a-checksum-1.0-SNAPSHOT.jar中没有主清单属性
+</code></pre>
+<p>此时会报错：<code>xxx.jar中没有主清单属性</code>；</p>
+<p>&lt;font color="#f00"&gt;<strong>这表示我们没有指定 Jar 包的入口方法，因此这个 Jar 包只能作为一个库来使用而不能成为 Executable Jar；</strong>&lt;/font&gt;</p>
+<p>这个问题是因为：jar包中的META-INF文件夹下的MANIFEST.MF文件缺少定义jar接口类）说白了就是没有指定class类）；</p>
+<blockquote>
+<p><strong>这里说明一下MANIFEST.MF就是一个清单文件，通俗点将就相当于WINDOWS中 ini 配置文件，用来配置程序的一些信息；</strong></p>
+</blockquote>
+<p>有两种解决方案：</p>
+<p>&lt;font color="#f00"&gt;<strong>1、手动编写配置<code>META-INF/MANIFEST.MF</code></strong>&lt;/font&gt;</p>
+<p>我们可以手动编写这个配置文件，然后打包的时候打包进去，例如：</p>
+<pre><code>Manifest-Version: 1.0
+Build-Jdk: 1.7.0_67
+Main-Class: io.github.jasonkayzk.CheckSum
+</code></pre>
+<p>但是通常我们都是使用 Maven 插件来帮助我们生成！</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>2、使用 <code>maven-jar-plugin</code> 插件</strong>&lt;/font&gt;</p>
+<p>配置中加入Maven插件：</p>
+<pre><code class="language-xml">&lt;build&gt;
+  &lt;plugins&gt;
+    &lt;plugin&gt;
+      &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+      &lt;artifactId&gt;maven-jar-plugin&lt;/artifactId&gt;
+      &lt;version&gt;3.1.0&lt;/version&gt;
+      &lt;configuration&gt;
+        &lt;archive&gt;
+          &lt;manifest&gt;
+            &lt;mainClass&gt;io.github.jasonkayzk.CheckSum&lt;/mainClass&gt;
+          &lt;/manifest&gt;
+        &lt;/archive&gt;
+      &lt;/configuration&gt;
+    &lt;/plugin&gt;
+  &lt;/plugins&gt;
+&lt;/build&gt;
+</code></pre>
+<p>在上面的配置中配置了 MainClass 是我们对应的 CheckSum 类；</p>
+<p>这样，Maven 在 package 阶段就会自动生成对应的 MANIFEST 文件并打入 Jar 包中；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>将依赖加入Jar包</strong></h3>
+<p>上面配置好了我们的Jar包入口，接下来重新打包并执行：</p>
+<pre><code class="language-bash">$ java -jar target/a-checksum-1.0-SNAPSHOT.jar \
+  --algorithm SHA-256 hello.txt
+
+Exception in thread "main" java.lang.NoClassDefFoundError: picocli/CommandLine
+        at io.github.jasonkayzk.CheckSum.main(CheckSum.java:35)
+Caused by: java.lang.ClassNotFoundException: picocli.CommandLine
+        at java.net.URLClassLoader.findClass(URLClassLoader.java:387)
+        at java.lang.ClassLoader.loadClass(ClassLoader.java:418)
+        at sun.misc.Launcher$AppClassLoader.loadClass(Launcher.java:355)
+        at java.lang.ClassLoader.loadClass(ClassLoader.java:351)
+        ... 1 more
+</code></pre>
+<p>此时仍然报错：<code>java.lang.NoClassDefFoundError: picocli/CommandLine</code>；</p>
+<p>&lt;font color="#f00"&gt;<strong>这是因为，通常情况下我们打包的 Jar 包是不包含依赖文件的；但是当我们作为 Executable Jar 去运行时，就缺少了我们的依赖；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>因此，我们需要将我们的依赖也打入 Jar 包中，即 <code>uber-jar</code>（或叫 <code>fat-jar</code>，胖Jar包）；</strong>&lt;/font&gt;</p>
+<p>Maven 提供了两个插件来解决这个问题：</p>
+<ul>
+<li><strong>maven-assembly-plugin；</strong></li>
+<li><strong>maven-shade-plugin；</strong></li>
+</ul>
+<p>这两个都可以用于将程序和依赖打成一个 uber-jar，尤其是开发sparkstreaming、flink程序，往yarn上提交任务的时候！</p>
+<p>两者的区别在于：</p>
+<p>&lt;font color="#f00"&gt;<strong>maven-assembly-plugin 插件会将依赖和资源文件都打入最终的Jar包，诸如properties文件等，如果项目和依赖中都有相同名称的资源文件时，就会发生冲突，导致项目中的相同名称的文件不会打到最终的Jar包中！如果这个文件是一个关键的配置文件，便会导致问题！</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>而maven-shade-plugin不存在这样的问题；所以，实际开发项目时候，还是尽量选用maven-shade-plugin！</strong>&lt;/font&gt;</p>
+<p>下面分别来看；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>使用<code>maven-assembly-plugin</code>打包</strong></h4>
+<p>Maven 中加入配置：</p>
+<pre><code class="language-xml">&lt;plugin&gt;
+  &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+  &lt;artifactId&gt;maven-assembly-plugin&lt;/artifactId&gt;
+  &lt;version&gt;3.1.1&lt;/version&gt;
+  &lt;configuration&gt;
+    &lt;!-- get all project dependencies --&gt;
+    &lt;descriptorRefs&gt;
+      &lt;descriptorRef&gt;jar-with-dependencies&lt;/descriptorRef&gt;
+    &lt;/descriptorRefs&gt;
+    &lt;!-- Main in manifest make executable jar --&gt;
+    &lt;archive&gt;
+      &lt;manifest&gt;
+        &lt;mainClass&gt;io.github.jasonkayzk.CheckSum&lt;/mainClass&gt;                        
+      &lt;/manifest&gt;
+    &lt;/archive&gt;
+  &lt;/configuration&gt;
+  &lt;executions&gt;
+    &lt;execution&gt;
+      &lt;id&gt;make-assembly&lt;/id&gt;
+      &lt;phase&gt;package&lt;/phase&gt;
+      &lt;goals&gt;
+        &lt;goal&gt;single&lt;/goal&gt;
+      &lt;/goals&gt;
+    &lt;/execution&gt;
+  &lt;/executions&gt;
+&lt;/plugin&gt;
+
+</code></pre>
+<p>然后再次打包并执行：</p>
+<pre><code class="language-bash">$ java -jar target/a-checksum-1.0-SNAPSHOT-jar-with-dependencies.jar \
+  --algorithm SHA-256 hello.txt
+
+5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03
+</code></pre>
+<p><code>maven-assembly-plugin</code> 插件会生成两个 Jar 包，一个包含了依赖（如上面的 <code>a-checksum-1.0-SNAPSHOT-jar-with-dependencies.jar</code>），一个不包含；</p>
+<p><code>maven-assembly-plugin</code> 插件使用比较简单，下面来看另外一个插件；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>使用<code>maven-shade-plugin</code>打包</strong></h4>
+<p>加入配置：</p>
+<pre><code class="language-xml">&lt;plugin&gt;
+  &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+  &lt;artifactId&gt;maven-shade-plugin&lt;/artifactId&gt;
+  &lt;version&gt;3.2.4&lt;/version&gt;
+  &lt;executions&gt;
+    &lt;execution&gt;
+      &lt;id&gt;checksum&lt;/id&gt;
+      &lt;phase&gt;package&lt;/phase&gt;
+      &lt;goals&gt;
+        &lt;goal&gt;shade&lt;/goal&gt;
+      &lt;/goals&gt;
+      &lt;configuration&gt;
+        &lt;transformers&gt;
+          &lt;transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"&gt;
+            &lt;manifestEntries&gt;
+              &lt;Main-Class&gt;io.github.jasonkayzk.CheckSum&lt;/Main-Class&gt;
+            &lt;/manifestEntries&gt;
+          &lt;/transformer&gt;
+        &lt;/transformers&gt;
+      &lt;/configuration&gt;
+    &lt;/execution&gt;
+  &lt;/executions&gt;
+&lt;/plugin&gt;
+</code></pre>
+<p><strong>需要注意的是：<code>&lt;id&gt;checksum&lt;/id&gt;</code> 是一定要配置的，否则打包时会报错：</strong></p>
+<pre><code>Maven – shade for parameter resource: Cannot find ‘resource’ in class org.apache.maven.plugins.shade.resource.ManifestResourceTransformer
+</code></pre>
+<p>详见：</p>
+<ul>
+<li>https://itecnote.com/tecnote/maven-shade-for-parameter-resource-cannot-find-resource-in-class-org-apache-maven-plugins-shade-resource-manifestresourcetransformer/</li>
+</ul>
+<p>重新打包后执行：</p>
+<pre><code class="language-bash">$ java -jar target/a-checksum-1.0-SNAPSHOT.jar \
+  --algorithm SHA-256 hello.txt
+
+5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>小结</strong></h2>
+<p>上文主要讲述了如何编写并打包一个 Executable Jar，打包的方式还是传统的 Jar 包的方式；</p>
+<p>实际上，得益于 GraalVM 的发展，目前已经可以直接编译Java 到 Native 了，但是还存在一些坑；</p>
+<p>希望以后有机会写关于 GraalVM 的内容～</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/remkop/picocli</li>
+<li>https://github.com/JasonkayZK/java-all/tree/main/cli/picocli</li>
+</ul>
+<p>系列文章：</p>
+<ul>
+<li><a href="https://jasonkayzk.github.io/2023/03/20/%E4%BD%BF%E7%94%A8Java%E7%BC%96%E5%86%99Cli%E5%91%BD%E4%BB%A4%E8%A1%8C%E5%B7%A5%E5%85%B7/">《使用Java编写Cli命令行工具》</a></li>
+<li><a href="https://jasonkayzk.github.io/2023/03/20/GraalVM%E4%BD%BF%E7%94%A8%E5%88%9D%E4%BD%93%E9%AA%8C/">《GraalVM使用初体验》</a></li>
+</ul>
+<p>参考文章：</p>
+<ul>
+<li>http://www.noobyard.com/article/p-nrudzjzq-dn.html</li>
+<li>https://www.modb.pro/db/128812</li>
+<li>https://itecnote.com/tecnote/maven-shade-for-parameter-resource-cannot-find-resource-in-class-org-apache-maven-plugins-shade-resource-manifestresourcetransformer/</li>
+</ul>
+<p>&lt;br/&gt;</p>

@@ -1,0 +1,67 @@
+<h2>原文：<a href="https://vivaxyblog.github.io/2017-07-12-webpack-require-context.html">Webpack require.context 的一些说明</a></h2>
+<hr/>
+<h2>layout: post
+title: Webpack require.context 的一些说明
+tags: [tools]</h2>
+<p>使用 <code>require.context</code> 可以动态引入文件。参考<a href="https://webpack.js.org/guides/dependency-management/#require-context">官方文档</a>，但是文档中的表述不甚清晰，因此我整理了几种用法和结果。</p>
+<p>先新建一个测试目录，安装 Webpack。目录结构如下：</p>
+<p><img alt="folder-preview" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2017-07-12-webpack-require-context/folder-preview.png"/></p>
+<h2>使用 <code>require</code></h2>
+<h3>完全使用变量 <code>require(variable)</code></h3>
+<p>代码如下：</p>
+<pre><code class="language-js">const filename = './dir/first-level.js';
+const func = require(filename); // =&gt; Uncaught Error: Cannot find module "."
+</code></pre>
+<pre><code>WARNING in ./index.js
+2:13-30 Critical dependency: the request of a dependency is an expression
+</code></pre>
+<p>结果：无法正确拿到文件中的内容。</p>
+<h3>部分使用变量 <code>require(prefix + variable + suffix)</code></h3>
+<p>第一种：</p>
+<pre><code class="language-js">const filename = './dir/first-level.js';
+const func = require('' + filename); // =&gt; Error
+</code></pre>
+<p>结果：编译超时或内存溢出导致 Webpack 进程退出。</p>
+<p>这时 Webpack 尝试引入 <code>.</code> 目录下的所有文件，由于 <code>node_modules</code> 存在，因此会引入非常多的文件导致问题。</p>
+<p>第二种：</p>
+<pre><code class="language-js">const filename = '/first-level.js';
+const func = require('./dir' + filename); // =&gt; Success
+</code></pre>
+<p>结果：成功获取文件中的内容。</p>
+<p>这时 Webpack 自动创建了一个 context，引入了所有路径符合 <code>^\.\/dir.*$</code> 的文件。生成的 <code>bundle.js</code> 中打包了所有的文件的内容。如果目录下存在非 js 文件，则需要通过配置正确的 loader 来引入。</p>
+<p>第三种：</p>
+<pre><code class="language-js">const filename = 'r/first-level.js';
+const func = require('./di' + filename); // =&gt; Success
+</code></pre>
+<p>结果：成功获取文件中的内容。</p>
+<p>这时 Webpack 自动创建了一个 context，引入了所有路径符合 <code>^\.\/di.*$</code> 的文件。生成的 <code>bundle.js</code> 中打包了所有的文件的内容。</p>
+<p>第四种：</p>
+<pre><code class="language-js">const filename = 'first-level';
+const func = require('./dir/' + filename + '.js'); // =&gt; Success
+</code></pre>
+<p>结构：成功获取文件中的内容。</p>
+<p>这时 Webpack 自动创建了一个 context，引入了所有路径符合 <code>./dir ^\.\/.*\.js$</code> 的文件。生成的 <code>bundle.js</code> 中打包了所有的文件的内容。</p>
+<h2>使用 <code>require.context</code></h2>
+<p>在刚才的过程中，Webpack 会创建一个 <code>require.context</code>，通过正则匹配到可能的文件，全部引入。如果我们想自定义这个正则规则的话，可以自己写一个 <code>require.context</code>。</p>
+<p>第一种：</p>
+<pre><code class="language-js">const context = require.context('./dir', true, /\.js$/);
+const keys = context.keys(); // =&gt; ["./another-first-level.js", "./first-level.js", "./sub-dir/second-level.js"]
+const filename = './first-level.js';
+const func = context(filename); // =&gt; Success
+</code></pre>
+<p>结果：成功获取文件中的内容。</p>
+<p>其中第一个参数表示相对的文件目录，第二个参数表示是否包括子目录中的文件，第三个参数表示引入的文件匹配的正则表达式。</p>
+<p>第二种：</p>
+<pre><code class="language-js">const context = require.context('./dir', false, /\.js$/);
+const keys = context.keys(); // =&gt; ["./another-first-level.js", "./first-level.js"]
+const filename = './first-level.js';
+const func = context(filename); // =&gt; Success
+</code></pre>
+<p>结果：成功获取第一层目录中的文件内容，但是不能拿到子目录中的文件。</p>
+<p>通过这个方式就可以解决引入不必要的 <code>node_modules</code> 中的文件的问题。相关的代码如下：</p>
+<pre><code class="language-js">var context = require.context('.', true, /^\.\/dir\/.*\.js$/);
+console.log(context.keys());
+const filename = './dir/first-level.js';
+console.log(context(filename));
+</code></pre>
+<p>希望对大家理解动态 <code>require</code> 和 <code>require.context</code> 有帮助。</p>

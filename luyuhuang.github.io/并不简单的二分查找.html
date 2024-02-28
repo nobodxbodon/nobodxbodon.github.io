@@ -1,0 +1,138 @@
+<h2>原文：<a href="https://luyuhuang.github.io/2021-03-31-binary-find.html">并不简单的二分查找</a></h2>
+<hr/>
+<h2>key: 51
+title: 并不简单的二分查找
+math: true
+tag: algorithms
+aside: false</h2>
+<p>二分查找是一个很经典的入门算法, 我们每个人都学过. 然而它往往没有我们没有想象的那么简单, 它有很多容易出错的细节: 用 <code>&lt;</code> 还是 <code>&lt;=</code> ? 是 <code>right = mid</code> 还是 <code>right = mid - 1</code> ? 是用 <code>mid = (right + left) / 2</code> 还是 <code>mid = left + (right - left) / 2</code> ? 如何使用二分查找找出左边界和右边界? 等等等等. 这篇文章我们就来搞清楚这些问题.</p>
+<h3>基本思路</h3>
+<p>二分查找的基本思路很简单: 在一个升序排列的数组中找到目标值, 首先检查数组正中间的数, 如果它比目标数大, 那么目标数一定位于数组的前半部分, 否则位于数组的后半部分; 然后在前半部分或者后半部分中执行同样的查找操作, 直到找到目标数.</p>
+<p>为了实现这一算法, 我们需要维护一段区间, 为当前的查找区间, 初始为整个数组. 为此我们维护两个变量 <code>left</code> 和 <code>right</code> 分别表示查找区间的左边界和右边界. 接着我们会找出数组的中点位置 <code>mid</code>, 将目标数于中点位置的数比较, 然后收缩区间.</p>
+<p>算法何时终止? 显然是找到了就可以终止了. 但若目标数不在数组中呢? 那应当是当查找区间为空时算法终止. 因为查找区间为空意味着没有数可找了, 就可以认为目标数不在数组之中了.</p>
+<h3>前闭后闭区间</h3>
+<p>如果数组的长度为 <code>len</code>, 则它的最大下标为 <code>len - 1</code>. 因此很自然地想到将 <code>left</code> 初始化为 0, <code>right</code> 初始化为 <code>len - 1</code>. 这样, <code>left</code> 和 <code>right</code> 表示的便是一个前闭后闭的区间. 很自然地想到中点位置 <code>mid = (left + right) / 2</code>, 即二者的平均数.</p>
+<pre><code class="language-c++">int binfind(const std::vector&lt;int&gt; &amp;array, int target) {
+    int left = 0, right = array.size() - 1;
+    while (left &lt;= right) {
+        int mid = (left + right) / 2;
+        if (array[mid] &lt; target) {
+            left = mid + 1;
+        } else if (array[mid] &gt; target) {
+            right = mid - 1;
+        } else {
+            return mid;
+        }
+    }
+    return -1;
+}
+</code></pre>
+<p>由于区间是前闭后闭的, 因此只要 <code>left &lt;= right</code>, 区间便不为空. 同时注意到在收缩区间时, <code>mid</code> 已经检查过了, 就不必包含在新区间中了, 因此有 <code>left = mid + 1</code> 和 <code>right = mid - 1</code>.</p>
+<h3>前闭后开区间</h3>
+<p>我们还可以初始令 <code>left = 0</code> 和 <code>right = length</code>, 让 <code>left</code> 和 <code>right</code> 表示成一个前闭后开的区间. 相应的代码就要改改了:</p>
+<pre><code class="language-c++">int binfind(const std::vector&lt;int&gt; &amp;array, int target) {
+    int left = 0, right = array.size();
+    while (left &lt; right) {
+        int mid = left + (right - left) / 2;
+        if (array[mid] &lt; target) {
+            left = mid + 1;
+        } else if (array[mid] &gt; target) {
+            right = mid;
+        } else {
+            return mid;
+        }
+    }
+    return -1;
+}
+</code></pre>
+<p>由于是前闭后开的区间, 因此当 <code>left &lt; right</code> 时区间不为空. 并且由于 <code>right</code> 位置上的数并不包含在区间中, 因此收缩区间时设置 <code>right = mid</code> 即可.</p>
+<p>这里我们使用了另外一种求中点的方式: <code>mid = left + (right - left) / 2</code>. 前闭后开的区间 <code>[left, right)</code> 的长度为 <code>right - left</code>, 我们让 <code>left</code> 向右偏移区间长度的一半, 即为中点的位置.</p>
+<h3>求中点位置</h3>
+<p>两种求中点位置的方式其实是一样的:</p>
+<p>$$
+\begin{align}
+m &amp;= l + \frac{r - l}{2} \
+&amp;= \frac{2l}{2} + \frac{r - l}{2} \
+&amp;= \frac{l + r}{2}
+\end{align}
+$$</p>
+<p>不过不同的是, <code>left + right</code> 的值有可能过大而导致整数溢出. 因此推荐使用 <code>mid = left + (right - left) / 2</code> 这种方式.</p>
+<p>如果认为中点位置应该是 <code>left</code> 加上区间长度的一半, 则对于前闭后闭的区间, 中点位置应该是 <code>mid = left + (right - left + 1) / 2</code>. 若区间长度为奇数 (即 <code>right - left</code> 为偶数), 则两种方式求得的结果是一样的; 若区间长度为偶数, 求得的结果则会比 <code>(left + right) / 2</code> 大 1. 不过这一差别并不会对算法造成实质影响.</p>
+<h3>找到边界</h3>
+<p>提问: 给定一个升序排序数组和一个目标数, 找出目标数在数组中的开始位置和位置. 例如目标数 3 在数组 <code>[1, 2, 3, 3, 3, 5]</code> 中的开始位置为 2, 结束位置为 4.</p>
+<p>我们仍然可以使用二分查找解决这个问题. 在前面看到的二分查找中, 可以看到:</p>
+<ul>
+<li>当中点数小于目标数时, 区间右移;</li>
+<li>当中点数大于目标数时, 区间左移;</li>
+<li>当中点数等于目标数时, 查找结束.</li>
+</ul>
+<p>而此时我们要找到目标数第一个出现当位置 (左边界), 意味着中点数等于目标数时查找不能结束, 而应该让区间左移. 只有这样区间才会不断逼近左边界.</p>
+<pre><code class="language-c++">int leftbound(const std::vector&lt;int&gt; &amp;array, int target) {
+    int left = 0, right = array.size();
+    while (left &lt; right) {
+        int mid = left + (right - left) / 2;
+        if (array[mid] &lt; target) {
+            left = mid + 1; // move right
+        } else { // array[mid] &gt;= target
+            right = mid; // move left
+        }
+    }
+    return left;
+}
+</code></pre>
+<p>这个过程中, <code>left</code> 只有在中间数小于目标数 (<code>array[mid] &lt; target</code>) 时才会向右移动. 因为有 <code>array[mid] &lt;= array[mid+1]</code> 且 <code>array[mid] &lt; target</code>, 如果 <code>target</code> 在 <code>array</code> 中, 则 <code>mid + 1</code> 必然不会超过 <code>target</code> 的左边界. 因此 <code>left</code> 不会超过 <code>target</code> 的左边界. 随着区间不断收缩, 循环结束时必然有 <code>left == right</code>. 最后 <code>left</code> 和 <code>right</code> 都会处于 <code>target</code> 的左边界的位置.</p>
+<p>找右边界的道理是一样的. 不过注意我们使用的时前闭后开的区间, 得到的右边界不属于区间的一部分. 因此最后的结果要减一.</p>
+<pre><code class="language-c++">int rightbound(const std::vector&lt;int&gt; &amp;array, int target) {
+    int left = 0, right = array.size();
+    while (left &lt; right) {
+        int mid = left + (right - left) / 2;
+        if (array[mid] &gt; target) {
+            right = mid; // move left
+        } else { // array[mid] &lt;= target
+            left = mid + 1; // move right
+        }
+    }
+    return left - 1;
+}
+</code></pre>
+<p>能不能使用前闭后闭的方式解这个问题呢? 其实也是可以的. 不过这样的话循环结束时会有 <code>left == right + 1</code>, 理解起来没这么自然.</p>
+<pre><code class="language-c++">int leftbound(const std::vector&lt;int&gt; &amp;array, int target) {
+    int left = 0, right = array.size() - 1;
+    while (left &lt;= right) {
+        int mid = left + (right - left) / 2;
+        if (array[mid] &lt; target) {
+            left = mid + 1;
+        } else {
+            right = mid - 1;
+        }
+    }
+    return left;
+}
+
+int rightbound(const std::vector&lt;int&gt; &amp;array, int target) {
+    int left = 0, right = array.size() - 1;
+    while (left &lt;= right) {
+        int mid = left + (right - left) / 2;
+        if (array[mid] &gt; target) {
+            right = mid - 1;
+        } else {
+            left = mid + 1;
+        }
+    }
+    return right;
+}
+</code></pre>
+<h3>总结</h3>
+<p>这么看下来, 二分查找的细节还是挺多的, 如果不搞清楚这些细节, 就很容易出错. 总的来说, 如果使用前闭后闭区间, 则:</p>
+<ul>
+<li>循环条件为 <code>left &lt;= right</code></li>
+<li>左移区间 <code>right = mid - 1</code>, 右移区间 <code>left = mid + 1</code></li>
+<li>循环结束时有 <code>left == right + 1</code></li>
+</ul>
+<p>如果使用前闭后开区间, 则:</p>
+<ul>
+<li>循环条件为 <code>left &lt; right</code></li>
+<li>左移区间 <code>right = mid</code>, 右移区间 <code>left = mid + 1</code></li>
+<li>循环结束时有 <code>left == right</code></li>
+</ul>
+<p>为了防止整数溢出, 应该使用 <code>mid = left + (right - left) / 2</code> 的方式求中点. 如果要找到左边界, 则当中间数等于目标数时区间左移; 如果要找右边界, 则当中间数等于目标数时区间右移. 综合看来, 使用前闭后开的区间理解起来容易些, 我个人也比较喜欢这种方式.</p>

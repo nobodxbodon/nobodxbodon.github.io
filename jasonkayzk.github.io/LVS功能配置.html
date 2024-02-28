@@ -1,0 +1,190 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/LVS%E5%8A%9F%E8%83%BD%E9%85%8D%E7%BD%AE.html">LVS功能配置</a></h2>
+<hr/>
+<h2>title: LVS功能配置
+cover: https://img.paulzzh.com/touhou/random?11
+date: 2020-04-10 11:49:22
+categories: 分布式
+toc: true
+tags: [分布式, 负载均衡, LVS]
+description: 紧接着上一篇LVS三种模型的推导, 本文介绍了LVS的相关配置</h2>
+<p>紧接着上一篇LVS三种模型的推导, 本文介绍了LVS的相关配置</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>&lt;!-- **目录:** --&gt;</p>
+<p>&lt;!-- toc --&gt;</p>
+<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+<h2>LVS功能配置</h2>
+<p>在上一篇文章<a href="https://jasonkayzk.github.io/2020/04/08/%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1LVS-%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%9E%8B%E6%8E%A8%E5%AF%BC/">负载均衡LVS-三种模型推导</a>我们进行了LVS三种常用的工作模型的介绍.</p>
+<p>本文在此基础之上介绍LVS相关功能的配置;</p>
+<h3>LVS网卡配置</h3>
+<p>在前面讲到, 为了实现DR模型, 需要在RS中配置一个对外隐藏, 对内可见的VIP.  而在Linux内核中有两个参数<code>arp_ignore</code>和<code>arp_announce</code>, 可以通过修改<code>/proc/sys/net/ipv4/conf/*IF*/</code>目录下的两个文件即可;</p>
+<p>每一个<code>/*IF*/</code>目录代表一个网卡的配置(也包括虚拟网卡), 例如:</p>
+<pre><code class="language-bash">zk@zk:/proc/sys/net/ipv4/conf$ ll
+dr-xr-xr-x 1 root root 0 4月  10 08:53 ./
+dr-xr-xr-x 1 root root 0 4月  10 08:53 ../
+dr-xr-xr-x 1 root root 0 4月  10 08:53 all/
+dr-xr-xr-x 1 root root 0 4月  10 11:57 br-44f57ba828cf/
+dr-xr-xr-x 1 root root 0 4月  10 11:57 br-f2f675760ec5/
+dr-xr-xr-x 1 root root 0 4月  10 08:53 default/
+dr-xr-xr-x 1 root root 0 4月  10 11:57 docker0/
+dr-xr-xr-x 1 root root 0 4月  10 08:53 enp34s0/
+dr-xr-xr-x 1 root root 0 4月  10 11:57 lo/
+</code></pre>
+<p>其中:</p>
+<ul>
+<li><code>all</code>: 配置对所有网卡生效;</li>
+<li><code>lo</code>: 环路网卡</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p><strong>配置文件说明:</strong></p>
+<ul>
+<li><p><strong>arp_ignore:</strong> 定义接收到ARP请求时的<strong>响应级别;</strong></p>
+<ul>
+<li>0: 只要本地配置的有相应地址, 就给与响应;(默认)</li>
+<li><strong>1: 仅在请求的目标(MAC)地址配置请求到达的接口上时, 才给予响应;</strong></li>
+</ul>
+</li>
+<li><p><strong>arp_announce:</strong> 定义将自己地址向外通告时的<strong>通告级别;</strong></p>
+<ul>
+<li>0: 将本地任何接口上的任何地址向外通告;(默认)</li>
+<li>1: 试图仅向目标网络通告与其网络匹配的地址;</li>
+<li><strong>2: 仅向与本地接口上地址匹配的网络进行通告;</strong></li>
+</ul>
+</li>
+</ul>
+<p>配置上述两个参数后:</p>
+<p>在处理请求时, 未在arp_ignore配置的请求将不会做出响应;</p>
+<p>同时在操作系统开启时, 不会向所有主机通告自己的地址(ARP表);</p>
+<p>从而实现了对外隐藏, 对内可见;</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>此外, 在只有一块网卡的情况下, 应当将配置配置在lo网卡上!</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>否则对于arp_ignore而言: 在模式1下, 无论如何都会接受到请求(无法实现目标请求MAC地址过滤)</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>LVS管理程序</h3>
+<p>在Linux中由ipvs实现LVS的功能, 而此功能是嵌入Linux内核中的.</p>
+<p>所以<strong>在进行交互时需要使用<code>ipvsadm</code>应用程序来管理;</strong></p>
+<p>&lt;br/&gt;</p>
+<h3>LVS调度方法</h3>
+<p><strong>① 静态调度算法</strong></p>
+<ul>
+<li>rr: 轮询;</li>
+<li>wrr: 加权轮询</li>
+<li>dh</li>
+<li>sh</li>
+</ul>
+<hr/>
+<p><strong>② 动态调度算法</strong></p>
+<p>LVS不会对客户端建立三次握手</p>
+<p>但是可以通过窥探第四层传输层的标识符来记录当前RS连接数, 进而进行动态调度算法</p>
+<ul>
+<li>lc: 最少连接;</li>
+<li>wlc: 加权最少连接;</li>
+<li>sed: 最短期望延迟;</li>
+<li>nq: never queue</li>
+<li>LBLC: 基于本地的最少连接</li>
+<li>DH</li>
+<li>LBLCR: 基于本地的带复制功能的最少连接;</li>
+</ul>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>在LVS中默认调度算法为WLC</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>LVS命令</h3>
+<p>首先安装ipvsadm应用程序:</p>
+<pre><code class="language-bash">yum install ipvsadm -y
+</code></pre>
+<p>然后配置ipvs管理集群服务</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>IPVS需要配置两个方案:</strong></p>
+<ul>
+<li><strong>一套用于配置收到什么样的数据包时进行负载均衡;(发送而来的包)</strong></li>
+<li><strong>另一套用于配置将收到的包给予那些服务器进行负载均衡;(发出的包)</strong></li>
+</ul>
+<p><strong>配置参数分别为<code>-A</code>和<code>-a</code></strong></p>
+</blockquote>
+<h4>对监控包的设置<code>-A</code></h4>
+<ul>
+<li>添加: -A -t|u|f service-address [-s scheduler]<ul>
+<li>-t: TCP协议的集群</li>
+<li>-u: UDP协议的集群</li>
+<li>-f: FWM: 防火墙标记</li>
+<li>service-address: VIP的地址以及端口号</li>
+<li>-s scheduler: 调度算法</li>
+</ul>
+</li>
+<li>修改: -E</li>
+<li>删除: -D -t|u|f service-address</li>
+</ul>
+<p>例如:</p>
+<p><code>ipvsadm -A -t 192.168.9.100:80 -s rr</code>表示, 客户端在请求192.168.9.100:80的TCP连接时, 会使用负载均衡;</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>IPVS支持配置多个IP地址的负载均衡</strong></p>
+<p>例如:</p>
+<p>在上面配置的基础上, 再进行<code>ipvsadm -A -t 172.16.11.1:8080 -s rr</code>配置</p>
+<p>则会同时对192.168.9.100:80以及172.16.11.1:8080两个地址进行负载均衡;<strong>(但是他们是单独负载均衡)</strong></p>
+</blockquote>
+<hr/>
+<h4>对负载包的设置<code>-a</code></h4>
+<ul>
+<li>添加: -a -t|u|f service-address -r server-address [-g|i|m] [-w weight]<ul>
+<li>-t|u|f service-address: 事先定义好的某集群服务</li>
+<li>-r server-address: 某RS的地址, 在NAT模型中可以使用IP:PORT实现端口映射;</li>
+<li>-g|i|m: LVS类型, 默认为DR模型<ul>
+<li>-g: DR</li>
+<li>-i: TUN</li>
+<li>-m: NAT</li>
+</ul>
+</li>
+<li>-w weight: 定义RS的权重</li>
+</ul>
+</li>
+<li>修改: -e</li>
+<li>删除: -d -t|u|f service-address -r server-address</li>
+</ul>
+<p>例如:</p>
+<p><code>ipvsadm -a -t 172.16.100.1:80 -r 192.168.10.8 -g</code></p>
+<p><code>ipvsadm -a -t 172.16.100.1:80 -r 192.168.10.9 -g</code></p>
+<p>上面两条命令增加了两个对负载包的配置, 即对VIP<code>172.16.100.1:80</code>配置了两个负载均衡RS: 192.168.10.8和192.168.10.9; 并指定使用DR模型;</p>
+<hr/>
+<p><strong>LVS配置查看</strong></p>
+<ul>
+<li>-L|I: 显示出负载了哪些包/监控了哪些RS</li>
+<li>-n: 数字格式显示主机地址和端口</li>
+<li><code>--stats</code>: 统计数据</li>
+<li><code>--rate</code>: 速率</li>
+<li><code>--timeout</code>: 显示tcp, tcpfin和udp的会话超时时长;</li>
+<li><strong>-c: 显示当前的ipvs连接状况(LVS负载的记录)</strong></li>
+</ul>
+<hr/>
+<p><strong>LVS删除与保存</strong></p>
+<ul>
+<li>删除:<ul>
+<li>-C: 清空IPVS规则, 删除所有集群服务;</li>
+</ul>
+</li>
+<li>保存:<ul>
+<li>-S</li>
+</ul>
+</li>
+<li>载入此前的规则:<ul>
+<li>-R</li>
+</ul>
+</li>
+</ul>
+<p>例如:</p>
+<p><code>ipvsadm -S &gt; /path/to/somefile</code>用于将当前配置保存在文件中;</p>
+<p><code>ipvsadm -R &lt; /path/to/somefile</code>用于载入配置文件中的配置;</p>
+<blockquote>
+<p>&lt;br/&gt;</p>
+<p><strong>ipvsadm没有配置文件, 但是可以通过向内核导入导出完成配置</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2>附录</h2>
+<p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
+<p>内容和博客同步更新~</p>
+<p>&lt;br/&gt;</p>

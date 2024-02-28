@@ -1,0 +1,145 @@
+<h2>原文：<a href="https://objcoding.github.io/2019-01-23-elk.html">使用Docker搭建ELK日志系统</a></h2>
+<hr/>
+<h2>layout: post
+title: "使用Docker搭建ELK日志系统"
+categories: Docker
+tags: ElasticSearch Logstash Kibana Filebeat
+author: 张乘辉</h2>
+<ul>
+<li>content
+{:toc}
+以下安装都是以 ~/ 目录作为安装根目录。</li>
+</ul>
+<h2>ElasticSearch</h2>
+<p>下载镜像：</p>
+<pre><code class="language-bash">$ sudo docker pull elasticsearch:5.5.0
+</code></pre>
+<p>运行ElasticSearch容器：</p>
+<pre><code class="language-bash">$ sudo docker run -it -d -p 9200:9200 -p 9300:9300 \
+-v ~/elasticsearch/data:/usr/share/elasticsearch/data \
+--name myes elasticsearch:5.5.0
+</code></pre>
+<p>特别注意的是如果使用v6以上版本会出现jdk的错误，我们查看日志</p>
+<pre><code class="language-bash">$ docker logs -f myes
+</code></pre>
+<p>查看日志：</p>
+<p>OpenJDK 64-Bit Server VM warning: Option UseConcMarkSweepGC was deprecated in version 9.0 and will likely be removed in a future release.</p>
+<p>网上找到大概的意思是：</p>
+<p><em>jdk9对elasticSearch不太友好（版本太新），必须使用JDK8，本人使用的是JDK8u152(jdk-8u152-windows-x64.exe)。如果使用JDK9，使用elasticSearch-rtf(v5.1.1)，会出现下面的错误，请特别注意，elasticSearch6.0的版本则必须使用JDK9，否则官网下载的msi不能安装成功，原因还没有去仔细检查。</em></p>
+<p>所以也是一个很坑爹的问题，所以我干脆直接就安装v5.5.0稳定版本吧。</p>
+<h2>Logstash</h2>
+<p>下载镜像：</p>
+<pre><code class="language-bash">$ sudo docker pull logstash:5.5.0
+</code></pre>
+<p>新建配置文件：</p>
+<pre><code class="language-bash">$ mkdir ~/logstash &amp;&amp; cd ~/logstash
+$ mkdir conf.d &amp;&amp; cd conf.d
+$ vim logstash.conf
+</code></pre>
+<p>logstash.conf：</p>
+<pre><code class="language-properties">input {
+
+  beats {
+    port =&gt; 5044 # 此端口需要与 filebeat.yml 中的端口相同
+  }
+
+  file {
+    path =&gt; "/data/logs"
+    # start_position =&gt; "beginning"
+  }
+}
+
+filter {
+  #grok {
+  #  match =&gt; { "message" =&gt; "%{COMBINEDAPACHELOG}" }
+  #}
+  #date {
+  #  match =&gt; ["timestamp", "dd/MMM/yyyy:HH:mm:ss Z"]
+  #}
+
+ grok {
+
+    patterns_dir =&gt; "/etc/logstash/conf.d/patterns"
+    match =&gt; {"message" =&gt; "%{TIMESTAMP_ISO8601:time}\S%{MYSELF:msgid}%{MYSELF:method}%{MYDATA:data}%{MYSELF:UserInfo}\S%{LOGLEVEL:level}\S%{MYSELF:thread}%{MYSELF:application}%{MYSELF:ip}"}
+}
+date {
+     #match =&gt; [ "time", "YYYY-MM-dd HH:mm:ss,SSS" ]
+     match =&gt; [ "time", "ISO8601" ]
+     target =&gt; "@timestamp"
+     timezone =&gt; "Asia/Phnom_Penh"
+ }
+
+}
+
+output {
+
+  stdout {
+    codec =&gt; rubydebug
+  }
+
+  elasticsearch {
+    action =&gt; "index"
+    hosts =&gt; ["172.17.10.114:9200"]
+    index =&gt; "%{[fields][indexname]}-%{+YYYY.MM.dd}"
+  }
+}
+
+
+</code></pre>
+<p>添加 patterns：</p>
+<pre><code class="language-bash">$ cd ~/logstash/conf.d
+$ mkdir patterns &amp;&amp; cd patterns
+$ vim custom
+</code></pre>
+<p>custom：</p>
+<pre><code class="language-bash">MYSELF \[\S*?\]
+MYDATA [\s\S]*?(?=\[User)
+</code></pre>
+<p>运行Logstash容器：</p>
+<pre><code class="language-bash">$ sudo docker run -it -d -p 5044:5044 \
+-v ~/logstash/conf.d:/etc/logstash/conf.d \
+-v ~/logstash/data/logs:/data/logs \
+--name logstash logstash:5.5.0 \
+-f /etc/logstash/conf.d/logstash.conf
+</code></pre>
+<h2>Kibana</h2>
+<p>下载镜像：</p>
+<pre><code class="language-bash">$ sudo docker pull kibana:5.5.0
+</code></pre>
+<p>新建配置文件：</p>
+<pre><code>$ mkdir ~/kibana &amp;&amp; cd ~/kibana
+$ vim kibana.yml
+</code></pre>
+<p>kibana.yml：</p>
+<pre><code class="language-yml">server.port: 5601
+server.host: "0.0.0.0"
+elasticsearch.url: "http://172.17.10.114:9200"
+</code></pre>
+<p>运行Kibana容器：</p>
+<pre><code class="language-bash">$ sudo docker run -it -d -p 5601:5601 \
+-v ~/kibana:/etc/kibana \
+--name kibana kibana:5.5.0
+</code></pre>
+<h2>Filebeat</h2>
+<p><strong>Filebeat需要部署在需要收集日志的服务器上。</strong></p>
+<p>下载镜像：</p>
+<pre><code class="language-bash">$ sudo docker pull docker.elastic.co/beats/filebeat:5.5.0
+</code></pre>
+<p>新建配置文件：</p>
+<pre><code class="language-yaml">filebeat.prospectors:
+- type: log
+   paths:
+      - ~/filebeat/logs  # 指定需要收集的日志文件的路径
+fields:
+   indexname: xxx # 这里填写项目名称，对应index =&gt; "%{[fields][indexname]}-%{+YYYY.MM.dd}"
+output.logstash:
+  hosts: ["172.17.10.114:5044"]
+
+</code></pre>
+<p>运行Filebeat容器：</p>
+<pre><code class="language-bash">$ sudo docker run -it -d \
+-v ~/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml \
+--name filebeat docker.elastic.co/beats/filebeat:5.5.0
+</code></pre>
+<p>附上一张ELK结构流程图：</p>
+<p><img alt="ELK" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/elk.jpg"/></p>

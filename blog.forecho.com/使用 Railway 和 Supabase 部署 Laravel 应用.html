@@ -1,0 +1,41 @@
+<h2>原文：<a href="https://blog.forecho.com/use-railway-and-supabase.html">使用 Railway 和 Supabase 部署 Laravel 应用</a></h2>
+<hr/>
+<h2>title: "使用 Railway 和 Supabase 部署 Laravel 应用"
+date: 2022-08-30T09:09:00+08:00
+tags: ["部署", "技术分享", 'Laravel']
+draft: false
+toc: true</h2>
+<h2>引言</h2>
+<p><a href="https://twitter.com/novoreorx/status/1557713528609714176"><img alt="20220830lBfWYZ" src="https://blog-1251237404.cos.ap-guangzhou.myqcloud.com/20220830lBfWYZ.png"/></a></p>
+<p>刷 Twitter 的时候看到有人分享如何使用 <a href="https://railway.app?referralCode=HI0KtP">Railway</a> + <a href="https://supabase.com/">Supabase</a> 部署应用，这些 PaaS 服务通常都有免费额度，如果是小项目通常相当于免费使用。</p>
+<p>简单看了一下觉得还不错，于是我尝试部署了一份 Laravel 应用。这篇文章就来分享一下我踩过的坑。</p>
+<p>&lt;!--more--&gt;</p>
+<h2><a href="https://railway.app?referralCode=HI0KtP">Railway</a></h2>
+<p>Railway 提供服务器和数据库服务，注册账户就可以免费使用 500 小时（20 天），或者 5 美元以下的额度，每个月重置额度，详情看他们的 <a href="https://docs.railway.app/reference/plans#starter-plan">Starter Plan</a>。</p>
+<p>绑定信用卡之后就会按照使用情况自动扣钱了，每个月超过 5 美元就开始收费。当然也就没有 500 小时/月的限制。所以 Starter Plan 版就是给你体验的，真要使用起来还是得绑定信用卡。</p>
+<p>这里我们只使用它提供的服务器服务，数据库可以使用 Supabase 代替，以减轻 Railway 的免费额度。</p>
+<h2><a href="https://supabase.com/">Supabase</a></h2>
+<p>Supabase 提供 Database、Authentication、Storage、Edge Functions 服务，这里我们只需要用它的 Database 服务，免费额度有 500MB，感觉对小项目够用了。</p>
+<p>值得注意的是 Supabase 提供 Database 是 PostgreSQL，如果要用 MySQL 的话，可以使用 <a href="https://planetscale.com/">PlanetScale</a>。</p>
+<h2>部署 Laravel 应用</h2>
+<p><img alt="" src="https://blog-1251237404.cos.ap-guangzhou.myqcloud.com/202208301hLOM8.png"/></p>
+<p>Railway 新建项目的时候可以选 Laravel 模板，但是坑爹的是，这个模板根本无法正常使用，我摸索了半天，经过几个小时的踩坑（Google + 不断尝试）最后终于正常部署了。</p>
+<p>其实只要在 Laravel 项目根目录加上 <code>Procfile</code> 文件就可以了，代码如下：</p>
+<pre><code>web: (cd /app &amp;&amp; cp .env.example .env &amp;&amp; php artisan key:generate &amp;&amp; php artisan migrate) &amp;&amp; ([ -e /app/storage ] &amp;&amp; chmod -R ugo+w /app/storage); perl /assets/transform-config.pl /assets/nginx.template.conf /nginx.conf &amp;&amp; echo "Server starting on port $PORT" &amp;&amp; (php-fpm -y /assets/php-fpm.conf &amp; nginx -c /nginx.conf)
+</code></pre>
+<p>由于我们使用的是 Supabase 数据库，所以这里我们要输入环境变量，配置从 Supabase 获取到。</p>
+<p><img alt="" src="https://blog-1251237404.cos.ap-guangzhou.myqcloud.com/202208304wQKFo.png"/></p>
+<p>Railway 支持自动化部署，自定义域名，看起来还不错。</p>
+<p>Supabase 的使用就不讲了，很简单。</p>
+<h2>最后</h2>
+<p>Railway 看起来是一个很新的平台，不是很完善，目前我没找到如何部署跑队列服务和定时脚本服务，在没找到这两个解决方案之前我不打算使用 Railway。如果你没有这两个需求倒是可以试试。</p>
+<p>说起 PaaS，就不得不提起 <a href="https://www.heroku.com/">Heroku</a> ，但是它似乎在被 Salesforce 收购之后不思进取了，可惜了。希望这行业有更多的平台涌出吧，有竞争才是好事。</p>
+<p>另外听说 <a href="https://fly.io/">Fly.io</a> 也是一个不错的平台，下回有时间可以研究一下。</p>
+<h2>更新</h2>
+<p>今天折腾了半天好好体验了一下 PlanetScale 和 Supabase，功能是不错，产品是好产品，但是真正要用起来的话发现国内网络延迟太高了（我选的是新加坡节点），我的服务器在香港，一个请求接近 2 秒。体验下来 PlanetScale 会比 Supabase 好一点。</p>
+<p>如果是自己一个人用还好，但是如果是 Side Project 用的话，太慢，体验不好。</p>
+<p>最后不得不放弃了，还是老老实实用阿里云的 RDS，RDS 新用户基础版 3 年 59.9 元，这个价格还不错。</p>
+<h2>参考资料</h2>
+<ul>
+<li><a href="https://blog.cysi.me/2022/05/build-miniflux-rss-on-railway.html">使用 Railway 和 Miniflux 零成本搭建 RSS 服务</a></li>
+</ul>

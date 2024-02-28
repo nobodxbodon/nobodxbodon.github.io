@@ -1,0 +1,82 @@
+<h2>原文：<a href="https://www.jeffjade.com/2014-12-22-lua-weaktable.html">Lua table之弱引用</a></h2>
+<hr/>
+<h2>layout: post
+title: Lua table之弱引用
+category: 技术
+tags: 程序
+keywords: Lua之Table</h2>
+<p>Lua采用了基于垃圾收集的内存管理机制，因此对于程序员来说，在很多时候内存问题都将不再困扰他们。然而任何垃圾收集器都不是万能的，在有些特殊情况下，垃圾收集器是无法准确的判断是否应该将当前对象清理。这样就极有可能导致很多垃圾对象无法被释放。为了解决这一问题，就需要Lua的开发者予以一定程度上的配合。比如，当某个table对象被存放在容器中，而容器的外部不再有任何变量引用该对象，对于这样的对象，Lua的垃圾收集器是不会清理的，因为容器对象仍然引用着他。如果此时针对该容器的应用仅限于查找，而不是遍历的话，那么该对象将永远不会被用到。事实上，对于这样的对象我们是希望Lua的垃圾收集器可以将其清理掉的。见如下代码:</p>
+<pre><code class="language-lua">a = {}
+key = {}
+a[key] = 1
+key = {}
+a[key] = 2
+collectgarbage()
+for k,v in pairs(a) do
+    print(v)
+end    
+</code></pre>
+<p>--输出1和2</p>
+<p>在执行垃圾收集之后，table a中的两个key都无法被清理，但是对value等于1的key而言，如果后面的逻辑不会遍历table a的话，那么我们就可以认为该对象内存泄露了。在Lua中提供了一种被称为弱引用table的机制，可以提示垃圾收集器，如果某个对象，如上面代码中的第一个table key，只是被弱引用table引用，那么在执行垃圾收集时可以将其清理。</p>
+<p>Lua是具备自动内存管理的,我们可以只管创建对象，无须删除对象(当然，对于不要的对象你需要设置一下nil值)，Lua会自动删除那些被认为是垃圾的对象。
+问题就出现在，什么对象才是垃圾对象，有些时候，我们很清楚某个对象是垃圾，但是，Lua却无法发现。正如上面所述，就需要Lua的开发者予以一定程度上的配合;再比如下面这个例子:</p>
+<pre><code class="language-lua">t = {};
+   
+-- 使用一个table作为t的key值
+key1 = {name = "key1"};
+t[key1] = 1;
+key1 = nil;
+
+-- 又使用一个table作为t的key值
+key2 = {name = "key2"};
+t[key2] = 1;
+key2 = nil;
+
+-- 强制进行一次垃圾收集
+collectgarbage();
+
+for key, value in pairs(t) do
+    print(key.name .. ":" .. value);
+end
+</code></pre>
+<p>-- 其结果输出是：</p>
+<blockquote>
+<p>key1:1<br/>
+key2:1</p>
+</blockquote>
+<p>这很符合常理，也在我们的预计当中，虽然我们在给t赋值之后，将key1和key2都赋值为nil了。
+但是，因为存在table对key1,key2的引用，已经添加到table中的key值是不会因此而被当做垃圾的。
+换句话说，key1本身已经是nil值，但它曾经所指向的<code>内容</code>依然存放在t中。key2也是一样的情况。
+所以我们最后还是能输出key1和key2的name字段。</p>
+<p>那么，如果我们把某个table作为另一个table的key值后，希望当table设为nil值时，另一个table的那一条字段也被删除。
+应该如何实现？这时候就要用到弱引用table了，弱引用table的实现也是利用了元表。</p>
+<p>&lt;font color="red"&gt;Lua中的弱引用表提供了3中弱引用模式，即key是弱引用、value是弱引用，以及key和value均是弱引用。不论是哪种类型的弱引用table，只要有一个key或value被回收，那么它们所在的整个条目都会从table中删除。&lt;/font&gt;</p>
+<p>一个table的弱引用类型是通过其元表的__mode字段来决定的。如果该值为包含字符"k"，那么table就是key弱引用，如果包含"v"，则是value若引用，如果两个字符均存在，就是key value弱引用。见如下代码：</p>
+<pre><code class="language-lua">a = {}
+b = {__mode = "k"}
+setmetatable(a,b)
+key = {}
+a[key] = 1
+key = {}
+a[key] = 2
+collectgarbage()
+for k,v in pairs(a) do
+    print(v)
+end
+</code></pre>
+<p>--仅仅输出2</p>
+<p>在上面的代码示例中，第一个key在被存放到table a之后，就被第二个key的定义所覆盖，因此它的唯一引用来自key弱引用表。事实上，这种机制在Java中也同样存在，Java在1.5之后的版本中也提供了一组弱引用容器，其语义和Lua的弱引用table相似。
+&lt;font color="blue"&gt;最后需要说明的是，Lua中的弱引用表只是作用于table类型的变量，对于其他类型的变量，如数值和字符串等，弱引用表并不起任何作用。&lt;/font&gt;</p>
+<p>##备忘录(memoize)函数：
+用“空间换时间”是一种通用的程序运行效率优化手段，比如：对于一个普通的Server，它接受到的请求中包含Lua代码，每当其收到请求后都会调用Lua的loadstring函数来动态解析请求中的Lua代码，如果这种操作过于频率，就会导致Server的执行效率下降。要解决该问题，我们可以将每次解析的结果缓存到一个table中，下次如果接收到相同的Lua代码，就不需要调用loadstirng来动态解析了，而是直接从table中获取解析后的函数直接执行即可。这样在有大量重复Lua代码的情况下，可以极大的提高Server的执行效率。反之，如果有相当一部分的Lua代码只是出现一次，那么再使用这种机制，就将会导致大量的内存资源被占用而得不到有效的释放。在这种情况下，如果使用弱引用表，不仅可以在一定程度上提升程序的运行效率，内存资源也会得到有效的释放。见如下代码：</p>
+<pre><code class="language-lua">local results = {}
+setmetatable(results,{__mode = "v"}) --results表中的key是字符串形式的Lua代码
+function mem_loadstring(s)
+    local res = results[s]
+    if res == nil then
+        res = assert(loadstring(s))
+        results[s] = res
+    end
+    return res
+end
+</code></pre>

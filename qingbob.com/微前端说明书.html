@@ -1,0 +1,187 @@
+<h2>原文：<a href="https://qingbob.com/2019-09-07-micro-front-end-specification.html">微前端说明书</a></h2>
+<hr/>
+<h2>layout: post
+title: 微前端说明书
+modified: 2019-09-07
+tags: [javascript, architecture]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<h2>为什么写</h2>
+<blockquote>
+<p>互联网公司技术选型三定律</p>
+<ol>
+<li>流行即正义</li>
+<li>新鲜即正义</li>
+<li>复杂即正义
+—— 我</li>
+</ol>
+</blockquote>
+<p>因为最近被问起当前公司的前端产品有没有聚合为微前端的可能性，所以又重新开始审视“微前端”这个话题。差不多一年前写过一篇<a href="https://zhuanlan.zhihu.com/p/50358444">反驳美团微前端方案的文章</a>。那篇文章更多的是关于“没有必要这么做”，但是“应该如何做”我也并没有给出更好的方案。最近在参考了很多资料之后，对这个的问题的答案有了轮廓</p>
+<p>本文分为两个部分：“战略”和“战术”。前者关于为什么以及在什么场景下使用微前端，后者关于采用什么的技术实施微前端。这篇文章里我会反对某些方案，赞成某些方案，仅代表个人意见</p>
+<p>开头的“互联网公司技术选型三定律”是我个人总结的，也是我在这篇文章里极力反对的。这三条定律的产生有行业的原因也有程序员职业的原因。三定律的存在导致了某些技术的被曲解和滥用，其中就有微前端。在本文中也会引用这三定律做说明</p>
+<h2>战略篇</h2>
+<p>实现微前端一点都不难，我相信你也看过无数种微前端实施方案。但问题不在于我们能不能做，而是我们为什么要做。</p>
+<p>Dan Abramov（你应该知道他是谁） <a href="https://twitter.com/dan_abramov/status/1132495687957012481?s=20">在 Twitter 上提出过一个问题</a>，他认为微前端解决的问题通过好的组件模式就能解决，为什么需要微前端？</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/micro-front-end-specification/dan_abramov_twitter.png"/></p>
+<p>有时候甚至不用通过组件，通过一个门户网站将不同功能的站点收集在一个页面上某种意义上也算微前端。所以我们谈论的微前端究竟是什么？</p>
+<p>微前端的概念衍生自微服务。在我看来微服务带来的改进是是架构上的解耦，比如灵活替换和独立部署发布。注意这样的解耦是架构上的而不是功能上的，在实际的的工作中，常常一个功能的迭代会带来多个微服务的链式修改。在一个恶劣设计的极端情况下，你划分了十个微服务，但是每次功能修改都需要对十个微服务同时修改，那这和一个单体应用有什么区别？在单体应用中如果你设计的足够优秀，单体内部也可以存在好的功能解耦。所以在当今微服务作为标配的情况下，微服务也并不是绝对正义</p>
+<p>微前端和微服务相似，它带来的也是仅仅是架构上的解耦。关于功能解耦我在战术部分详述</p>
+<p>组件化的确是目前前端普遍的开发模式，但并不是所有的前端功能都需要走组件化这一条路。比如文档性质的站点可以通过 static site generator 生成；绚烂的活动页面更适合利用动画特效类库进行编程。我想表达的是：<strong>微前端不是跨世代的通用解决方案，它也不是用于代替先用的组件模式。它只是给了我们一个让不同技术栈不同团队开发同一个产品的机会</strong>。这个定义来自于 Luca Mezzalira 对 Dan Abramov 质疑的回复，我非常赞同:</p>
+<blockquote>
+<p>Let’s start with this, Micro-frontends are not trying to replace components, it’s a possibility we have that doesn’t fit in all the projects like components are not the answer for everything.</p>
+</blockquote>
+<p>微前端适用于不同技术栈不同团队需要对同一产品进行修改的开发模式，比如 Google Cloud:</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/micro-front-end-specification/google_cloud.png"/></p>
+<p>从菜单栏我们可以看出谷歌云提供不同类型的服务，但是这些服务之间都相互独立，有的是通用性质的，有的是云计算相关的，即使是在云计算一栏下又划分了不同类型的计算服务。（我猜测）不同的服务来自不同的团队进行开发，虽然它们不相互干扰，但是又需要同一个产品予以体现。那么使用微前端是最好的方式</p>
+<p>注意这里“同一产品”的定义仅仅是从视觉形态和用户体验方面考虑。如果 A 网站只是要用到 B 网站的数据，那么通过接口提供就好了。</p>
+<p>你可能会注意到腾讯旗下的（所有）站点的登陆框都是使用 iframe 集成。这也算是一种微前端：其他的团队只负责自己业务相关的页面，而“登陆框”团队负责维护统一登陆框供大家调用。他们之间不需要关心对方的技术栈，迭代周期（甚至甩锅也变得方便了）。如果有一天 iframe 变成了统一的 Web Component，这种微前端关系仍然成立</p>
+<p>在<a href="https://tech.meituan.com/2018/09/06/fe-tiny-spa.html">美团的的微前端方案</a>里，我们看看他们做微前端的诉求:</p>
+<blockquote>
+<p>美团已经是一家拥有几万人规模的大型互联网公司，提升整体效率至关重要，这需要很多内部和外部的管理系统来支撑。由于这些系统之间存在大量的连通和交互诉求，因此我们希望能够按照用户和使用场景将这些系统汇总成一个或者几个综合的系统。</p>
+</blockquote>
+<blockquote>
+<p>因为美团的HR系统所涉及项目比较多，目前由三个团队来负责。其中：OA团队负责考勤、合同、流程等功能，HR团队负责入职、转正、调岗、离职等功能，上海团队负责绩效、招聘等功能</p>
+</blockquote>
+<blockquote>
+<p>这种团队和功能的划分模式，使得每个系统都是相对独立的，拥有独立的域名、独立的UI设计、独立的技术栈。但是，这样会带来开发团队之间职责划分不清、用户体验效果差等问题</p>
+</blockquote>
+<p>这里我对他们要做微前端的动机感到有一些疑惑：</p>
+<ul>
+<li>“系统汇总”的方式有很多，除了门户以外，我们曾经尝试过通过给每一个系统添加一个公共共享的导航栏组件来让系统之间的导航和跳转更方便，效果也不错</li>
+<li>“独立的域名、独立的UI设计、独立的技术栈”——这不就是相互独立的站点吗？如果这么多年用户都能正常使用，为什么现在要把它们聚合在一起？</li>
+<li>“这样会带来开发团队之间职责划分不清、用户体验效果差”，我不认为微前端能够解决团队之间职责划分的问题；用户体验效果不是更应该从交互体验和统一设计规范入手吗？</li>
+</ul>
+<p>我不是针对美团，但就微前端而言，就事论事我认为这是一个好的反面例子，能够让我们从不同的角度进行反思。在后面的内容里我也会再引用其中的内容。当然他们也不是这篇文章中唯一的反面教材。</p>
+<p>我在阅读 Martin Fowler 的 《Patterns Of Enterprise Application Atchitecture》时，最大的一点感触是他从来不排斥任何的技术方案：如果你想做业务相关的数据存储，你当然可以选择 ORM 来实现 Domain Model 模式；你同样可以选择简单至极的 Transaction Script 模式 (A Transaction Script organizes all this logic primarily as a single procedure)：</p>
+<blockquote>
+<p>However much of an object bigot you become, don’t rule out Transaction Script. There are a lot of simple problems out there, and a simple solution will get you up and running much faster.</p>
+</blockquote>
+<p>很多人（曾经包括我自己在内）在技术选型方面喜欢追求一种“宏大叙事感”：如果技术不够复杂，不够新，开发周期不够长，动员团队不够多，怎么在公司内彰显我的影响力？我们之所以敢这么放肆是因为环境鼓励我们这么做，每个团队都在这么做。我们一直在被暗示，项目的风险和可维护性不重要，反正三年之后我也不一定在这个公司，三年之后我可能成了管理人员，三年之后接手维护系统的人不是我。无论如何三年之后项目一定会推倒重来。我们的简历上总是强调我们做过<strong>多少</strong>系统，而不是把它们做的<strong>多好</strong></p>
+<p>从职业素养的要求上说作为开发人员我们应该关心风险和可维护性。减少项目风险和增加可维护性的措施之一就是让代码变得简单。<strong>微前端从本质上说只是给了我们一个解决选项而非标准答案</strong>。如果你有留意的微服务的发展趋势的话，微服务生态已经非常的庞大，几乎每一个环节都能找到对应的第三方组件来完成工作。微前端也一样，如果你愿意你可以找到无数种方案让项目看上去高精尖，但是为什么明明一个 React 就能解决的问题一定要上 React 全家桶才甘心。</p>
+<p>准确且谨慎的使用微前端，这是我的建议</p>
+<p>Dan Abramov 提出的另一个质疑是多种技术栈混合的产物其实是一种互不妥协的结果：</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/micro-front-end-specification/dan_abramov_twitter_2.png"/></p>
+<p>首先我不认为应该禁止游戏混用引擎，比如某个 3D 游戏的某个回忆复古关卡需要横版射击的表现形式，那么就应该使用横版射击引擎，引擎应该忠于游戏的展现。其次，前端框架与游戏引擎不同，游戏引擎不仅决定了物理特效，还影响了画面展现，但是前端框架只是决定了运行机制，真正的用户体验一致性取决于是否统一 UI 设计与用户体验</p>
+<h2>战术篇</h2>
+<p>我无法告诉你某个方案是最完美的。评价是一件多维的事情，这其中甚至还与你的团队规模有关，所以我只是把这些可能的方案的 pros 和 cons 一一列举出来。我也不会陷入到具体的技术细节中去，例如如何在 CSS 中避免 class 污染，像我之前说的，实现从来都不是问题，问题是我们为什么要去实现。</p>
+<h3>Web App 隔离</h3>
+<p>让我们从最简单的 case 开始。</p>
+<p>在美团的例子中，微前端是由三个团队独立开发的 Web App 组成，此时 App 是微前端架构里的最小粒度。这样的划分和隔离是最安全的，因为 App 间几乎没有任何的从人到代码的资源共享。</p>
+<p><strong>重复代码</strong></p>
+<p>但这样的独立策略不免让人担心代码的重复：假设团队 A 使用 React 技术栈开发了一个 Dialog 组件，团队 B 也使用了 React 技术栈也开发了一个 Dialog 组件，那么貌似这那个 Dialog 能够合并成一个 Dialog 来减少维护成本。</p>
+<p>这的确符合常识，我们耳目濡染的接收了很多关于不要做重复代码的熏陶：比如 DRY(Don't Repeat Yourself) 原则，DIE 原则（Duplication is Evil）.在绝大多数情况下它们都是正确，但在微前端中并非如此。“微 (Micro)” 这个词并非仅仅是字面上“小”的意思，而是代表独立和自治。以 Dialog 为例，不同的 App 隶属于不同业务，不同的业务对 Dialog 功能有着不同的需求。每个小团队对自己的业务才是最熟悉的，如果需要对 Dialog 进行变化的话他们能够对自己维护的 Dialog 准确快速的做出决定。把不同团队的 Dialog 合并成为一个之后，看似代码量减少了，但是期间的沟通成本和维护成本反而增加了。本来是为了解耦架构的微前端因为组件共享又被耦合在了一起。</p>
+<p>即使不站在微前端的角度上，我依然不推荐抽象共享组件。抽象最好应该是在项目稳定的后期，看到了确切的功能重叠部分，再考虑把它们共享出来。因为在需求快速变化的前期，不同业务的需求会导致共享组件变成并集而非交集的结果。</p>
+<p>最后抽象并非是无敌的，前提是你要知道如何抽象，错误的抽象比重复代码维护起来还要难受</p>
+<p><strong>编排层</strong></p>
+<p>隔离方案中另一个需要解决的问题是应用的启动和切换，此时我们需要一个类似于 Orchestration Layer（编排层） 的东西。它负责协调不同的 App 之间的活动，比如：</p>
+<ul>
+<li>管理 App 的生命周期</li>
+<li>加载、卸载 App</li>
+<li>微前端路由管理</li>
+<li>提供公共功能</li>
+</ul>
+<p>编排层不是什么新鲜的东西，在 SOA 架构中就已经存在。你可以把编排层和 App 理解为 steam 平台和平台上游戏的关系，也可以把 BFF 当作针对接口的编排层。在美团的方案中，编排层就是他们口中的 Portal 项目。</p>
+<p>但是我反感方案美团 Portal 方案的关键原因是，<strong>编排层对 App 代码进行了入侵</strong>。比如：</p>
+<blockquote>
+<p>为了不侵入“子项目”，我们采用构建过程中替换的方式来做，“Portal项目”把公共库引入进来，重新定义，然后通过window.app.require的方式引用，在编译“子项目”的时候，把引用公共库的代码从require('react')全部替换为window.app.require('react')，这样就可以将JS公共库的版本都交给“Portal项目”来控制了</p>
+</blockquote>
+<p>这段话自相矛盾：段落的开头说“为了不入侵子项目”，结尾则说“这样就可以将JS公共库的版本都交给 Portal 项目来控制了”。这样一来，微前端中最宝贵的独立技术栈的优势被削弱了，所有 App 的公共类库都要交给 Portal 控制。</p>
+<p>如果它们指的是 Java 的 Portal 概念的话，我觉得再这里也不适用，因为 Portal 指的是动态碎片聚合成单个网页：</p>
+<blockquote>
+<p>A portlet is a Web-based component that will process requests and generate dynamic content.</p>
+</blockquote>
+<p>在这里我想特别的强调编排层的职责，<strong>编排层不是 manager，它类似 broker、coordinator 甚至 glue。编排层是为 App 服务，而不是 App 为编排层服务</strong>。你不会见到 BFF 对上游的后端接口提需求；你也不会见到 Application Layer 对 Domain Layer 指手画脚。</p>
+<p>关于编排层另一点我想强调的是，编排层不局限于在 client 端实现，我们也可以拥有 server 端的编排层。例如当用户从应用中登出之后，由后端返回一个包含需要登陆的页面，而前端则不需要再关心权限控制。这其实是回到了传统 MVC 的那一套。如果选择 server 端的编排层，一方面我们可以考虑用上 server rendering；另一方面我们也需要担心 App 间数据共享的问题</p>
+<h3>以组件为单位</h3>
+<p>以组件为单位聚合成微前端是目前你能看到的<strong>主流理想</strong>的实现方式。</p>
+<ul>
+<li>为什么说是主流？因为你能搜索到的绝大部分关于微前端的实现案例，都是基于组件化的。</li>
+<li>为什么说是理想？因为这些案例通常是来自某一位开发人员之手，而非是某个团队实践之后的结果。</li>
+</ul>
+<p>如果你在 Google 上搜索 Micro Frontends, 排名靠前的是一个名叫 <a href="https://micro-frontends.org/">Micro Frontends</a> 的开源项目。项目里举了一个例子，来描述用组件聚合微前端的一个场景，在这个挑选商品的页面中，它需要调度三种框架来编写组件来协同完成工作：</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/micro-front-end-specification/three-teams.png"/></p>
+<p>我们就以这个 case 为例，看看以组件为单位的微前端需要解决什么问题</p>
+<p><strong>Communication</strong></p>
+<p>通信是头等大事。在上面的例子中，当用户在产品列表中选择不同类型的玩具时，需要通知购买按钮的价格进行调整。然而项目作者在父子组件通信实现方案中选择直接修改购买按钮对应的 DOM：移除旧 DOM、插入新 DOM 或者修改 DOM 属性。在这个开源项目中，作者认为 DOM 就是组件间相互通信的 API 。</p>
+<p>我支持作者后半段叙述的使用 DOM Event 来进行子组件到父组件以及同辈组件之间的消息传递。但是直接修改 DOM 绝对是一个非常糟糕的设计。直接修改 DOM 好比我直接通过 IP 访问网站，好比 React 父组件通过找到子组件的 DOM 来修改子组件。不仅耦合性强，以后每增加一处需要感知变化的组件时，都要在父组件中添加代码。但是通过事件，我只需要添加消费方即可。</p>
+<p><strong>Synchronization</strong></p>
+<p>仅仅是消息机制往往是不够的，有时候我们将数据状态进行同步。假设现在需要支持用户勾选多个商品并统一进行结算，且支持优惠满减活动。此时购物按钮组件需要存储目前购物总金额，才能计算出优惠之后的金额。</p>
+<p>此时我想到三个办法：</p>
+<ol>
+<li>保持原状，用户选择商品时依然发布事件。购物按钮接收到事件后通过 Event Sourcing 计算当前总额</li>
+<li>商品列表追踪当前商品总额，并在用户操作商品时通过事件同步给购物按钮</li>
+<li>用户选择商品时发布事件，不过由全局存储的模块接收事件并计算总金额。购物按钮从全局存储模块获得当前总金额</li>
+</ol>
+<p>方案一的缺陷在于，如果有多个组件同时需要知道当前总额时，多个组件需要重复相同的工作，一份相同含义和价值的数据会存储被存储多份</p>
+<p>方案二的问题在于，商品列表在业务逻辑上来说是不需要知道商品总额的，模块的职责划分出现了错误</p>
+<p>所以目前看来方案三才是最佳的选择</p>
+<p><strong>Package Manage</strong></p>
+<p>通信和数据共享都无法回避一件事情：契约。无论是组件间直接通信还是通过 event 进行通信，它们都需要和对方预定消息格式；需要共享数据的组件之间也需要约定数据的 schema。无论组件如何的迭代，契约始终要和其他组件保证一致。</p>
+<p>因为组件之间独立的缘故，不同的组件迭代节奏不尽相同，自然组件间就会出现版本差异。然而如何保证不同版本间的契约不会被破坏？文档可以，契约测试也可以。然而更大的问题是，如何保证组件协作产生的功能不被破坏？独立组件或许有测试能够覆盖到自己的功能，但这不意味着合并之后的功能依旧正常，于是在 App 中，我们似乎还需要端到端的测试来保证交付功能的正常</p>
+<p>如果团队如果真的独立开发组件的话，我建议在组件的发布阶段加上 pipeline，持续集成以避免影响其他功能</p>
+<p><strong>Responsibility and Team Work</strong></p>
+<p>使用组件聚合最（令我）头疼的问题之一，是如何为组件找到对应的团队负责，以及如何在组件聚合的模式下划分团队。</p>
+<p>团队划分通常有两类划分模式，这两种模式的叫法有很多，我在这里姑且称之为 Component Team（以下简称 CT） 和 Feature Team（有以下简称 FT）</p>
+<ul>
+<li><p>Component Team: 康威定律告诉我们组织的沟通方式会在系统设计上有所表达。如果你有四个小组开发编译器，那么你会得到一个四步编译器。CT 模式即组织和架构一致。在这个模式下团队的划分是按照分层架构或者说垂直技术栈进行划分的，例如前端、后端和运维。CT 模式的问题首先在于领域知识散落在不同的技术架构中，产生了耦合；其次在需要协同工作的情况下缺少 ownership，每个团队只关心自己的KPI，缺少知识的共享和传承</p>
+</li>
+<li><p>Feature Team: 这个模式也被成为逆康威模式（Inverse Conway Maneuver），团队按照业务架构而非技术架构进行划分，一个团队负责单一业务上的功能，但是在技术上，它们可以需要同时修改端到端的代码以及多个微服务，你可以理解为全栈。这个模式的问题是，在允许多个团队修改同一个服务的情况，缺少服务 owner 容易导致服务代码的质量下降</p>
+</li>
+</ul>
+<p>在敏捷开发和 DDD 的影响之下 FT 模式逐渐变得流行。我个人也推荐 FT 模式，因为我曾在某司深受 CT 模式其害，当组织越庞大，垂直的组织壁垒就越多，你能想象我在某司的时候运维部门的最大愿望是希望我们不要上线吗</p>
+<p>然而在使用组件聚合的情况下，我们应该如何划分组件和团队？</p>
+<p>首先我不赞成上面例子中如此细粒度的划分技术栈的划分组件和团队。这样的会导致每个如此之小的功能的修改都要涉及好几个（未知）团队的协作开发，CT 模式下的壁垒又重新显现。我更加反对将 componets 在公司内部作为独立的组件库由独立的团队进行开发，这会导致业务团队与组件团队无法对齐。</p>
+<p>那 FT 模式呢？当我在设想以 FT 模式进行组件划分时，我又陷入了一种粒度的纠结当中。以上面选择商品并且结算为例，该团队负责的范围就此为止了吗？如果下方还有商品评论和商品推荐的相关内容，我是否应该继续交给这个团队继续负责？</p>
+<p>我认为 DDD 是可能是一个解药。DDD 理论能够帮助我们划分出不同的领域模型，帮助我们界定上下文。比如商品的购买属于核心域，但是商品的评论属于支撑子域。这样我们就有理由不将它们交给一个 FT 团队负责。这样前端团队和后端也方便对齐。</p>
+<p>注意在 DDD 的模式下请避免组件的跨域复用，这会导致上下文和领域的重叠。</p>
+<p>另外如果以 DDD 划分的话，说不定因为范围够大而导致组件聚合升级成了 App 聚合</p>
+<h3>以组件为聚合的解决方案</h3>
+<p>不少微前端解决方案基本都是以组件为划分的，不过它们定义的组件和我们理解的组件并不相同。最终的解决思路又十分相似</p>
+<p><strong>IKEA</strong></p>
+<p>你没看错，宜家</p>
+<p>在 <a href="https://www.infoq.com/news/2018/08/experiences-micro-frontends/">Experiences Using Micro Frontends at IKEA</a> 一文中，宜家架构师 Kotte 介绍它们采用了一种类似于  transclusion mechanism 的形式。客户端 transclusion 的例子便是图片标签。标签拥有 src 属性用于指向一个 URL。浏览器会在渲染时将改标签替换为一个真实的图片。</p>
+<p>在服务端他们的 Edge Side Includes(ESI) 便对应图片标签，不过指向的不是图片而是 HTML。他们拥有页面 (Page) 和碎片 (Fragment) 的概念，一个团队同时需要负责碎片和页面的开发，页面通过 ESI 引用那些碎片。碎片的引用是跨越团队边界的。比如一个产品团队拥有产品缩略图的的碎片，其他的团队就可以引用这个缩略图碎片而不用自己再重写相同的功能。</p>
+<p>因为页面由不同团队的的碎片组成，可能使用的不同技术，为了能够使它们组件时相互兼容，团队采用了一种自包含（self-contained）技术，即碎片本身就包含了它自己需要的所有资源，比如 CSS 和 Javascript，能够独立运行，而不需要思考碎片的依赖。</p>
+<p><strong>OpenComponents</strong></p>
+<p>OpenComponents（以下简称 OC） 是一种端到端的解决方案。在关于 OC 的<a href="https://github.com/opencomponents/oc/wiki/Architecture-overview">Architecture overview</a>中，项目开宗明义的指出:</p>
+<blockquote>
+<p>OpenComponents' heart is a REST API. It is used for consuming and publishing components.</p>
+</blockquote>
+<p>你可以把它理解为一个进阶版的 npm 系统。除了是独立的组件包之外，它还封装了业务请求，甚至已经渲染完毕，加载即用，不需要再二次开发。如果你需要在页面上引用使用一个缩略图功能的 OC, 只需要在页面引用</p>
+<pre><code class="language-javascript"> &lt;oc-component href="http://localhost/thumbnails"&gt;
+</code></pre>
+<p>目前解决微前端的另一个思路是将前端是站在消费者的角度考虑聚合：可能模块 A 是由 React 编写，模块 B 是由 Vue 编写，没关系在服务端统一编译成浏览器需要 html 与 es5 碎片返回，最终将它们组合再一起，对于编排层来说一视同仁。OC 是这个思路，宜家也是这个思路，</p>
+<p><strong>Project Mosaic</strong></p>
+<p>Mosaic 是整套的从微服务到微前端的解决方案。从它官网的图例便可以理解它的架构：</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/micro-front-end-specification/mosaic-diagram.png"/></p>
+<p>它也是通过组件化加碎片化的方式聚合前端</p>
+<p>这三种方案都没有明确说明如何解决我上面提出的各种问题。</p>
+<h2>结语</h2>
+<p>最后借用 Simon Brown 的<a href="https://mobile.twitter.com/simonbrown/status/573072777147777024">一条 twitter </a>来结束这篇文章：</p>
+<blockquote>
+<p>I'll keep saying this ... if people can't build monoliths properly, microservices won't help.</p>
+</blockquote>
+<p>如果你连单体应用都写不好，微前端也帮不上什么忙</p>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/css-clean-arch">CSS 里的整洁架构</a></li>
+<li><a href="https://www.v2think.com/fe-arch-001-principles">前端架构 101（一）：在谈论它们之前我们需要达成的共识</a></li>
+<li><a href="https://www.v2think.com/fe-arch-002-mvc-solved">前端架构 101（二）： MVC 初探</a></li>
+<li><a href="https://www.v2think.com/fe-arch-003-architecture-principles">前端架构 101（三）：MVC 启示录：模块的职责，作用域和通信</a></li>
+<li><a href="https://www.v2think.com/fe-arch-004-flux-rise">前端架构 101（四）：MVC的不足与Flux的崛起</a></li>
+<li><a href="https://www.v2think.com/fe_arch_005_mvp">前端架构 101（五）：从 Flux 进化到 Model-View-Presenter</a></li>
+<li><a href="https://www.v2think.com/fe_arch_006_clean_architecture">前端架构 101（六）：整洁（Clean Architecture）架构是归宿</a></li>
+<li><a href="https://www.v2think.com/arch-enjoy_angular-architecture-best-practices-zh-cn">【译文】【前端架构鉴赏 01】：Angular 架构模式与最佳实践</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_a-scalable-angular2-architecture-zh-cn">【译文】【前端架构鉴赏 02】：可拓展 Angular 2 架构</a></li>
+<li><a href="https://www.v2think.com/arch_enjoy_model-view-presenter-with-angular">【译文】【前端架构鉴赏 03】：Angular 与 MVP 模式</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-specification">微前端说明书</a></li>
+<li><a href="https://www.v2think.com/micro-front-end-aggregation">从美团这篇文章聊聊微前端的聚合问题</a></li>
+<li><a href="https://www.v2think.com/mvc-vs-flux">写给前端看的架构文章(1)：MVC VS Flux</a></li>
+<li><a href="https://www.v2think.com/starting-from-limitations-of-mvc-in-front-end-development">从MVC模式在前端开发中的局限性谈起</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>

@@ -1,0 +1,346 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E4%B8%80%E6%96%87%E7%9C%8B%E6%87%82Go%E6%96%B9%E6%B3%95%E4%B8%AD%E7%9A%84%E5%80%BC%E6%8E%A5%E6%94%B6%E5%99%A8%E5%92%8C%E5%BC%95%E7%94%A8%E6%8E%A5%E6%94%B6%E5%99%A8.html">一文看懂Go方法中的值接收器和引用接收器</a></h2>
+<hr/>
+<h2>title: 一文看懂Go方法中的值接收器和引用接收器
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?54'
+date: 2021-06-28 09:22:22
+categories: Golang
+tags: [Golang]
+description: 在Go中定义方法时可以将方法的接收器声明为值接收器和引用接收器两种，本文比较清晰的讲述了这两种方式的区别；</h2>
+<p>在Go中定义方法时可以将方法的接收器声明为值接收器和引用接收器两种；</p>
+<p>本文比较清晰的讲述了这两种方式的区别；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/Go_Learn/tree/receiver</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h2><strong>一文看懂Go方法中的值接收器和引用接收器</strong></h2>
+<p>废话不多说，直接来看下面代码定义的两个方法有什么区别：</p>
+<pre><code class="language-go">type Object struct {
+	Elem string
+}
+
+func (o *Object) refEqual(o2 *Object) bool {
+	fmt.Printf("refEqual str: %v\n", o.Elem == o2.Elem)
+	return o == o2
+}
+
+func (o Object) copyEqual(o2 *Object) bool {
+	fmt.Printf("copyEqual str: %v\n", o.Elem == o2.Elem)
+	return &amp;o == o2
+}
+</code></pre>
+<p>两个Equal方法的接收器声明分别为值接收器和引用接收器；</p>
+<p>下面进行测试：</p>
+<p>receiver_test.go</p>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"testing"
+)
+
+type Object struct {
+	Elem string
+}
+
+func (o *Object) refEqual(o2 *Object) bool {
+	fmt.Printf("refEqual str: %v\n", o.Elem == o2.Elem)
+	return o == o2
+}
+
+func (o Object) copyEqual(o2 *Object) bool {
+	fmt.Printf("copyEqual str: %v\n", o.Elem == o2.Elem)
+	return &amp;o == o2
+}
+
+func TestEqual(t *testing.T) {
+	elem := Object{Elem: "haha"}
+
+	fmt.Printf("ref func: %v\n", elem.refEqual(&amp;elem))
+	fmt.Printf("copy func: %v\n", elem.copyEqual(&amp;elem))
+}
+</code></pre>
+<p>执行后输出：</p>
+<pre><code>refEqual str: true
+ref func: true
+copyEqual str: true
+copy func: false
+</code></pre>
+<p>其实从方法名就可以看出区别：</p>
+<ul>
+<li>&lt;font color="#f00"&gt;<strong>对于值接收器而言：在调用方法时会将当前对象完整的Copy一份，然后使用这个对象进行调用；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;<strong>对于引用接收器而言：在调用方法时会将当前对象的引用Copy一份，然后使用这个引用进行调用，因此，此时两个引用指向的是同一个堆中对象！</strong>&lt;/font&gt;</li>
+</ul>
+<p>因此不难得出结论：</p>
+<ul>
+<li>对于对象中的string而言：<ul>
+<li>对于值接收器而言：<strong>由于将对象完整的Copy了一份，所以对象中的字符串必定是相同的；</strong></li>
+<li>对于引用接收器而言：<strong>由于两个引用指向的是同一个堆中对象，所以对象中的字符串也必定是相同的；</strong></li>
+</ul>
+</li>
+<li>对于对象本身而言：<ul>
+<li>对于值接收器而言：<strong>由于将对象完整的Copy了一份，因此两个对象是堆中不同的对象！</strong></li>
+<li>对于引用接收器而言：<strong>由于两个引用指向的是同一个堆中对象，所以对象本身也是相同的；</strong></li>
+</ul>
+</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h2><strong>接收器和Interface</strong></h2>
+<p>由于Go是强类型的语言，你会认为<code>*Object</code>和<code>Object</code>在实现Interface时会被认为是两个类型！</p>
+<blockquote>
+<p><strong>我们理所当然的会想：</strong></p>
+<ul>
+<li><strong><code>Object</code>就是Object类型；</strong></li>
+<li><strong><code>*Object</code>是指向Object类型的指针类型；</strong></li>
+</ul>
+<p><strong>所以对于Interface而言，在实现时<code>(o *Object)</code>和<code>(o Object)</code>也是不同的！</strong></p>
+</blockquote>
+<p>&lt;font color="#f00"&gt;<strong>然而在Go中，对于Interface而言，由于Go不支持重载，所以实际上对于<code>(o *Object)</code>和<code>(o Object)</code>，我们只能实现一个！</strong>&lt;/font&gt;</p>
+<p>来看下面的代码：</p>
+<pre><code class="language-go">type Introduce interface {
+	Introduce() string
+}
+
+type Item struct {
+	Elem string
+}
+
+func (i *Item) Introduce() string {
+	return "haha from reference"
+}
+
+func (i Item) Introduce() string {
+	return "haha from object"
+}
+</code></pre>
+<p><strong>上面的代码无法编译，因为会被认为<code>Introduce</code>方法被重复定义！</strong></p>
+<p>这就奇怪了，明明类型和类型的引用是不同的类型，为什么会被认为是重复定义呢？</p>
+<p>其实，这是由Go中方法调用的机制决定的：</p>
+<p>&lt;font color="#f00"&gt;<strong>Go会自动判断调用方法的是具体类型还是类型引用，并增加<code>&amp;</code>或者<code>*</code>来帮助你完成方法调用；</strong>&lt;/font&gt;</p>
+<p>例子如下：</p>
+<p>interface_test.go</p>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"testing"
+)
+
+type Introduce interface {
+	Introduce() string
+}
+
+type Item struct {
+	Elem string
+}
+
+//func (i *Item) Introduce() string {
+//	return "haha from reference"
+//}
+
+func (i Item) Introduce() string {
+	return "haha from object"
+}
+
+func TestInterface(t *testing.T) {
+	elem := &amp;Item{Elem: "haha"}
+
+	fmt.Println(elem.Introduce())
+	fmt.Println((*elem).Introduce())
+}
+</code></pre>
+<p>程序是可以被正常编译并输出的：</p>
+<pre><code>haha from object
+haha from object
+</code></pre>
+<p>我们将<code>(i Item)</code>替换为<code>(i *Item)</code>，重新执行：</p>
+<pre><code>haha from reference
+haha from reference
+</code></pre>
+<p>可以看到，也是可以正常执行的！</p>
+<p>&lt;font color="#f00"&gt;<strong>因此，拜Go的方法调用补全和无重载机制所赐，我们无法对一个类型的值接收器和引用接收器同时实现一个Interface；换句话说，我们只能“二选一”！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>否则，Go将不能推断到底是采用的值调用还是引用调用；</strong>&lt;/font&gt;</p>
+<blockquote>
+<p><strong>无法使用同一个方法名同时实现值接收器和引用接收器的问题不是Interface本身的问题，只要是在Go中声明方法，都存在这样的问题；</strong></p>
+<p><strong>但是由于Interface需要比对函数签名，所以我们无法同时实现接口！</strong></p>
+<p><strong>对于普通方法，我们可以根据方法名区分，如：</strong></p>
+<ul>
+<li><strong>EqualByValue(o Object)；</strong></li>
+<li><strong>EqualByRef(o *Object)；</strong></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>Interface方法调用和Receiver</strong></h2>
+<p>经过上面的总结，我们基本了解了Go中的值接收器和引用接收器，以及他们和Interface的关系；</p>
+<p>那么，对于实现了Interface的值接收器和引用接收器和普通的方法有什么区别呢？</p>
+<p>答案是没有区别！</p>
+<p>来看下面的例子：</p>
+<p>interface2_test.go</p>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"testing"
+)
+
+type SelfCompare interface {
+	Equal(item *MyElem) bool
+}
+
+type MyElem struct {
+	Elem string
+}
+
+func (m *MyElem) Equal(item *MyElem) bool {
+	return m == item
+}
+
+//func (m MyElem) Equal(item *MyElem) bool {
+//	return &amp;m == item
+//}
+
+func TestMyElem(t *testing.T) {
+	elem := &amp;MyElem{Elem: "haha"}
+
+	fmt.Printf("ref func: %v\n", elem.Equal(elem))
+}
+</code></pre>
+<p>结果如下：</p>
+<ul>
+<li>当采用值接收器调用，返回为false；</li>
+<li>当采用引用接收器调用，返回true；</li>
+</ul>
+<p>&lt;font color="#f00"&gt;<strong>方法调用和普通的方法完全相同，唯一的区别在于此时MyElem引用可以被当作SelfCompare的Interface类型！</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>需要注意的是，对于使用Interface调用来说，是有区别的！</strong>&lt;/font&gt;</p>
+<p>下面来看下面的例子：</p>
+<pre><code class="language-go">func callEqual(s SelfCompare) {
+	fmt.Println(s.Equal(s.(*MyElem)))
+}
+
+func TestInterfaceCall(t *testing.T) {
+	elem := &amp;MyElem{Elem: "haha"}
+	callEqual(elem)
+}
+</code></pre>
+<p>输出结果如下：</p>
+<ul>
+<li>当采用值接收器调用，返回为false；</li>
+<li>当采用引用接收器调用，返回true；</li>
+</ul>
+<p>输出结果和上面一致；</p>
+<p>这是由于：&lt;font color="#f00"&gt;<strong>本质上，<code>SelfCompare</code>类型（或者说interface类型）就是一个其他类型的引用！</strong>&lt;/font&gt;</p>
+<p>如果你不相信，你可以将代码稍作修改，声明方法为值引用，同时向<code>callEqual</code>函数传参时，仅传递对象值，而非引用：</p>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"testing"
+)
+
+type SelfCompare interface {
+	Equal(item *MyElem) bool
+}
+
+type MyElem struct {
+	Elem string
+}
+
+func (m MyElem) Equal(item *MyElem) bool {
+	return &amp;m == item
+}
+
+func callEqual(s SelfCompare) {
+	fmt.Println(s.Equal(s.(*MyElem)))
+}
+
+func TestInterfaceCall(t *testing.T) {
+	elem := MyElem{Elem: "haha"}
+    fmt.Println(elem.Equal(&amp;elem))
+	callEqual(elem)
+}
+</code></pre>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注意：在这里我们向函数<code>callEqual</code>直接传递的是值！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>尝试执行代码会产生一个Panic：</p>
+<pre><code>=== RUN   TestInterfaceCall
+false
+
+--- FAIL: TestInterfaceCall (0.00s)
+panic: interface conversion: main.SelfCompare is main.MyElem, not *main.MyElem [recovered]
+	panic: interface conversion: main.SelfCompare is main.MyElem, not *main.MyElem
+
+goroutine 6 [running]:
+testing.tRunner.func1.1(0xee4020, 0xc00007a4e0)
+	E:/golang/src/testing/testing.go:1057 +0x310
+testing.tRunner.func1(0xc000045080)
+	E:/golang/src/testing/testing.go:1060 +0x43a
+panic(0xee4020, 0xc00007a4e0)
+	E:/golang/src/runtime/panic.go:969 +0x176
+receiver.callEqual(0xf33a40, 0xc000050520)
+	D:/workspace/Go_Learn/interface2_test.go:31 +0xd9
+receiver.TestInterfaceCall(0xc000045080)
+	D:/workspace/Go_Learn/interface2_test.go:37 +0xd7
+testing.tRunner(0xc000045080, 0xf118e0)
+	E:/golang/src/testing/testing.go:1108 +0xef
+created by testing.(*T).Run
+	E:/golang/src/testing/testing.go:1159 +0x397
+
+Process finished with exit code 1
+</code></pre>
+<p>首先，我们使用<code>elem</code>本身去调用方法，是可以正常输出<code>false</code>的！</p>
+<p>但是为什么到了函数中，转换为了<code>SelfCompare</code>的接口类型就不行了呢？</p>
+<p>这是由于：&lt;font color="#f00"&gt;<strong>Go中的接口在调用方法时总是希望获取到一个对象的引用类型，而非对象本身；这一点从Panic输出的错误中也可以看出！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>同时，此时Go编译器并不会自动判断Interface是否是引用，并自动添加<code>*</code>和<code>&amp;</code>！</strong>&lt;/font&gt;</p>
+<p>因此，当我们传入一个对象时，产生了Panic；</p>
+<p><strong>我想，这可能就是Go不允许类型的值接收器和引用接收器同时实现同一个接口的另一个原因吧？</strong></p>
+<blockquote>
+<p>这里我还想吐槽一下Go的编译器，为了保证编译速度，这么重要的类型检查也都做的这么粗糙；</p>
+<p>和Rust相比差了不是一点半点！</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>Interface指针</strong></h2>
+<p>最后，再跑题说几句Interface指针吧；</p>
+<p>从上面我们知道，对于一个对象方法的直接调用来说Go编译器会自动判断是否是引用，并自动添加<code>*</code>和<code>&amp;</code>，但是对于Interface而言并不存在这个优化；</p>
+<p>因此我们单纯将<code>callEqual</code>的入参修改为指针类型，函数将直接报错：</p>
+<pre><code class="language-go">func callEqual(s *SelfCompare) {
+	fmt.Println(s.Equal(s.(*MyElem)))
+}
+</code></pre>
+<p>我们可以通过手动添加解引用来修复错误：</p>
+<pre><code class="language-go">func callEqual(s *SelfCompare) {
+	fmt.Println((*s).Equal((*s).(*MyElem)))
+}
+</code></pre>
+<p>修改完成后，下面的测试代码也会报错：</p>
+<pre><code class="language-go">func TestInterfaceCall(t *testing.T) {
+	elem := MyElem{Elem: "haha"}
+	callEqual(elem) // Cannot use 'elem' (type MyElem) as type *SelfCompare
+}
+</code></pre>
+<p>为了调用这段代码，我们需要将elem强制转换为<code>*SelfCompare</code>类型；</p>
+<p>当你写下下面的代码后，会发现还是报错：</p>
+<pre><code class="language-go">func TestInterfaceCall(t *testing.T) {
+	elem := MyElem{Elem: "haha"}
+	e := elem.(SelfCompare) // Invalid type assertion: elem.(SelfCompare) (non-interface type MyElem on left)
+	callEqual(&amp;e)
+}
+</code></pre>
+<p>我们不能将一个非Interface类型转换为Interface！</p>
+<p>至此，你会发现这段代码写起来无比的别扭：因为Interface本身就已经是一个引用了，你没必要再去声明一个引用的引用；</p>
+<p>因此，比较好的实践就是：&lt;font color="#f00"&gt;<strong>对于Interface类型入参永远使用对象引用，同时永远不要使用<code>*Interface</code>的骚操作！</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>总结</strong></h2>
+<p>本文比较深入的探讨了Go中方法实现的值接收器和引用接收器以及他们和Interface的联系；</p>
+<p>最后跑题聊了聊Go中的Interface；</p>
+<p>文中内容都是本人编写Go代码中的一些思索，如有不对之处，还请批评指出！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>附录</strong></h2>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/Go_Learn/tree/receiver</li>
+</ul>
+<p>&lt;br/&gt;</p>

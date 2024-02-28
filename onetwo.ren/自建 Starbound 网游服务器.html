@@ -1,0 +1,120 @@
+<h2>原文：<a href="https://onetwo.ren/2018-12-19-%E8%87%AA%E5%BB%BAStarbound%E7%BD%91%E6%B8%B8%E6%9C%8D%E5%8A%A1%E5%99%A8.html">自建 Starbound 网游服务器</a></h2>
+<hr/>
+<p>layout: post
+title: '自建 Starbound 网游服务器'
+date: 2018-12-19 23:42:19 +0800
+image: 'blog-author.jpg'
+description: '记录了搭 Starbound 私服的过程'
+main-class: 'game'
+color: '#7D669E'
+tags:</p>
+<ul>
+<li>debug</li>
+<li>game
+categories: Journal
+twitter_text:
+introduction: '在阿里云上架设 Starbound 服务器踩过的一些坑，还有运维心得'</li>
+</ul>
+<hr/>
+<h2>StarBound</h2>
+<p>我的《<a href="https://onetwo.ren/%E6%98%9F%E7%95%8C%E8%BE%B9%E5%A2%83%E9%82%A3%E4%B9%88%E5%A4%A7-%E6%88%91%E5%8D%B4%E6%87%92%E5%BE%97%E5%8A%A8/">星界边境那么大，我却懒得动</a>》这篇博客已经坑了老久了，感觉得再体验一下 Starbound 来获取一些灵感，于是我拉上朋友联机 Starbound。</p>
+<p>以前和朋友用 Steam 连 Starbound 的时候，如果我用我的台式电脑来作为主机，朋友跟我在一个局域网，那样联机体验还不错。但是如果不在同一个屋子里联机的时候，体验就好不起来了，而且换电脑之后星球上的建筑等数据是不会被 Steam 云同步的，只有角色数据会云同步，要是能自己搭一个服务器，就可以当网游玩了，不用担心备份和 Steam 联机的延迟啦。</p>
+<h3>国外服务器用不得</h3>
+<p>于是我先拿自己的 vultr 服务器试了一下，感觉国外 ping 值 200ms 以上的话，联机体验还是不行，有时候会看到朋友的角色定住不动，或者朋友反映怪打不死之类的。后来换到阿里云就好多了，基本和在一个屋子里玩一样了。</p>
+<p>我 18 年使用了阿里云学生版，进入副本会卡，但是便宜。20 年我采用华为云按需计费。</p>
+<p>注意要在网络权限组里开启 21025 端口。</p>
+<h3>使用 LinuxGSM</h3>
+<p>最开始我参考了一个讲如何手工用 steam 命令行工具下载游戏然后用 <code>screen</code> 这个 Linux 程序来维护服务器的<a href="https://steamcommunity.com/sharedfiles/filedetails/?l=german&amp;id=200785834">教程</a>，还有 <a href="https://starbounder.org/Guide:LinuxServerSetup">Guide:LinuxServerSetup</a>。</p>
+<p>不过后来我发现这实在是不好维护，还是使用自动化的工具 <a href="https://linuxgsm.com/lgsm/sbserver/">LinuxGSM</a> 来得好，这是一个守护 starbound 游戏服务器的程序，还能自动安装游戏，反正能省去一些手工劳动吧。</p>
+<h3>LinuxGSM 教程中没提及的部分</h3>
+<p>我们的安装流程是：</p>
+<ol>
+<li>安装 LinuxGSM （看官方教程即可）</li>
+<li>配置用户名密码和 Hosts</li>
+<li>配置 Steam Guard</li>
+<li>安装 Mod</li>
+<li>启动游戏</li>
+</ol>
+<p>注意官网教程中的依赖少了以下几项，需要自己额外安装上：</p>
+<pre><code class="language-shell">apt install libsdl2-2.0-0 libsdl2-2.0-0:i386 # 解决报错 SDL not found and Failed to set thread priority: per-thread setup failed
+apt install jq netcat lib32stdc++6 steamcmd # steamcmd 的依赖
+</code></pre>
+<p>由于众所周知的原因，我们需要用 root 账号输入 <code>vim /etc/hosts</code> 添加以下的域名解析（若 LinuxGSM 下载脚本失败说明第一个失效，若 steam 无法更新说明第二个失效，需自行更换为有效的）：</p>
+<pre><code class="language-hosts"># gfw
+199.232.4.133 raw.githubusercontent.com
+104.78.74.220 steamcommunity.com
+</code></pre>
+<p>接着需要按 LinuxGSM 教程中的方法将自己的用户名密码填写到<a href="https://docs.linuxgsm.com/steamcmd#steam-user-login">指定位置</a>。</p>
+<pre><code>steamuser="linonetwo012"
+steampass='pswd'
+</code></pre>
+<p>安装过程中要注意自己的邮箱，如果收到了 Steam 发来的邮件，而且安装过程卡住如下，则需要黏贴上刚收到的验证码，然后按回车：</p>
+<pre><code class="language-shell">sbserver@starbound-game:~$ ./sbserver update
+[ ERROR ] Updating sbserver: No appmanifest_211820.acf found
+[ INFO ] Updating sbserver: Forcing update to correct issue
+[ START ] Updating sbserver: SteamCMD
+RFXJR
+
+Redirecting stderr to '/home/sbserver/.local/share/Steam/logs/stderr.txt'
+[  0%] Checking for available updates...
+</code></pre>
+<p>我是在第一次 <code>./sbserver install</code> 的时候安装失败了，因为没有输入验证码就无法下载游戏，所以我用 <code>./sbserver update</code> 再次安装。</p>
+<p>然后再开始安装 <code>./sbserver install</code>，装的时候注意输入验证码。</p>
+<h4>安装 Mod</h4>
+<p>先进入 steamcmd，用如下命令找到 Steam 安装目录，steam 从创意工坊下载的 mod 都会放在里面，我们需要配置 Starbound 服务器找到这些 mod。</p>
+<pre><code>Steam&gt;install_folder_list
+Index 0 = "/home/sbserver/.local/share/Steam" 27.92 GB free disk space
+</code></pre>
+<p>这也就是我们要在下面的 <code>serverfiles/linux/sbinit.config</code> 里用 <code>../../.local/share/Steam/steamapps/workshop/content/211820</code> 的原因。</p>
+<p>安装 mod 得一个个输入 mod 在创意工坊的代码，然后用 steam 的命令行工具来安装，mod 的创意工坊代码就是其网址 <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=807695810"><code>https://steamcommunity.com/sharedfiles/filedetails/?id=807695810</code></a> 中 <code>id=</code> 后面的那串数字。</p>
+<p>好在我早就把自用的 mod <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=1267792017">放进了一个合集里</a>，以前是方便了联机的朋友一键订阅，现在就是可以从它直接生成自动操作 steam 命令行工具的脚本，不过因为我不是很熟悉 sed 和 tee 的用法，有时候脚本内容会被追加到 <code>moddownload.sh</code> 里面，有时候却不会，不是很稳定：</p>
+<pre><code class="language-shell">
+echo login 账号填这 密码填这 &gt; moddownload.sh &amp;&amp; curl -s --data "collectioncount=1&amp;publishedfileids[0]=合集的ID填这" https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/ \
+| jq '.response.collectiondetails[] | .children[] | .publishedfileid' \
+| sed 's/^/workshop_download_item 211820 /' | tee -a moddownload.sh &amp;&amp; echo quit &gt;&gt; moddownload.sh &amp;&amp; steamcmd +runscript /home/sbserver/moddownload.sh
+</code></pre>
+<p>接着要用另一个脚本生成 <code>serverfiles/linux/sbinit.config</code> ，它就相当于你想启动的 mod 的列表，里面放了一大列 steam 命令行工具下载了的 mod 的存放路径：</p>
+<pre><code class="language-shell">echo -e "{\n  \"assetDirectories\": [\n    \"../assets/\",\n    \"../mods/\",\n    " &amp;&amp; \
+curl -s --data "collectioncount=1&amp;publishedfileids[0]=合集的ID填这" https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/ \
+| jq '.response.collectiondetails[] | .children[] | .publishedfileid' \
+| sed 's#^#"../../.local/share/Steam/steamapps/workshop/content/211820/#' | sed 's#/"#/#' | tr -t '\n' ',' &amp;&amp; \
+echo -e "\b\b\n  ],\n  \"storageDirectory\": \"../storage/\"\n}\n"
+</code></pre>
+<p>这些脚本都参考自 <a href="https://github.com/GameServerManagers/LinuxGSM/issues/1623">LinuxGSM/issues/1623</a>。</p>
+<p>这里我踩过的坑有：</p>
+<ol>
+<li>没有检查生成的 <code>sbinit.config</code>是不是一个合法的 JSON，有一次数组的最后一项后面多带了一个逗号，结果 starbound 服务器就无法启动了。</li>
+<li>里面的 mod 路径是不是指向 steam 下载的 mod 们，因为 LinuxGSM 也会维护一个 mod 文件夹，结果我的 <code>sbinit.config</code>一直指向的是这个文件夹，当我用 steam 命令行工具更新了 mod 之后，LinuxGSM 维护的 mod 文件夹是不变的，于是我就一直很奇怪为什么 mod 没更新。</li>
+<li>有的 mod 会冲突，导致 <code>Exception caught in client main loop, eof reached</code> 等报错，可能是因为 Enhanced Storage 等 mod 与其他某个 mod 冲突了，而互相影响的 mod 太多了形成了复杂的网络无法找到是其他哪几个 mod 影响了 Enhanced Storage，所以只好把 Enhanced Storage 卸掉。</li>
+<li>有时候服务端的 mod 比客户端的少，例如我在 <code>sbinit.config</code> 里面指向了错误的 mod 文件夹，导致客户端有 70+个 mod，而服务端只有 ~50 个 mod，这就会在登录服务器时导致服务端报错（可以在 log 里看到具体错误信息），而客户端报的错就会是 <code>incoming client packet has caused an exception</code> 。</li>
+</ol>
+<p>即使服务端和客户端开启的 mod 列表是完全相同的，在登录服务器时还是会提示 <code>Assets mismatch between client and server, and the override option is not set</code> 。那解决办法当然就是让所有玩家都在客户端的设置里打开 <code>Allow Assets Mismatch</code> ，只要两边 mod 真的是对应的，打开之后就能正常登录服务器了。但是打开之后总感觉就失去了一个测试点，像之前客户端服务端 mod 数量真的不对应的时候，就没人来帮我们做检查了。</p>
+<p>之前在 vultr 上试着开服的时候，服务器总是卡在这三步中的某一步上：</p>
+<pre><code class="language-log">
+[22:35:02.148] [Info] Root: Loaded RadioMessageDatabase in 0.106177 seconds
+[22:35:10.984] [Info] Root: Loaded ItemDatabase in 14.4328 seconds
+[22:35:12.441] [Info] Root: Loaded CollectionDatabase in 10.2919 seconds
+</code></pre>
+<p>我就猜想可能是可怜的破服务器仅有的 1G 内存用光了，于是我就照着 ArchLinux 的维基创建了 5G 的交换文件 <a href="https://wiki.archlinux.org/index.php/Swap_(%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87)">wiki.archlinux.org/Swap_(简体中文)</a>，不得不赞这个维基之清晰，从上面复制黏贴命令一般不会踩到坑。</p>
+<p>然而在载入巨大大副本的时候服务器还是会爆卡，客户端上就是一直卡在 beam down 的过程中了，用 <code>top</code> 一看原来是因为服务器的物理内存不足，然后 kswapd0 进程就会占用大量 CPU 算力来搬运内存中的游戏数据到 swapfile 里。这么勤劳干嘛呢，这些游戏数据是一个只用不到 20 分钟的副本的。而因为它的勤劳，我在副本里行动都一卡一卡的。</p>
+<p>于是我在 <code>/etc/sysctl.conf</code> 里设置了 <code>vm.swappiness = 5</code> ，果然显著降低了 kswapd0 搬运内存的意愿，现在只有内存仅剩 5% 的时候它才开始搬运内容啦~再进入副本果然就是一点也不卡了。</p>
+<p>然后未雨绸缪，我打算把 sbserver 用户下的所有进程的优先级都默认提高，遂创建 <code>/etc/security/limits.d/sbserver-priority.conf</code> 文件，写入 <code>sbserver hard priority -20</code> ，把默认的 nice 值提到和 kswapd0 一样高。重启后再用 <code>ps -efl | grep starbound</code> 一看，果然 nice 都变成和系统进程一个级别的 -20 了，而优先级会比系统进程的 80 低一点，只有 60，这样游戏流畅的同时系统应该也不会崩吧。</p>
+<h3>开机启动</h3>
+<p>我选用了<a href="https://blog.csdn.net/qq_35440678/article/details/80489102">linux设置开机自启动脚本的最佳方式</a>里 contab 那种，新建了一个 sh 文件来执行 <code>@reboot /home/sbserver/start_sb_at_boot.sh</code>，sh 的内容为 <code>cd /home/sbserver &amp;&amp; ./sbserver start</code>，要记得 <code>chmod +x ./start_sb_at_boot.sh</code></p>
+<h3>查看 Log</h3>
+<p>可以用 <code>./sbserver console</code> 来看 log。</p>
+<p>退出是 <code>ctrl+b</code> 再按 <code>d</code>，而不是 <code>ctrl+c</code>。</p>
+<p>最后要赞美 <a href="https://zeit.co/">zeit 公司</a>，他们开发的 <a href="https://www.npmjs.com/package/serve">serve</a> 在我查看 mod 列表、阅读 log、翻阅 mod 路径的过程中起了很大的作用。在装好 nodejs 之后，再装上 serve，然后 <code>serve /home/sbserver</code> ，就可以用这个简洁易用的 web 界面来查看服务器上的数据了。（当然要事先在服务器的安全组里设置 5000 端口仅能从我自己的电脑的 IP 可访问，以保证安全）</p>
+<p><img alt="log1" src="https://raw.githubusercontent.com/linonetwo/linonetwo.github.io/master/assets/img/posts/starbound/log1.png"/></p>
+<p><img alt="log2" src="https://raw.githubusercontent.com/linonetwo/linonetwo.github.io/master/assets/img/posts/starbound/log2.png"/></p>
+<h2>Factorio</h2>
+<p>Starbound 坏就坏在它是手工小作坊，制造物品和整理物品都很繁琐。于是我又和朋友开始玩 Factorio。有了 Starbound 的经验，我立即选择使用 <a href="https://linuxgsm.com/lgsm/fctrserver/">LinuxGSM</a> 安装 Factorio。</p>
+<h3>Mod</h3>
+<p>Factorio 的 Mod 不是通过 Steam 管理的，所以需要手动上传到服务器上。我使用 <a href="https://www.npmjs.com/package/upload-server-1">www.npmjs.com/package/upload-server-1</a> 来上传我在用的 Mod 和 Mod 配置。</p>
+<p>在 Mac 上，Mod 位于 <code>~/Library/Application\ Support/factorio/mods</code>，用「访达」的「前往文件夹…」功能进去之后，我在服务器上运行 <code>upload-server -p 5000 -f ./mods</code> 启动一个上传服务器（先在服务器管理系统的防火墙设置里把 5000 端口的 TCP 出入打开），在上传文件里把刚刚打开的 Mac 上的 Mod 文件夹拖进去。</p>
+<p>上传的时候好像出了点问题，不过接着我用 <code>serve .</code> 启动一个静态文件服务器（<a href="https://www.npmjs.com/package/serve">www.npmjs.com/package/serve</a>），看到所有文件都成功放到 <code>~/serverfiles/mods</code> 里面了。</p>
+<h3>配置</h3>
+<p>一开始服务端没有报错，但是客户端说无法连接，查了老半天没用的资料我才意识到要先同步服务端和客户端的 Mod。</p>
+<p>等 Mod 列表完全一致之后，服务器启动后很快就退出了，用 <code>serve</code> 起一个服务器看 log ，发现最后的报错是 <code>Error ServerMultiplayerManager.cpp:96: MultiplayerManager failed: "Error while running on_init: Given seed value (34186445404) is too big, the data type allows values from 0 to 4294967295</code>，看来这个复杂的 Mod 没有适配多人模式。在 <code>./serverfiles/mods/mod-list.json</code> 里将它关掉就好了。</p>
+<p>这时我还是连不上，用 <code>./fctrserver console</code> 查看运行情况，发现出现了 <code>factorio Error ServerMultiplayerManager.cpp:633: Matching server connection failed: Error when creating server game: Missing token.</code>，经过一番调查，才知道原来要把 config 里面的 <code>username</code> 和 <code>password</code> 填上论坛的账号密码才行。不过填了还是没法解决这个问题，我才发现原来用 LinuxGSM 创建的游戏，会读取另一个配置文件 <code>./serverfiles/data/fctrserver.json</code>，在这个文件里修改就解决了这个问题。</p>
+<p>但还是出现 <code>Refusing connection for address (IP ADDR:({xxx:7018})), username (linonetwo012). UserVerificationMissing</code>，这是因为配置文件里开了 <code>"require_user_verification": true,</code>，校验不成功可能是因为我没有公网 IP，将这一项改为 <code>false</code> 就能连上了。</p>

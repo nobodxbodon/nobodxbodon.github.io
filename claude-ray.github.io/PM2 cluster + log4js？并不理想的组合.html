@@ -1,0 +1,58 @@
+<h2>原文：<a href="https://claude-ray.github.io/pm2-cluster-log4js.html">PM2 cluster + log4js？并不理想的组合</a></h2>
+<hr/>
+<h2>title: PM2 cluster + log4js？并不理想的组合
+date: 2018-12-21 20:49:03
+tag: [Node.js,log4js,pm2,pm2-intercom]
+categories: Node.js</h2>
+<h1>log4js 和 cluster</h1>
+<h2>写策略</h2>
+<p>node cluster 多个进程同时写一个文件是不安全的，通常会只选择一个 master 进程负责写入，其他 worker 进程则将数据传输到 master。</p>
+<p>log4js 的写策略正是如此，但默认只适用于 node 原生的 cluster 模式，然而通过 pm2 启动的进程都是 worker。</p>
+<p>官方提供的方案是安装 <code>pm2-intercom</code>，并在代码配置 log4js 时打开 <code>pm2: true</code> 选项，其原理也是选出一个负责写文件的主进程。</p>
+<pre><code class="language-sh">pm2 install pm2-intercom
+</code></pre>
+<h2>选举 master</h2>
+<p>log4js 选择主进程的<a href="https://github.com/log4js-node/log4js-node/blob/master/lib/clustering.js#L13">策略</a>：</p>
+<pre><code class="language-js">const isPM2Master = () =&gt; pm2 &amp;&amp; process.env[pm2InstanceVar] === '0';
+const isMaster = () =&gt; disabled || cluster.isMaster || isPM2Master();
+</code></pre>
+<p>其中 disabled 是 log4js 的 disableClustering 选项，设置为 true 后，所有进程都将作为 master 进而拥有写文件的权限，这并没有解决安全问题。它存在的价值后面再说。</p>
+<p>每个 pm2 启动的进程都有唯一的 process.env.NODE_APP_INSTANCE 标识，<code>process.env.NODE_APP_INSTANCE === '0'</code> 是常见的选择主从方式。多进程同时记录日志时，也可以用此方式指定唯一的进程负责写文件，避免同时写文件造成的冲突。此外 pm2 支持通过重命名 <code>instance_var</code> 来改变 process.env 的标记名，目的是解决和 <code>node-config</code> 包共用导致的异常。</p>
+<blockquote>
+<p><a href="http://pm2.keymetrics.io/docs/usage/environment/#specific-environment-variables">关于 NODE_APP_INSTANCE 的 pm2 官方说明</a></p>
+</blockquote>
+<h2>问题多多的 pm2-intercom 方案</h2>
+<p>当下 pm2 的版本是 3.2.x，而 <code>pm2-intercom</code> 在 pm2 2.x 版本就已经存在异常了，重复日志甚至丢失日志，或在开发环境运行正常，到了线上莫名失败。更严重的是，当一个 pm2 box 内运行多个 cluster 模式启动的应用时，日志记录会变得混乱，各应用的日志都乱入了最早启动的应用的日志文件中。</p>
+<p>log4js 的维护者 nomiddlename 也在 issue 中表示 pm2-intercom 存在着古怪的问题。</p>
+<blockquote>
+<p><a href="https://github.com/log4js-node/log4js-node/issues/265#issuecomment-359126674">log4js doesn't work with PM2 cluster mode #265</a></p>
+<p>pm2-intercom has always seemed a bit dodgy - for some people it never works at all anyway. It didn't need to use git clone when I installed it. Best plan might be to use the disableClustering option in your log4js config, log to stdout and let pm2 handle the files as it normally would.</p>
+</blockquote>
+<h2>option.disableClustering 不是银弹</h2>
+<p>上面再次提到 <code>disableClustering</code> 选项，不错，pm2-intercom 异常的场景可以拿它救场，但要注意它本身不适用于直接写文件，每个进程都被赋予了 master 权限，会再次引发开篇的冲突问题。官方文档也明确警示：<code>Be careful if you’re logging to files</code>。</p>
+<h1>pm2-intercom 粗解</h1>
+<p>这个模块是简易的 IPC，借助 <code>process.send</code> 方法，将多个进程的数据包统一发送至 pm2 中编号为 0 的 pm2-intercom 进程，此进程再将收到的消息推送至项目进程中的一个。</p>
+<p>在log4js的使用场景，表现为各自进程的日志首先发送到 pm2-intercom，由 pm2-intercom 分发到全部进程，但只有 log4js isMaster 才会写文件。</p>
+<p>分发代码如下</p>
+<pre><code class="language-js">function(packet) {
+  async.forEachLimit(process_list, 3, function(proc, next) {
+    sendDataToProcessId(proc.pm_id, packet);
+  }, function(err) {
+    if (err) console.error(err);
+  });
+}
+</code></pre>
+<h1>小结</h1>
+<p>如果想在多进程模式下记录日志到同一个文件，log4js + PM2 显然不是完美的组合。winston 也有人反馈丢日志的<a href="https://github.com/winstonjs/winston/issues/1466">问题</a>，但没有得到官方回复前，仍需要验证。</p>
+<p>如果想安全记录日志，还是得分多个文件，或脱离 pm2，像 egg 一样在框架层面自行 cluster。</p>
+<h2>Reference</h2>
+<ul>
+<li><p><a href="https://log4js-node.github.io/log4js-node/clustering.html">Clustering / Multi-process Logging</a></p>
+</li>
+<li><p><a href="https://www.npmjs.com/package/lj-log4js-pm2intercom">to-fix-pm2-intercom-in-pm2-2x</a></p>
+</li>
+<li><p><a href="https://juejin.im/post/5b7d0e20f265da43231f00d4">再说打日志你不会，pm2 + log4js，你值得拥有</a></p>
+</li>
+<li><p><a href="https://www.jianshu.com/p/20fcb3672723">探索 PM2 Cluster 模式下 Log4js 日志丢失</a></p>
+</li>
+</ul>

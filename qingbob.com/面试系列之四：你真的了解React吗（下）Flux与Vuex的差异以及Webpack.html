@@ -1,0 +1,172 @@
+<h2>原文：<a href="https://qingbob.com/2017-07-07-understand-react-03.html">面试系列之四：你真的了解React吗（下）Flux与Vuex的差异以及Webpack</a></h2>
+<hr/>
+<h2>layout: post
+title: 面试系列之四：你真的了解React吗（下）Flux与Vuex的差异以及Webpack
+modified: 2017-07-07
+tags: [javascript, react, interview]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>本系列文章旨在完善你可能忽略的React相关的知识点，通过回答以下问题：</p>
+<ul>
+<li><a href="#why_need_react">React解决了什么问题</a></li>
+<li><strong><a href="#design_component">如何设计一个好的组件？</a></strong></li>
+<li><strong><a href="#when_render_invoked">组件的Render函数在何时被调用？</a></strong><ul>
+<li>调用时DOM就一定会被更新吗？</li>
+</ul>
+</li>
+<li><a href="#react_lifecircle">组件的生命周期有哪些？</a><ul>
+<li>当某些第三方类库想对DOM初始化，或者进行远程数据加载时，应该在哪个周期中完成？</li>
+<li>在哪些声明周期中可以修改组件的state？</li>
+</ul>
+</li>
+<li><strong><a href="#component_communication">不同父节点的组件需要对彼此的状态进行改变时应该实现？</a></strong><ul>
+<li>如何设计出一个好的Flux架构</li>
+<li>如何设计出一个好的React组件</li>
+</ul>
+</li>
+<li><a href="#component_optimize">如何进行优化？</a><ul>
+<li>组件中的key属性有什么用？</li>
+</ul>
+</li>
+<li><a href="#component_element_diff">Component 与 Element 与 Instance 的区别</a></li>
+<li><strong><a href="#flux_vs_vuex">如果你使用过Redux与Vuex的话，聊聊他们的区别与你的心得</a></strong><ul>
+<li>Vue.js 的双向绑定是如何实现的？</li>
+</ul>
+</li>
+<li><a href="#about_webpack">Webpack如何打包输出多个文件？</a><ul>
+<li>webpack打包时如何工作的？<ul>
+<li>如何解决循环引用的问题</li>
+</ul>
+</li>
+<li>在什么情况下需要打包输出多个文件？</li>
+<li>loader和plugin的差别</li>
+<li>你觉得使用过什么高级技巧吗？</li>
+</ul>
+</li>
+<li><a href="#webpack_ecology">（开放问题）React的生态你使用过哪些类库</a></li>
+</ul>
+<p>本文是本系列的最后一篇文章，之前的内容可以参考之前的本系列的前两篇文章：</p>
+<p>【】</p>
+<h2>如果你使用过Redux与Vuex的话，聊聊他们的区别与你的心得 &lt;a name="flux_vs_vuex"&gt;&lt;/a&gt;</h2>
+<p>我个人是比较擅长Flux与Vuex的，这里主要是分享我对Flux与Vux的使用经验，聊聊Flux与Vuex的区别。这题也算的上是半开放式的命题，Redux我也学习过写过相关的代码，但是相对Vuex，我没法详细的说出以及比较Flux与Redux的优劣。所以各位在面试的时候根据自己的情况酌情回答。如果以后有机会的话，我也会补上对Redux的使用心得。</p>
+<p>就我个人的经验我更倾向于使用Vuex，它们很相似，都强调组件化，都强调单向数据流，Vuex也是受到Flux启发而诞生。但根据它们之间的差异说一说我选择Vuex的理由：</p>
+<ul>
+<li><strong>代码文件大小</strong>：React代码打包之后相对较大，基本是300KB起跳；而Vue和Vuex框架代码则相对较小，基础库能维持在100KB左右。</li>
+<li><strong>现成的框架</strong>：在Flux初期，Facebook只是推出了Flux这个框架概念，而没有实现这个框架。除非你使用一些第三方的Flux框架，否则你需要自己去实现Flux中的两个事件机制（Component对于Store的响应，Store对于Action的响应）。当然现在React的github项目里已经有Flux框架的示例代码，以及他们推出了Relay框架。相反Vuex不仅提出了这个框架概念，还实现并且提供了这个框架，让开发起来更加便捷。</li>
+<li><strong>针对性的改进</strong>：如果你阅读过Vuex的官方文档的话，你会明白Vuex其实是针对Flux存在的一些缺陷而开发的。具体的缺陷其实我们在上一篇中提到过，例如不同的组件都维护自己的状态的话，不同组件之间想改变对方的状态其实会比较困难的。Vuex的解决办法也是上一篇中提到的那样，把state提升到全局的高度，尽可能是使用stateless组件。同时又引入了
+<code>module</code>等概念更利于代码的解耦和开发。</li>
+<li><strong>具体细节上的差异</strong>：Vuex中保留了action与store的概念，并且引入了新的mutation。action和mutation广义上来说都是提交对store修改，不同的是action可以是异步的，并且大多数情况是在event handler中提交，通过<code>$store.dispatch</code>方法；唯一修改 Store 的地方只能通过mutation，而且mutation必须是同步的，直接对store进行修改，举例一个简单store的例子：</li>
+</ul>
+<pre><code class="language-javascript">export const SampleStore = {
+    state: {
+        data: ''
+    },  
+    actions: {
+        fetchData({commit}) {
+            fetch('/api/sample', (response) =&gt; {
+                return response.json();
+            }).then((data) =&gt; {
+                commit('updateData', data);
+            });
+        }
+    },
+    mutations: {
+        updateData(inputData, state) {
+            state.data = inputData;
+        }
+    },
+    getters: {
+        data: state =&gt; state.data
+    }
+}
+</code></pre>
+<p>注意在上面的例子中，<code>fetchData</code>这个action是用于异步的请求数据，而<code>updateData</code>这个mutation用于同步的修改store，而component中的event handler只能调用action，而不允许直接调用mutation。我认为这以及非常直观的显示了它们之间的差异。</p>
+<p>最后新增的<code>getters</code>类似于面向对象编程语言中property的访问器，保证view访问到的数据是你允许访问的。</p>
+<h3>Vue.js 的双向绑定是如何实现的</h3>
+<p>传统的数据绑定不外乎两种方式：</p>
+<ul>
+<li><p>事件机制（pub/sub）：我们通过特定的方法修改数据，例如<code>Store.set('key', 'value')</code>，<code>set</code>方法修改数据的同时触发一个事件，告诉view数据发生了更改，view立即从新从store拉取数据。这类似于Flux中View对于Store数据的响应，只不过通过某种方法或者directive将这种机制封装起来了。这种机制的弱势在于你没法用传统的方式等号<code>=</code>对数据进行赋值。</p>
+</li>
+<li><p>轮询（pull/dirty check）：这个方式就更加简单了，数据的消费方不断的检测数据有没有修改。当然不是无时无刻的进行检测，而是在input事件或者change事件的时候进行检测。Angular 1.0使用的就是这种机制。我个人倾向于把这种方式称为轮询而不是脏检查</p>
+</li>
+</ul>
+<p>然而对于Javascript来说，还存在第三种方式，那就是利用Javascript中的Object天生的支持的属性访问器。</p>
+<p>在Javascript中，我们可以给对象中的值定义访问器，例如：</p>
+<pre><code class="language-javascript">let data = {};
+Object.defineProperty(data, 'key',  {
+    get() {
+        console.log('Get method invoked');
+    },
+    set(newVal) {
+        console.log('Set method invoked');
+    }
+})
+</code></pre>
+<p>那么接下来当你每次想访问<code>data</code>中<code>key</code>字段时，无论是取值<code>data.key</code>还是赋值<code>data.key = 'Hi'</code>，都会有打印信息。这也意味着，我们能够在用户执行普通的赋值和取值操作时，做一些事情，例如通知数据的消费者数据发生了更改，让它们重新编译模板。这也就是<code>Vue.js</code>双向绑定的思路。</p>
+<p>当然这只是双向数据绑定的一个环节，但是是最核心的环节，其他还包括如何添加订阅者，如何编译模板等等，在这里就不详述了,可以参考以下两篇文章：</p>
+<ul>
+<li><a href="http://www.cnblogs.com/kidney/p/6052935.html">Vue.js双向绑定的实现原理</a></li>
+<li><a href="https://github.com/DMQ/mvvm">剖析Vue实现原理 - 如何实现双向绑定mvvm</a></li>
+</ul>
+<h2>Webpack如何打包输出多个文件？&lt;a name="about_webpack"&gt;&lt;/a&gt;</h2>
+<p>关于Webpack的入门，可以参考我的之前的一片文章<a href="https://zhuanlan.zhihu.com/p/26041084">《Webpack 速成》</a>，这篇文章从需求出发，解释了Webpack的一些基本用法。</p>
+<p>首先你要明白Webpack的用途，从最终效果上来说它和gulp或者grunt非常相似，甚至有些功能是重叠的。但Webpack的初衷是用于模块打包，解决模块间的兼容性问题。例如有些模块是在服务端（Node.js）开发使用，想挪用到浏览器端使用；有的模块是以ES6 module标准编写，而有的模块则是以AMD标准编写的，而它们之间需要互相调用。你一定听说过UMD这个概念，Universal Module Define，就是在定义模块是尽可能的兼容多的标准。而Webpack帮你解决了这个问题，让你不用的过多担心标准，而专注于模块的开发。</p>
+<p>关于loader和plugin的区别在刚刚说的那篇入门中有提到，简单来说loader决定了你Webpack打包模块的能力，例如你需要打包vue组件，那么你需要引入vue-loader；如果你需要编译打包less代码，则需要引入less-loader。而plugin提供的则是模块打包之后更边缘的便捷功能，例如Webpack自带Uglify插件用于压缩代码，自带CommonsChunkPlugin插件用于提取公共模块。</p>
+<p>打包多个文件的场景很简单，但是实际情况中运用的或许不多。举一个不恰当的例子，例如你的站点有多个页面（home、gallery、about），但每个页面都是一个Vuex架构下的单页面应用。于是可以设置多个入口，key为入口名称，value为入口文件路径：</p>
+<pre><code class="language-javascript">entry: {
+    app: './entry/app.js',
+    gallery: './entry/gallery.js',
+    about: './entry/about.js'
+}
+</code></pre>
+<p>同时在<code>output</code>字段处，设置文件的输出规则是以入口的key开头，即下面代码filename字段的<code>[name]</code>值：</p>
+<pre><code class="language-javascript">output: {
+    path: path.resolve('.', 'output'),
+    filename: '[name].bundle.js'
+}
+</code></pre>
+<p>当然<code>[name]</code>也可以替换为其他的字段，例如有其他字段可选：</p>
+<ul>
+<li><code>[name]</code>: The module name</li>
+<li><code>[id]</code>: The module identifier</li>
+<li><code>[file]</code>: The module filename</li>
+</ul>
+<p>不知道你有没有考虑过Webpack的打包原理，为什么它能将多个文件都打包在一起呢？如果你有了解过之前RequireJS或者SeaJS的加载原理的话，其实打包过程也很相似：一个模块如果有依赖模块的话，在所有的依赖模块加载完成之前它自己的工厂函数代码是不会被执行的，即使执行也会报错，因为它依赖的变量和函数都并不存在。Webpack打包原理也相同：首先Webpack需要有一个入口模块，也就是webpack配置文件里的entry。通过对入口模块进行语法分析也好，注入依赖分析也好，找到模块的依赖。此时Webpack应该会有一个HashMap，key为模块的路径或者名称，而value则为模块的工厂代码或者具体内容。HashMap主要有两个作用，一方面是用于缓存（可能存在一个模块被多次引用的情况），另一方面则用于标记（模块是否被加载）。Webpack则针对入口模块以深度优先的原则逐个将依赖模块进行加载。最后将入口模块自己打包进bundle中。</p>
+<p>然而以上所说的这个打包流程我故意漏掉了一个重要环节，就是如何解决模块间循环引用的问题（<code>A</code>引用模块<code>B</code>，<code>B</code>同时引用了模块<code>A</code>）。但就解决循环引用这个问题而言，是可以以论文的篇幅进行叙述的。遗憾的是针对Webpack或者RequireJS，我并没有找到确切的资料描述它们是如何解决循环引用的问题。在面试中询问我的这个问题的时候，我临时想到的是一个简单粗暴的办法，即在对一个模块进行构建时对它的依赖建立一个链表，例如模块A的依赖链表是：<code>B-&gt;C-&gt;D-&gt;E-&gt;F</code>，在构建这个链表的同时，比如我们打算在<code>F</code>后添加模块<code>G</code>时，我们会去检测<code>G</code>的依赖链表里是否存在模块<code>A</code>，如果存在的话则形成了循环依赖。</p>
+<p>最后关于Webpack的高级用法——我被问到了这个问题，但我不知道如何定义什么是高级用法。如果你开发过Webpack的plugin我觉得算是一项加分点，而至于其他点，我认为在面试中你可以把你认为的的高级用法都说出来，哪怕只是使用了<code>alias</code>。</p>
+<h2>你使用过哪些React的生态类库&lt;a name="webpack_ecology"&gt;&lt;/a&gt;</h2>
+<p>这就是一个完全开放的命题了。如果说之前的答案还能靠强化学习甚至死记硬背的话，那么这一题完全是要依靠个人平时的积累。你要叙述的不仅仅是你用过什么，还要告诉面试官你为什么用它和解决了什么问题。像报菜名一样报上一大堆类库的名称没有任何意义</p>
+<p>这是最后一个问题了。顺便也适合做一个结尾，在面试的过程中最大的一个感悟是，<strong>技术，或者说是能力在日常中就应该积累</strong>。为什么我说日常而不是工作，因为大部分工作使用的技术方向还是较窄，尤其是新技术和允许发挥的空间（代码兼容性、时间排期）。等到你有朝一日想换工作就晚了，罗马不是一天建成的。我认为最好的积累方式应该是在工作中发现问题，并且尝试用天马行空的技术解决问题。不要先想手上有什么，能解决什么样的问题；而是应该先想解决方案，再想方设法用技术去实现方案。噢，对了，这样同时也能增强自己的项目经历。</p>
+<p>最后送大家两个锦囊：</p>
+<p>第一句是关于如何学好前端的。至于出处拿着这句话直接谷歌去吧，我个人是非常认同这个建议的</p>
+<blockquote>
+<p>First do it, then do it right, then do it better. ——Addy Osmani</p>
+</blockquote>
+<p>第二句是鸡汤，给你再学习前端挫败时候看的</p>
+<blockquote>
+<p>Ever tried. Ever failed. No matter. Try again. Fail again. Fail better. ——Samuel Beckett</p>
+</blockquote>
+<p>参考文章</p>
+<p><a href="https://www.site2share.com/folder/20020522">https://www.site2share.com/folder/20020522</a></p>
+<p>你可能会喜欢</p>
+<ul>
+<li><a href="https://www.v2think.com/understand-react-01">面试系列之二：你真的了解React吗（上）如何设计组件以及重要的生命周期</a></li>
+<li><a href="https://www.v2think.com/understand-react-02">面试系列之三：你真的了解React吗（中）组件间的通信以及React优化</a></li>
+<li><a href="https://www.v2think.com/understand-react-03">面试系列之四：你真的了解React吗（下）Flux与Vuex的差异以及Webpack</a></li>
+<li><a href="https://www.v2think.com/create-app-user-guide">从React脚手架工具学习React项目的最佳实践（上）：前端基础配置</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-01">深入React的生命周期(上)：出生(Mount)</a></li>
+<li><a href="https://www.v2think.com/dig-into-react-lifecircle-02">深入React的生命周期(下)：更新(Update)</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-01">深入理解 Webpack 打包分块（上）</a></li>
+<li><a href="https://www.v2think.com/webpack-chunks-split-02">深入理解 Webpack 打包分块（下）</a></li>
+<li><a href="https://www.v2think.com/webpack-tutorial">Webpack 速成</a></li>
+<li><a href="https://www.v2think.com/tips-for-building-mobx-app">构建大型 Mobx 应用的几个建议</a></li>
+<li><a href="https://www.v2think.com/five-tips-for-redux-large-applications">【译文】给构建大型 redux 应用的五个建议</a></li>
+<li><a href="https://www.v2think.com/redux-performance-01-basic">React + Redux 性能优化（一）：理论篇</a></li>
+<li><a href="https://www.v2think.com/redux-performance-02-immutablejs">React + Redux 性能优化（二）工具篇： Immutablejs</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CQRS-ES-DDD">Flux与Redux背后的设计思想(二)：CQRS, Event Sourcing, DDD</a></li>
+<li><a href="https://www.v2think.com/design-philosophy-behind-flux-and-redux-CB-EB-ESB">Flux与Redux背后的设计思想(一)：Command Bus, Event Bus, Service Bus</a></li>
+</ul>

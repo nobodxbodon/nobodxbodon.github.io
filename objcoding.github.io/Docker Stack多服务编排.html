@@ -1,0 +1,93 @@
+<h2>原文：[Docker Stack多服务编排](https://objcoding.github.io/2018-09-03- docker stack.html)</h2>
+<hr/>
+<h2>layout: post
+title: "Docker Stack多服务编排"
+categories: Docker
+tags: compose swarm stack
+author: 张乘辉</h2>
+<ul>
+<li>content
+{:toc}
+之前 swarm 集群中<code>docker service create</code>一次只能部署一个微服务，我们可以使用 docker stack + compose 一次启动多个服务。</li>
+</ul>
+<p><strong>stack 是一组相互关联的服务，它是服务的上一层，这些服务共享依赖关系，并且可以一起编排和缩放。单个 stack 能够定义和协调整个应用程序的功能，简单来说 stack 就是一组服务的集合。</strong></p>
+<ul>
+<li>编写 docker-compose.yml 文件：</li>
+</ul>
+<pre><code class="language-bash">version: "3"
+
+services:
+  go-gin-demo:
+    image: chenghuizhang/go-gin-demo:v3
+    ports:
+      - 8081:8081
+    networks:
+      - overlay
+    deploy:
+      mode: replicated
+      replicas: 2
+  hello:
+    image: chenghuizhang/helloword:0.0.2
+    ports:
+      - 8080:8080
+    networks:
+      - overlay
+    deploy:
+      mode: replicated
+      replicas: 2
+
+  visualizer:
+    image: dockersamples/visualizer:stable
+    ports:
+      - 8090:8080
+    stop_grace_period: 1m30s
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+             
+networks:
+  overlay:
+</code></pre>
+<p>该 compose 文件制定部署 3 个服务，分别指定了服务的端口、服务实例个数、网络、镜像名称等等， 其中的  visualizer 服务提供一个可视化页面，我们可以从浏览器中很直观的查看集群中各个服务的运行节点。</p>
+<ul>
+<li>部署</li>
+</ul>
+<pre><code class="language-bash">$ docker stack deploy -c docker-compose.yml mynet
+</code></pre>
+<p>现在我们打开浏览器输入 任一节点 IP:8090 即可看到各节点运行状态。如下图所示：</p>
+<p><img alt="visualizer" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/docker_compose.png"/></p>
+<p>也可以在服务器里面查看服务运行情况：</p>
+<pre><code class="language-bash">$ docker stack ps mynet
+</code></pre>
+<p><img alt="docker compose" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/docker_compose2.png"/></p>
+<ul>
+<li>stack 相关命令：</li>
+</ul>
+<pre><code>deploy      Deploy a new stack or update an existing stack
+ls          List stacks
+ps          List the tasks in the stack
+rm          Remove one or more stacks
+services    List the services in the stack
+</code></pre>
+<ul>
+<li>现在我们更新一下 docker-compose.yml 文件，增加 portainer 服务：</li>
+</ul>
+<pre><code>portainer:
+    image: portainer/portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+</code></pre>
+<pre><code class="language-bash">$ docker stack deploy -c docker-compose.yml mynet
+</code></pre>
+<p>打开页面：</p>
+<p><img alt="docker stack" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/docker_stack.png"/></p>
+<p>portainer 是 docker swarm 集群容器管理页面，可管理 Docker 容器、image、volume、network 等，当然我们还可以在其页面上添加多个stack：</p>
+<p><img alt="docker stack" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/docker_stack2.png"/></p>

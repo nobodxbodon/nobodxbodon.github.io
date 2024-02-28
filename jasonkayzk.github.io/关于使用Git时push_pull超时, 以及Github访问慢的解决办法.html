@@ -1,0 +1,138 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/%E5%85%B3%E4%BA%8E%E4%BD%BF%E7%94%A8Git%E6%97%B6push-pull%E8%B6%85%E6%97%B6-%E4%BB%A5%E5%8F%8AGithub%E8%AE%BF%E9%97%AE%E6%85%A2%E7%9A%84%E8%A7%A3%E5%86%B3%E5%8A%9E%E6%B3%95.html">关于使用Git时push/pull超时, 以及Github访问慢的解决办法</a></h2>
+<hr/>
+<h2>title: '关于使用Git时push/pull超时, 以及Github访问慢的解决办法'
+toc: true
+date: 2019-10-10 21:32:56
+categories: Git
+cover: https://timgsa.baidu.com/timg?image&amp;quality=80&amp;size=b9999_10000&amp;sec=1570726027679&amp;di=9399d91e4f2812b1188d4c409f69caad&amp;imgtype=0&amp;src=http%3A%2F%2Fku.90sjimg.com%2Felement_origin_min_pic%2F00%2F86%2F44%2F4056eb5f135855d.jpg
+tags: [Git, Github]
+description: 最近在使用Git向github提交代码的时候总是卡顿, 出现SSH连接超时的情况, 一开始以为是因为网络缘故, 后来发现是ssh本身配置的问题!</h2>
+<p>最近在使用Git向github提交代码的时候总是卡顿, 出现SSH连接超时的情况, 一开始以为是因为网络缘故, 后来发现是ssh本身配置的问题!</p>
+<p>阅读本篇你将学会:</p>
+<ul>
+<li>加速国内Github访问的方法</li>
+<li>解决git push/pull卡死</li>
+<li>解决git push/pull ssh连接超时</li>
+<li>......</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<p>&lt;br/&gt;</p>
+<h3>前言</h3>
+<p>最近一段时间发现在使用git向github提交代码或者拉取代码的时候, 往往要等相当长的一段时间, 甚至有时会出现SSH超时的情况!</p>
+<p>如下图, 命令一直停留, 直到超时:</p>
+<p><img alt="pull卡死" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/pull%E5%8D%A1%E6%AD%BB.png"/></p>
+<p>&lt;br/&gt;</p>
+<p>一开始以为是因为在国内访问github的时候由于丢包, 或者连接不稳定导致的问题, 所以先使用<code>ssh命令</code>做了一下连接测试:</p>
+<pre><code class="language-bash">ssh -T git@github.com
+
+Hi JasonkayZK! You've successfully authenticated, but GitHub does not provide shell access.
+</code></pre>
+<p>最后返回的是可以通过ssh授权! 说明ssh没什么问题!</p>
+<p>&lt;br/&gt;</p>
+<p>之后又通过<code>mtr命令</code>查看了一下路由和丢包情况, 如图:</p>
+<p><img alt="mtrGithub" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/mtrGithub.png"/></p>
+<p>结果显示, 虽然延迟在265ms左右, 但是并没有很严重的丢包! 应该大概率也不会是网络的原因.</p>
+<p>&lt;br/&gt;</p>
+<p>最后经过查找大量的博客, 最后发现是&lt;font color="#ff0000"&gt;由于ssh配置导致的问题!!!&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<hr/>
+<h3>一. 解决git连接github超时问题</h3>
+<h4>1. 修改ssh配置[解决问题]</h4>
+<p>在等待<code>git pull</code>命令超时之后报出了类似: <code>ssh: connect to host github.com port 22: Connection timed out</code>的错误!</p>
+<blockquote>
+<p><strong>原因是:</strong> &lt;font color="#ff0000"&gt;ssh 阻塞了22端口!&lt;/font&gt;</p>
+<p><strong>解决方法:</strong> &lt;font color="#ff0000"&gt;修改 ssh 的配置文件&lt;/font&gt;</p>
+</blockquote>
+<p>关于修改配置，存在两种解决方法:</p>
+<ul>
+<li><code>/etc/ssh/ssh_config</code> 中修改全局配置</li>
+<li>在用户主目录下.ssh/中添加配置文件</li>
+</ul>
+<p>这里选择的后者:</p>
+<pre><code class="language-bash">cd ~/.ssh/
+vi config
+
+# 在config中添加下面内容
+Host github.com  
+User git  
+Hostname ssh.github.com 
+PreferredAuthentications publickey  
+IdentityFile ~/.ssh/id_rsa 
+Port 443
+</code></pre>
+<p>即: 使用https的443端口进行访问!</p>
+<p>对我来说解决了问题! 当然网上还有其他的解决方法, 我试了之后都未解决!</p>
+<p>&lt;br/&gt;</p>
+<h4>2. 先pull再push[未解决]</h4>
+<p>网上有说先pull(即使提醒<code>Everything is up-to-date</code>)!</p>
+<p>但是对于我来说, pull和push一样都会卡死, 所以并未解决我的问题!</p>
+<p>&lt;br/&gt;</p>
+<h4>3. 添加sendpack.sideband属性[未解决]</h4>
+<p>网上还有解决方法是: 添加<code>sendpack.sideband</code>属性并置为false</p>
+<pre><code class="language-bash"># 全局的
+git config --global sendpack.sideband false
+# 仓库的
+git config --local sendpack.sideband false
+</code></pre>
+<p>通过<code>git config --local -l</code> 查看仓库级配置，可以看到有sendpack.sideband这一项并且是置为false的!</p>
+<pre><code class="language-bash">git config --local -l 
+</code></pre>
+<p>笔者尝试过之后, 还是未解决问题!</p>
+<p>&lt;br/&gt;</p>
+<hr/>
+<h3>二. 加速国内Github访问</h3>
+<p>由于某些原因，国内访问Github会异常缓慢，在clone仓库时甚至只有10k以下的速度，下载半天有时还会失败需要从头再来，甚是让人恼火。</p>
+<p>本小节介绍&lt;font color="#ff0000"&gt;通过修改系统hosts文件的办法，绕过国内dns解析，直接访问GitHub的CDN节点，从而达到加速的目的.&lt;/font&gt;</p>
+<h4>1. 获取GitHub官方CDN地址</h4>
+<p>打开https://www.ipaddress.com/</p>
+<p>查询以下三个链接的DNS解析地址:</p>
+<pre><code>github.com 
+assets-cdn.github.com 
+github.global.ssl.fastly.net
+</code></pre>
+<p><img alt="DNS解析地址" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/DNS%E8%A7%A3%E6%9E%90%E5%9C%B0%E5%9D%80.png"/></p>
+<p>记录下查询到的IP地址!</p>
+<p>&lt;br/&gt;</p>
+<h4>2. 修改系统Hosts文件</h4>
+<p>修改系统的Hosts文件:</p>
+<ul>
+<li>Linux: <code>/etc/hosts</code></li>
+<li>Windows: <code>C:\Windows\System32\drivers\etc</code></li>
+</ul>
+<pre><code class="language-bash">sudo vi /etc/hosts
+
+# 添加下面三行
+192.30.253.112    github.com
+151.101.72.133    assets-cdn.github.com
+151.101.193.194    github.global.ssl.fastly.net
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>**注: **</p>
+<ul>
+<li>需管理员权限</li>
+<li>注意IP地址与域名间需留有空格</li>
+<li>上面为(2019.10.10查询的IP, 时间不同可能有变化!!!)</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h4>3. 刷新系统DNS缓存</h4>
+<p><strong>Linux下:</strong></p>
+<pre><code class="language-bash">sudo /etc/init.d/networking restart
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p><strong>Windows下:</strong></p>
+<p>Windows+X 打开系统命令行(管理员身份)或powershell</p>
+<p>运行 <code>ipconfig /flushdns</code> 手动刷新系统DNS缓存:</p>
+<p><img alt="win刷新系统DNS缓存" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/win%E5%88%B7%E6%96%B0%E7%B3%BB%E7%BB%9FDNS%E7%BC%93%E5%AD%98.png"/></p>
+<p>&lt;br/&gt;</p>
+<p>完成, 现在打开Github，clone一个项目到本地试试吧!</p>
+<p>&lt;br/&gt;</p>
+<hr/>
+<h3>附录</h3>
+<p>参考文章:</p>
+<ul>
+<li><a href="https://blog.csdn.net/cekiasoo/article/details/54259921">Git push提交到远程仓库卡住的问题解决</a></li>
+<li><a href="https://www.v2ex.com/t/431645">git push 一直卡住</a></li>
+<li><a href="https://www.cnblogs.com/sweetheartly/articles/9439798.html">解决git连接github超时问题</a></li>
+<li><a href="https://blog.csdn.net/w958660278/article/details/81161224">加速国内Github访问</a></li>
+</ul>

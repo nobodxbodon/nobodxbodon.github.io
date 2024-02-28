@@ -1,0 +1,236 @@
+<h2>原文：<a href="https://qingbob.com/2019-01-12-build-schema-lib.html">不如自己写一个 schema 类库吧</a></h2>
+<hr/>
+<h2>layout: post
+title:  不如自己写一个 schema 类库吧
+modified: 2019-01-12
+tags: [javascript, schema]
+image:
+feature: abstract-3.jpg
+credit: dargadgetz
+creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
+comments: true
+share: true</h2>
+<p>这篇文章里没有过多的技巧和经验，记录的是一个想法从诞生到实现的过程</p>
+<h2>背景需求</h2>
+<p>在上一篇文章 <a href="https://zhuanlan.zhihu.com/p/54291246">构建大型 Mobx 应用的几个建议</a> 中，我提到过使用 schema 来约定数据结构。但遗憾的事情是，在浏览器端，我一直没有能找到合适的 schmea 类库，所以只能用 Immutable.js 中的 Record 代替。</p>
+<p>如果你还不了解什么是 schema，在这里简单解释一下: 在应用内部的不同组件之间，应用端与服务端之间，都需要使用消息进行通信，而随着应用复杂度增长，消息的数据结构也变得复杂和庞大。对每一类需要使用的消息或者对象提前定义 schema，有利于确保通信的正确性，防止传入不存在的字段，或者传入字段的类型不正确；同时也具有自解释的文档的作用，有利于今后的维护。我们以 <a href="https://github.com/hapijs/joi">joi</a> 类库为例</p>
+<pre><code class="language-javascript">const Joi = require('joi');
+
+const schema = Joi.object().keys({
+    username: Joi.string().alphanum().min(3).max(30).required(),
+    password: Joi.string().regex(/^[a-zA-Z0-9]{3,30}$/),
+    access_token: [Joi.string(), Joi.number()],
+    birthyear: Joi.number().integer().min(1900).max(2013),
+    email: Joi.string().email({ minDomainAtoms: 2 })
+}).with('username', 'birthyear').without('password', 'access_token');
+
+// Return result.
+const result = Joi.validate({ username: 'abc', birthyear: 1994 }, schema);
+// result.error === null -&gt; valid
+
+// You can also pass a callback which will be called synchronously with the validation result.
+Joi.validate({ username: 'abc', birthyear: 1994 }, schema, function (err, value) { });  // err === null -&gt; valid
+</code></pre>
+<p>就像能在 <a href="https://www.npmjs.com/search?q=schema">npm</a> 上能找到的所有 schema 类库类似，它们始终在采取一种“事后验证”机制，即事先定义 schema 之后，再将需要验证的对象交给 schema 进行验证，这是让我不满意的。我更希望采取 Reacord 的方式：</p>
+<pre><code class="language-javascript">const Person = Record({
+  name: '',
+  age: ''
+})
+const person = new Person({
+  name: 'Lee',
+  age: 22,
+})
+const team = new List(jsonData).map(Person) // =&gt; List&lt;Person&gt;
+</code></pre>
+<p>在上面的例子中，schema 俨然拥有了类似于“类”的功能，你能够使用它创建指定数据结构的实例。如果你在创建实例时传入的属性没有事先定义便会报错。但是美中不足的是，Record 不支持更进一步的对每个字段进行约束：指定类型、最大值和最小值等，就像在 joi 里看到的那样。</p>
+<p>介于找不到满意的 schema 类库，不如我们自己编写一个。综上它需要具备以下两种能力：</p>
+<ul>
+<li>能够根据 schema 创建实例，而不是事后验证</li>
+<li>支持对 schema 定义时字段的约束</li>
+</ul>
+<h2>设计 API</h2>
+<p>在开发之前，我们需要考虑并且约定将来如何使用它。关于这一点在上一小节中已经得出初步的结论了。</p>
+<p>假设类库名为 <code>Schema</code></p>
+<ul>
+<li>创建 Schema：</li>
+</ul>
+<pre><code class="language-javascript">const PersonSchema = Schema({
+  name: '',
+  age: ''
+})
+</code></pre>
+<p>虽然我们支持对字段约束，但是你可以不需要约束。那么采用以上的方式即可，仅仅约定了 schema 的字段名词，以及默认值</p>
+<ul>
+<li>实例化 Schema:</li>
+</ul>
+<pre><code class="language-javascript">const person = PersonSchema({
+  name: 'Lee',
+  age: 22
+})
+</code></pre>
+<ul>
+<li>对字段进行约束：</li>
+</ul>
+<pre><code class="language-javascript">const PersonSchema = Schema({
+  name: Types().string().default('').required(),
+  age: Types().number().required()
+})
+</code></pre>
+<p>解释一下，理想状态下应该使用 React 中<code>PropTypes</code>的方式对字段进行约束，例如<code>PropTypes.func.isRequired</code>，但是一时想不到如何实现，于是提供<code>Types</code>类辅佐以链式调用的方式曲线救国，可以约束的条件如下：</p>
+<ul>
+<li>数据类型约束<ul>
+<li><code>string()</code>: 仅限字符串类型</li>
+<li><code>number()</code>: 仅限数字类型</li>
+<li><code>boolean()</code>: 仅限布尔类型</li>
+<li><code>array()</code>: 仅限数组类型</li>
+<li><code>object()</code>: 仅限对象类型</li>
+</ul>
+</li>
+<li>其他约束<ul>
+<li><code>required()</code>: 该字段创建实例时必传</li>
+<li><code>default(value)</code>: 该字段的默认值</li>
+<li><code>valueof(value1, value2, value3)</code>: 该字段值必须是 value1, value2, value3 值之一</li>
+</ul>
+</li>
+</ul>
+<p>当然还可以添加其他种类的约束，比如<code>min()</code>、<code>max()</code>、<code>regex()</code>等等，这些二期再实现，以上才是目前来说看来是最重要</p>
+<ul>
+<li>支持 schema 嵌套</li>
+</ul>
+<pre><code class="language-javascript">const PersonSchema = Schema({
+  name: Types().string().default('').required(),
+  age: Types().number().required(),
+  job: Schema({
+    title: '',
+    company: ''
+  })
+})
+</code></pre>
+<h2>实现</h2>
+<h3><code>Types</code></h3>
+<p>关于 Types 的链式调用 <code>Types().string().required()</code> 让我想到了什么？jQuery. jQuery 是如何实现链式调用的？函数调用的结束始终返回对 jQuery 的引用。</p>
+<p><code>Types</code>是一个类，<code>Types()</code>用于生成一个实例。你可能注意到没有使用关键词<code>new</code>，因为我认为使用关键词<code>new</code>是很鸡肋很累赘的事情。技术上不使用<code>new</code>关键词生成实例也很容易，只要 1) 使用函数而不是 <code>class</code> 定义类； 2) 在构造函数中添加对实例的判断：</p>
+<pre><code class="language-javascript">function Types() {
+  if (!(this instanceof Types)) {
+    return new Types();
+  }
+}
+</code></pre>
+<p>而至于对各种数据类型的验证，我们借助并且封装<code>lodash</code>的方法进行实现。用户每执行一个约束（<code>.string()</code>）函数，我们会生成一个内部的验证函数，存储在 <code>Types</code> 实例的 <code>validators</code> 变量中，用于将来对该字段值的判断</p>
+<pre><code class="language-javascript">import _ from 'lodash'
+
+const lodashWrap = fn =&gt; {
+  return value =&gt; {
+    return fn.call(this, value);
+  };
+};
+
+function Types() {
+  if (!(this instanceof Types)) {
+    return new Types();
+  }
+  this.validators = []
+}
+
+Types.prototype = {
+  string: function() {
+    this.validators.push(lodashWrap(_.isString));
+    return this;
+  },
+</code></pre>
+<p>同理，我们也实现了<code>default</code>、<code>required</code>和<code>valueof</code></p>
+<pre><code class="language-javascript">
+function Types() {
+  if (!(this instanceof Types)) {
+    return new Types();
+  }
+  this.validators = [];
+  this.isRequired = false;
+  this.defaultValue = void 0;
+  this.possibleValues = [];
+}
+
+
+Types.prototype = {
+  default: function(defaultValue) {
+    this.defaultValue = defaultValue;
+    return this;
+  },
+  required: function() {
+    this.isRequired = true;
+    return this;
+  },
+  valueOf: function() {
+    this.possibleValues = _.flattenDeep(Array.from(arguments));
+    return this
+</code></pre>
+<h3><code>Schema</code></h3>
+<p>通过我们之前约定的 <code>Schema()</code> 的用法不难判断出 <code>Schema</code> 的基本结构应该如下：</p>
+<pre><code class="language-javascript">export const Schema = definition =&gt; {
+  return function(inputObj = {}) {
+    return {}
+  }
+}
+</code></pre>
+<p><code>Schema</code> 的代码实现中绝大部分并没有什么特别的，基本上就是通过遍历 <code>definition</code> 来获得不同字段的各种约束信息：</p>
+<pre><code class="language-javascript">export const Schema = definition =&gt; {
+  const fieldValidator = {};
+  const fieldDefaults = {};
+  const fieldPossibleValues = {};
+  const fieldSchemas = {};
+</code></pre>
+<p>上述代码中的<code>fieldValidator</code>、<code>fieldDefaults</code>都是“词典”，用于归类存储不同字段的各种约束信息</p>
+<p>在 <code>definition</code> 中我们获取到了 schema 的定义，即对每个字段（key）的约束。通过对字段值的各种判断，就能得到用于想表达的约束信息：</p>
+<ul>
+<li>如果值不是 <code>Types</code> 的实例，表示用户只是定义了字段，但并没有对它进行约束，同时当前值也是默认值。在创建实例或者对实例进行写操作时不需要任何校验</li>
+<li>如果值是 <code>Types</code> 实例，那么我们就能从实例的属性里取得各种约束信息，就是之前<code>Types</code>定义里的意义<code>validators</code>、<code>defaultValue</code>、<code>isRequired</code>、<code>possibleValues</code></li>
+<li>如果值是函数，表示用户定义了一个嵌套的 Schema，在校验时需要使用这个定义的 Schema 进行校验</li>
+</ul>
+<p>承接以上代码：</p>
+<pre><code class="language-javascript">const fields = Object.keys(definition);
+fields.forEach(field =&gt; {
+  const fieldValue = definition[field];
+  if (_.isFunction(fieldValue)) {
+    fieldSchemas[field] = fieldValue;
+    return;
+  }
+  if (!(fieldValue instanceof Types)) {
+    fieldDefaults[field] = fieldValue;
+    return;
+  }
+  if (fieldValue.validators.length) {
+    fieldValidator[field] = fieldValue.validators;
+  }
+  if (typeof fieldValue.defaultValue !== "undefined") {
+    fieldDefaults[field] = fieldValue.defaultValue;
+  }
+  if (fieldValue.possibleValues &amp;&amp; fieldValue.possibleValues.length) {
+    fieldPossibleValues[field] = fieldValue.possibleValues;
+  }
+});
+</code></pre>
+<p><code>Schema</code>类的实现关键在于如何实现<code>set</code>访问器，即如何在用户给字段赋值时进行校验，校验通过之后才允许赋值成功。关于如何实现访问器，我们有两种方案进行选择：</p>
+<ul>
+<li>使用 <code>Object.defineProperty</code> 定义对象的访问器</li>
+<li>使用 Proxy 机制</li>
+</ul>
+<p><code>Object.defineProperty</code>的本质是对对象进行修改（当然你也能够深度拷贝一份原对象再进行修改，以避免污染）；而 Proxy 从“语义”上来说更适合这个场景，也不存在污染的问题。并且在同时尝试了两个方案之后，使用 Proxy 的成本更低。于是决定使用 Proxy 机制，那么代码结构大致变为：</p>
+<pre><code class="language-javascript">export const Schema = definition =&gt; {
+  return function(inputObj = {}) {
+    const proxyHandler = {
+      get: (target, prop) =&gt; {
+        return target[prop];
+      },
+      set: (target, prop, value) =&gt; {
+        // LOTS OF TODO
+      }
+    }
+    return new Proxy(Object.assign({}, inputObj), proxyHandler);
+  }
+}
+</code></pre>
+<p>而 <code>set</code> 方法中省略的则是按部就班的各种判断代码了</p>
+<h2>结束语</h2>
+<p>本文的源码在 <a href="https://github.com/hh54188/schemaor">https://github.com/hh54188/schemaor</a></p>
+<p>你可以拷贝它，和它玩耍，测试它，修改它。<strong>但千万不要将它用在生产环境中</strong>，它还没有经过充分的测试，以及还有很多细枝末节和边界情况需要处理</p>
+<p>欢迎通过 <a href="https://github.com/hh54188/schemaor/pulls">pull request</a> 和 <a href="https://github.com/hh54188/schemaor/issues">issues</a> 提出更多的建议</p>

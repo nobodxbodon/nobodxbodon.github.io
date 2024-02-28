@@ -1,0 +1,1013 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Rust%E4%B8%AD%E4%BD%BF%E7%94%A8libp2p.html">Rust中使用libp2p</a></h2>
+<hr/>
+<h2>title: Rust中使用libp2p
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?99'
+date: 2023-12-27 22:12:07
+categories: Rust
+tags: [Rust, P2P, libp2p]
+description: 在个人数据日益被侵犯的现在，P2P技术变得越来越重要；本文通过编写一个实例，讲解了P2P中的一些概念，以及如何使用libp2p来进行点对点应用的开发！</h2>
+<p>在个人数据日益被侵犯的现在，P2P技术变得越来越重要；</p>
+<p>本文通过编写一个实例，讲解了P2P中的一些概念，以及如何使用libp2p来进行点对点应用的开发！</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/proj/p2p-demo</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Rust中使用libp2p</strong></h1>
+<h2><strong>P2P 概述</strong></h2>
+<h3><strong>P2P 简介</strong></h3>
+<ul>
+<li>P2P：peer-to-peer</li>
+<li>P2P 是一种网络技术，可以在不同的计算机之间共享各种计算资源，如 CPU、网络带宽和存储。</li>
+<li>P2P 是当今用户在线共享文件（如音乐、图像和其他数字媒体）的一种非常常用的方法。<ul>
+<li>Bittorrent 和 Gnutella 是流行的文件共享 p2p 应用程序的例子。以及比特币和以太坊等区块链网络。</li>
+<li>它们不依赖中央服务器或中介来连接多个客户端。</li>
+<li>最重要的是，它们利用用户的计算机作为客户端和服务器，从而将计算从中央服务器上卸载下来。</li>
+</ul>
+</li>
+<li>传统的分布式系统使用 Client-Server 范式来部署</li>
+<li>P2P 是另一种分布式系统<ul>
+<li>在 P2P 中，一组节点（或对等点，Peer）彼此直接交互以共同提供公共服务，而无需中央协调器或管理员</li>
+<li>P2P 系统中的每个节点（或 Peer）都可以充当客户端（从其他节点请求信息）和服务器（存储/检索数据并响应客户端请求执行必要的计算）。</li>
+<li>P2P 网络中的所有节点不必完全相同，一个关键特征将 Client-Server 网络与 P2P 网络区分开来：缺乏具有唯一权限的专用服务器。在开放、无许可的 P2P 网络中，任何节点都可以决定提供与 P2P 节点相关的全部或部分服务集。</li>
+</ul>
+</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>P2P 的特点</h3>
+<ul>
+<li>与 Client-Server 网络相比，P2P 网络能够在其上构建不同类别的应用程序，这些应用程序是无许可、容错和抗审查的。<ul>
+<li>无许可：因为数据和状态是跨多个节点复制的，所以没有服务器可以切断客户机对信息的访问。</li>
+<li>容错性：因为没有单点故障，例如中央服务器。</li>
+<li>抗审查：如区块链等网络。</li>
+<li>P2P 计算还可以更好地利用资源。</li>
+</ul>
+</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>P2P 的复杂性</h3>
+<ul>
+<li>构建 P2P 系统要比传统 Client-Server 的系统复杂<ul>
+<li>传输：P2P 网络中的每个 Peer 都可以使用不同的协议，例如HTTP(s)、TCP、UDP等。</li>
+<li>身份：每个 Peer 都需要知道其想要连接并发送消息的 Peer 的身份。</li>
+<li>安全性：每个 Peer 都应该能够以安全的方式与其他 Peer 通信，而不存在第三方拦截或修改消息的风险等。</li>
+<li>路由：每个 Peer 可以通过各种路由（例如数据包在 IP 协议中的分布方式）从其他 Peer 接收消息，这意味着如果消息不是针对自身的，则每个 Peer 都应该能够将消息路由到其他 Peer。</li>
+<li>消息传递：P2P 网络应该能够发送点对点消息或组消息（以发布/订阅模式）。</li>
+</ul>
+</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>P2P 的要求</h3>
+<h4><strong>传输</strong></h4>
+<ul>
+<li>TCP/IP 和 UDP 协议无处不在，在编写网络应用程序时非常流行。但还有其他更高级别的协议，如 HTTP（TCP上分层）和 QUIC（UDP上分层）。</li>
+<li>P2P 网络中的每个 Peer 都应该能够启动到另一个节点的连接，并且由于网络中 peer 的多样性，能够通过多个协议监听传入的连接。</li>
+</ul>
+<h4><strong>Peer 身份</strong></h4>
+<ul>
+<li>与 web 开发领域不同，在 web 开发领域中，服务器由唯一的域名标识（例如 www.rust-lang.org，然后使用域名服务将其解析为服务器的IP地址）</li>
+<li>P2P 网络中的节点需要唯一身份，以便其他节点可以访问它们。</li>
+<li>P2P 网络中的节点使用公钥和私钥对（非对称公钥加密）与其他节点建立通信。<ul>
+<li>P2P 网络中的节点的身份称为 PeerId，是节点公钥的加密散列。</li>
+</ul>
+</li>
+</ul>
+<h4><strong>安全</strong></h4>
+<ul>
+<li>加密密钥对和 PeerId 使节点能够与它的 peers 建立安全、经过身份验证的通信通道。但这只是安全的一个方面。</li>
+<li>节点还需要实现授权框架，该框架为哪个节点可以执行何种操作建立规则。</li>
+<li>还有需要解决的网络级安全威胁，如 sybil 攻击（其中一个节点运营商利用不同身份启动大量节点，以获得网络中的优势地位）或 eclipse 攻击（其中一组恶意节点共谋以特定节点为目标，使后者无法到达任何合法节点）。</li>
+</ul>
+<h4><strong>Peer 路由</strong></h4>
+<ul>
+<li>P2P 网络中的节点首先需要找到其他 peer 才能进行通信。这是通过维护 peer 路由表来实现的，该表包含对网络中其他 peer 的引用。</li>
+<li>但是，在具有数千个或更多动态变化的节点（即节点加入和离开网络）的 P2P 网络中，任何单个节点都难以为网络中的所有节点维护完整而准确的路由表。Peer 路由使节点能够将不是给自己准备的消息路由到目标节点。</li>
+</ul>
+<h4><strong>消息</strong></h4>
+<ul>
+<li>P2P 网络中的节点可以向特定节点发送消息，但也可以参与广播消息协议。<ul>
+<li>例如，发布/订阅，其中节点注册对特定主题的兴趣（订阅），发送该主题消息的任何节点（发布）都由订阅该主题的所有节点接收。这种技术通常用于将消息的内容传输到整个网络。</li>
+</ul>
+</li>
+</ul>
+<h4><strong>流多路复用</strong></h4>
+<ul>
+<li>流多路复用（Stream multiplexing）是通过公共通信链路发送多个信息流的一种方法。</li>
+<li>在 P2P 的情况下，它允许多个独立的“逻辑”流共享一个公共 P2P 传输层。<ul>
+<li>当考虑到一个节点与不同 peers 具有多个通信流的可能性，或者两个远程节点之间也可能存在多个并发连接的可能性时，这一点变得很重要。</li>
+<li>流多路复用有助于优化 peer 之间建立连接的开销。</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注意：多路复用在后端服务开发中很常见，其中客户端可以与服务器建立底层网络连接，然后通过底层网络连接多路复用不同的流（每个流具有唯一的端口号）</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>Libp2p概述</strong></h2>
+<p>libp2p 是一个由协议、规范和库组成的模块化系统，它支持 P2P 应用程序的开发；</p>
+<p>它目前支持三种语言：JS、Go、Rust、JVM（Kotlin编写），未来将支持 Haskell、Python等；</p>
+<p>它被许多流行的项目使用，例如：IPFS、Filecoin 和 Polkadot 等；</p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>由于目前 rust-libp2p 每次更新版本时， API 的变化都比较大！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>所以在使用时需要参考 CHANGELOG 来进行代码迁移！</strong>&lt;/font&gt;</p>
+<p><strong>例如，Swarm 参考：</strong></p>
+<ul>
+<li>https://github.com/libp2p/rust-libp2p/blob/4fc911e6b39f8b2f097583fb60178948ae368528/swarm/CHANGELOG.md</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>Libp2p 主要模块</strong></h3>
+<ul>
+<li>传输（Transport）：负责从一个 peer 到另一个 peer 的数据的实际传输和接收</li>
+<li>身份（Identity）：libp2p 使用公钥密钥（PKI）作为 peer 节点身份的基础。使用加密算法为每个节点生成唯一的 peer id。</li>
+<li>安全（Security）：节点使用其私钥对消息进行签名。节点之间的传输连接可以升级为安全的加密通道，以便远程 peer 可以相互信任，并且没有第三方可以拦截它们之间的通信。</li>
+<li>Peer 发现（Peer Discovery）：允许 peer 在 libp2p 网络中查找并相互通信。</li>
+<li>Peer 路由（Peer Routing）：使用其他 peer 的知识信息来实现与 peer 节点的通信。</li>
+<li>内容发现（Content Discovery）：在不知道哪个 peer 节点拥有该内容的情况下，允许 peer 节点从其他 peer 节点获取部分内容。</li>
+<li>消息（Messaging）：其中发布/订阅：允许向对某个主题感兴趣的一组 peer 发送消息。</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3>P2P 节点的身份</h3>
+<p>P2P Node</p>
+<p>PeerId: 12d3k.....</p>
+<p>&lt;br/&gt;</p>
+<h3>公钥和私钥</h3>
+<ul>
+<li>加密身份使用公钥基础设施（PKI），广泛用于为用户、设备和应用程序提供唯一身份，并保护端到端通信的安全。</li>
+<li>它的工作原理是创建两个不同的加密密钥，也称为由私钥和公钥组成的密钥对，它们之间具有数学关系。</li>
+<li>密钥对有着广泛的应用，但在 P2P 网络中<ul>
+<li>节点使用密钥对彼此进行身份识别和身份验证。</li>
+<li>公钥可以在网络中与其他人共享，但决不能泄漏节点的私钥。</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p><strong>公钥和私钥的例子 - 访问传统的服务器</strong></p>
+<ul>
+<li>如果想连接到数据中心的远程服务器（使用SSH），用户可以生成密钥对并在远程服务器上配置公钥，从而授予用户访问权限。</li>
+<li>但远程服务器如何知道哪个用户是该公钥的所有者？<ul>
+<li>为了实现这一点，当连接（通过SSH）到远程服务器时，用户必须指定私钥（与存储在服务器上的公钥关联的）。</li>
+<li>私钥从不发送到远程服务器，但SSH客户端（在本地服务器上运行）使用用户的私钥向远程SSH服务器进行身份验证。</li>
+</ul>
+</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>多地址（Multiaddresses）</strong></h3>
+<ul>
+<li><p>在 libp2p 中，peer 的身份在其整个生命周期内都是稳定且可验证的。</p>
+</li>
+<li><p>但 libp2p 区分了 peer 的身份和位置。</p>
+<ul>
+<li>peer 的身份是 peer id。</li>
+</ul>
+</li>
+<li><p>peer 的位置是可以到达对方的网络地址。</p>
+<ul>
+<li>例如，可以通过 TCP、websockets、QUIC 或任何其他协议访问 peer。</li>
+<li>libp2p 将这些网络地址编码成一个自描述格式，它叫做 multiaddress（multiaddr）。</li>
+<li>因此，在 libp2p中，multiaddress 表示 peer 的位置。</li>
+</ul>
+</li>
+<li><p>当 p2p 网络上的节点共享其联系信息时，它们会发送一个保护网络地址和 peer id 的多地址（multiaddress）。</p>
+</li>
+<li><p>节点多地址的 peer id 表示如下：</p>
+<ul>
+<li><strong>/p2p/12D3KooWBu3fmjZgSmLkQ2p...</strong></li>
+</ul>
+</li>
+<li><p>多地址的网络地址表示如下：</p>
+<ul>
+<li><strong>/ip4/192.158.1.23/tcp/1234</strong></li>
+</ul>
+</li>
+<li><p>节点的完整地址就是 peer id 和网络地址的组合：</p>
+<ul>
+<li><strong>/ip4/192.158.1.23/tcp/1234/p2p/12D3KooWBu3fmjZgSmLkQ2p...</strong></li>
+</ul>
+</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>Swarm概述</strong></h3>
+<p>Swarm 是 libp2p 中给定 P2P 节点内的网络管理器模块；</p>
+<p>它维护从给定节点到远程节点的所有活动和挂起连接，并管理已打开的所有子流的状态；</p>
+<h4><strong>Swarm 的结构和上下文环境</strong></h4>
+<p>Swarm 代表了一个低级接口，并提供了对 libp2p 网络的细粒度控制。Swarm 是使用传输、网络行为和节点 peer id 的组合构建的。</p>
+<p>传输（Transport）会指明如何在网络上发送字节，而网络行为（Behaviour）会指明发送什么字节，发送给谁。</p>
+<p>多个网络行为可以与单个运行节点相关联。</p>
+<blockquote>
+<p><strong>需要注意的是：同一套客户端和服务端代码在 libp2p 网络的所有节点上运行，即每个Node即是客户端又是服务端；</strong></p>
+<p><strong>这与客户端和服务器具有不同代码库的 Client-Server 模型不同；</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3>发现 peer</h3>
+<p>mDNS 是由 RFC 6762（datatracker.ietf.org/doc/html/rfc6762）定义的协议，它将主机名解析为 IP 地址。</p>
+<p>在 libp2p 中，mDNS 用于发现网络上的其他节点。</p>
+<p>在 libp2p 中实现的网络行为 mDNS 将自动发现本地网络上的其他 libp2p 节点。</p>
+<blockquote>
+<p>详见：</p>
+<ul>
+<li>https://datatracker.ietf.org/doc/html/rfc6762</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>rust-libp2p实践</strong></h2>
+<p>上面介绍了关于 P2P 和 libp2p 中的一些概念；</p>
+<p><strong>最主要的是：Peer、非对称加密、Transport、Behaviour 以及 Swarm 的概念；</strong></p>
+<p>下面我们将使用 <a href="https://github.com/libp2p/rust-libp2p/">rust-libp2p</a> 来创建一个点对点的应用；</p>
+<blockquote>
+<p><strong>注意：</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>由于 <a href="https://github.com/libp2p/rust-libp2p/">rust-libp2p</a> 的 API 变化较大，这里我们采用的是目前最新的版本：<code>0.52</code>；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>该版本要求最低的 Rust 版本为 <code>1.71.0</code>，可能需要使用 <code>rustup update stable</code> 更新</strong>！&lt;/font&gt;</p>
+</blockquote>
+<p>接下来我们会创建一个简单的关于菜谱的应用：</p>
+<p>用户可以：</p>
+<ul>
+<li>列出当前和本机连接的所有对等点：<code>ls p</code></li>
+<li>创建菜谱（默认情况下不分享）：<code>create r recipe_name|recipe_ingredients|recipe_instruction</code></li>
+<li>发布菜谱来对他人分享：<code>publish r recipe_id</code></li>
+<li>列出本地菜谱：<code>ls r</code></li>
+<li>列出其他所有对等点分享的菜谱：<code>ls r all</code></li>
+<li>列出某个对等点分享的菜谱：<code>ls r 12D...(PeerId)</code></li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建项目</strong></h3>
+<p>使用 cargo 创建一个项目，增加依赖：</p>
+<pre><code class="language-toml">[dependencies]
+libp2p = { version = "0.52", features = ["tokio", "floodsub", "noise", "tcp", "yamux", "mdns", "macros", "identify"] }
+tokio = { version = "1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread", "fs", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+once_cell = "1.5"
+log = "0.4"
+pretty_env_logger = "0.4"
+anyhow = "1.0.77"
+</code></pre>
+<ul>
+<li>libp2p 和 tokio 分别提供了 p2p 和 async 支持；</li>
+<li>serde、serde_json 完成了 json 序列化；</li>
+<li>once_cell 用来初始化全局变量；</li>
+<li>log、pretty_env_logger 打印日志；</li>
+<li>anyhow 提供错误处理；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>全局变量</strong></h3>
+<p>前面提到，p2p 中使用非对称加密来确定一个 PeerId，这里我们使用全局变量来定义一个全局唯一的 PeerId：</p>
+<p>src/consts.rs</p>
+<pre><code class="language-rust">pub const STORAGE_FILE_PATH: &amp;str = "./recipes.json";
+
+/// Key pair enables us to communicate securely with the rest of the network, making sure no one can impersonate
+pub static KEYS: Lazy&lt;identity::Keypair&gt; = Lazy::new(identity::Keypair::generate_ed25519);
+
+/// A unique identifier for a specific peer within the whole peer to peer network
+///
+/// Derive from a key pair to ensure its uniqueness
+pub static PEER_ID: Lazy&lt;PeerId&gt; = Lazy::new(|| PeerId::from(KEYS.public()));
+
+/// A Topic is a concept from Floodsub, which is an implementation of libp2p’s pub/sub interface
+pub static TOPIC: Lazy&lt;Topic&gt; = Lazy::new(|| Topic::new("recipes"));
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code>STORAGE_FILE_PATH</code>：本地菜谱存储路径；</li>
+<li><code>KEYS</code>：非对称加密密钥对；</li>
+<li><code>PEER_ID</code>：通过密钥对生成的 PeerId；</li>
+<li><code>TOPIC</code>：在 Floodsub 模式中，对等节点可以订阅的 Topic，类似于 PubSub 模式；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>模型定义</strong></h3>
+<p>接下来定义几个结构体类型；</p>
+<p>存储菜谱信息 Recipe：</p>
+<p>src/models.rs</p>
+<pre><code class="language-rust">/// The recipe data for cook
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Recipe {
+    pub id: usize,
+    pub name: String,
+    pub ingredients: String,
+    pub instructions: String,
+    pub shared: bool,
+}
+</code></pre>
+<p>列出菜谱的模式（全部、根据 PeerId）：</p>
+<p>src/models.rs</p>
+<pre><code class="language-rust">/// Fetch data mode
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ListMode {
+    /// Fetch from all peers
+    All,
+
+    /// Fetch from one specific peer
+    One(String),
+}
+</code></pre>
+<p>列出菜谱的请求、响应：</p>
+<p>src/models.rs</p>
+<pre><code class="language-rust">#[derive(Debug, Serialize, Deserialize)]
+pub struct ListRequest {
+    pub mode: ListMode,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListResponse {
+    pub mode: ListMode,
+    pub data: Vec&lt;Recipe&gt;,
+    pub receiver: String,
+}
+</code></pre>
+<p>Tokio select 事件枚举（后面会用到）：</p>
+<p>src/models.rs</p>
+<pre><code class="language-rust">pub enum EventType {
+    Response(ListResponse),
+    Input(String),
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>创建并启动一个 Swarm</strong></h3>
+<p>前面介绍了 Swarm 的概念，Swarm 是一个管理器，管理所有节点的活动、挂起、连接等等；</p>
+<p>在创建一个 Swarm 时大概要配置以下几个内容：</p>
+<ul>
+<li><strong>身份验证（Identity）</strong>：身份验证的密钥对（KeyPair）；</li>
+<li><strong>运行时环境（Runtime）</strong>：例如 tokio、async_std 等；</li>
+<li><strong>连接类型（Transport）</strong>：TCP、UDP，以及连接对应的配置：超时时间、连接验证、多路复用等；</li>
+<li><strong>网络行为（NetworkBehaviour）</strong>：网络连接的类型，非常重要的概念，用于定义对等点之间网络行为，例如：FloodSub、mDNS 以及自定义 NetworkBehaviour；</li>
+<li><strong>Swarm 自身配置</strong>：Executor 线程池创建、管理等；</li>
+</ul>
+<p>下面就创建了一个 Swarm：</p>
+<p>src/main.rs</p>
+<pre><code class="language-rust">let mut swarm = libp2p::SwarmBuilder::with_existing_identity(KEYS.clone())
+  .with_tokio()
+  .with_tcp(
+    tcp::Config::default(),
+    noise::Config::new,
+    yamux::Config::default,
+  )?
+  .with_behaviour(|_key| RecipeBehaviour {
+    flood_sub: Floodsub::new(*PEER_ID),
+    mdns: mdns::tokio::Behaviour::new(mdns::Config::default(), KEYS.public().to_peer_id())
+    .expect("can create mdns"),
+  })?
+  .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
+  .build();
+</code></pre>
+<p>创建 Swarm 的部分：</p>
+<ul>
+<li><code>with_existing_identity</code>：指定了密钥对；</li>
+<li><code>with_tokio</code>：指定了异步运行时为 tokio；</li>
+<li><code>with_tcp</code>：使用 TCP 为 Transport；<ul>
+<li><code>tcp_config: libp2p_tcp::Config</code>：TCP 配置，例如连接超时时间等；</li>
+<li><code>security_upgrade: SecUpgrade</code>：TCP 安全连接配置，这里使用 noise 握手，即使用密钥对的方式；</li>
+<li><code>multiplexer_upgrade: MuxUpgrade</code>：连接多路复用配置，这里使用 yamux；</li>
+</ul>
+</li>
+<li><code>with_behaviour</code>：该 Swarm 网络行为定义，这里为自定义的 RecipeBehaviour，后文会介绍；</li>
+<li><code>with_swarm_config：Swarm</code> 自身配置，这里作为实验，配置了闲置超时时间为 5s；</li>
+</ul>
+<p>通过 <code>listen_on</code> 即可启动监听：</p>
+<p>src/main.rs</p>
+<pre><code class="language-rust">Swarm::listen_on(
+        &amp;mut swarm,
+        "/ip4/0.0.0.0/tcp/0"
+            .parse()
+            .expect("can get a local socket"),
+    )
+    .expect("swarm can be started");
+</code></pre>
+<p><strong>监听 IPV4 下任意 IP 来源（<code>0.0.0.0</code>）的连接，并且监听端口由系统分配（端口号为0）；</strong></p>
+<p>此外，这里我们还启动了 Swarm 中定义的 FloodSub 对我们 Topic 的监听：</p>
+<p>src/main.rs</p>
+<pre><code class="language-rust">swarm.behaviour_mut().flood_sub.subscribe(TOPIC.clone());
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>定义网络行为 NetworkBehaviour</strong></h3>
+<p>在上一小节创建 Swarm 时，我们使用了 RecipeBehaviour 我们自定义的行为；</p>
+<p>下面我们来看是如何定义的：</p>
+<p>src/behaviour.rs</p>
+<pre><code class="language-rust">#[derive(NetworkBehaviour)]
+#[behaviour(to_swarm = "RecipeBehaviourEvent")]
+pub struct RecipeBehaviour {
+    pub(crate) flood_sub: Floodsub,
+    pub(crate) mdns: mdns::tokio::Behaviour,
+}
+
+#[derive(Debug)]
+pub enum RecipeBehaviourEvent {
+    Floodsub(FloodsubEvent),
+    Mdns(mdns::Event),
+}
+
+impl From&lt;FloodsubEvent&gt; for RecipeBehaviourEvent {
+    fn from(event: FloodsubEvent) -&gt; RecipeBehaviourEvent {
+        RecipeBehaviourEvent::Floodsub(event)
+    }
+}
+
+impl From&lt;mdns::Event&gt; for RecipeBehaviourEvent {
+    fn from(event: mdns::Event) -&gt; RecipeBehaviourEvent {
+        RecipeBehaviourEvent::Mdns(event)
+    }
+}
+</code></pre>
+<p>首先是 RecipeBehaviour 结构体，其中包括了 FloodSub 和 mDNS 两个 Behaviour；</p>
+<p>分别处理了：消息广播和节点自动发现；</p>
+<p>&lt;font color="#f00"&gt;<strong>需要注意的是：RecipeBehaviour 结构体使用 <code>#[derive(NetworkBehaviour)]</code> 标识；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>此宏会自动实现部分逻辑，同时要求被标注的结构体只能含有实现了 NetworkBehaviour 的属性！</strong>&lt;/font&gt;</p>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>注意：之前可以在 NetworkBehaviour 结构体中使用 <code>#[behaviour(ignore)]</code> 的方式被废弃！</strong>&lt;/font&gt;</p>
+<p><strong>见：</strong></p>
+<ul>
+<li>https://github.com/libp2p/rust-libp2p/blob/4fc911e6b39f8b2f097583fb60178948ae368528/swarm/CHANGELOG.md#0380</li>
+</ul>
+</blockquote>
+<p>&lt;font color="#f00"&gt;<strong>同时，BehaviourEvent 的定义被抽取到了枚举中，通过 <code>#[behaviour(to_swarm = "RecipeBehaviourEvent")]</code> 来声明；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>后面可以看到，我们通过将 RecipeBehaviour 中定义的行为产生的事件统一使用 From Trait 转换为RecipeBehaviourEvent 来统一处理；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>这也是最新 rust-libp2p 官方推荐的方式！</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>处理输入请求</strong></h3>
+<p>在前面我们定义了我们应用允许用户操作的一些行为，用户可以：</p>
+<ul>
+<li>列出当前和本机连接的所有对等点：<code>ls p</code></li>
+<li>创建菜谱（默认情况下不分享）：<code>create r recipe_name|recipe_ingredients|recipe_instruction</code></li>
+<li>发布菜谱来对他人分享：<code>publish r recipe_id</code></li>
+<li>列出本地菜谱：<code>ls r</code></li>
+<li>列出其他所有对等点分享的菜谱：<code>ls r all</code></li>
+<li>列出某个对等点分享的菜谱：<code>ls r 12D...(PeerId)</code></li>
+</ul>
+<p>下面我们来简单实现：</p>
+<p>src/main.rs</p>
+<pre><code class="language-rust">let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
+let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+loop {
+  let evt = {
+    tokio::select! {
+      line = stdin.next_line() =&gt; Some(EventType::Input(line.expect("can get line").expect("can read line from stdin"))),
+      response = response_rcv.recv() =&gt; Some(EventType::Response(response.expect("response exists"))),
+      _ = handle_swarm_event(response_sender.clone(), &amp;mut swarm) =&gt; None,
+    }
+  };
+
+  if let Some(event) = evt {
+    match event {
+      EventType::Response(resp) =&gt; {
+        let json = serde_json::to_string(&amp;resp).expect("can jsonify response");
+        swarm
+        .behaviour_mut()
+        .flood_sub
+        .publish(TOPIC.clone(), json.as_bytes());
+      }
+      EventType::Input(line) =&gt; match line.as_str() {
+        "ls p" =&gt; handle_list_peers(&amp;mut swarm).await,
+        cmd if cmd.starts_with("create r") =&gt; handle_create_recipe(cmd).await,
+        cmd if cmd.starts_with("publish r") =&gt; handle_publish_recipe(cmd).await,
+        cmd if cmd.starts_with("ls r") =&gt; handle_list_recipes(cmd, &amp;mut swarm).await,
+        _ =&gt; error!("unknown command: {:?}", line),
+      },
+    }
+  }
+}
+</code></pre>
+<p>为了简单实现，我们使用 StdIn 作为输入；</p>
+<p>在 loop 无限循环中，我们使用 <code>tokio::select!</code> 来等待准备完成的事件：</p>
+<ul>
+<li><code>line</code>：用户完成了一行数据；</li>
+<li><code>response</code>：列表数据请求的响应；</li>
+<li>处理到来的 Swarm 事件： handle_swarm_event；</li>
+</ul>
+<p>上面的 select 最终会返回我们之前定义的 EventType 类型：</p>
+<pre><code class="language-rust">pub enum EventType {
+  Input(String),
+  Response(ListResponse),
+}
+</code></pre>
+<p>对于 Input 的处理比较简单，直接对应我们之前对于用户的定义处理即可：</p>
+<pre><code class="language-rust">EventType::Input(line) =&gt; match line.as_str() {
+  "ls p" =&gt; handle_list_peers(&amp;mut swarm).await,
+  cmd if cmd.starts_with("create r") =&gt; handle_create_recipe(cmd).await,
+  cmd if cmd.starts_with("publish r") =&gt; handle_publish_recipe(cmd).await,
+  cmd if cmd.starts_with("ls r") =&gt; handle_list_recipes(cmd, &amp;mut swarm).await,
+  _ =&gt; error!("unknown command: {:?}", line),
+},
+</code></pre>
+<p>对于 Response 则是将结果广播给其他所有 Node：</p>
+<pre><code class="language-rust">EventType::Response(resp) =&gt; {
+  let json = serde_json::to_string(&amp;resp).expect("can jsonify response");
+  swarm
+  .behaviour_mut()
+  .flood_sub
+  .publish(TOPIC.clone(), json.as_bytes());
+}
+</code></pre>
+<p>下面来看处理用户输入的逻辑；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>列出全部对等点</strong></h4>
+<p>使用 <code>ls p</code> 列出所有目前已连接的对等点：</p>
+<p>src/handlers.rs</p>
+<pre><code class="language-rust">pub async fn handle_list_peers(swarm: &amp;mut Swarm&lt;RecipeBehaviour&gt;) {
+    info!("Discovered Peers:");
+    let nodes = swarm.behaviour().mdns.discovered_nodes();
+
+    let mut unique_peers = HashSet::new();
+    for peer in nodes {
+        unique_peers.insert(peer);
+    }
+    unique_peers.iter().for_each(|p| info!("{}", p));
+}
+</code></pre>
+<p>通过 swarm 可以获取到 mdns 中自动发现的节点；</p>
+<p>逻辑非常简单，这里不再赘述；</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>创建Recipe</strong></h4>
+<p>使用 <code>create r recipe_name|recipe_ingredients|recipe_instruction</code> 创建一个新的 Recipe；</p>
+<p>创建Recipe 只涉及到本地数据，不涉及 p2p 部分，逻辑比较简单：</p>
+<p>src/handlers.rs</p>
+<pre><code class="language-rust">pub async fn handle_create_recipe(cmd: &amp;str) {
+  if let Some(rest) = cmd.strip_prefix("create r") {
+    let elements: Vec&lt;&amp;str&gt; = rest.split('|').collect();
+    if elements.len() &lt; 3 {
+      info!("too few arguments - Format: name|ingredients|instructions");
+    } else {
+      let name = elements.first().expect("name is there");
+      let ingredients = elements.get(1).expect("ingredients is there");
+      let instructions = elements.get(2).expect("instructions is there");
+      if let Err(e) = create_new_recipe(name, ingredients, instructions).await {
+        error!("error creating recipe: {}", e);
+      };
+    }
+  }
+}
+
+async fn create_new_recipe(name: &amp;str, ingredients: &amp;str, instructions: &amp;str) -&gt; Result&lt;()&gt; {
+  let mut local_recipes = read_local_recipes().await?;
+  let new_id = match local_recipes.iter().max_by_key(|r| r.id) {
+    Some(v) =&gt; v.id + 1,
+    None =&gt; 0,
+  };
+  local_recipes.push(Recipe {
+    id: new_id,
+    name: name.to_owned(),
+    ingredients: ingredients.to_owned(),
+    instructions: instructions.to_owned(),
+    shared: false,
+  });
+  write_local_recipes(&amp;local_recipes).await?;
+
+  info!("Created recipe:");
+  info!("Name: {}", name);
+  info!("Ingredients: {}", ingredients);
+  info!("Instructions:: {}", instructions);
+
+  Ok(())
+}
+
+async fn write_local_recipes(recipes: &amp;Vec&lt;Recipe&gt;) -&gt; Result&lt;()&gt; {
+  let json = serde_json::to_string(&amp;recipes)?;
+  fs::write(STORAGE_FILE_PATH, &amp;json).await?;
+  Ok(())
+}
+
+async fn read_local_recipes() -&gt; Result&lt;Vec&lt;Recipe&gt;&gt; {
+  let content = fs::read(STORAGE_FILE_PATH).await?;
+  let result = serde_json::from_slice(&amp;content)?;
+  Ok(result)
+}
+</code></pre>
+<p>逻辑比较简单，就是解析命令行传入的参数，创建结构体，先加载数据文件的数据，然后添加一条再写回文件；</p>
+<blockquote>
+<p><strong>频繁读写文件的效率非常的低，这里只是作为例子演示简单实现！</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h4><strong>发布Recipe</strong></h4>
+<p>发布菜谱来对他人分享：<code>publish r recipe_id</code></p>
+<p>发布 Recipe 的逻辑也非常简单：</p>
+<p>src/handlers.rs</p>
+<pre><code class="language-rust">pub async fn handle_publish_recipe(cmd: &amp;str) {
+  if let Some(rest) = cmd.strip_prefix("publish r") {
+    match rest.trim().parse::&lt;usize&gt;() {
+      Ok(id) =&gt; {
+        if let Err(e) = publish_recipe(id).await {
+          info!("error publishing recipe with id {}, {}", id, e)
+        } else {
+          info!("Published Recipe with id: {}", id);
+        }
+      }
+      Err(e) =&gt; error!("invalid id: {}, {}", rest.trim(), e),
+    };
+  }
+}
+
+async fn publish_recipe(id: usize) -&gt; Result&lt;()&gt; {
+  let mut local_recipes = read_local_recipes().await?;
+  local_recipes
+  .iter_mut()
+  .filter(|r| r.id == id)
+  .for_each(|r| r.shared = true);
+  write_local_recipes(&amp;local_recipes).await?;
+  Ok(())
+}
+</code></pre>
+<p>首先解析命令行传入的Recipe Id，然后修改文件中对应 Id 的 shared 字段，改为 true；</p>
+<blockquote>
+<p><strong>和创建Recipe类似，这里也会频繁读写文件，效率较低，仅作为展示例子；</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h3><strong>查询菜谱（发送消息）</strong></h3>
+<p>查询菜谱比较复杂，可以通过下面三种形式：</p>
+<ul>
+<li>列出本地菜谱：<code>ls r</code></li>
+<li>列出其他所有对等点分享的菜谱：<code>ls r all</code></li>
+<li>列出某个对等点分享的菜谱：<code>ls r 12D...(PeerId)</code></li>
+</ul>
+<p>下面来看实现：</p>
+<p>src/handlers.rs</p>
+<pre><code class="language-rust">pub async fn handle_list_recipes(cmd: &amp;str, swarm: &amp;mut Swarm&lt;RecipeBehaviour&gt;) {
+  let rest = cmd.strip_prefix("ls r ");
+  match rest {
+    Some("all") =&gt; {
+      let req = ListRequest {
+        mode: ListMode::All,
+      };
+      let json = serde_json::to_string(&amp;req).expect("can jsonify request");
+      swarm
+      .behaviour_mut()
+      .flood_sub
+      .publish(TOPIC.clone(), json.as_bytes());
+    }
+    Some(recipes_peer_id) =&gt; {
+      let req = ListRequest {
+        mode: ListMode::One(recipes_peer_id.to_owned()),
+      };
+      let json = serde_json::to_string(&amp;req).expect("can jsonify request");
+      swarm
+      .behaviour_mut()
+      .flood_sub
+      .publish(TOPIC.clone(), json.as_bytes());
+    }
+    None =&gt; {
+      match read_local_recipes().await {
+        Ok(v) =&gt; {
+          info!("Local Recipes ({})", v.len());
+          v.iter().for_each(|r| info!("{:?}", r));
+        }
+        Err(e) =&gt; error!("error fetching local recipes: {}", e),
+      };
+    }
+  };
+}
+</code></pre>
+<p>首先，解析命令行参数：</p>
+<ul>
+<li><strong>如果为 all</strong>：则使用 FloodSub 向网络中所有其他 Node 广播 <code>ListMode::All</code> 请求；</li>
+<li><strong>如果为 <code>recipes_peer_id</code></strong>：则广播 <code>ListMode::One(recipes_peer_id.to_owned())</code> 请求；</li>
+<li>否则，为查询本地 Recipe 列表，直接读取文件返回即可！</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>响应消息</strong></h3>
+<p>前面我们通过 FloodSub 向对等网中的其他节点发送了请求，那么如何响应消息呢？</p>
+<p>这就是 Swarm 自定义逻辑中的核心部分了！</p>
+<p>注意到，在前面的 处理输入请求 一小节，我们在 <code>tokio::select!</code> 中定义了：</p>
+<pre><code class="language-rust">tokio::select! {
+  ...
+  _ = handle_swarm_event(response_sender.clone(), &amp;mut swarm) =&gt; None,
+}
+</code></pre>
+<p>我们正是在这个函数中处理的 BehaviourEvent 逻辑，下面来看：</p>
+<p>src/handlers.rs</p>
+<pre><code class="language-rust">pub async fn handle_swarm_event(
+  response_sender: mpsc::UnboundedSender&lt;ListResponse&gt;,
+  swarm: &amp;mut Swarm&lt;RecipeBehaviour&gt;,
+) {
+  let event = swarm.select_next_some().await;
+  info!("Income swarm Event: {:?}", event);
+
+  match event {
+    SwarmEvent::Behaviour(recipe_behaviours) =&gt; match recipe_behaviours {
+      RecipeBehaviourEvent::Floodsub(flood_sub_event) =&gt; match flood_sub_event {
+        FloodsubEvent::Message(msg) =&gt; {
+          if let Ok(resp) = serde_json::from_slice::&lt;ListResponse&gt;(&amp;msg.data) {
+            if resp.receiver == PEER_ID.to_string() {
+              info!("Response from {}:", msg.source);
+              resp.data.iter().for_each(|r| info!("{:?}", r));
+            }
+          } else if let Ok(req) = serde_json::from_slice::&lt;ListRequest&gt;(&amp;msg.data) {
+            match req.mode {
+              ListMode::All =&gt; {
+                info!("Received ALL req: {:?} from {:?}", req, msg.source);
+                respond_with_public_recipes(
+                  response_sender.clone(),
+                  msg.source.to_string(),
+                );
+              }
+              ListMode::One(ref peer_id) =&gt; {
+                if peer_id == &amp;PEER_ID.to_string() {
+                  info!("Received req: {:?} from {:?}", req, msg.source);
+                  respond_with_public_recipes(
+                    response_sender.clone(),
+                    msg.source.to_string(),
+                  );
+                }
+              }
+            }
+          }
+        }
+        FloodsubEvent::Subscribed { .. } =&gt; {}
+        FloodsubEvent::Unsubscribed { .. } =&gt; {}
+      },
+      RecipeBehaviourEvent::Mdns(mdns_event) =&gt; match mdns_event {
+        Event::Discovered(discovered_list) =&gt; {
+          let behavior_mut = swarm.behaviour_mut();
+          for (peer, _addr) in discovered_list {
+            behavior_mut.flood_sub.add_node_to_partial_view(peer);
+          }
+        }
+        Event::Expired(expired_list) =&gt; {
+          let behavior_mut = swarm.behaviour_mut();
+          for (peer, _addr) in expired_list {
+            if !behavior_mut.mdns.has_node(&amp;peer) {
+              behavior_mut.flood_sub.remove_node_from_partial_view(&amp;peer);
+            }
+          }
+        }
+      },
+    },
+    SwarmEvent::ConnectionEstablished {
+      peer_id,
+      connection_id,
+      endpoint,
+      num_established,
+      ..
+    } =&gt; {
+      debug!("[Connection established] peer_id: {}, connection_id: {}, endpoint: {:?}, num_established: {:?}", peer_id, connection_id, endpoint, num_established);
+    }
+    SwarmEvent::ConnectionClosed {
+      peer_id,
+      connection_id,
+      endpoint,
+      num_established,
+      ..
+    } =&gt; {
+      debug!("[Connection closed] peer_id: {}, connection_id: {}, endpoint: {:?}, num_established: {:?}", peer_id, connection_id, endpoint, num_established);
+    }
+    SwarmEvent::IncomingConnection { .. } =&gt; {}
+    SwarmEvent::IncomingConnectionError { .. } =&gt; {}
+    SwarmEvent::OutgoingConnectionError { .. } =&gt; {}
+    SwarmEvent::NewListenAddr { .. } =&gt; {}
+    SwarmEvent::ExpiredListenAddr { .. } =&gt; {}
+    SwarmEvent::ListenerClosed { .. } =&gt; {}
+    SwarmEvent::ListenerError { .. } =&gt; {}
+    SwarmEvent::Dialing { .. } =&gt; {}
+  };
+}
+</code></pre>
+<p>可以看到，我们正是通过 <code>let event = swarm.select_next_some().await</code> 来获取的 Swarm 中所有的 Event 事件！</p>
+<p><strong>随后我们即可枚举全部的 Event 事件：</strong></p>
+<ul>
+<li><code>SwarmEvent::Behaviour</code>：用户自定义的事件，也就是上面我们通过 <code>to_swarm</code> 宏指定的 Enum 类型！</li>
+<li><code>SwarmEvent::ConnectionEstablished</code>：连接建立事件；</li>
+<li><code>SwarmEvent::ConnectionClosed</code>：连接断开事件；</li>
+<li>……</li>
+</ul>
+<blockquote>
+<p><strong>可以看到，得益于 Rust 强大的枚举类型，我们可以非常清晰的处理各种事件！</strong></p>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h4><strong>处理FloodSubEvent</strong></h4>
+<p>处理 FloodSubEvent 的逻辑如下：</p>
+<pre><code class="language-rust">RecipeBehaviourEvent::Floodsub(flood_sub_event) =&gt; match flood_sub_event {
+  FloodsubEvent::Message(msg) =&gt; {
+    if let Ok(resp) = serde_json::from_slice::&lt;ListResponse&gt;(&amp;msg.data) {
+      if resp.receiver == PEER_ID.to_string() {
+        info!("Response from {}:", msg.source);
+        resp.data.iter().for_each(|r| info!("{:?}", r));
+      }
+    } else if let Ok(req) = serde_json::from_slice::&lt;ListRequest&gt;(&amp;msg.data) {
+      match req.mode {
+        ListMode::All =&gt; {
+          info!("Received ALL req: {:?} from {:?}", req, msg.source);
+          respond_with_public_recipes(
+            response_sender.clone(),
+            msg.source.to_string(),
+          );
+        }
+        ListMode::One(ref peer_id) =&gt; {
+          if peer_id == &amp;PEER_ID.to_string() {
+            info!("Received req: {:?} from {:?}", req, msg.source);
+            respond_with_public_recipes(
+              response_sender.clone(),
+              msg.source.to_string(),
+            );
+          }
+        }
+      }
+    }
+  }
+  FloodsubEvent::Subscribed { .. } =&gt; {}
+  FloodsubEvent::Unsubscribed { .. } =&gt; {}
+},
+</code></pre>
+<p>首先我们判断：</p>
+<ul>
+<li>如果接收到的是其他节点广播的 ListResponse，并且 receiver 为本机 PeerId 则直接输出；</li>
+<li>如果接收到的是 ListRequest，则判断：<ul>
+<li>如果为 <code>ListMode::All</code> 查询模式，则读取本机数据，并返回；</li>
+<li>如果为 <code>ListMode::One(ref peer_id)</code>，则判断 PeerId 为本机才返回；</li>
+</ul>
+</li>
+</ul>
+<p><code>respond_with_public_recipes</code> 的逻辑如下：</p>
+<pre><code class="language-rust">fn respond_with_public_recipes(sender: mpsc::UnboundedSender&lt;ListResponse&gt;, receiver: String) {
+  tokio::spawn(async move {
+    match read_local_recipes().await {
+      Ok(recipes) =&gt; {
+        let resp = ListResponse {
+          mode: ListMode::All,
+          receiver,
+          data: recipes.into_iter().filter(|r| r.shared).collect(),
+        };
+        if let Err(e) = sender.send(resp) {
+          error!("error sending response via channel, {}", e);
+        }
+      }
+      Err(e) =&gt; error!("error fetching local recipes to answer ALL request, {}", e),
+    }
+  });
+}
+</code></pre>
+<p>读取本地 Recipe 数据，并通过 sender 发送即可！</p>
+<p>在 <code>tokio::select!</code> 中会接收响应，并广播出去：</p>
+<pre><code class="language-rust">tokio::select! {
+  response = response_rcv.recv() =&gt; Some(EventType::Response(response.expect("response exists"))),
+}
+
+EventType::Response(resp) =&gt; {
+  let json = serde_json::to_string(&amp;resp).expect("can jsonify response");
+  swarm
+  .behaviour_mut()
+  .flood_sub
+  .publish(TOPIC.clone(), json.as_bytes());
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h4><strong>处理mDNSEvent</strong></h4>
+<p>mDNS 包括了两个事件：</p>
+<pre><code class="language-rust">#[derive(Debug, Clone)]
+pub enum Event {
+  /// Discovered nodes through mDNS.
+  Discovered(Vec&lt;(PeerId, Multiaddr)&gt;),
+
+  /// The given combinations of `PeerId` and `Multiaddr` have expired.
+  ///
+  /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
+  /// been refreshed, we remove it from the list and emit it as an `Expired` event.
+  Expired(Vec&lt;(PeerId, Multiaddr)&gt;),
+}
+
+</code></pre>
+<p>分别为：</p>
+<ul>
+<li><code>Discovered(Vec&lt;(PeerId, Multiaddr)&gt;)</code>：已发现的节点；</li>
+<li><code>Expired(Vec&lt;(PeerId, Multiaddr)&gt;)</code>：新节点过期；</li>
+</ul>
+<p>处理逻辑如下：</p>
+<p>src/handlers.rs</p>
+<pre><code class="language-rust">RecipeBehaviourEvent::Mdns(mdns_event) =&gt; match mdns_event {
+  Event::Discovered(discovered_list) =&gt; {
+    let behavior_mut = swarm.behaviour_mut();
+    for (peer, _addr) in discovered_list {
+      behavior_mut.flood_sub.add_node_to_partial_view(peer);
+    }
+  }
+  Event::Expired(expired_list) =&gt; {
+    let behavior_mut = swarm.behaviour_mut();
+    for (peer, _addr) in expired_list {
+      if !behavior_mut.mdns.has_node(&amp;peer) {
+        behavior_mut.flood_sub.remove_node_from_partial_view(&amp;peer);
+      }
+    }
+  }
+},
+</code></pre>
+<p>即：</p>
+<ul>
+<li>当发现了节点，这将其加入到 FloodSub 广播的节点中；</li>
+<li>如果节点过期，则将该节点从 FloodSub 广播列表中去除；</li>
+</ul>
+<p>逻辑非常简单；</p>
+<p>至此，我们的应用开发完毕！</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>应用测试</strong></h3>
+<p>我们可以通过 <code>cargo run</code> 在本机创建多个节点；</p>
+<pre><code class="language-shell">cargo run
+
+INFO  rust_learn &gt; Peer Id: 12D3KooWA7xhiEmFxikn9aiWcffkhDACDhz1rRPXxkC4yxgnzJCT
+INFO  libp2p_mdns::behaviour::iface &gt; creating instance on iface 192.168.31.22
+INFO  rust_learn::handlers          &gt; Income swarm Event: NewListenAddr { listener_id: ListenerId(1), address: "/ip4/127.0.0.1/tcp/65248" }
+INFO  rust_learn::handlers          &gt; Income swarm Event: NewListenAddr { listener_id: ListenerId(1), address: "/ip4/192.168.31.22/tcp/65248" }
+INFO  libp2p_mdns::behaviour        &gt; discovered: 12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7 /ip4/192.168.31.22/tcp/65247
+INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Mdns(Discovered([(PeerId("12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7"), "/ip4/192.168.31.22/tcp/65247")])))
+INFO  rust_learn::handlers          &gt; Income swarm Event: Dialing { peer_id: Some(PeerId("12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7")), connection_id: ConnectionId(1) }
+INFO  rust_learn::handlers          &gt; Income swarm Event: ConnectionEstablished { peer_id: PeerId("12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7"), connection_id: ConnectionId(1), endpoint: Dialer { address: "/ip4/192.168.31.22/tcp/65247/p2p/12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7", role_override: Dialer }, num_established: 1, concurrent_dial_errors: Some([]), established_in: 7.355625ms }
+INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Floodsub(Subscribed { peer_id: PeerId("12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7"), topic: Topic("recipes") }))
+INFO  libp2p_mdns::behaviour        &gt; discovered: 12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz /ip4/192.168.31.22/tcp/65250
+INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Mdns(Discovered([(PeerId("12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz"), "/ip4/192.168.31.22/tcp/65250")])))
+INFO  rust_learn::handlers          &gt; Income swarm Event: Dialing { peer_id: Some(PeerId("12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz")), connection_id: ConnectionId(2) }
+INFO  rust_learn::handlers          &gt; Income swarm Event: IncomingConnection { connection_id: ConnectionId(3), local_addr: "/ip4/192.168.31.22/tcp/65248", send_back_addr: "/ip4/192.168.31.22/tcp/65253" }
+INFO  rust_learn::handlers          &gt; Income swarm Event: ConnectionEstablished { peer_id: PeerId("12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz"), connection_id: ConnectionId(2), endpoint: Dialer { address: "/ip4/192.168.31.22/tcp/65250/p2p/12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz", role_override: Dialer }, num_established: 1, concurrent_dial_errors: Some([]), established_in: 5.762334ms }
+INFO  rust_learn::handlers          &gt; Income swarm Event: ConnectionEstablished { peer_id: PeerId("12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz"), connection_id: ConnectionId(3), endpoint: Listener { local_addr: "/ip4/192.168.31.22/tcp/65248", send_back_addr: "/ip4/192.168.31.22/tcp/65253" }, num_established: 2, concurrent_dial_errors: None, established_in: 5.212125ms }
+INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Floodsub(Subscribed { peer_id: PeerId("12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz"), topic: Topic("recipes") }))
+</code></pre>
+<p>查看所有对等节点：</p>
+<pre><code class="language-shell">ls p
+
+ INFO  rust_learn::handlers          &gt; Discovered Peers:
+ INFO  rust_learn::handlers          &gt; 12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7
+ INFO  rust_learn::handlers          &gt; 12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz
+</code></pre>
+<p>创建 Recipe：</p>
+<pre><code class="language-shell">create r name|recipe_ingredients|recipe_instruction
+
+ INFO  rust_learn::handlers          &gt; Created recipe:
+ INFO  rust_learn::handlers          &gt; Name:  name
+ INFO  rust_learn::handlers          &gt; Ingredients: recipe_ingredients
+ INFO  rust_learn::handlers          &gt; Instructions:: recipe_instruction
+</code></pre>
+<p>列出本地 Recipe：</p>
+<pre><code class="language-shell">ls r
+
+ INFO  rust_learn::handlers          &gt; Local Recipes (6)
+ INFO  rust_learn::handlers          &gt; Recipe { id: 0, name: " Coffee", ingredients: "Coffee", instructions: "Make Coffee", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 1, name: " Tea", ingredients: "Tea, Water", instructions: "Boil Water, add tea", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 2, name: " Carrot Cake", ingredients: "Carrots, Cake", instructions: "Make Carrot Cake", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 3, name: " Name", ingredients: "Ingredients", instructions: "Instructions", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 4, name: " name", ingredients: "recipeIngredients", instructions: "instruction", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 5, name: " name", ingredients: "recipe_ingredients", instructions: "recipe_instruction", shared: false }
+</code></pre>
+<p>列出所有对等点 Recipe：</p>
+<pre><code class="language-shell">ls r all
+
+ INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Floodsub(Message(FloodsubMessage { source: PeerId("12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7"), data: [123, 34, 109, 111,...
+ INFO  rust_learn::handlers          &gt; Response from 12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7:
+ INFO  rust_learn::handlers          &gt; Recipe { id: 0, name: " Coffee", ingredients: "Coffee", instructions: "Make Coffee", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 1, name: " Tea", ingredients: "Tea, Water", instructions: "Boil Water, add tea", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 2, name: " Carrot Cake", ingredients: "Carrots, Cake", instructions: "Make Carrot Cake", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 3, name: " Name", ingredients: "Ingredients", instructions: "Instructions", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 4, name: " name", ingredients: "recipeIngredients", instructions: "instruction", shared: true }
+ INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Floodsub(Message(FloodsubMessage { source: PeerId("12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz"), data: [123, 34, 109....
+ INFO  rust_learn::handlers          &gt; Response from 12D3KooWCWesVZsAoDaFs7UZYXV6gTNd56UPMoiWfxWFgvLCJZhz:
+ INFO  rust_learn::handlers          &gt; Recipe { id: 0, name: " Coffee", ingredients: "Coffee", instructions: "Make Coffee", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 1, name: " Tea", ingredients: "Tea, Water", instructions: "Boil Water, add tea", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 2, name: " Carrot Cake", ingredients: "Carrots, Cake", instructions: "Make Carrot Cake", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 3, name: " Name", ingredients: "Ingredients", instructions: "Instructions", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 4, name: " name", ingredients: "recipeIngredients", instructions: "instruction", shared: true }
+</code></pre>
+<p>列出某个对等点 Recipe：</p>
+<pre><code class="language-shell">ls r 12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7
+
+ INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Floodsub(Message(FloodsubMessage { source: PeerId("12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7"), data: [123, 34, 109, 111, 100, 101, 34, ...
+ INFO  rust_learn::handlers          &gt; Response from 12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7:
+ INFO  rust_learn::handlers          &gt; Recipe { id: 0, name: " Coffee", ingredients: "Coffee", instructions: "Make Coffee", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 1, name: " Tea", ingredients: "Tea, Water", instructions: "Boil Water, add tea", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 2, name: " Carrot Cake", ingredients: "Carrots, Cake", instructions: "Make Carrot Cake", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 3, name: " Name", ingredients: "Ingredients", instructions: "Instructions", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 4, name: " name", ingredients: "recipeIngredients", instructions: "instruction", shared: true }
+</code></pre>
+<p>发布 Recipe：</p>
+<pre><code class="language-shell">publish r 5
+
+ INFO  rust_learn::handlers          &gt; Published Recipe with id: 5
+</code></pre>
+<p>再次列出远程节点中的 Recipe：</p>
+<pre><code class="language-shell">ls r 12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7
+
+ INFO  rust_learn::handlers          &gt; Income swarm Event: Behaviour(Floodsub(Message(FloodsubMessage { source: PeerId("12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7"), data: [123, 34, 109, ...
+ INFO  rust_learn::handlers          &gt; Response from 12D3KooWGEGJQhFaR4ZzJ15CUvMVVu1wcaGd3i7yzvHHYFexbfT7:
+ INFO  rust_learn::handlers          &gt; Recipe { id: 0, name: " Coffee", ingredients: "Coffee", instructions: "Make Coffee", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 1, name: " Tea", ingredients: "Tea, Water", instructions: "Boil Water, add tea", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 2, name: " Carrot Cake", ingredients: "Carrots, Cake", instructions: "Make Carrot Cake", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 3, name: " Name", ingredients: "Ingredients", instructions: "Instructions", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 4, name: " name", ingredients: "recipeIngredients", instructions: "instruction", shared: true }
+ INFO  rust_learn::handlers          &gt; Recipe { id: 5, name: " name", ingredients: "recipe_ingredients", instructions: "recipe_instruction", shared: true }
+</code></pre>
+<p>由于多个节点共享的是同一份数据文件，刚刚我们发布了一个新的 Recipe，所以刚刚发布的 Recipe 也在这里显示了！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>小结</strong></h2>
+<p>相信通过上面的讲解，你已经了解了 libp2p 的基本使用；</p>
+<p>P2P 技术目前广泛应用在区块链等领域，相信 libp2p 也一定会被越来越多的人使用！</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/proj/p2p-demo</li>
+</ul>
+<p>参考文章：</p>
+<ul>
+<li>https://github.com/libp2p/rust-libp2p/blob/4fc911e6b39f8b2f097583fb60178948ae368528/swarm/CHANGELOG.md</li>
+<li>https://github.com/libp2p/rust-libp2p/blob/4fc911e6b39f8b2f097583fb60178948ae368528/examples/chat/src/main.rs</li>
+<li>https://github.com/zupzup/rust-peer-to-peer-example/</li>
+<li>https://docs.rs/libp2p/0.53.2/libp2p/tutorials/ping/index.html</li>
+<li>https://datatracker.ietf.org/doc/html/rfc6762</li>
+<li>https://blog.logrocket.com/libp2p-tutorial-build-a-peer-to-peer-app-in-rust/</li>
+<li>https://www.cnblogs.com/QiaoPengjun/p/17418735.html</li>
+</ul>
+<p>&lt;br/&gt;</p>

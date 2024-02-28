@@ -1,0 +1,156 @@
+<h2>原文：<a href="https://blog.biezhi.me/2019-01-21-zero-copy-user-mode-perspective.html">零拷贝 - 用户态分析</a></h2>
+<hr/>
+<h2>layout: post
+title: 零拷贝 - 用户态分析
+tags: ["linux", "翻译"]</h2>
+<p>现在几乎所有人都听过 Linux 下的零拷贝技术，但我经常遇到对这个问题不能深入理解的人。所以我写了这篇文章，来深入研究这些问题。本文通过用户态程序的角度来看零拷贝，因此我有意忽略了内核级别的实现。</p>
+<h1>什么是 “零拷贝” ？</h1>
+<p>为了更好的理解这个问题，我们首先需要了解问题本身。来看一个网络服务的简单运行过程，在这个过程中将磁盘的文件读取到缓冲区，然后通过网络发送给客户端。下面是示例代码：</p>
+<pre><code class="language-c">read(file, tmp_buf, len); 
+write(socket, tmp_buf, len);
+</code></pre>
+<p>这个例子看起来非常简单，你可能会认为只有两次系统调用不会产生太多的系统开销。实际上并非如此，在这两次调用之后，数据至少被拷贝了 4 次，同时还执行了很多次 <em>用户态/内核态</em> 的上下文切换。（实际上这个过程是非常复杂的，为了解释我尽可能保持简单）为了更好的理解这个过程，请查看下图中的上下文切换，图片上部分展示上下文切换过程，下部分展示拷贝操作。</p>
+<p>![两次系统调用]({{ "/public/images/2019/01/sys_call_copy.jpg" | prepend: site.cdnurl }} "两次系统调用")</p>
+<ol>
+<li>程序调用 <code>read</code> 产生一次用户态到内核态的上下文切换。DMA 模块从磁盘读取文件内容，将其拷贝到内核空间的缓冲区，完成第 1 次拷贝。</li>
+<li>数据从内核缓冲区拷贝到用户空间缓冲区，之后系统调用 <code>read</code> 返回，这回导致从内核空间到用户空间的上下文切换。这个时候数据存储在用户空间的 <code>tmp_buf</code> 缓冲区内，可以后续的操作了。</li>
+<li>程序调用 <code>write</code> 产生一次用户态到内核态的上下文切换。数据从用户空间缓冲区被拷贝到内核空间缓冲区，完成第 3 次拷贝。但是这次数据存储在一个和 <code>socket</code> 相关的缓冲区中，而不是第一步的缓冲区。</li>
+<li><code>write</code> 调用返回，产生第 4 个上下文切换。第 4 次拷贝在 DMA 模块将数据从内核空间缓冲区传递至协议引擎的时候发生，这与我们的代码的执行是独立且异步发生的。你可能会疑惑：“为何要说是独立、异步？难道不是在 <code>write</code> 系统调用返回前数据已经被传送了？write 系统调用的返回，并不意味着传输成功——它甚至无法保证传输的开始。调用的返回，只是表明以太网驱动程序在其传输队列中有空位，并已经接受我们的数据用于传输。可能有众多的数据排在我们的数据之前。除非驱动程序或硬件采用优先级队列的方法，各组数据是依照FIFO的次序被传输的(上图中叉状的 DMA copy 表明这最后一次拷贝可以被延后)。</li>
+</ol>
+<h1>mmap</h1>
+<p>如你所见，上面的数据拷贝非常多，我们可以减少一些重复拷贝来减少开销，提升性能。作为一名驱动程序开发人员，我的工作围绕着拥有先进特性的硬件展开。某些硬件支持完全绕开内存，将数据直接传送给其他设备。这个特性消除了系统内存中的数据副本，因此是一种很好的选择，但并不是所有的硬件都支持。此外，来自于硬盘的数据必须重新打包(地址连续)才能用于网络传输，这也引入了某些复杂性。为了减少开销，我们可以从消除内核缓冲区与用户缓冲区之间的拷贝开始。</p>
+<p>减少数据拷贝的一种方法是将 <code>read</code> 调用改为 <code>mmap</code>。例如：</p>
+<pre><code class="language-c">tmp_buf = mmap(file, len); 
+write(socket, tmp_buf, len);
+</code></pre>
+<p>为了方便你理解，请参考下图的过程。</p>
+<p>![mmap调用]({{ "/public/images/2019/01/sys_mmap.jpg" | prepend: site.cdnurl }} "mmap 调用")</p>
+<ol>
+<li><code>mmap</code> 调用导致文件内容通过 DMA 模块拷贝到内核缓冲区。然后与用户进程共享缓冲区，这样不会在内核缓冲区和用户空间之间产生任何拷贝。</li>
+<li><code>write</code> 调用导致内核将数据从原始内核缓冲区拷贝到与 <code>socket</code> 关联的内核缓冲区中。</li>
+<li>第 3 次数据拷贝发生在 DMA 模块将数据从 <code>socket</code> 缓冲区传递给协议引擎时。</li>
+</ol>
+<p>通过调用 <code>mmap</code> 而不是 <code>read</code>，我们已经将内核拷贝数据操作减半。当传输大量数据时，效果会非常好。然而，这种改进并非没有代价；使用 <code>mmap + write</code> 方式存在一些隐藏的陷阱。当内存中做文件映射后调用 <code>write</code>，与此同时另一个进程截断这个文件时。此时 <code>write</code> 调用的进程会收到一个 <code>SIGBUS</code> 中断信号，因为当前进程访问了非法内存地址。这个信号默认情况下会杀死当前进程并生成 <code>dump</code> 文件——而这对于网络服务器程序而言不是最期望的操作。有两种方式可用于解决该问题：</p>
+<p>第一种方法是处理收到的 <code>SIGBUS</code> 信号，然后在处理程序中简单地调用 <code>return</code>。通过这样做，<code>write</code> 调用会返回它在被中断之前写入的字节数，并且将全局变量 <code>errno</code> 设置为成功。我认为这是一个治标不治本的解决方案。因为收到 <code>SIGBUS</code> 信号表示程序发生了严重的错误，我不推荐使用它作为解决方案。</p>
+<p>第二种方式应用了文件租借（在Microsoft Windows系统中被称为“机会锁”)。这才是解劝前面问题的正确方式。通过对文件描述符执行租借，可以同内核就某个特定文件达成租约。从内核可以获得读/写租约。当另外一个进程试图将你正在传输的文件截断时，内核会向你的进程发送实时信号——RT_SIGNAL_LEASE。该信号通知你的进程，内核即将终止在该文件上你曾获得的租约。这样，在write调用访问非法内存地址、并被随后接收到的SIGBUS信号杀死之前，write系统调用就被RT_SIGNAL_LEASE信号中断了。write的返回值是在被中断前已写的字节数，全局变量errno设置为成功。下面是一段展示如何从内核获得租约的示例代码。</p>
+<pre><code class="language-c">if (fcntl(fd, F_SETSIG, RT_SIGNAL_LEASE) == -1) {
+    perror("kernel lease set signal");
+    return -1;
+}
+/* l_type can be F_RDLCK F_WRLCK */
+if (fcntl(fd, F_SETLEASE, l_type)) {
+    perror("kernel lease set type");
+    return -1;
+}
+</code></pre>
+<p>在对文件进行映射前，应该先获得租约，并在结束 <code>write</code> 操作后结束租约。这是通过在 <code>fcntl</code> 调用中指定租约类型为 <code>F_UNLCK</code> 来实现的。</p>
+<h1>Sendfile</h1>
+<p>在内核的 2.1 版本中，引入了 <code>sendfile</code> 系统调用，目的是简化通过网络和两个本地文件之间的数据传输。<code>sendfile</code> 的引入不仅减少了数据拷贝，还减少了上下文切换。可以这样使用它：</p>
+<pre><code class="language-c">sendfile(socket, file, len);
+</code></pre>
+<p>同样的，为了理解起来方便，可以看下图的调用过程。</p>
+<p>![sendfile代替读写]({{ "/public/images/2019/01/sys_sendfile.jpg" | prepend: site.cdnurl }} "sendfile 代替读写")</p>
+<ol>
+<li><code>sendfile</code> 调用会使得文件内容通过 DMA 模块拷贝到内核缓冲区。然后，内核将数据拷贝到与 <code>socket</code> 关联的内核缓冲区中。</li>
+<li>第 3 次拷贝发生在 DMA 模块将数据从内核 <code>socket</code> 缓冲区传递到协议引擎时。</li>
+</ol>
+<p>你可能想问当我们使用 <code>sendfile</code> 调用传输文件时有另一个进程截断会发生什么？如果我们没有注册任何信号处理程序，<code>sendfile</code> 调用只会返回它在被中断之前传输的字节数，并且全局变量 <code>errno</code> 被设置为成功。</p>
+<p>但是，如果我们在调用 <code>sendfile</code> 之前从内核获得了文件租约，那么行为和返回状态完全相同。我们会在<code>sendfile</code> 调用返回之前收到一个 <code>RT_SIGNAL_LEASE</code> 信号。</p>
+<p>到目前为止，我们已经能够避免让内核产生多次拷贝，但我们还有一次拷贝。这可以避免吗？当然，在硬件的帮助下。为了避免内核完成的所有数据拷贝，我们需要一个支持收集操作的网络接口。这仅仅意味着等待传输的数据不需要在内存中；它可以分散在各种存储位置。在内核 2.4 版本中，修改了 <code>socket</code> 缓冲区描述符以适应这些要求 - 在 Linux 下称为零拷贝。这种方法不仅减少了多个上下文切换，还避免了处理器完成的数据拷贝。对于用户的程序不用做什么修改，所以代码仍然如下所示：</p>
+<pre><code class="language-c">sendfile(socket, file, len);
+</code></pre>
+<p>为了更好地了解所涉及的过程，请查看下图</p>
+<p>![sendfile代替读写]({{ "/public/images/2019/01/sys_call_sendfile.jpg" | prepend: site.cdnurl }} "sendfile 代替读写")</p>
+<ol>
+<li><code>sendfile</code> 调用会导致文件内容通过 DMA 模块拷贝到内核缓冲区。</li>
+<li>没有数据被复制到 <code>socket</code> 缓冲区。相反，只有关于数据的位置和长度信息的描述符被附加到 <code>socket</code> 缓冲区。DMA 模块将数据直接从内核缓冲区传递到协议引擎，从而避免了剩余的最终拷贝。</li>
+</ol>
+<p>因为数据实际上仍然是从磁盘复制到内存，从内存复制到总线，所以有人可能会认为这不是真正的零拷贝。但从操作系统的角度来看，这是零拷贝，因为内核缓冲区之间的数据不会产生多余的拷贝。使用零拷贝时，除了避免拷贝外，还可以获得其他性能优势，比如更少的上下文切换，更少的 CPU 高速缓存污染以及不会产生 CPU 校验和计算。</p>
+<p>现在我们知道了什么是零拷贝，把前面的理论通过编码来实践。你可以从 <a href="http://www.xalien.org/articles/source/sfl-src.tgz">http://www.xalien.org/articles/source/sfl-src.tgz</a> 下载源码。解压源码需要执行 <code>tar -zxvf sfl-src.tgz</code>，然后编译代码并创建一个随机数据文件 <code>data.bin</code>，接下来使用 <code>make</code> 运行。</p>
+<p>查看头文件：</p>
+<pre><code class="language-c">/* sfl.c sendfile example program
+Dragan Stancevic &lt;
+header name                 function / variable
+-------------------------------------------------*/
+#include &lt;stdio.h&gt;          /* printf, perror */
+#include &lt;fcntl.h&gt;          /* open */
+#include &lt;unistd.h&gt;         /* close */
+#include &lt;errno.h&gt;          /* errno */
+#include &lt;string.h&gt;         /* memset */
+#include &lt;sys/socket.h&gt;     /* socket */
+#include &lt;netinet/in.h&gt;     /* sockaddr_in */
+#include &lt;sys/sendfile.h&gt;   /* sendfile */
+#include &lt;arpa/inet.h&gt;      /* inet_addr */
+#define BUFF_SIZE (10*1024) /* size of the tmp buffer */
+</code></pre>
+<p>除了 <code>socket</code> 操作需要的头文件 <code>&lt;sys/socket.h&gt;</code> 和 <code>&lt;netinet/in.h&gt;</code> 之外，我们还需要 <code>sendfile</code> 调用的头文件 - <code>&lt;sys/sendfile.h&gt;</code> ：</p>
+<pre><code class="language-c">/* are we sending or receiving */
+if(argv[1][0] == 's') is_server++;
+/* open descriptors */
+sd = socket(PF_INET, SOCK_STREAM, 0);
+if(is_server) fd = open("data.bin", O_RDONLY);
+</code></pre>
+<p>同样的程序既可以充当 <em>服务端/发送者</em>，也可以充当 <em>客户端/接受者</em>。这里我们接收一个命令提示符参数，通过该参数将标志 <code>is_server</code> 设置为以 <strong>发送方模式</strong> 运行。我们还打开了 <code>INET</code> 协议族的流套接字。作为在服务端运行的一部分，我们需要某种类型的数据传输到客户端，所以打开我们的数据文件（data.bin）。由于我们使用 <code>sendfile</code> 来传输数据，所以不用读取文件的实际内容将其存储在程序的缓冲区中。这是服务端地址：</p>
+<pre><code class="language-c">/* clear the memory */
+memset(&amp;sa, 0, sizeof(struct sockaddr_in));
+/* initialize structure */
+sa.sin_family = PF_INET;
+sa.sin_port = htons(1033);
+sa.sin_addr.s_addr = inet_addr(argv[2]);
+</code></pre>
+<p>我们重置了服务端地址结构并分配了端口和 IP 地址。服务端的地址作为命令行参数传递，端口号写死为 <code>1033</code>，选择这个端口号是因为它是一个允许访问的端口范围。</p>
+<p>下面是服务端执行的代码分支：</p>
+<pre><code class="language-c">if(is_server){
+    int client; /* new client socket */
+    printf("Server binding to [%s]\n", argv[2]);
+    if(bind(sd, (struct sockaddr *)&amp;sa,
+                      sizeof(sa)) &lt; 0){
+        perror("bind");
+        exit(errno);
+    }
+}
+</code></pre>
+<p>作为服务端，我们需要为 <code>socket</code> 描述符分配一个地址。这是通过系统调用 <code>bind</code> 实现的，它为 <code>socket</code> 描述符（sd）分配一个服务器地址（sa）：</p>
+<pre><code class="language-c">if(listen(sd,1) &lt; 0){
+    perror("listen");
+    exit(errno);
+}
+</code></pre>
+<p>因为我们正在使用流套接字，所以我们必须接受传入连接并设置连接队列大小。我将缓冲压队列设置为 1，但对于等待接受的已建立连接，一般会将缓冲值要设置的更高一些。在旧版本的内核中，缓冲队列用于防止 <code>syn flood</code> 攻击。由于系统调用 <code>listen</code> 已经修改为 <em>仅为已建立的连接设置参数</em>，所以不使用这个调用的缓冲队列功能。内核参数 <code>tcp_max_syn_backlog</code> 代替了保护系统免受 <code>syn flood</code> 攻击的角色：</p>
+<pre><code class="language-c">if((client = accept(sd, NULL, NULL)) &lt; 0){
+    perror("accept");
+    exit(errno);
+}
+</code></pre>
+<p><code>accept</code> 调用从挂起连接队列上的第一个连接请求创建一个新的 <code>socket</code> 连接。调用的返回值是新创建的连接的描述符； <code>socket</code> 现在可以进行读、写或轮询/select 了：</p>
+<pre><code class="language-c">if((cnt = sendfile(client,fd,&amp;off,
+                          BUFF_SIZE)) &lt; 0){
+    perror("sendfile");
+    exit(errno);
+}
+printf("Server sent %d bytes.\n", cnt);
+close(client);
+</code></pre>
+<p>在客户端 <code>socket</code> 描述符上建立连接，我们可以开始将数据传输到远端。通过 <code>sendfile</code> 调用来实现，该调用是在 Linux 下通过以下方式原型化的：</p>
+<pre><code class="language-c">extern ssize_t
+sendfile (int __out_fd, int __in_fd, off_t *offset,
+          size_t __count) __THROW;
+</code></pre>
+<ul>
+<li>前两个参数是文件描述符。</li>
+<li>第 3 个参数指向 <code>sendfile</code> 开始发送数据的偏移量。</li>
+<li>第四个参数是我们要传输的字节数。</li>
+</ul>
+<p>为了使 <code>sendfile</code> 传输使用零拷贝功能，你需要从网卡获得内存收集操作支持。还需要实现校验和的协议的校验和功能，通过 TCP 或 UDP。如果你的 <code>NIC</code> 已过时不支持这些功能，你也可以使用 <code>sendfile</code> 来传输文件，不同之处在于内核会在传输之前合并缓冲区。</p>
+<h1>移植性问题</h1>
+<p>通常，<code>sendfile</code> 系统调用的一个问题是缺少标准实现，就像开放系统调用一样。Linux、Solaris 或 HP-UX 中 的 Sendfile 实现完全不同。这对于想通过代码实现零拷贝的开发人员而言是个问题。</p>
+<p>其中一个实现差异是 Linux 提供了一个 <code>sendfile</code> 接口，用于在两个文件描述符（文件到文件）和（文件到socket）之间传输数据。另一方面，HP-UX 和 Solaris 只能用于文件到 socket 的提交。</p>
+<p>第二个区别是 Linux 没有实现向量传输。Solaris sendfile 和 HP-UX sendfile 有一些扩展参数，可以避免与正在传输的数据添加头部的开销。</p>
+<h1>展望</h1>
+<p>Linux 下的零拷贝实现离最终实现还有点距离，并且很可能在不久的将来发生变化。要添加更多功能，例如，sendfile 调用不支持向量传输，而 Samba 和 Apache 等服务器必须使用设置了 <code>TCP_CORK</code> 标志的多个sendfile 调用。这个标志告诉系统在下一个 <code>sendfile</code> 调用中会有更多数据通过。<code>TCP_CORK</code> 和<code>TCP_NODELAY</code> 不兼容，并且在我们想要在数据前添加或附加标头时使用。这是一个完美的例子，其中向量调用将消除对当前实现所强制的多个 <code>sendfile</code> 调用和延迟的需要。</p>
+<p>当前 sendfile 中一个相当令人不快的限制是它在传输大于2GB的文件时无法使用。如此大小的文件在今天并不罕见，并且在出路时复制所有数据相当令人失望。因为在这种情况下sendfile和mmap方法都不可用，所以sendfile64在未来的内核版本中会非常方便。</p>
+<h1>总结</h1>
+<p>尽管有一些缺点，不过通过 <code>sendfile</code> 来实现零拷贝也很有用，我希望你在阅读本文后可以开始在你的程序中使用它。如果想对这个主题有更深入的兴趣，请留意我的第二篇文章，标题为 “零拷贝 - 内核态分析”，我将在零拷贝的内核内部挖掘更多内容。</p>
+<blockquote>
+<p>英文原文：<a href="http://www.linuxjournal.com/article/6345">http://www.linuxjournal.com/article/6345</a></p>
+</blockquote>

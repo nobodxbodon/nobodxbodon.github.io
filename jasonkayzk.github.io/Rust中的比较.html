@@ -1,0 +1,533 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/Rust%E4%B8%AD%E7%9A%84%E6%AF%94%E8%BE%83.html">Rust中的比较</a></h2>
+<hr/>
+<h2>title: Rust中的比较
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?73'
+date: 2022-11-23 13:43:26
+categories: Rust
+tags: [Rust]
+description: 在Rust中定义了PartialEq、PartialOrd、Eq、Ord等等Trait，本文讲述了这些Trait的区别；并且实现了自定义排序；</h2>
+<p>在Rust中定义了PartialEq、PartialOrd、Eq、Ord等等Trait，本文讲述了这些Trait的区别，并且实现了自定义排序；</p>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/compare</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>Rust中的比较</strong></h1>
+<p>在Rust的 <code>core::cmp.rs</code> 模块中定义了许多用于两值之间比较的Trait，分别是：</p>
+<ul>
+<li>PartialEq；</li>
+<li>Eq；</li>
+<li>PartialOrd；</li>
+<li>Ord；</li>
+</ul>
+<p>这四个 Trait 之间有这样一个关系：</p>
+<ul>
+<li><strong>Eq 基于 PartialEq，即 <code>pub Trait Eq：PartialEq</code>；</strong></li>
+<li><strong>PartialOrd 基于 PartialEq，即 <code>pub Trait PartialOrd：PartialEq</code>；</strong></li>
+<li><strong>Ord 基于 Eq 和 PartialOrd，<code>pub Trait PartialOrd：Eq + PartialOrd&lt;Self&gt;</code>；</strong></li>
+</ul>
+<p>同时还定义了比较结果，为 <code>Ordering</code> 枚举类型：</p>
+<pre><code class="language-rust">pub enum Ordering {
+    Less = -1,
+    Equal = 0,
+    Greater = 1,
+}
+</code></pre>
+<p>下面我们分别来看；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>部分等价关系 PartialEq</strong></h2>
+<p>先说最基础的 <code>PartialEq</code>，在这个 Trait 中定义了两个方法：</p>
+<pre><code class="language-rust">pub Trait PartialEq&lt;Rhs: ?Sized = Self&gt; {
+    /// This method tests for `self` and `other` values to be equal, and is used
+    /// by `==`.
+    #[must_use]
+    #[stable(feature = "rust1", since = "1.0.0")]
+    fn eq(&amp;self, other: &amp;Rhs) -&gt; bool;
+
+    /// This method tests for `!=`. The default implementation is almost always
+    /// sufficient, and should not be overridden without very good reason.
+    #[inline]
+    #[must_use]
+    #[stable(feature = "rust1", since = "1.0.0")]
+    fn ne(&amp;self, other: &amp;Rhs) -&gt; bool {
+        !self.eq(other)
+    }
+}
+</code></pre>
+<ul>
+<li>eq：两个值相等的话就返回 <code>true</code>，需要使用者自行定义该方法；</li>
+<li>ne：两个值不相等的话就返回 <code>true</code>，默认为 <code>!eq(&amp;self)</code>；</li>
+</ul>
+<p><code>PartialEq Trait</code> 实现了<a href="https://en.wikipedia.org/wiki/Partial_equivalence_relation">部分等价关系 Partial_equivalence_relation</a>，这种数值关系有以下特性：</p>
+<ul>
+<li><strong>对称性 (symmetric)：如果 <code>a == b</code>，那么 <code>b == a</code>；</strong></li>
+<li><strong>可传递性 (transitive)：如果 <code>a == b</code> 且 <code>b == c</code>，那么 <code>a == c</code>；</strong></li>
+</ul>
+<p><strong>所有的基本数据类型都实现了 <code>PartialEq Trait</code>，它们都定义在 cmp.rs 源码文件里；</strong></p>
+<p>并且，通常情况下只需要用 <code>#[derive]</code> 的方法实现即可，例如：</p>
+<pre><code class="language-rust">#[derive(PartialEq)]
+pub struct Person {
+    pub id: u32,
+    pub name: String,
+    pub height: f64,
+}
+</code></pre>
+<p>编译器会生成类似下面的代码：</p>
+<pre><code class="language-rust">impl PartialEq for Person {
+    fn eq(&amp;self, other: &amp;Self) -&gt; bool {
+        self.id == other.id &amp;&amp;
+            self.name == other.name &amp;&amp;
+            self.height == other.height
+    }
+}
+</code></pre>
+<p>如果在比较两个 <code>Person</code> 时，只想通过 <code>id</code> 属性来确定是不是同一个人，可以手动定义 <code>PartialEq Trait</code> 的实现：</p>
+<pre><code class="language-rust">impl PartialEq for Person {
+    fn eq(&amp;self, other: &amp;Self) -&gt; bool {
+        self.id == other.id
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>PartialEq和运算符重载</strong></h3>
+<p>对于实现了 PartialEq Trait 的类型，相应的也会重载 <code>==</code> 运算符；</p>
+<p>例如：</p>
+<p>examples/0_partial_eq.rs</p>
+<pre><code class="language-rust">pub struct Person {
+    pub id: u32,
+    pub name: String,
+    pub height: f64,
+}
+
+impl PartialEq for Person {
+    fn eq(&amp;self, other: &amp;Self) -&gt; bool {
+        self.id == other.id
+    }
+}
+
+fn main() {
+    let p1 = Person {
+        id: 0,
+        name: "John".to_string(),
+        height: 1.2,
+    };
+
+    let p2 = Person {
+        id: 0,
+        name: "Jack".to_string(),
+        height: 1.4,
+    };
+
+    println!("p1 == p2 = {}", p1 == p2); // p1 == p2 = true
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>等价关系 Eq</strong></h2>
+<p><code>Eq Trait</code> 实现了 <a href="https://en.wikipedia.org/wiki/Equivalence_relation">等价关系 Equivalence_relation</a>，该数值关系具有以下特性：</p>
+<ul>
+<li><strong>对称性 (symmetric)：如果 <code>a == b</code>，那么 <code>b == a</code>；</strong></li>
+<li><strong>可传递性 (transitive)：如果 <code>a == b</code> 且 <code>b == c</code>，那么 <code>a == c</code>；</strong></li>
+<li><strong>自反性 (reflexive)：<code>a == a</code>；</strong></li>
+</ul>
+<p><strong><code>Eq Trait</code> 基于 <code>PartialEq Trait</code>，并且在此之上并没有添加新的方法定义；</strong></p>
+<blockquote>
+<p><strong>这个 Trait 只是用于告诉编译器，这是个 <code>等价关系</code> 而非 <code>部分等价关系</code>；</strong></p>
+<p><strong>因为编译器并不能检测 <code>自反性 (reflexive)</code>；</strong></p>
+</blockquote>
+<p>在标准库中，只有 f32 和 f64 没有实现 <code>Eq Trait</code>，因为浮点值有两个特殊的值：</p>
+<ul>
+<li><strong>NAN：非数值不可比较，<code>NAN != NAN</code>；</strong></li>
+<li><strong>INFINITY：无穷大；</strong></li>
+</ul>
+<p>例如：</p>
+<pre><code class="language-rust">println!("NAN == NAN ? {}", std::f64::NAN == std::f64::NAN);
+// NAN == NAN ? false
+
+println!("INFINITY == INFINITY ? {}", std::f64::INFINITY == std::f64::INFINITY);
+// INFINITY == INFINITY ? true
+</code></pre>
+<p>所以，上面的示例中定义的 <code>struct Person</code> 是无法用 <code>#[derive(Eq)]</code> 的方法定义的：</p>
+<pre><code class="language-rust">#[derive(Eq)]
+struct Person {
+    pub id: u32,
+    pub name: String,
+    pub height: f64,
+}
+</code></pre>
+<p>编译器会报出以下错误:</p>
+<pre><code class="language-bash">188 |     height: f64,
+    |     ^^^^^^^^^^^ the Trait `std::cmp::Eq` is not implemented for `f64`
+    |
+    = note: required by `std::cmp::AssertParamIsEq`
+</code></pre>
+<p>但我们可以手动实现该 Trait:</p>
+<pre><code class="language-rust">struct Person {
+    pub id: u32,
+    pub name: String,
+    pub height: f64,
+}
+
+impl Eq for Person {
+    fn eq(&amp;self, other: &amp;Self) -&gt; bool {
+        ...
+    }
+}
+</code></pre>
+<p><strong><code>Eq Trait</code> 基于 <code>PartialEq Trait</code>，因此实现了 <code>Eq Trait</code> 的类型自然也相应的重载了 <code>==</code> 运算符；</strong></p>
+<p>&lt;br/&gt;</p>
+<h2><strong>偏序关系 PartialOrd</strong></h2>
+<p><code>PartialOrd Trait</code> 基于 <code>PartialEq Trait</code> 实现，它新定义了几个方法：</p>
+<pre><code class="language-rust">pub trait PartialOrd&lt;Rhs: ?Sized = Self&gt;: PartialEq&lt;Rhs&gt; {
+    fn partial_cmp(&amp;self, other: &amp;Rhs) -&gt; Option&lt;Ordering&gt;;
+
+    fn lt(&amp;self, other: &amp;Rhs) -&gt; bool {
+        matches!(self.partial_cmp(other), Some(Less))
+    }
+
+    fn le(&amp;self, other: &amp;Rhs) -&gt; bool {
+        matches!(self.partial_cmp(other), Some(Less | Equal))
+    }
+
+    fn gt(&amp;self, other: &amp;Rhs) -&gt; bool {
+        matches!(self.partial_cmp(other), Some(Greater))
+    }
+
+    fn ge(&amp;self, other: &amp;Rhs) -&gt; bool {
+        matches!(self.partial_cmp(other), Some(Greater | Equal))
+    }
+}
+</code></pre>
+<ul>
+<li><strong><code>partial_cmp</code>，需要使用者实现本方法，返回两值的比较结果；</strong></li>
+<li><strong>lt，le，gt，ge 已经定义好；</strong></li>
+</ul>
+<p>偏序关系有以下特性：</p>
+<ul>
+<li><strong>不对称性 antisymmetry：如果 <code>a &lt; b</code> 那么 <code>!(a &gt; b)</code>；</strong></li>
+<li><strong>可传递性 transitive：如果 <code>a &lt; b</code> 且 <code>b &lt; c</code> 那么 <code>a &lt; c</code>；</strong></li>
+</ul>
+<p><strong>标准库里的所有基本类型都已实现该 Trait；</strong></p>
+<p>可直接使用 <code>#[derive]</code> 的方法实现该 Trait，也可像下面这样手动实现，这里是以身高来排序的：</p>
+<pre><code class="language-rust">impl PartialOrd for Person {
+    fn partial_cmp(&amp;self，other：&amp;Self) -&gt; Option&lt;std::cmp::Ordering&gt; {
+        self.height.partial_cmp(&amp;other.height)
+    }
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>PartialOrd和运算符重载</strong></h3>
+<p>和上面类似，对于实现了 PartialOrd Trait 的类型，相应的也会重载  <code>&lt;</code>、<code>&lt;=</code>、<code>&gt;</code> 和 <code>&gt;=</code> 运算符；</p>
+<p>例如：</p>
+<p>examples/1_parital_ord.rs</p>
+<pre><code class="language-rust">use std::cmp::Ordering;
+
+pub struct Person {
+    pub id: u32,
+    pub name: String,
+    pub height: f64,
+}
+
+impl PartialEq&lt;Self&gt; for Person {
+    fn eq(&amp;self, other: &amp;Self) -&gt; bool { self.id == other.id }
+}
+
+impl PartialOrd for Person {
+    fn partial_cmp(&amp;self, other: &amp;Self) -&gt; Option&lt;Ordering&gt; {
+        self.height.partial_cmp(&amp;other.height)
+    }
+}
+
+fn main() {
+    let p1 = Person {
+        id: 0,
+        name: "John".to_string(),
+        height: 1.2,
+    };
+
+    let p2 = Person {
+        id: 0,
+        name: "Jack".to_string(),
+        height: 1.4,
+    };
+
+    println!("p1 &lt; p2 = {}", p1 &lt; p2);
+    println!("p1 &lt;= p2 = {}", p1 &lt;= p2);
+    println!("p1 &gt; p2 = {}", p1 &gt; p2);
+    println!("p1 &gt;= p2 = {}", p1 &gt;= p2);
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2><strong>全序关系 Ord</strong></h2>
+<p><code>Ord Trait</code> 是基于 <code>PartialOrd Trait</code> 和 <code>Eq Trait</code> 实现，它新定义了几个方法：</p>
+<pre><code class="language-rust">pub trait Ord: Eq + PartialOrd&lt;Self&gt; {
+    fn cmp(&amp;self, other: &amp;Self) -&gt; Ordering;
+
+    fn max(self, other: Self) -&gt; Self
+    where
+        Self: Sized,
+        Self: ~const Destruct,
+    {
+        // HACK(fee1-dead): go back to using `self.max_by(other, Ord::cmp)`
+        // when trait methods are allowed to be used when a const closure is
+        // expected.
+        match self.cmp(&amp;other) {
+            Ordering::Less | Ordering::Equal =&gt; other,
+            Ordering::Greater =&gt; self,
+        }
+    }
+
+    #[stable(feature = "ord_max_min", since = "1.21.0")]
+    #[inline]
+    #[must_use]
+    fn min(self, other: Self) -&gt; Self
+    where
+        Self: Sized,
+        Self: ~const Destruct,
+    {
+        // HACK(fee1-dead): go back to using `self.min_by(other, Ord::cmp)`
+        // when trait methods are allowed to be used when a const closure is
+        // expected.
+        match self.cmp(&amp;other) {
+            Ordering::Less | Ordering::Equal =&gt; self,
+            Ordering::Greater =&gt; other,
+        }
+    }
+
+    /// Restrict a value to a certain interval.
+    ///
+    /// Returns `max` if `self` is greater than `max`, and `min` if `self` is
+    /// less than `min`. Otherwise this returns `self`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `min &gt; max`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert!((-3).clamp(-2, 1) == -2);
+    /// assert!(0.clamp(-2, 1) == 0);
+    /// assert!(2.clamp(-2, 1) == 1);
+    /// ```
+    fn clamp(self, min: Self, max: Self) -&gt; Self
+    where
+        Self: Sized,
+        Self: ~const Destruct,
+        Self: ~const PartialOrd,
+    {
+        assert!(min &lt;= max);
+        if self &lt; min {
+            min
+        } else if self &gt; max {
+            max
+        } else {
+            self
+        }
+    }
+}
+</code></pre>
+<ul>
+<li><strong>cmp：需要使用者实现本方法，返回两值的比较结果；</strong></li>
+<li><strong>max，min，clamp：已经定义好；</strong></li>
+</ul>
+<blockquote>
+<p><strong>注：clamp函数用于将数值限制在一个给定的区间[min, max]内；</strong></p>
+</blockquote>
+<p>全序关系有以下特性：</p>
+<ul>
+<li><strong>完整的不对称性 total antisymmetry：<code>a &lt; b</code>，<code>a == b</code>，<code>a &gt; b</code> 这三种结果只有一个是真；</strong></li>
+<li><strong>可传递性 transitive：如果 <code>a &lt; b</code> 且 <code>b &lt; c</code> 那么 <code>a &lt; c</code>；</strong></li>
+</ul>
+<p>&lt;font color="#f00"&gt;<strong>在标准库中，f32 和 f64 没有实现 <code>Ord Trait</code>，同样是因为 <code>NAN</code> 和 <code>INFINITY</code> 的 不确定性，<code>NAN</code> 和 <code>INFINITY</code> 无法跟其它浮点值比较大小；</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>PartialOrd和Ord的区别</strong></h2>
+<p>PartialOrd和Ord的区别在于，<strong>PartialOrd 是部分有序的</strong>（说了又好像没说。。。）；</p>
+<p>简单来说：</p>
+<p>&lt;font color="#f00"&gt;<strong>如果我们的类型只在部分情况下具有相等性，那你就只能实现 <code>PartialEq</code>，否则可以实现 <code>PartialEq</code> 然后再默认实现 <code>Eq</code>；</strong></p>
+<p>&lt;font color="#f00"&gt;<strong>同时，从代码的角度来说，PartialOrd Trait 返回值类型为 <code>Option&lt;Ordering&gt;</code>，而 Ord Trait 的返回值为 <code>Ordering</code>；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong>即对于 PartialOrd，存在我们无法确定的比较结果！</strong>&lt;/font&gt;</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>部分相等性</strong></h3>
+<p>首先我们需要找到一个类型，它实现了 <code>PartialEq</code> 但是没有实现 <code>Eq</code>；</p>
+<blockquote>
+<p><strong>由于部分相等肯定是全部相等的子集，所以不存在反过来的情况；</strong></p>
+</blockquote>
+<p>Rust 中 <code>HashMap</code> 的 key 要求实现 <code>Eq</code> 特征，也就是要能完全相等，而浮点数由于没有实现 <code>Eq</code> ，因此不能用于 <code>HashMap</code> 的 key；</p>
+<p>那么，让我们考虑浮点数既然没有实现 <code>Eq</code> 为何还能进行比较呢？</p>
+<pre><code class="language-rust">fn main() {
+   let f1 = 3.14;
+   let f2 = 3.14;
+
+   if f1 == f2 {
+       println!("hello, world!");
+   }
+}
+</code></pre>
+<p>以上代码是可以看到输出内容的，既然浮点数没有实现 <code>Eq</code> 那说明它实现了 <code>PartialEq</code>！</p>
+<p>可以写个简单代码验证下：</p>
+<pre><code class="language-rust">fn main() {
+    let f1 = 3.14;
+    is_eq(f1);
+    is_partial_eq(f1)
+}
+
+fn is_eq&lt;T: Eq&gt;(f: T) {}
+fn is_partial_eq&lt;T: PartialEq&gt;(f: T) {}
+</code></pre>
+<p>上面的代码通过特征约束的方式验证了我们的结论：</p>
+<pre><code class="language-shell">3 |     is_eq(f1);
+  |     ----- ^^ the trait `Eq` is not implemented for `{float}`
+</code></pre>
+<p>我们成功找到了一个类型实现了 <code>PartialEq</code> 但没有实现 <code>Eq</code>，那就通过它来看看何为部分相等性；</p>
+<p>其实<strong>答案很简单：浮点数有一个特殊的值 <code>NaN</code>，它是无法进行相等性比较的！</strong></p>
+<pre><code class="language-rust">fn main() {
+    let f1 = f32::NAN;
+    let f2 = f32::NAN;
+
+    if f1 == f2 {
+        println!("NaN 竟然可以比较，这很不数学啊！")
+    } else {
+        println!("果然，虽然两个都是 NaN ，但是它们其实并不相等")
+    }
+}
+</code></pre>
+<p>因此，既然浮点数有一个值不可以比较相等性，那它自然只能实现 <code>PartialEq</code> 而不能实现 <code>Eq</code> 了！</p>
+<p>简而言之：</p>
+<p>&lt;font color="#f00"&gt;<strong>全序规则要求该类型包括的所有元素对都是可比较的，而 NaN 不可以！</strong>&lt;/font&gt;</p>
+<p>以此类推，如果我们的类型也有这种特殊要求，那也应该这么做！</p>
+<blockquote>
+<p><strong>注：Ord 意味着一个类型的所有值都可以进行排序，而 PartialOrd 则不然！</strong></p>
+</blockquote>
+<blockquote>
+<p><strong>详细说明：</strong></p>
+<ul>
+<li>https://course.rs/difficulties/eq.html</li>
+<li>https://zh.wikipedia.org/wiki/%E5%81%8F%E5%BA%8F%E5%85%B3%E7%B3%BB</li>
+<li>https://zh.m.wikipedia.org/zh-hans/NaN</li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>指定排序规则</strong></h2>
+<h3><strong>为类型实现Ord Trait</strong></h3>
+<p>vector 中的 sort 方法要求类型实现了 Ord Trait；</p>
+<p>例如：</p>
+<p>examples/2_sort.rs</p>
+<pre><code class="language-rust">use std::cmp::Ordering;
+
+#[derive(Debug)]
+pub struct Person {
+    pub id: u32,
+    pub name: String,
+    pub height: f64,
+}
+
+impl PartialEq&lt;Self&gt; for Person {
+    fn eq(&amp;self, other: &amp;Self) -&gt; bool { self.id == other.id }
+}
+
+impl PartialOrd for Person {
+    fn partial_cmp(&amp;self, other: &amp;Self) -&gt; Option&lt;Ordering&gt; {
+        self.id.partial_cmp(&amp;other.id)
+    }
+}
+
+impl Eq for Person {}
+
+impl Ord for Person {
+    fn cmp(&amp;self, other: &amp;Self) -&gt; Ordering {
+        self.id.cmp(&amp;other.id)
+    }
+}
+
+fn main() {
+    let mut v = vec![
+        Person {
+            id: 3,
+            name: "".to_string(),
+            height: 3.0,
+        },
+        Person {
+            id: 2,
+            name: "".to_string(),
+            height: 4.0,
+        },
+        Person {
+            id: 1,
+            name: "".to_string(),
+            height: 5.0,
+        },
+    ];
+
+    v.sort();
+
+    println!("{:?}", v);
+    // [Person { id: 1, name: "", height: 5.0 }, Person { id: 2, name: "", height: 4.0 }, Person { id: 3, name: "", height: 3.0 }]
+}
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>使用sort_by</strong></h3>
+<p>上面为 Person 实现了 Ord Trait，因此可以使用 <code>v.sort</code> 进行排序；</p>
+<p>但是有的时候不想为这个类型实现一大堆的 Trait，此时可以使用 sort_by，并传入 lambda 表达式：</p>
+<pre><code class="language-rust">pub fn sort_by&lt;F&gt;(&amp;mut self, mut compare: F)
+where
+F: FnMut(&amp;T, &amp;T) -&gt; Ordering,
+{
+  merge_sort(self, |a, b| compare(a, b) == Less);
+}
+</code></pre>
+<p>我们只需要传入一个返回 Ordering 枚举的比较函数即可！</p>
+<p>例如：</p>
+<p>examples/2_sort2.rs</p>
+<pre><code class="language-rust">#[derive(Debug)]
+pub struct Person {
+    pub id: u32,
+    pub name: String,
+    pub height: f64,
+}
+
+fn main() {
+    let mut v = vec![
+        Person {
+            id: 3,
+            name: "".to_string(),
+            height: 3.0,
+        },
+        Person {
+            id: 1,
+            name: "".to_string(),
+            height: 5.0,
+        },
+        Person {
+            id: 2,
+            name: "".to_string(),
+            height: 4.0,
+        },
+    ];
+
+    v.sort_by(|a, b| a.id.cmp(&amp;b.id));
+
+    println!("{:?}", v);
+    // [Person { id: 1, name: "", height: 5.0 }, Person { id: 2, name: "", height: 4.0 }, Person { id: 3, name: "", height: 3.0 }]
+}
+</code></pre>
+<p>代码是不是清爽了许多？</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/rust-learn/tree/compare</li>
+</ul>
+<p>文章参考：</p>
+<ul>
+<li>https://blog.biofan.org/2019/08/rust-cmp/</li>
+<li><a href="https://en.wikipedia.org/wiki/Equivalence_relation">Equivalence_relation</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Partial_equivalence_relation">Partial_equivalence_relation</a></li>
+<li><a href="https://en.wikipedia.org/wiki/Total_order">Total_order</a></li>
+<li><a href="https://blog.biofan.org/2019/08/rust-cmp/cmp.rs">nightly 版的 cmp.rs 源代码</a></li>
+<li><a href="https://wenku.baidu.com/view/58f21acdba4cf7ec4afe04a1b0717fd5360cb29a.html">Part 3 Equivalence relations 等价关系与偏序关系</a></li>
+<li>https://stackoverflow.com/questions/70588237/why-sort-need-t-to-be-ord#comment124782439_70588237</li>
+<li>https://rust-lang-nursery.github.io/rust-cookbook/algorithms/sorting.html</li>
+</ul>
+<p>&lt;br/&gt;</p>
