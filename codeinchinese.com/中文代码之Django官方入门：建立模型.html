@@ -1,0 +1,89 @@
+<h2>原文：<a href="https://codeinchinese.com/2019/07/04/%E4%B8%AD%E6%96%87%E4%BB%A3%E7%A0%81%E4%B9%8BDjango%E5%AE%98%E6%96%B9%E5%85%A5%E9%97%A8%EF%BC%9A%E5%BB%BA%E7%AB%8B%E6%A8%A1%E5%9E%8B.markdown">中文代码之Django官方入门：建立模型</a></h2>
+<hr/>
+<h2>layout: post
+comments: true
+title:  中文代码之Django官方入门：建立模型
+description:
+date:   2019-05-14 00:00:00 -0700
+categories: 命名 Python</h2>
+<p>参考<a href="https://docs.djangoproject.com/zh-hans/2.2/intro/tutorial02/">编写你的第一个 Django 应用，第 2 部分</a></p>
+<p>创建项目后，首先用中文命名应用：</p>
+<pre><code>$ python3 manage.py startapp 投票
+</code></pre>
+<p>之后在<code>models.py</code>建立模型，其他各种相关配置略去，详细请见末尾源码库：</p>
+<pre><code class="language-python">import datetime
+
+from django.db import models
+from django.utils import timezone
+
+class 问题(models.Model):
+    内容 = models.CharField(max_length=200)
+    发问日期 = models.DateTimeField('发布问题日期')
+
+    def __str__(self):
+        return self.内容
+
+    def 刚发问(self):
+        return self.发问日期 &gt;= timezone.now() - datetime.timedelta(days=1)
+
+class 选项(models.Model):
+    问题 = models.ForeignKey(问题, on_delete=models.CASCADE)
+    内容 = models.CharField(max_length=200)
+    票数 = models.IntegerField(default=0)
+
+    def __str__(self):
+        return self.内容
+</code></pre>
+<p>交互环境测试API通过：</p>
+<pre><code class="language-python">$ python3 manage.py shell
+Python 3.7.3 (v3.7.3:ef4ec6ed12, Mar 25 2019, 16:52:21) 
+[Clang 6.0 (clang-600.0.57)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+(InteractiveConsole)
+&gt;&gt;&gt; from 投票.models import 选项, 问题
+&gt;&gt;&gt; 问题.objects.all()
+&lt;QuerySet [&lt;问题: 最近可好?&gt;]&gt;
+&gt;&gt;&gt; 问题.objects.filter(id=1)
+&lt;QuerySet [&lt;问题: 最近可好?&gt;]&gt;
+&gt;&gt;&gt; 问题.objects.filter(内容__startswith='最')
+&lt;QuerySet [&lt;问题: 最近可好?&gt;]&gt;
+&gt;&gt;&gt; from django.utils import timezone
+&gt;&gt;&gt; 今年=timezone.now().year
+&gt;&gt;&gt; 
+&gt;&gt;&gt; 问题.objects.get(发问日期__year=今年)
+&lt;问题: 最近可好?&gt;
+&gt;&gt;&gt; 问题.objects.get(id=2)
+Traceback (most recent call last):
+  File "&lt;console&gt;", line 1, in &lt;module&gt;
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/django/db/models/manager.py", line 82, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/django/db/models/query.py", line 408, in get
+    self.model._meta.object_name
+投票.models.问题.DoesNotExist: 问题 matching query does not exist.
+&gt;&gt;&gt; 问问
+&gt;&gt;&gt; 问=问题.objects.get(pk=1)
+&gt;&gt;&gt; 问.刚发问()
+True
+&gt;&gt;&gt; 问.选项_set.all()
+&lt;QuerySet []&gt;
+&gt;&gt;&gt; 问.选项_set.create(内容='没啥', 票数=0)
+&lt;选项: 没啥&gt;
+&gt;&gt;&gt; 问.选项_set.create(内容='看天', 票数=0)
+&lt;选项: 看天&gt;
+&gt;&gt;&gt; 选=问.选项_set.create(内容='打字', 票数=0)
+&gt;&gt;&gt; 选.问题
+&lt;问题: 最近可好?&gt;
+&gt;&gt;&gt; 问.选项_set.all()
+&lt;QuerySet [&lt;选项: 没啥&gt;, &lt;选项: 看天&gt;, &lt;选项: 打字&gt;]&gt;
+&gt;&gt;&gt; 问.选项_set.count()
+3
+&gt;&gt;&gt; 选项.objects.filter(问题__发问日期__year=今年)
+&lt;QuerySet [&lt;选项: 没啥&gt;, &lt;选项: 看天&gt;, &lt;选项: 打字&gt;]&gt;
+&gt;&gt;&gt; 选=问.选项_set.filter(内容__startswith='打')
+&gt;&gt;&gt; 选.delete()
+(1, {'投票.选项': 1})
+&gt;&gt;&gt; 选项.objects.filter(问题__发问日期__year=今年)
+&lt;QuerySet [&lt;选项: 没啥&gt;, &lt;选项: 看天&gt;]&gt;
+</code></pre>
+<p>完整源码在：<a href="https://github.com/program-in-chinese/Django_tutorial_zh">program-in-chinese/Django_tutorial_zh</a></p>
+<p>测试环境：Python 3.7.3, Django-2.2.3, Mac</p>

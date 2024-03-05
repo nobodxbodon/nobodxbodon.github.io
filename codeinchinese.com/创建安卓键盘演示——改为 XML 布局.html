@@ -1,0 +1,60 @@
+<h2>原文：[创建安卓键盘演示——改为 XML 布局](https://codeinchinese.com/2020/02/20/创建安卓键盘演示——改为 XML 布局.markdown)</h2>
+<hr/>
+<h2>layout: post
+comments: true
+title:  创建安卓键盘演示——改为 XML 布局
+description:
+date:   2020-02-20 00:00:00 -0700
+categories: 命名</h2>
+<p>续前文：<a href="https://zhuanlan.zhihu.com/p/105324080">创建安卓键盘演示——“好不”</a></p>
+<p>因为一些 UI 元素的属性似乎只有在 XML 中才能设置，于是先摸索一下如何使用 XML 布局代替原本在 Java 代码中初始化 UI。</p>
+<p>xml/keyboard.xml:</p>
+<p>&lt;Keyboard xmlns:android="http://schemas.android.com/apk/res/android"&gt;</p>
+<pre><code>&lt;Row&gt;
+    &lt;Key
+        android:codes="1"
+        android:keyLabel="好" /&gt;
+    &lt;Key
+        android:codes="2"
+        android:keyLabel="不" /&gt;
+&lt;/Row&gt;</code></pre>
+<p>&lt;/Keyboard&gt;</p>
+<p>layout/keyboard_view.xml （值得一提，<a href="https://developer.android.com/reference/android/inputmethodservice/KeyboardView">KeyboardView</a> 和 <a href="https://developer.android.com/reference/android/inputmethodservice/Keyboard">Keyboard</a> 在最新的 API 29 中已作废）</p>
+<pre><code class="language-xml">&lt;?xml version="1.0" encoding="utf-8"?&gt;
+&lt;android.inputmethodservice.KeyboardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/keyboard_view"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"&gt;
+&lt;/android.inputmethodservice.KeyboardView&gt;
+</code></pre>
+<p>Java 部分相应修改：</p>
+<pre><code class="language-java">public class 好不键盘 extends InputMethodService implements KeyboardView.OnKeyboardActionListener {
+
+    private static final String 字符 = "@好不";
+
+    @Override
+    public View onCreateInputView() {
+        KeyboardView 视图 = (KeyboardView) getLayoutInflater().inflate(R.layout.keyboard_view, null);
+        Keyboard 键盘 = new Keyboard(this, R.xml.keyboard);
+        视图.setKeyboard(键盘);
+        视图.setOnKeyboardActionListener(this);
+        return 视图;
+    }
+
+    @Override
+    public void onKey(int 码, int[] keyCodes) {
+        InputConnection 输入连接 = getCurrentInputConnection();
+
+        if (输入连接 != null) {
+            char 字 = 字符.charAt(码);
+            输入连接.commitText(String.valueOf(字), 1);
+        }
+    }
+//...一堆空的重写方法
+}
+</code></pre>
+<p>效果差很多，还需研究如何设置风格：</p>
+<p>![2020-02-20_keyboard好不]({{ "/assets/2020-02-20_keyboard好不.png" | absolute_url }})</p>
+<h3>参考</h3>
+<p><a href="https://medium.com/@ssaurel/learn-to-create-a-system-keyboard-on-android-95aca21b1e5f">Learn to create a System Keyboard on Android</a></p>

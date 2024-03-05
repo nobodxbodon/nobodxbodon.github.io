@@ -1,0 +1,120 @@
+<h2>原文：<a href="https://codeinchinese.com/2019/04/23/%E4%B8%AD%E6%96%87%E5%91%BD%E5%90%8D%E4%B9%8BHibernate+MySQL%E6%BC%94%E7%A4%BA.markdown">中文命名之Hibernate 4 + MySQL演示</a></h2>
+<hr/>
+<h2>layout: post
+comments: true
+title:  中文命名之Hibernate 4 + MySQL演示
+description: 用一个简单例子演示Hibernate + MySQL基本功能中使用中文命名. Demostrate naming in Chinese in the basic features of Hibernate + MySQL.
+date:   2019-04-23 00:00:00 -0700
+categories: 命名 Hibernate</h2>
+<p>最近有个契机, 需要在一个给定开发环境中验证中文命名的可行性. 达成的例子源码在: <a href="https://github.com/nobodxbodon/HibernateExampleZh">HibernateExampleZh</a></p>
+<p>当前用的是Hibernate 3.3.2.GA. 之后测试了更多版本, 彩蛋见最后一部分.</p>
+<h3>测试环境:</h3>
+<ul>
+<li>Windows 7 Pro 64bit, JDK 1.7.0_80, MySQL 5.5.62, Eclipse Kepler SR2</li>
+<li>MacOS 10.13.6, JDK 1.8.0_45, MySQL 5.5.24, Eclipse 4.7.3a</li>
+</ul>
+<h3>功能验证:</h3>
+<p>运行<code>com.codeinchinese.App</code>, 在数据库表中插入一条记录并进行一次条件查询.</p>
+<h3>数据库</h3>
+<p><a href="https://github.com/nobodxbodon/HibernateExampleZh/blob/master/%E6%95%B0%E6%8D%AE%E5%BA%93/%E5%AE%A2%E6%88%B7.sql">源码</a>如下, 与<a href="https://zhuanlan.zhihu.com/p/31417833">前文</a>相比, 多了索引.</p>
+<p>需修改<code>hibernate.cfg.xml</code>中的数据库用户/密码部分.</p>
+<pre><code class="language-mysql">DROP TABLE IF EXISTS `演示`.`客户`;
+CREATE TABLE  `演示`.`客户` (
+  `客户_ID` bigint(20) unsigned COLLATE utf8_unicode_ci NOT NULL AUTO_INCREMENT,
+  `姓名` varchar(45) COLLATE utf8_unicode_ci NOT NULL,
+  `创建日期` datetime COLLATE utf8_unicode_ci NOT NULL,
+  PRIMARY KEY (`客户_ID`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8 COLLATE utf8_unicode_ci;
+
+ALTER TABLE `演示`.`客户`
+ADD INDEX `姓名_索引` (`姓名` ASC) ;
+</code></pre>
+<h3>Java</h3>
+<p><a href="https://github.com/nobodxbodon/HibernateExampleZh/blob/master/src/main/java/com/codeinchinese/%E5%AE%A2%E6%88%B7/%E6%A8%A1%E5%9E%8B/%E5%AE%A2%E6%88%B7%E7%B1%BB.java">模型类</a></p>
+<pre><code class="language-java">public class 客户类 implements java.io.Serializable {
+
+  private Long 客户_ID;
+  private String 姓名;
+  private Date 创建日期;
+
+  public 客户类() {
+  }
+
+  public 客户类(String 姓名, Date 创建日期) {
+      this.姓名 = 姓名;
+      this.创建日期 = 创建日期;
+  }
+
+  public Long get客户Id() {
+      return this.客户_ID;
+  }
+
+  public void set客户Id(Long 客户Id) {
+      this.客户_ID = 客户Id;
+  }
+
+  public String get姓名() {
+      return this.姓名;
+  }
+
+  public void set姓名(String 姓名) {
+      this.姓名 = 姓名;
+  }
+
+  public Date get创建日期() {
+      return this.创建日期;
+  }
+
+  public void set创建日期(Date 创建日期) {
+      this.创建日期 = 创建日期;
+  }
+
+  @Override
+  public String toString() {
+    return 客户_ID + " " + 姓名 + " " + 创建日期;
+  }
+
+}
+</code></pre>
+<h3>Hibernate映射文件</h3>
+<p><a href="https://github.com/nobodxbodon/HibernateExampleZh/blob/master/src/main/resources/com/codeinchinese/%E5%AE%A2%E6%88%B7/hibernate/%E5%AE%A2%E6%88%B7.hbm.xml">客户.hbm.xml</a></p>
+<pre><code class="language-xml">&lt;hibernate-mapping&gt;
+    &lt;class name="com.codeinchinese.客户.模型.客户类" table="客户"&gt;
+        &lt;id name="客户Id" type="java.lang.Long"&gt;
+            &lt;column name="客户_ID" /&gt;
+            &lt;generator class="identity" /&gt;
+        &lt;/id&gt;
+        &lt;property name="姓名" type="string"&gt;
+            &lt;column name="姓名" length="45" not-null="true" /&gt;
+        &lt;/property&gt;
+        &lt;property name="创建日期" type="timestamp"&gt;
+            &lt;column name="创建日期" length="19" not-null="true" /&gt;
+        &lt;/property&gt;
+    &lt;/class&gt;
+&lt;/hibernate-mapping&gt;
+</code></pre>
+<h3>检查更多Hibernate版本</h3>
+<p>经测试, 到<code>4.2.21.Final</code>都正常运行, 但从<code>5.0.0.Final</code>开始到最近的<code>6.0.0.Alpha2</code>, 都不支持模型类名的中文命名. 具体报错如下:</p>
+<pre><code>Caused by: org.xml.sax.SAXParseException; lineNumber: 6; columnNumber: 58; cvc-pattern-valid: Value 'com.codeinchinese.客户.模型.客户类' is not facet-valid with respect to pattern '([a-zA-Z_$][a-zA-Z\d_$]*\.)*[a-zA-Z_$][a-zA-Z\d_$]*' for type 'ClassNameType'.
+	at com.sun.org.apache.xerces.internal.util.ErrorHandlerWrapper.createSAXParseException(ErrorHandlerWrapper.java:203)
+	at com.sun.org.apache.xerces.internal.util.ErrorHandlerWrapper.error(ErrorHandlerWrapper.java:134)
+	at com.sun.org.apache.xerces.internal.impl.XMLErrorReporter.reportError(XMLErrorReporter.java:396)
+	at com.sun.org.apache.xerces.internal.impl.XMLErrorReporter.reportError(XMLErrorReporter.java:327)
+	at com.sun.org.apache.xerces.internal.impl.XMLErrorReporter.reportError(XMLErrorReporter.java:284)
+	at com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator$XSIErrorReporter.reportError(XMLSchemaValidator.java:452)
+	at com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator.reportSchemaError(XMLSchemaValidator.java:3230)
+	at com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator.processOneAttribute(XMLSchemaValidator.java:2825)
+	at com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator.processAttributes(XMLSchemaValidator.java:2762)
+	at com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator.handleStartElement(XMLSchemaValidator.java:2050)
+	at com.sun.org.apache.xerces.internal.impl.xs.XMLSchemaValidator.startElement(XMLSchemaValidator.java:740)
+	at com.sun.org.apache.xerces.internal.jaxp.validation.ValidatorHandlerImpl.startElement(ValidatorHandlerImpl.java:570)
+	at com.sun.xml.bind.v2.runtime.unmarshaller.ValidatingUnmarshaller.startElement(ValidatingUnmarshaller.java:101)
+	at com.sun.xml.bind.v2.runtime.unmarshaller.InterningXmlVisitor.startElement(InterningXmlVisitor.java:75)
+	at com.sun.xml.bind.v2.runtime.unmarshaller.StAXEventConnector.handleStartElement(StAXEventConnector.java:261)
+	at com.sun.xml.bind.v2.runtime.unmarshaller.StAXEventConnector.bridge(StAXEventConnector.java:130)
+	at com.sun.xml.bind.v2.runtime.unmarshaller.UnmarshallerImpl.unmarshal0(UnmarshallerImpl.java:460)
+</code></pre>
+<p>修改为英文类名<code>com.codeinchinese.customer.model.Customer</code>后, 保留MySQL中文命名和Hibernate相关映射, 仍能运行.</p>
+<p>考虑到这是从版本4到5的功能退化, 而且在6.0版本并无修复的意思, 应该提issue反馈一下.</p>
+<h3>参考</h3>
+<p><a href="https://www.mkyong.com/hibernate/maven-3-hibernate-3-6-oracle-11g-example-xml-mapping/">Maven 3 + Hibernate 3.6 + Oracle 11g Example</a></p>

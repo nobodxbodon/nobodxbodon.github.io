@@ -1,0 +1,78 @@
+<h2>原文：[浅尝 miniKanren，传说中的逻辑式编程（二）](https://codeinchinese.com/2021/05/13/浅尝 miniKanren，传说中的逻辑式编程（二）)</h2>
+<p>先广个告，使用中文命名标识符、Python 实现的木兰编程语言重现项目刚挂出了三个悬赏任务，详见 <a href="https://zhuanlan.zhihu.com/p/372021884">此文</a>，恭候各位。</p>
+<hr/>
+<p>续 <a href="https://zhuanlan.zhihu.com/p/371439938">上文</a>，碰壁后试了一下为 <a href="http://io.livecode.ch/learn/webyrd/webmk">教程</a> 编写的 <a href="https://github.com/webyrd/webmk">小关实现</a>，发现例程运行就没问题了，已 <a href="https://github.com/webyrd/webmk/issues/4#issuecomment-838701563">向教程 repo 反馈</a>。</p>
+<p>如教程所言，结果是 #f 和 #t 交替出现：</p>
+<pre><code>&gt; (run 9 (啥)
+    (let 循环 ()
+      (conde
+        ((== #f 啥))
+        ((== #t 啥))
+        ((循环)))))
+(#f #t #f #t #f #t #f #t #f)
+</code></pre>
+<p>#f 满足第一个条件，#t 满足第二个，conde 的各个分句互相独立，而第三个分句会重置条件（？），因而会不断获得答案。</p>
+<p>下面定义“任何”：</p>
+<pre><code>(define 任何
+  (lambda (关联)
+    (conde
+      (关联)
+      ((任何 关联)))))
+</code></pre>
+<p>现在不用 let，下面仍为死循环，因为*为无限求答：</p>
+<pre><code>&gt; (run* (啥)
+  (conde
+    ((任何 (== #f 啥)))
+    ((== #t 啥))))
+</code></pre>
+<p>限定答案数后，结果如下，#t 只有一次，后续都是 #f。教程里特意说明答案顺序不讲究。</p>
+<pre><code>&gt; (run 5 (啥)
+  (conde
+    ((任何 (== #f 啥)))
+    ((== #t 啥))))
+(#t #f #f #f #f)
+</code></pre>
+<p>顺便试了这样，就变为交替出现：</p>
+<pre><code>&gt; (run 5 (啥)
+    (conde
+      ((任何 (== #f 啥)))
+      ((任何 (== #t 啥)))))
+(#f #t #f #t #f)
+</code></pre>
+<p>类似的，这样也是 123 交替循环：</p>
+<pre><code>&gt; (run 10 (啥)
+    (任何
+      (conde
+        ((== 1 啥))
+        ((== 2 啥))
+        ((== 3 啥)))))
+(1 2 3 1 2 3 1 2 3 1)
+</code></pre>
+<p>条件嵌套：</p>
+<pre><code>&gt; (run 3 (啥)
+    (let ((没门 (任何 (== #f #t))))
+      (conde
+        ((== 1 啥))
+        (没门)
+        ((conde
+           ((== 2 啥))
+           (没门)
+           ((== 3 啥)))))))
+(1 2 3)
+</code></pre>
+<p>如果把 3 改为 4，又会无限循环，因为“没门”会一直寻找不存在的第四个答案。</p>
+<pre><code>&gt; (run 4 (啥)
+    (let ((没门 (任何 (== #f #t))))
+      (conde
+        ((== 1 啥))
+        (没门)
+        ((conde
+           ((== 2 啥))
+           (没门)
+           ((== 3 啥)))))))
+</code></pre>
+<p>另试了一下，下面也是死循环：</p>
+<pre><code>(run* (啥)
+  (任何 (== #f #t)))
+</code></pre>
+<p>后面半段教程是关于四个限制运算符：=/= symbolo numbero absento。搂了两眼……Scheme+逻辑式先到这吧，哪天蓄够蓝条再继续。</p>

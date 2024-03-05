@@ -1,0 +1,47 @@
+<h2>原文：[为Jekyll+GitHub Pages添加全文搜索功能](https://codeinchinese.com/2019/04/08/为Jekyll+GitHub Pages添加全文搜索功能.markdown)</h2>
+<hr/>
+<h2>layout: post
+comments: true
+title:  为Jekyll+GitHub Pages添加全文搜索功能
+description: 为Jekyll+GitHub Pages添加全文搜索功能
+date:   2019-04-08 00:00:00 -0700
+categories: 命名</h2>
+<p>![2019-04-08_gh搜索演示]({{ "/assets/2019-04-08_gh搜索演示.png" | absolute_url }})</p>
+<p>动态演示如下:</p>
+<p>![2019-04-08_gh搜索]({{ "/assets/2019-04-08_gh搜索.gif" | absolute_url }})</p>
+<p>源码库: <a href="https://github.com/program-in-chinese/team_website">program-in-chinese/team_website</a></p>
+<p>找到此JS工具: <a href="https://github.com/christian-fei/Simple-Jekyll-Search">christian-fei/Simple-Jekyll-Search</a>, 按安装说明先完成了对题目/类别/日期的搜索, 本地运行不错. 再接再厉添加了对描述和全文(post.content)的搜索, 详见<a href="https://github.com/program-in-chinese/team_website/blob/master/%E5%85%A8%E6%96%87%E7%B4%A2%E5%BC%95.json">全文索引.json</a></p>
+<p>发现生成的json文件中, 特殊字符如引号使得json语法出错:</p>
+<p>![2019-04-08_invalidJSON]({{ "/assets/2019-04-08_invalidJSON.png" | absolute_url }})</p>
+<p>发现前人对同样问题的解决方法<a href="https://github.com/christian-fei/Simple-Jekyll-Search/issues/63">"full-text search" donot work! · Issue #63 · christian-fei/Simple-Jekyll-Search</a>, 另参考<a href="https://github.com/christian-fei/Simple-Jekyll-Search/wiki#if-search-isnt-working-due-to-invalid-json">christian-fei/Simple-Jekyll-Search</a>, 在<code>_plugins</code>下添加脚本<code>特殊字符过滤.rb</code>:</p>
+<pre><code class="language-ruby">module Jekyll
+  module C字符过滤器
+    def remove_chars_cn(输入)
+      输入.gsub! '\\','&amp;#92;'
+      输入.gsub! /\t/, '    '
+      输入.gsub! '@',''
+      输入.gsub! '$',''
+      输入.gsub! '%',''
+      输入.gsub! '&amp;',''
+      输入.gsub! '"',''
+      输入.gsub! '{',''
+      输入.gsub! '}',''
+      输入
+    end
+  end
+end
+
+Liquid::Template.register_filter(Jekyll::C字符过滤器)
+</code></pre>
+<p>module名称如果没有大写字母开头, 报语法错误如下, 猜测原因与<a href="https://zhuanlan.zhihu.com/p/52114604">Scala疑似中文命名问题后续</a>类似, 不过Ruby好像将中文字符认作了非大写的:</p>
+<pre><code>特殊字符过滤.rb:2: class/module name must be CONSTANT (SyntaxError)
+</code></pre>
+<p>方法remove_chars_cn未能中文, 由于Jekyll的Liquid脚本语言貌似不支持Unicode标识符, 会报错:</p>
+<pre><code>Liquid Warning: Liquid syntax error (line 6): Unexpected character 删 in "{{ post.description | strip_html | strip_newlines | 删除特殊字符 }}" in 全文索引.json
+</code></pre>
+<p>在本地运行通过后, 将包括插件在内的修改提交到GitHub后, 发现网站加载json文件时报错"invalid JSON", 查看取json的请求响应内容后, 各种尝试后初步认定是插件未成功运行, 一通搜之后发现, GitHub Pages不支持任意插件的运行: <a href="https://stackoverflow.com/questions/20369397/jekyll-plugin-not-work-on-github/20377640#20377640">jekyll plugin not work on github</a></p>
+<p>解决方法就是本地jekyll生成网站源码后, 将网站源码提交到repo里.</p>
+<p>参考<a href="https://jekyllrb.com/docs/configuration/options/">Configuration Options</a>在<code>_config.yml</code>中将输出目录改为<code>docs</code>:</p>
+<pre><code>destination: docs
+</code></pre>
+<p>再将原本的jekyll文件都移到repo根下, 运行生成后提交, 搞定.</p>

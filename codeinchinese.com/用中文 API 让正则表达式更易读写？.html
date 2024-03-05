@@ -1,0 +1,73 @@
+<h2>原文：[用中文 API 让正则表达式更易读写？](https://codeinchinese.com/2020/11/30/用中文 API 让正则表达式更易读写？)</h2>
+<p><a href="https://gitee.com/MulanRevive/mulan-rework">木兰语言重现项目</a>中用到了不少正则表达式，其中不乏不那么一目了然的（Python实现）：</p>
+<pre><code class="language-re">标识符：r'\$?[_a-zA-Z\u4e00-\u9fa5][_a-zA-Z0-9\u4e00-\u9fa5]*'  
+
+双引号字符串： r'(\")((?&lt;!\\)\\\1|.)*?\1'
+
+字符串插值相关：r'\\\(([^\\\)]*)\\\)|`([^`]*)`'
+</code></pre>
+<p>由此想到是否有 API 能够构建正则表达式。找到 <a href="https://github.com/VerbalExpressions/PythonVerbalExpressions">PythonVerbalExpressions</a>，它首页上一个示例如下:</p>
+<pre><code class="language-python">verbal_expression.
+start_of_line().
+find('http').
+maybe('s').
+find('://').
+maybe('www.').
+anything_but(' ').
+end_of_line()
+</code></pre>
+<p>对应正则: <code>^(http)(s)?(\:\/\/)(www\.)?([^\ ]*)$</code></p>
+<p>看起来的确比较可读，而且如果改为中文 API 的话，命名会更简短:</p>
+<pre><code class="language-python">开头().
+寻找('http').
+或许('s').
+寻找('://').
+或许('www.').
+除了(' ').
+结尾()
+</code></pre>
+<p>问题是这个库的功能似乎有限，仅支持小部分正则语法，于是考虑改进。</p>
+<h2>设想中的 API 示例</h2>
+<p>以开头的木兰实现中的几个正则为例，用设想中的 API 表达后进行对比</p>
+<p>标识符：</p>
+<pre><code class="language-python">至多一个("$").一个("_", 大小写英文, 中文).任意个("_", 大小写英文, 数字, 中文)
+
+原始正则表达式对比：r'\$?[_a-zA-Z\u4e00-\u9fa5][_a-zA-Z0-9\u4e00-\u9fa5]*'       
+</code></pre>
+<p>双引号字符串：</p>
+<pre><code class="language-python">分组(双引号)
+  .最小匹配(
+    任意个(
+      分组(
+        皆可(
+          前面不是(反斜杠).一个(反斜杠).一个(引用分组(1)),
+          一个(非换行字符))
+      )
+    )
+  )
+  .引用分组(1)
+
+r'(\")((?&lt;!\\)\\\1|.)*?\1'
+</code></pre>
+<p>字符串插值相关：</p>
+<pre><code class="language-python">皆可(
+  一个(反斜杠).一个(左小括号).分组(任意个(不是(反斜杠, 右小括号))).一个(反斜杠).一个(右小括号),
+  一个(反引号).分组(任意个(不是(反引号))).一个(反引号)
+)
+
+r'\\\(([^\\\)]*)\\\)|`([^`]*)`'
+</code></pre>
+<p>相对原始正则表达式，在可读性之外还有几个优势:</p>
+<ul>
+<li>不需为正则的特殊意义字符加反斜杠，如 \，(，) 等</li>
+<li>明确运算优先级，比如双引号字符串中的 | 和 (?&lt;!)...</li>
+</ul>
+<p>在易写方面，相对于正则的符号语法，API 语义更加直白。</p>
+<p>欢迎意见建议。</p>
+<p>========
+类型?</p>
+<p>返回"正则表达式":</p>
+<pre><code></code></pre>
+<p>返回"分组":</p>
+<pre><code>分组()
+</code></pre>

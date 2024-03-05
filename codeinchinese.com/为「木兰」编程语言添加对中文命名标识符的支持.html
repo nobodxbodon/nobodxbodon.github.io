@@ -1,0 +1,38 @@
+<h2>原文：<a href="https://codeinchinese.com/2020/01/23/%E4%B8%BA%E3%80%8C%E6%9C%A8%E5%85%B0%E3%80%8D%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%E6%B7%BB%E5%8A%A0%E5%AF%B9%E4%B8%AD%E6%96%87%E5%91%BD%E5%90%8D%E6%A0%87%E8%AF%86%E7%AC%A6%E7%9A%84%E6%94%AF%E6%8C%81.markdown">为「木兰」编程语言添加对中文命名标识符的支持</a></h2>
+<hr/>
+<h2>layout: post
+comments: true
+title:  为「木兰」编程语言添加对中文命名标识符的支持
+description:
+date:   2020-01-23 22:00:00 -0700
+categories:  命名 木兰</h2>
+<p>基于 @肖剑 的<a href="https://www.zhihu.com/question/366509495/answer/978966908">逆向工程</a>(如很多人已经知道的, 当然是 Python 代码, 很不错, 嗯).</p>
+<p>开始对「木兰」编程语言进行分析。首先打算摸索它的基本功能。前文<a href="https://zhuanlan.zhihu.com/p/103893370">戳破针对「木兰」编程语言的拙劣谣言</a>已经进行了少量代码测试.</p>
+<p>但, 可惜木兰<a href="https://www.zhihu.com/question/366509495/answer/977696328">尚未支持中文命名标识符</a>, 打算先改进一下, 以便编写更易维护的测试代码. 测试代码打算先在逆向工程中运行（主力机器是 Mac），待基本确定范围后，再在 exe 中确认一遍。</p>
+<p>运行 ulang-0.2.2.exe 后, 如果输入下面代码:</p>
+<pre><code class="language-python">年 = year()
+</code></pre>
+<p>会报错<code>LexingError</code>.</p>
+<p>在我 fork 出的逆向工程中运行<code>python -m ulang</code>可以启动同样的交互环境 ulang's REPL. 但同样的代码报错不同, 似乎信息更多一些:</p>
+<pre><code>&gt; 年 = year()
+SyntaxError: File "&lt;STDIN&gt;", line 1:1, unknown token is found here
+年 = year()
+^
+</code></pre>
+<p>回头可以研究一下报错机制, 为何 exe 和逆向的不同.</p>
+<p>早先回答时猜想是由于"实现的前端在词法分析这步拦住了"中文命名, 于是查看逆向代码中, 果然看到<code>parser/lexer.py</code>中关于标识符的正则表达规则中, 只允许英文/数字/下划线:</p>
+<pre><code class="language-python">lg.add('IDENTIFIER', '\\$?[_a-zA-Z][_a-zA-Z0-9]*')
+</code></pre>
+<p>接下去就熟门熟路, 添加上中文字符的 unicode 范围:</p>
+<pre><code class="language-python">lg.add('IDENTIFIER', '\\$?[_a-zA-Z\u4e00-\u9fa5][_a-zA-Z0-9\u4e00-\u9fa5]*')
+</code></pre>
+<p>再从逆向工程中运行:</p>
+<pre><code>$ python3 -m ulang
+Welcome to ulang's REPL..
+Type 'help' for more informations.
+&gt; 年 = year()
+&gt; 年
+2020
+</code></pre>
+<p>嗯, 告别过去, 不错的第一步.</p>
+<p>逆向工程地址: https://github.com/MulanRevive/mulan</p>
