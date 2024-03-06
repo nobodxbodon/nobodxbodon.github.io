@@ -1,0 +1,328 @@
+<h2>原文：<a href="https://jaredtao.gitee.io/%E7%8E%A9%E8%BD%ACQml(4">玩转Qml(4)-I18n动态国际化</a>-I18n动态国际化)</h2>
+<hr/>
+<p>title: 玩转Qml(4)-I18n动态国际化
+photos: /images/Qml4/1.gif
+tags:</p>
+<ul>
+<li>Qt</li>
+<li>Qml</li>
+<li>QtQuick</li>
+<li>组件化编程
+categories: 玩转Qml
+abbrlink: 18621
+date: 2019-05-12 23:44:23</li>
+</ul>
+<hr/>
+<ul>
+<li><a href="#%E7%AE%80%E4%BB%8B">简介</a></li>
+<li><a href="#%E6%95%88%E6%9E%9C%E9%A2%84%E8%A7%88">效果预览</a></li>
+<li><a href="#%E6%BA%90%E7%A0%81%E4%B8%AD%E8%BE%93%E5%87%BA%E4%B8%AD%E6%96%87">源码中输出中文</a></li>
+<li><a href="#qt%E6%9C%AC%E8%BA%AB%E7%9A%84%E5%9B%BD%E9%99%85%E5%8C%96">Qt本身的国际化</a></li>
+<li><a href="#%E7%BF%BB%E8%AF%91%E5%B7%A5%E4%BD%9C">翻译工作</a></li>
+<li><a href="#%E5%AE%9E%E7%8E%B0%E5%8A%A8%E6%80%81%E7%BF%BB%E8%AF%91">实现动态翻译</a><ul>
+<li><a href="#%E5%8A%A0%E8%BD%BD%E7%BF%BB%E8%AF%91%E6%96%87%E4%BB%B6">加载翻译文件</a></li>
+<li><a href="#qml%E4%B8%AD%E5%88%87%E6%8D%A2%E8%AF%AD%E8%A8%80">Qml中切换语言</a></li>
+</ul>
+</li>
+<li><a href="#%E5%A4%9A%E5%9B%BD%E8%AF%AD%E8%A8%80%E7%89%88%E6%9C%AC">多国语言版本</a></li>
+</ul>
+<h2>简介</h2>
+<p>本文是《玩转Qml》系列文章的第四篇，涛哥将教大家，如何在Qml中实现动态国际化。</p>
+<p>i18n 是 internationalization(国际化) 的首尾字符加中间的 18 个字符。随着产品越做越大，要推向国际的时候，国际化这一步</p>
+<p>是必不可少的。i18n 的方案有很多，这里只讨论在Qt/Qml中的方案。</p>
+<h2>源码</h2>
+<p>《玩转Qml》系列文章，配套了一个优秀的开源项目:TaoQuick</p>
+<p>github https://github.com/jaredtao/TaoQuick</p>
+<p>访问不了或者速度太慢，可以用国内的镜像网站gitee</p>
+<p>https://gitee.com/jaredtao/TaoQuick</p>
+<h2>效果预览</h2>
+<p>看一下最终效果</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Qml4/1.gif"/></p>
+<p>目前支持的语言包括：</p>
+<ul>
+<li>中文</li>
+<li>英文</li>
+<li>日文</li>
+<li>韩文</li>
+<li>法文</li>
+<li>俄文</li>
+<li>德文</li>
+<li>西班牙文</li>
+<li>葡萄牙文</li>
+<li>意大利文</li>
+<li>越南文</li>
+<li>阿拉伯文</li>
+</ul>
+<p>(其中阿拉伯文是从右往左写的，qml默认的处理看起来不完全正确。</p>
+<p>涛哥对阿拉伯也不是很熟，就不深入研究了。)</p>
+<h2>源码中输出中文</h2>
+<p>先说一下源码中输出中文的问题。</p>
+<p>在文件本身的编码是utf-8的前提下，以下三种方式都可以直接输出中文。</p>
+<pre><code>    qInfo() &lt;&lt; u8"山有木兮木有枝，心悦君兮君不知。";
+</code></pre>
+<pre><code>    qInfo() &lt;&lt; QStringLiteral("黄河远上白云间，一片孤城万仞山。");
+</code></pre>
+<pre><code>    qInfo() &lt;&lt; QString::fromLocal8Bit("人生若只如初见，何事秋风悲画扇。");
+</code></pre>
+<p>u8是c++11标准支持的字符串字面量写法，可以参考https://zh.cppreference.com/w/cpp/language/string_literal</p>
+<p>QStringLiteral是Qt特有的宏，用来在编译期生成字符串字面量，效果和u8类似。</p>
+<p>QString::fromLocal8Bit可以在运行过程中，动态处理中文字符串。</p>
+<h2>Qt本身的国际化</h2>
+<p>Qt的国际化, 相关文章太多了，Qt帮助文档也有，涛哥这里列出重点</p>
+<ol>
+<li>C++代码中的字符串使用QObject::tr()包起来，类本身是QObject的子类时可以省略作用域“QObject::”,直接写tr</li>
+<li>qml代码中使用qsTr把字符串包起来</li>
+<li>pro文件中添加一句TRANSLATIONS += trans_zh.qs ，这个名字起什么无所谓，关键是‘_zh’要有。</li>
+<li>调用lrelease工具,扫描项目并生成trans_zh.qs 文件。这个文件是xml格式的，未经过翻译的，需要为这个文件做一些翻译工作。
+后面说怎么做翻译。</li>
+<li>翻译做好后，调用lupdate工具，生成trans_zh.qm文件。这个文件就是把xml变成了二进制。</li>
+<li>将qm文件放在运行路径，或者资源文件里。</li>
+<li>切换语言时， Qt/C++代码中使用QTranslater加载qm文件，QCoreApplication卸载旧的QTranslater，并安装新的QTranslater。调用
+QmlEngine::retranslate函数</li>
+</ol>
+<p>在5.10以前的版本，Qt是不能直接动态切换语言的，要么重新启动程序，要么把所有的text都set一遍，retranslate是5.10才有的接口。</p>
+<p>涛哥这次的方案，以retranslate为主，5.10以前还有各路大神的动态切换语言方案，不在本次文章的讨论范围。</p>
+<h2>翻译工作</h2>
+<p>Qt提供了可视化的工具，即QTDIR/bin路径下的linguist.exe，可以直接打开我们拿到的trans_zh.qs文件。这个工具可以由程序员之外不懂xml的专业翻译人士使用。</p>
+<p>涛哥在这里就使用自动化的翻译工具来做这个事情，比如使用 百度翻译API 或 有道翻译API。</p>
+<p>为此，涛哥使用go语言写了一个小工具，能接入百度和有道的翻译API，并且能读取Qt的qs文件、完成翻译后再写回qs文件。</p>
+<p>小工具已经开源 <a href="https://github.com/jaredtao/Transer">Qt-Transer</a></p>
+<p>当然这种小工具Qt也能做，涛哥使用go纯属兴趣。</p>
+<h2>实现动态翻译</h2>
+<h3>加载翻译文件</h3>
+<p>需要在Qt/C++代码中实现，并提供给qml调用。这里以中文和英文为例，涛哥直接写在了自定义QQuivkView的代码里。</p>
+<pre><code class="language-c++">//TaoView.h
+
+class TaoView : public QQuickView
+{
+    Q_OBJECT
+public:
+    explicit TaoView(QWindow *parent = nullptr);
+    Q_INVOKABLE void reTrans(const QString &amp;lang);  //这是通过invokable导出的函数
+
+public slots:
+private:
+    QTranslator m_enTrans;      //英文的翻译
+    QTranslator m_zhTrans;      //中文的翻译
+    QString m_lang;             //记录当前语言
+};
+
+</code></pre>
+<pre><code class="language-C++">// TaoView.cpp
+#include "stdafx.h"
+
+#include "TaoView.h"
+
+#include &lt;QTranslator&gt;
+#include &lt;QQmlEngine&gt;
+TaoView::TaoView(QWindow *parent) : QQuickView(parent)
+{
+    setFlag(Qt::FramelessWindowHint);
+    setResizeMode(SizeRootObjectToView);
+    setColor(QColor(Qt::transparent));
+    
+    //构造函数直接加载翻译文件
+
+    bool ok = m_enTrans.load("trans_en.qm");
+    bool ok2 = m_zhTrans.load("trans_zh.qm");
+    qWarning() &lt;&lt; ok &lt;&lt; ok2;
+
+    //默认安装中文
+    QCoreApplication::installTranslator(&amp;m_zhTrans);
+    m_lang = QStringLiteral("中文简体");
+}
+
+void TaoView::reTrans(const QString &amp;lang)
+{
+    if (m_lang == lang)
+    {
+        return;
+    }
+    //切换语言
+    m_lang = lang;
+    if ( lang == QStringLiteral("中文简体"))
+    {
+        QCoreApplication::removeTranslator(&amp;m_enTrans);
+        QCoreApplication::installTranslator(&amp;m_zhTrans);
+        engine()-&gt;retranslate();
+    } else if (lang == "English") {
+        QCoreApplication::removeTranslator(&amp;m_zhTrans);
+        QCoreApplication::installTranslator(&amp;m_enTrans);
+        engine()-&gt;retranslate();
+    }
+}
+
+</code></pre>
+<h3>Qml中切换语言</h3>
+<p>和文章3 <a href="https://jaredtao.github.io/2019/05/12/Qml%E7%BB%84%E4%BB%B6%E5%8C%96%E7%BC%96%E7%A8%8B3-%E5%8A%A8%E6%80%81%E5%88%87%E6%8D%A2%E7%9A%AE%E8%82%A4/">Qml组件化编程3-动态切换皮肤</a> 类似, 在标题栏按钮中做一个切换按钮</p>
+<pre><code class="language-qml">// TitleBar.qml
+TImageBtn {
+    width: 20
+    height: 20
+    anchors.verticalCenter: parent.verticalCenter
+    imageUrl: containsMouse ? "qrc:/Image/Window/lang_white.png" : "qrc:/Image/Window/lang_gray.png"
+    onClicked: {
+        pop.show()
+    }
+    TPopup {
+        id: pop
+        barColor: gConfig.reserverColor
+        backgroundWidth: 100
+        backgroundHeight: 80
+        contentItem: ListView {
+            id: langListView
+            anchors.fill: parent
+            anchors.margins: 2
+            model: ["中文简体", "English"]      //语言列表，这里不需要qsTr
+            delegate: TTextBtn {
+                width: langListView.width
+                height: 36
+                text: modelData
+                color: containsMouse ? "lightgray" : pop.barColor
+                onClicked: {
+                    pop.hide()
+                    //调用Q_INVOKABLE导出的函数，reTrans
+                    view.reTrans(modelData)
+                }
+            }
+        }
+    }
+}
+
+</code></pre>
+<h2>多国语言版本</h2>
+<p>前面的代码只有中文和英文，已经可以说明问题了。</p>
+<p>这里再把最终版本的多国语言的贴出来。</p>
+<p>这是头文件</p>
+<pre><code class="language-c++">//TaoView.h
+#pragma once
+
+#include &lt;QQuickView&gt;
+#include &lt;memory&gt;
+
+class TaoView : public QQuickView
+{
+    Q_OBJECT
+    Q_PROPERTY(QStringList languageList READ languageList NOTIFY languageListChanged)
+public:
+    explicit TaoView(QWindow *parent = nullptr);
+    Q_INVOKABLE void reTrans(const QString &amp;lang);
+    const QStringList &amp;languageList() const
+    {
+        return m_languageList;
+    }
+
+signals:
+    void reTransed();
+    void languageListChanged();
+
+private:
+    QString m_lang;
+    QMap&lt;QString, std::shared_ptr&lt;QTranslator&gt;&gt; m_transMap;
+    QTranslator *m_pLastLang = nullptr;
+    QStringList m_languageList;
+};
+</code></pre>
+<p>这是cpp</p>
+<pre><code class="language-c++">//TaoView.cpp
+#include "stdafx.h"
+
+#include "TaoView.h"
+
+#include &lt;QTranslator&gt;
+#include &lt;QQmlEngine&gt;
+TaoView::TaoView(QWindow *parent) : QQuickView(parent)
+{
+    setFlag(Qt::FramelessWindowHint);
+    setResizeMode(SizeRootObjectToView);
+    setColor(QColor(Qt::transparent));
+
+    m_languageList &lt;&lt; u8"中文简体"
+                   &lt;&lt; u8"English"
+                   &lt;&lt; u8"日本語"
+                   &lt;&lt; u8"한국어"
+                   &lt;&lt; u8"Français"
+                   &lt;&lt; u8"Español"
+                   &lt;&lt; u8"Portugués"
+                   &lt;&lt; u8"In Italiano"
+                   &lt;&lt; u8"русский язык"
+                   &lt;&lt; u8"Tiếng Việt"
+                   &lt;&lt; u8"Deutsch"
+                   &lt;&lt; u8" عربي ، ";
+    QStringList fileList;
+    fileList &lt;&lt; "trans_zh.qm"
+            &lt;&lt; "trans_en.qm"
+            &lt;&lt; "trans_ja.qm"
+            &lt;&lt; "trans_ko.qm"
+            &lt;&lt; "trans_fr.qm"
+            &lt;&lt; "trans_es.qm"
+            &lt;&lt; "trans_pt.qm"
+            &lt;&lt; "trans_it.qm"
+            &lt;&lt; "trans_ru.qm"
+            &lt;&lt; "trans_vi.qm"
+            &lt;&lt; "trans_de.qm"
+            &lt;&lt; "trans_ar.qm";
+
+    for (auto i = 0; i &lt; m_languageList.length(); ++i)
+    {
+        auto trans = std::make_shared&lt;QTranslator&gt;();
+        bool ok = trans-&gt;load(fileList.at(i));
+        qWarning() &lt;&lt; m_languageList.at(i) &lt;&lt; fileList.at(i) &lt;&lt; ok;
+        m_transMap[m_languageList.at(i)] = trans;
+    }
+    m_pLastLang = m_transMap[m_languageList.at(0)].get();
+    QCoreApplication::installTranslator(m_pLastLang);
+    m_lang = m_languageList.at(0);
+    emit languageListChanged();
+}
+
+void TaoView::reTrans(const QString &amp;lang)
+{
+    if (m_lang == lang)
+    {
+        return;
+    }
+    m_lang = lang;
+
+    QCoreApplication::removeTranslator(m_pLastLang);
+    m_pLastLang = m_transMap[lang].get();
+    QCoreApplication::installTranslator(m_pLastLang);
+    engine()-&gt;retranslate();
+    emit reTransed();
+}
+</code></pre>
+<p>还有qml</p>
+<pre><code class="language-qml">    ....
+        TImageBtn {
+            width: 20
+            height: 20
+            anchors.verticalCenter: parent.verticalCenter
+            imageUrl: containsMouse ? "qrc:/Image/Window/lang_white.png" : "qrc:/Image/Window/lang_gray.png"
+            onClicked: {
+                pop.show()
+            }
+            TPopup {
+                id: pop
+                barColor: gConfig.reserverColor
+                backgroundWidth: 100
+                backgroundHeight: 400
+                contentItem: ListView {
+                    id: langListView
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    model: view.languageList        //这里换成了list属性
+                    delegate: TTextBtn {
+                        width: langListView.width
+                        height: 36
+                        text: modelData
+                        color: containsMouse ? "lightgray" : pop.barColor
+                        onClicked: {
+                            pop.hide()
+                            view.reTrans(modelData)
+                        }
+                    }
+                }
+            }
+        }
+    ....
+</code></pre>

@@ -1,0 +1,559 @@
+<h2>原文：<a href="https://jaredtao.gitee.io/%E7%8E%A9%E8%BD%ACQml(7">玩转Qml(7)-自绘组件</a>-自绘组件)</h2>
+<hr/>
+<p>title: 玩转Qml(7)-自绘组件
+photos: /images/Qml7/4.gif
+tags:</p>
+<ul>
+<li>Qt</li>
+<li>Qml</li>
+<li>QtQuick</li>
+<li>组件化编程
+categories: 玩转Qml
+abbrlink: 62615
+date: 2019-05-19 12:33:44</li>
+</ul>
+<hr/>
+<ul>
+<li><a href="#%E7%AE%80%E4%BB%8B">简介</a></li>
+<li><a href="#%E6%BA%90%E7%A0%81">源码</a></li>
+<li><a href="#%E8%87%AA%E7%BB%98%E6%96%B9%E6%A1%88">自绘方案</a></li>
+<li><a href="#qpainter">QPainter</a><ul>
+<li><a href="#qwidgetqpainter-%E7%A4%BA%E4%BE%8B">QWidget+QPainter 示例</a></li>
+<li><a href="#qquickpainteditemqpainter-%E7%A4%BA%E4%BE%8B">QQuickPaintedItem+QPainter 示例</a></li>
+<li><a href="#%E5%85%B3%E4%BA%8Eqpainter">关于QPainter</a></li>
+</ul>
+</li>
+<li><a href="#qml-canvas">Qml Canvas</a></li>
+<li><a href="#qml-shapes">Qml Shapes</a></li>
+<li><a href="#qopenglwidget--qopenglwindow">QOpenGLWidget / QOpenGLWindow</a></li>
+<li><a href="#qml-scenegraph">Qml SceneGraph</a></li>
+<li><a href="#qml-qquickframebufferobject">Qml QQuickFrameBufferObject</a></li>
+<li><a href="#qml-shadereffect">Qml ShaderEffect</a></li>
+<li><a href="#qvulkanwindow">QVulkanWindow</a></li>
+</ul>
+<h2>简介</h2>
+<p>本文是《玩转Qml》系列文章的第七篇，涛哥会罗列Qt中的所有自绘方案，并提供一些案例和说明。</p>
+<p>Qt自带的组件，外观都是固定的，一般可以通过qss/Qml style等方式进行定制。</p>
+<p>如果要实现外观特殊的组件，就需要自己绘制了。</p>
+<h2>源码</h2>
+<p>《玩转Qml》系列文章，配套了一个优秀的开源项目:TaoQuick</p>
+<p>github https://github.com/jaredtao/TaoQuick</p>
+<p>访问不了或者速度太慢，可以用国内的镜像网站gitee</p>
+<p>https://gitee.com/jaredtao/TaoQuick</p>
+<h2>自绘方案</h2>
+<p>Qt中的自绘方案有这么一些：</p>
+<ul>
+<li>QWidget+QPainter / QQuickPaintedItem+QPainter</li>
+<li>Qml Canvas</li>
+<li>Qml Shapes</li>
+<li>QOpenGLWidget / QOpenGLWindow</li>
+<li>Qml QQuickFrameBufferObject</li>
+<li>Qml SceneGraph</li>
+<li>Qml ShaderEffect</li>
+<li>QVulkanWindow</li>
+</ul>
+<p>(GraphicsView和QWidget的绘制类似，就不讨论了)</p>
+<h2>QPainter</h2>
+<p>QPainter是一个功能强大的画笔，QWidget中的各种控件如QPushButton、QLable等都是用QPainter画出来的。</p>
+<p>(QWidget的控件在绘制时，还增加了qss样式表，让UI定制变得更加方便。)</p>
+<h3>QWidget+QPainter 示例</h3>
+<p>QWidget中使用QPainter的方法，是重载paintEvent事件，这里示例绘制一个进度条:</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Qml7/1.gif"/></p>
+<pre><code class="language-C++">//MainWindow.h
+#pragma once
+
+#include &lt;QMainWindow&gt;
+
+class MainWindow : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    MainWindow(QWidget *parent = 0);
+    ~MainWindow();
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    void timerEvent(QTimerEvent *event) override;
+private:
+    QList&lt;QColor&gt; mColorList;
+    int mCurrent = 0;
+};
+</code></pre>
+<pre><code class="language-C++">//MainWindow.cpp
+#include "MainWindow.h"
+#include &lt;QPainter&gt;
+#include &lt;QtMath&gt;
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
+{
+    resize(400, 300);
+    mColorList &lt;&lt; QColor(51, 52, 54)
+               &lt;&lt; QColor(75, 85, 86)
+               &lt;&lt; QColor(87, 103, 103)
+               &lt;&lt; QColor(95, 119, 121)
+               &lt;&lt; QColor(101, 132, 134)
+               &lt;&lt; QColor(104, 146, 145)
+               &lt;&lt; QColor(104, 158, 158)
+               &lt;&lt; QColor(101, 169, 168)
+               &lt;&lt; QColor(92, 182, 180)
+               &lt;&lt; QColor(79, 194, 191);
+
+    //每秒触发60次定时器，即刷新率60FPS
+    startTimer(1000 / 60);
+}
+
+MainWindow::~MainWindow()
+{
+
+}
+void MainWindow::timerEvent(QTimerEvent *) {
+    mCurrent =(mCurrent + 3) % 360;
+    update();
+}
+
+void MainWindow::paintEvent(QPaintEvent *event)
+{
+    QPainter painter(this);
+    painter.setRenderHints(QPainter::Antialiasing|QPainter::TextAntialiasing);
+    //原点x坐标
+    qreal a = 100;
+    //原点y坐标
+    qreal b = 100;
+    //半径
+    qreal r = 80;
+    //每个小圆的半径递增值
+    qreal roffset = 2;
+    //每个小圆的角度递增值
+    qreal angleOffset = 30;
+
+    qreal currentangle = mCurrent ;
+
+    for (int i = 0; i &lt; mColorList.length(); i++) {
+        qreal r0 = i * roffset;
+        qreal angle = currentangle + i * angleOffset;
+
+        qreal x0 = r * cos(qDegreesToRadians(angle)) + a;
+        qreal y0 = r * sin(qDegreesToRadians(angle)) + b;
+        painter.setPen(mColorList[i]);
+        painter.setBrush(QBrush(mColorList[i]));
+        painter.drawEllipse(x0  - r0, y0 - r0, 2 * r0, 2 * r0);
+    }
+}
+
+</code></pre>
+<h3>QQuickPaintedItem+QPainter 示例</h3>
+<p>QQuickPaintedItem继承自QQuickItem，而QQuickItem就是Qml中的Item。</p>
+<p>QQuickPaintedItem通过重载paint函数,就可以使用QPainter绘制。</p>
+<p>自定义的QQuickPaintedItem子类需要注册到Qml中才能使用，注册类型或者注册实例都可以，具体可以参考《 Qml组件化编程5-Qml与C++交互》</p>
+<p>这里示例QQuickPaintedItem 中使用 QPainter绘制一个阴阳八卦:</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Qml7/2.gif"/></p>
+<pre><code class="language-C++">//PBar.h
+#pragma once
+
+#include &lt;QQuickPaintedItem&gt;
+
+class PBar : public QQuickPaintedItem
+{
+    Q_OBJECT
+public:
+    PBar(QQuickItem *parent = nullptr);
+
+    void paint(QPainter *painter) override;
+    void timerEvent(QTimerEvent *event) override;
+private:
+    QList&lt;QColor&gt; mColorList;
+    int mCurrent = 0;
+};
+</code></pre>
+<pre><code class="language-C++">//PBar.cpp
+#include "PBar.h"
+#include &lt;QPainter&gt;
+#include &lt;QtMath&gt;
+PBar::PBar(QQuickItem *parent) : QQuickPaintedItem (parent)
+{
+    mColorList &lt;&lt; QColor(51, 52, 54)
+               &lt;&lt; QColor(75, 85, 86)
+               &lt;&lt; QColor(87, 103, 103)
+               &lt;&lt; QColor(95, 119, 121)
+               &lt;&lt; QColor(101, 132, 134)
+               &lt;&lt; QColor(104, 146, 145)
+               &lt;&lt; QColor(104, 158, 158)
+               &lt;&lt; QColor(101, 169, 168)
+               &lt;&lt; QColor(92, 182, 180)
+               &lt;&lt; QColor(79, 194, 191);
+
+    //每秒触发60次定时器，即刷新率60FPS
+    startTimer(1000 / 60);
+}
+
+void PBar::paint(QPainter *painter)
+{
+    //原点x坐标
+    qreal a = 100;
+    //原点y坐标
+    qreal b = 100;
+    //半径
+    qreal r = 80;
+
+    qreal r1 = r / 2;
+    qreal r2 = r / 6;
+    qreal currentangle = mCurrent;
+
+
+    painter-&gt;save();
+    painter-&gt;setRenderHints(QPainter::Antialiasing|QPainter::TextAntialiasing);
+    //red 部分
+    {
+        painter-&gt;setBrush(QBrush(QColor(128, 1, 1)));
+
+        QPainterPath path(QPointF(a + r * cos(qDegreesToRadians( currentangle )), b - r * sin(qDegreesToRadians(currentangle ))));
+        path.arcTo(a - r, b - r,
+                   r * 2, r * 2,
+                   currentangle, 180);
+        path.arcTo(a + r1 * cos(qDegreesToRadians(currentangle + 180)) - r1, b - r1 * sin(qDegreesToRadians(currentangle + 180)) - r1,
+                   r1 * 2, r1 * 2,
+                   currentangle + 180, 180);
+        path.arcTo(a + r1*cos(qDegreesToRadians(currentangle)) - r1, b - r1 * sin(qDegreesToRadians(currentangle)) - r1,
+                   r1 * 2, r1 * 2,
+                   currentangle + 180, -180
+                   );
+
+        painter-&gt;drawPath(path);
+    }
+
+    //blue 部分
+    {
+        painter-&gt;setBrush(QBrush(QColor(1, 1, 128)));
+        QPainterPath path(QPointF(a + r * cos(qDegreesToRadians( currentangle )), b - r * sin(qDegreesToRadians(currentangle ))));
+        path.arcTo(a - r, b - r,
+                   r * 2, r * 2,
+                   currentangle, -180);
+        path.arcTo(a + r1 * cos(qDegreesToRadians(currentangle + 180)) - r1, b - r1 * sin(qDegreesToRadians(currentangle + 180)) - r1,
+                   r1 * 2, r1 * 2,
+                   currentangle + 180, 180);
+        path.arcTo(a + r1*cos(qDegreesToRadians(currentangle)) - r1, b - r1 * sin(qDegreesToRadians(currentangle)) - r1,
+                   r1 * 2, r1 * 2,
+                   currentangle + 180, -180
+                   );
+
+        painter-&gt;drawPath(path);
+    }
+    {
+        // red 小圆
+        painter-&gt;setBrush(QBrush(QColor(128, 1, 1)));
+        QPainterPath path;
+        path.addEllipse(a + r1 * cos(qDegreesToRadians(currentangle)) - r2, b - r1 * sin(qDegreesToRadians(currentangle )) - r2,
+                        r2 * 2, r2 * 2);
+        painter-&gt;drawPath(path);
+    }
+    {
+        //blue 小圆
+        painter-&gt;setBrush(QBrush(QColor(1, 1, 128)));
+        QPainterPath path;
+        path.addEllipse(a + r1 * cos(qDegreesToRadians(180 + currentangle)) - r2, b - r1 * sin(qDegreesToRadians(180 + currentangle)) - r2,
+                        r2 * 2, r2 * 2);
+        painter-&gt;drawPath(path);
+    }
+    painter-&gt;restore();
+}
+
+void PBar::timerEvent(QTimerEvent *event)
+{
+    (void)event;
+    mCurrent =(mCurrent + 3) % 360;
+    update();
+}
+
+</code></pre>
+<pre><code class="language-C++">//main.cpp
+#include &lt;QGuiApplication&gt;
+#include &lt;QQmlApplicationEngine&gt;
+#include "PBar.h"
+int main(int argc, char *argv[])
+{
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+
+    QGuiApplication app(argc, argv);
+    qmlRegisterType&lt;PBar&gt;("PBar", 1, 0, "PBar");
+    QQmlApplicationEngine engine;
+    const QUrl url(QStringLiteral("qrc:/main.qml"));
+    QObject::connect(&amp;engine, &amp;QQmlApplicationEngine::objectCreated,
+                     &amp;app, [url](QObject *obj, const QUrl &amp;objUrl) {
+                         if (!obj &amp;&amp; url == objUrl)
+                             QCoreApplication::exit(-1);
+                     }, Qt::QueuedConnection);
+    engine.load(url);
+
+    return app.exec();
+}
+
+</code></pre>
+<pre><code class="language-qml">//main.qml
+import QtQuick 2.0
+import QtQuick.Window 2.0
+import PBar 1.0
+Window {
+    visible: true
+    width: 640
+    height: 480
+    title: qsTr("Hello PBar")
+
+    PBar {
+        anchors.fill: parent
+    }
+}
+
+</code></pre>
+<h3>关于QPainter</h3>
+<p>QPainter底层使用CPU做光栅化渲染，这种方式在没有GPU的设备中能够很好地工作。</p>
+<p>(我的好友"Qt侠-刘典武"就是这方面的实战专家，他手上有将近150个精美的自绘组件，比官方还要多，有需要的同学可以联系他 QQ517216493)</p>
+<p>然而时代在飞速发展，很多设备都带上了GPU，QPainter在GPU设备上，将不能发挥GPU的全部实力。</p>
+<p>(刘典武也在积极跟进GPU绘制)</p>
+<p>这里提一下，有个叫QUItCoding的组织，开发了一套<a href="https://github.com/QUItCoding/qnanopainter">QNanoPainter</a>，接口和QPainter一致，</p>
+<p>在大部分场景下都拥有不错的性能。其底层是基于<a href="https://github.com/memononen/nanovg">nanovg</a>的GPU加速。</p>
+<p>不过QNanoPainter并没有合并进Qt官方，具体原因不清楚, 有可能是因为性能并不是100%达标的。</p>
+<h2>Qml Canvas</h2>
+<p>Qml中提供了Canvas组件，接口和html中的Canvas基本一致，可以直接copy html中的Canvas代码(极少部分不能用)。</p>
+<p>当然QPainter实现的功能，也都可以移植到Canvas中。</p>
+<p>Canvas渲染性能并不太好，如果有性能要求，还是不要用Canvas了。</p>
+<p>这里示例绘制一个笑脸</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Qml7/3.png"/></p>
+<pre><code class="language-qml">//main.qml
+import QtQuick 2.0
+import QtQuick.Window 2.0
+
+Window {
+    visible: true
+    width: 640
+    height: 480
+    title: qsTr("Hello Canvas")
+
+    Canvas {
+        id: canvas
+        anchors.fill: parent
+        onPaint: {
+
+            var ctx = canvas.getContext('2d');
+
+            ctx.beginPath();
+            ctx.arc(75,75,50,0,Math.PI*2,true); // 绘制
+            ctx.moveTo(110,75);
+            ctx.arc(75,75,35,0,Math.PI,false);   // 口(顺时针)
+            ctx.moveTo(65,65);
+            ctx.arc(60,65,5,0,Math.PI*2,true);  // 左眼
+            ctx.moveTo(95,65);
+            ctx.arc(90,65,5,0,Math.PI*2,true);  // 右眼
+            ctx.stroke();
+
+        }
+    }
+}
+
+</code></pre>
+<h2>Qml Shapes</h2>
+<p>Qt5.10开始，Qml增加了Quick.Shapes功能。这是目前官方提供的自绘途径中，兼顾性能和易用性的最佳选择。</p>
+<p>Shapes底层为GPU渲染(基于SceneGraph)，QPainter能绘制的基础图元，都可以用Shapes实现。Shapes再配合上Qml中的</p>
+<p>属性绑定和属性动画，可以轻易实现各式各样的动态、酷炫的UI。</p>
+<p>(后续的自定义组件，涛哥将会优先使用Shapes。)</p>
+<p>这里示例实现一个任意圆角的Rectangle组件:</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Qml7/4.gif"/></p>
+<pre><code class="language-qml">// TRoundRect.qml
+import QtQuick 2.12
+import QtQuick.Controls 2.5
+import QtQuick.Shapes 1.12
+Shape {
+    id: root
+    //左上角是否圆角
+    property bool leftTopRound: true
+    //左下角是否圆角
+    property bool leftBottomRound: true
+    //右上角是否圆角
+    property bool rightTopRound: true
+    //右下角是否圆角
+    property bool rightBottomRound: true
+    //圆角半径
+    property real radius
+    //颜色
+    property color color: "red"
+
+    //多重采样抗锯齿
+    layer.enabled: true
+    layer.samples: 8
+    
+    //平滑处理
+    smooth: true
+
+    //反走样抗锯齿
+    antialiasing: true
+
+    ShapePath {
+        fillColor: color
+        startX: leftTopRound ? radius : 0
+        startY: 0
+        fillRule: ShapePath.WindingFill
+        PathLine {
+            x: rightTopRound ? root.width - radius : root.width
+            y: 0
+        }
+        PathArc {
+            x: root.width
+            y: rightTopRound ? radius : 0
+            radiusX: rightTopRound ? radius : 0
+            radiusY: rightTopRound ? radius : 0
+        }
+
+        PathLine {
+            x: root.width
+            y: rightBottomRound ? root.height - radius : root.height
+        }
+        PathArc {
+            x: rightBottomRound ? root.width - radius : root.width
+            y: root.height
+            radiusX: rightBottomRound ? radius : 0
+            radiusY: rightBottomRound ? radius : 0
+        }
+        PathLine {
+            x: leftBottomRound ? radius : 0
+            y: root.height
+        }
+        PathArc {
+            x: 0
+            y: leftBottomRound ? root.height - radius : root.height
+            radiusX: leftBottomRound ? radius : 0
+            radiusY: leftBottomRound ? radius : 0
+        }
+
+        PathLine {
+            x: 0
+            y: leftTopRound ? radius : 0
+        }
+        PathArc {
+            x: leftTopRound ? radius : 0
+            y: 0
+            radiusX: leftTopRound ? radius : 0
+            radiusY: leftTopRound ? radius : 0
+        }
+    }
+}
+</code></pre>
+<p>看一下TRoundRect的用法</p>
+<pre><code class="language-qml">import QtQuick 2.0
+import QtQuick.Controls 2.5
+Rectangle {
+    width: 800
+    height: 600
+
+    Rectangle { //背景红色，衬托一下
+        x: 10
+        width: 100
+        height: 160
+        color: "red"
+    }
+    TRoundRect {
+        id: roundRect
+        x: 40
+        y: 10
+        width: 200
+        height: 160
+        radius: 40
+        leftTopRound: lt.checked
+        rightTopRound: rt.checked
+        leftBottomRound: lb.checked
+        rightBottomRound: rb.checked
+        color: "#A0333666"      //半透明色
+    }
+
+    Grid {
+        x: 300
+        y: 10
+        columns: 2
+        spacing: 10
+
+        CheckBox {
+            id: lt
+            text: "LeftTop"
+            checked: true
+        }
+        CheckBox {
+            id: rt
+            text: "RightTop"
+            checked: true
+        }
+        CheckBox {
+            id: lb
+            text: "LeftBottom"
+            checked: true
+        }
+        CheckBox {
+            id: rb
+            text: "rightBottom"
+            checked: true
+        }
+    }
+}
+</code></pre>
+<h2>QOpenGLWidget / QOpenGLWindow</h2>
+<p>有的同学学习过OpenGL这类图形渲染API，Qt为OpenGL提供了便利的窗口和上下文环境。</p>
+<p>QOpenGLWidget用来在QWidget框架中集成OpenGL渲染，QOpenGLWindow用在Qml框架。</p>
+<p>使用方法都是子类重载下面三个函数：</p>
+<pre><code class="language-C++">void initializeGL();
+
+void paintGL();
+
+void resizeGL(int w, int h);
+</code></pre>
+<p>这里可以参考官方的示例：</p>
+<p><a href="%5Bhttps://doc.qt.io/qt-5/qtopengl-hellogl2-example.html">QOpenGLWidget示例</a></p>
+<p><a href="https://doc.qt.io/qt-5/qtgui-openglwindow-example.html">QOpenGLWindow示例</a></p>
+<p>Qt对OpenGL系列的函数都做了封装，一般使用QOpenGLFunctions就够了，QOpenGLFunctions是基于OpenGL ES 2.0 API的跨平台实现，删减了个别API。</p>
+<p>相应的有一个未删减的OpenGLES2 的封装：QOpenGLFunctions_ES2。</p>
+<p>当然为了兼容所有OpenGL版本，Qt分别封装了相应的类</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Qml7/5.png"/></p>
+<p>有特殊版本需要的时候，可以把QOpenGLFunctions换成相应的类。</p>
+<p>还有一个OpenGL ES3.0的封装， QOpenGLExtraFunctions，可以在支持OpenGL ES 3.0的设备上使用。</p>
+<p>使用这些functions，一定要在有OpenGL上下文环境的地方，先调用一下initializeOpenGLFunctions。有些版本的init有返回值的，要注意判断并处理。</p>
+<h2>Qml SceneGraph</h2>
+<p>Qml基于GPU实现了一套渲染框架，这个框架就是SceneGraph。</p>
+<p>SceneGraph提供了很多GPU渲染相关的功能，以方便进行自绘制，都是以QSG开头的类，如下图所示：</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Qml7/6.png"/></p>
+<p>使用方式是在QQuickItem的子类中，重载updatePaintNode函数：</p>
+<pre><code class="language-C++">  QSGNode *TaoItem::updatePaintNode(QSGNode *node, UpdatePaintNodeData *)
+  {
+      QSGSimpleRectNode *n = static_cast&lt;QSGSimpleRectNode *&gt;(node);
+      if (!n) {
+          n = new QSGSimpleRectNode();
+          n-&gt;setColor(Qt::red);
+      }
+      n-&gt;setRect(boundingRect());
+      return n;
+  }
+
+</code></pre>
+<p>在使用Qml框架的程序中，使用这些QSG功能，将自定义渲染直接加入SceneGraph框架的渲染流程，无疑是性能最优的。</p>
+<p>不过问题在于，这些QSG有点难以使用。需要有一定的OpenGL或DirectX相关图形学知识，并理解SceneGraph的节点交换机制，才能用好。</p>
+<p>而懂OpenGL的人，有更好的选择，就是直接使用OpenGL的API。下面的QQuickFrameBufferObject就是一种途径。</p>
+<h2>Qml QQuickFrameBufferObject</h2>
+<p>QQuickFramebufferObject继承于QQuickItem(Qml中将它当作一个Item就可以了)，用来在一个framebuffer object(FBO)上做渲染，</p>
+<p>SceneGraph框架会将这个FBO渲染到屏幕上。</p>
+<p>使用的方式是，实现一个QQuickFramebufferObject::Renderer类。</p>
+<p>这个类里面始终是拥有OpenGL上下文环境的，内存也是被SceneGraph框架管理的，只要理解了渲染流程，用起来还是很方便的。</p>
+<p>涛哥在Qml中集成 视频播放器 和 3D模型渲染的时候，就使用了这个FBO。</p>
+<p>可以参考这两个例子：</p>
+<p><a href="https://github.com/jaredtao/QmlAssimp">Qml渲染3D模型</a></p>
+<p><a href="https://github.com/jaredtao/QmlOpenGLResize">FFmpeg解码，Qml/OpenGL转码渲染</a></p>
+<h2>Qml ShaderEffect</h2>
+<p>学习过图形学的人，都应该听说过大名鼎鼎的<a href="https://www.shadertoy.com/">Shadertoy</a></p>
+<p>只要一点奇妙的Shader代码，就能渲染出各种酷炫的效果。</p>
+<p>Qml中提供了ShaderEffect组件，就可以用来做ShaderToy那样的特效。</p>
+<p>可以参考qyvlik的代码仓库：</p>
+<p><a href="https://github.com/qyvlik/ShaderToy.qml">qyvlik-ShaderToy.qml</a></p>
+<p>以及我很久以前写的例子：</p>
+<p><a href="https://github.com/jaredtao/ShaderToy">Tao-ShaderToy</a></p>
+<p><a href="https://github.com/jaredtao/PowerBall">360能量球</a></p>
+<p>Qml中还有个神奇的ShaderEffectSource，可以用在普通Item的layer.effect中，</p>
+<p>比如这个例子，就用ShaderEffectSource做了倒影特效:</p>
+<p><a href="https://github.com/jaredtao/Qmldemoset">倒影特效</a></p>
+<h2>QVulkanWindow</h2>
+<p>OpenGL的下一代，已经进化为vulkan了。</p>
+<p>Qt 5.10开始，也提供了vulkan的支持。</p>
+<p>涛哥水平有限，这次只提一下，就先不展开说了。</p>

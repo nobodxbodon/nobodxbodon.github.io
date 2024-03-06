@@ -1,0 +1,374 @@
+<h2>原文：<a href="https://jaredtao.gitee.io/%E7%8E%A9%E8%BD%ACQt(2">玩转Qt(2)-自制简易好看的日志系统</a>-自制简易好看的日志系统)</h2>
+<hr/>
+<p>title: 玩转Qt(2)-自制简易好看的日志系统
+photos: /images/Logger/1.png
+tags:</p>
+<ul>
+<li>Qt</li>
+<li>Log</li>
+<li>日志系统</li>
+<li>轻量级Log系统
+categories: 玩转Qt
+abbrlink: 60472
+date: 2019-04-30 23:44:23</li>
+</ul>
+<hr/>
+<ul>
+<li><a href="#%E7%AE%80%E4%BB%8B">简介</a></li>
+<li><a href="#%E9%A2%84%E8%A7%88">预览</a></li>
+<li><a href="#%E5%8E%9F%E7%90%86">原理</a><ul>
+<li><a href="#html%E6%A0%BC%E5%BC%8F%E7%9A%84log">html格式的log</a></li>
+<li><a href="#qt%E7%9A%84log%E7%B3%BB%E7%BB%9F">Qt的log系统</a></li>
+<li><a href="#%E8%9E%8D%E5%90%88">融合</a></li>
+</ul>
+</li>
+<li><a href="#%E6%96%87%E4%BB%B6%E5%8F%A5%E6%9F%84%E5%A4%8D%E7%94%A8">文件句柄复用</a></li>
+<li><a href="#%E5%A4%9A%E7%BA%BF%E7%A8%8B%E6%B5%8B%E8%AF%95">多线程测试</a></li>
+<li><a href="#github%E4%BB%93%E5%BA%93%E9%93%BE%E6%8E%A5">github仓库链接</a></li>
+</ul>
+<h2>简介</h2>
+<p>一个完善的软件工程，自然是少不了log系统的。</p>
+<p>这次涛哥教大家，用最少的代码做一个轻量又好看的log系统。</p>
+<p>涛哥知道有现成的log4cpp、log4cplus之类的，也有使用过。</p>
+<p>这次是抱着学习的心态来造这个轮子的，造轮子的过程才能学到</p>
+<p>更多知识，才能有进步、有提升，难道不是么？</p>
+<h2>预览</h2>
+<p>先看一下成果</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Logger/1.png"/></p>
+<h2>原理</h2>
+<h3>html格式的log</h3>
+<p>为了实现 “代码最少” 和 “好看” 的需求，涛哥把log写进了一个html文件。</p>
+<p>这样的log相当于一个静态的网页，只要装有浏览器的操作系统，都可以打开并看到上面图示那样的log。</p>
+<p>涛哥给这个html文件设计了一个固定的模板的:</p>
+<pre><code class="language-html">&lt;?xml version="1.0" encoding="utf-8" standalone="yes"?&gt;
+&lt;!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"&gt;
+&lt;html&gt;
+
+&lt;head&gt;
+    &lt;title&gt;TaoLogger&lt;/title&gt;
+    &lt;meta http-equiv="Content-Type" content="text/html; charset=utf-8" /&gt;
+    &lt;style type="text/css" id="logCss"&gt;
+        body {
+            background: #18242b;
+            color: #afc6d1;
+            margin-right: 20px;
+            margin-left: 20px;
+            font-size: 14px;
+            font-family: Arial, sans-serif, sans;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        a:link {
+            color: #a0b2bb;
+        }
+
+        a:active {
+            color: #f59504;
+        }
+
+        a:visited {
+            color: #adc7d4;
+        }
+
+        a:hover {
+            color: #e49115;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        h2 {
+            color: #ebe5e5;
+        }
+
+        .d,
+        .w,
+        .c,
+        .f,
+        .i {
+            padding: 3px;
+            overflow: auto;
+        }
+
+        .d {
+            background-color: #0f1011;
+            color: #a8c1ce;
+        }
+
+        .i {
+            background-color: #294453;
+            color: #a8c1ce;
+        }
+
+        .w {
+            background-color: #7993a0;
+            color: #1b2329;
+        }
+
+        .c {
+            background-color: #ff952b;
+            color: #1d2930;
+        }
+
+        .f {
+            background-color: #fc0808;
+            color: #19242b;
+        }
+    &lt;/style&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+    &lt;h1&gt;&lt;a href="https://jaredtao.github.io"&gt;TaoLogger&lt;/a&gt; 日志文件&lt;/h1&gt;
+    &lt;script type="text/JavaScript"&gt;
+        function objHide(obj) {
+            obj.style.display="none"
+        }
+        function objShow(obj) {
+            obj.style.display="block"
+        }
+        function selectType() {
+            var sel = document.getElementById("typeSelect");
+            const hideList = new Set(['d', 'i', 'w', 'c', 'f']);
+            if (sel.value === 'a') {
+                hideList.forEach(element =&gt; {
+                    var list = document.querySelectorAll('.' + element);
+                    list.forEach(objShow);
+                });
+            } else {
+                var ss = hideList;
+                ss.delete(sel.value);
+                ss.forEach(element =&gt; {
+                    var list = document.querySelectorAll('.' + element);
+                    list.forEach(objHide);
+                });
+                var showList = document.querySelectorAll('.' + sel.value);
+                showList.forEach(objShow);
+            }
+        }
+    &lt;/script&gt;
+    &lt;select id="typeSelect" onchange="selectType()"&gt;
+        &lt;option value='a' selected="selected"&gt;All&lt;/option&gt;
+        &lt;option value='d'&gt;Debug&lt;/option&gt;
+        &lt;option value='i'&gt;Info&lt;/option&gt;
+        &lt;option value='w'&gt;Warning&lt;/option&gt;
+        &lt;option value='c'&gt;Critical&lt;/option&gt;
+        &lt;option value='f'&gt;Fatal&lt;/option&gt;
+    &lt;/select&gt;
+</code></pre>
+<p>（如果你不懂html，也没关系，直接拿过去用就好了）</p>
+<p>这个模板只使用了一些很基本的html元素和css样式表，筛选器那里用了一点JavaScript。</p>
+<ul>
+<li>Log模板的用法</li>
+</ul>
+<p>很简单的，模板作为html文件的前面部分，接下来每一行log，以追加的方式跟在模板后面就行了。</p>
+<p>(html的body结束标记并没有写，浏览器都能正常打开。容错性真的强！)</p>
+<p>当然, 每一条log有个格式要求:</p>
+<pre><code class="language-html">    &lt;div class="d"&gt; 山有木兮木有枝，心悦君兮君不知。&lt;/div&gt;
+</code></pre>
+<p>就是增加了一对div标记， div的class属性要设置为d、i、w、c、f这几个字符中的一个，分别是</p>
+<p>debug、info、warning、critical、fatal的首字母, 这正是Qt所提供的log分类。</p>
+<p>设置div的class属性，就是给筛选器用来做筛选。</p>
+<ul>
+<li>Log模板的存取</li>
+</ul>
+<p>文件读取? 不，太慢了。</p>
+<p>这就是一段固定的字符串，直接编译进代码里，程序启动的时候直接装载到内存就好了。</p>
+<p>那么C++里面，怎么才能装下这段带有转义字符的字符串呢？涛哥的答案是：C++11的 “原始字符串字面量”或者叫 “R字符串”</p>
+<p>可以参考这里 <a href="https://zh.cppreference.com/w/cpp/language/string_literal">cppreference</a></p>
+<p>简单来说，是这样写的：</p>
+<pre><code class="language-c++">string logTemplate = R"(xxxxxx)";
+</code></pre>
+<p>只要有了 R"(  )" 这个写法，括号中间随便写转义字符、换行符都行。当然为了方便让编译器识别哪个</p>
+<p>才是真正的'结束括号'，C++11标准提出了括号前后增加分隔符的写法，即:</p>
+<pre><code class="language-c++">string logTemplate = R"prefix(xxxxxx)prefix";
+</code></pre>
+<p>左括号的前面和右括号的后面, 是同样的一段字符串作为分隔符就行了。</p>
+<p>涛哥的代码里是这么用的</p>
+<pre><code class="language-c++">namespace Logger
+{
+    const static QString logTemplate = u8R"logTemplate(
+&lt;?xml version="1.0" encoding="utf-8" standalone="yes"?&gt;
+&lt;!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"&gt;
+&lt;html&gt;
+
+&lt;head&gt;
+    &lt;title&gt;TaoLogger&lt;/title&gt;
+    ...
+    这里省略一大堆html代码
+    ...
+
+    )logTemplate";
+
+}
+</code></pre>
+<h3>Qt的log系统</h3>
+<ul>
+<li>Qt的log分类</li>
+</ul>
+<p>Qt的打印信息，大家普遍使用的是qDebug，不过Qt除了qDebug，还有qInfo, qWarning, qCritical等等。</p>
+<p>涛哥翻了Qt5.12的源码，发现这几个打印最终都是通过fprintf(stderr)或者fprintf(stdout)来实现输出的，</p>
+<p>不同的地方就在于Log类型。如果要用好这个分类，那我们平时使用打印的时候，就要注意做区分:</p>
+<pre><code>- 调试信息用qDebug
+
+- 常规信息用qInfo
+
+- 警告用qWarning
+
+- 比较严重的问题用qCritical</code></pre>
+<ul>
+<li>Qt的log格式化</li>
+</ul>
+<p>Qt提供了一个函数qSetMessagePattern，用来定制输出信息。</p>
+<p>例如：</p>
+<pre><code class="language-c++">    qSetMessagePattern("[%{time yyyyMMdd h:mm:ss.zzz t} %{if-debug}D%{endif}%{if-info}I%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}%{if-fatal}F%{endif}] %{file}:%{line} - %{message}");
+</code></pre>
+<p>一般只要在main.cpp中添加这一行代码，之后的qDebug、qInfo等函数都会按照这个格式来输出，包含了</p>
+<p>时间戳、log类型、文件名、行号 等信息。也可以不改任何代码、改环境变量来做到</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Logger/2.jpg"/>
+<img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Logger/3.jpg"/></p>
+<ul>
+<li>Release模式信息缺失</li>
+</ul>
+<p>这里有个问题，就是文件名和行号在debug模式正常，Release模式会变成空的。</p>
+<p>要解决这个问题，那么就需要编译器提供的内置宏<code>__FILE__</code> 和 <code>__LINE__</code>了</p>
+<p>涛哥写了这样几个宏，代替qDebug和qInfo等函数。</p>
+<pre><code class="language-C++">#define LOG_DEBUG qDebug() &lt;&lt; __FILE__ &lt;&lt; __FUNCTION__ &lt;&lt; __LINE__
+#define LOG_INFO qInfo() &lt;&lt; __FILE__ &lt;&lt; __FUNCTION__ &lt;&lt; __LINE__
+#define LOG_WARN qWarning() &lt;&lt; __FILE__ &lt;&lt; __FUNCTION__ &lt;&lt; __LINE__
+#define LOG_CRIT qCritical() &lt;&lt; __FILE__ &lt;&lt; __FUNCTION__ &lt;&lt; __LINE__
+
+</code></pre>
+<p>用法类似这样:</p>
+<pre><code class="language-C++">    LOG_DEBUG &lt;&lt; u8"山有木兮木有枝，心悦君兮君不知。";
+</code></pre>
+<ul>
+<li>Qt的写log文件</li>
+</ul>
+<p>Qt还提供了一个函数 qInstallMessageHandler，可以插入一个回调函数，让每一行qDebug/qInfo等</p>
+<p>函数的打印信息，都经过这个回调来处理。看一下帮助文档：</p>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Logger/4.jpg"/></p>
+<p>其实帮助文档已经提供了一个简易的log功能，涛哥就是在这个功能的基础上，做了一些定制化的修改。</p>
+<h3>融合</h3>
+<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/images/Logger/5.jpg"/></p>
+<ul>
+<li>log存储路径和容量</li>
+</ul>
+<p>涛哥写了一个函数和一组静态变量，用来设置和记录log存储的路径和容量</p>
+<p>头文件中的声明</p>
+<pre><code class="language-c++">#pragma once
+#include &lt;QDebug&gt;
+
+namespace Logger
+{
+//默认存储路径为当前路径的Log文件夹下，默认文件数量为1024
+void initLog(const QString&amp; logPath = QStringLiteral("Log"), int logMaxCount = 1024);
+
+} // namespace Logger
+
+</code></pre>
+<p>CPP中的实现</p>
+<pre><code class="language-C++">namespace Logger
+{
+//静态变量，记录存储路径
+static QString gLogDir;
+//静态变量，记录最大存储数量
+static int gLogMaxCount;
+
+void initLog(const QString &amp;logPath, int logMaxCount)
+{
+    //安装回调
+    qInstallMessageHandler(outputMessage);
+    //记录路径
+    gLogDir = QCoreApplication::applicationDirPath() + "/" + logPath;
+    //记录最大存储数
+    gLogMaxCount = logMaxCount;
+    //检查存储文件夹，不存在则创建
+    QDir dir(gLogDir);
+    if (!dir.exists())
+    {
+        dir.mkpath(dir.absolutePath());
+    }
+    //获取文件列表
+    QStringList infoList = dir.entryList(QDir::Files, QDir::Name);
+    //硬盘空间有限，超过最大存储数的都删掉。
+    while (infoList.size() &gt; gLogMaxCount)
+    {
+        //每次删第一个。文件名其实是默认按时间排序的，第一个就是时间最早的。
+        dir.remove(infoList.first());
+        infoList.removeFirst();
+    }
+}
+static void outputMessage(QtMsgType type, const QMessageLogContext &amp;context, const QString &amp;msg)
+{
+    //
+}
+}
+</code></pre>
+<ul>
+<li>log存储</li>
+</ul>
+<pre><code class="language-C++">static void outputMessage(QtMsgType type, const QMessageLogContext &amp;context, const QString &amp;msg)
+{
+    //每一条消息的约定格式。%1即log类型，%2即log内容。这里用静态变量，每次用的时候填充
+    //生成一个QString副本，达到最大程度的复用。
+    static const QString messageTemp= QString("&lt;div class=\"%1\"&gt;%2&lt;/div&gt;\r\n");
+    //预定的消息类型映射表
+    static const char typeList[] = {'d', 'w', 'c', 'f', 'i'};
+    //锁
+    static QMutex mutex;
+    //取时间
+    QDateTime dt = QDateTime::currentDateTime();
+    
+    //时间作为文件名
+
+    //每分钟一个文件
+    //QString fileNameDt = dt.toString("yyyy-MM-dd_hh_mm");
+
+    //每小时一个文件
+    QString fileNameDt = dt.toString("yyyy-MM-dd_hh");
+
+    //每天一个文件
+    //QString fileNameDt = dt.toString("yyyy-MM-dd_");
+    //时间戳
+    QString contentDt = dt.toString("yyyy-MM-dd hh:mm:ss");
+    //消息的前面写上时间戳，后面写内容。 msg如果是用LOG_WARN那几个宏打印的，本身已经带了文件名和行号了。
+    QString message = QString("%1 %2").arg(contentDt).arg(msg);
+    
+    //组装一条html格式的log
+    QString htmlMessage = messageTemp.arg(typeList[static_cast&lt;int&gt;(type)]).arg(message);
+
+    QFile file(QString("%1/%2_log.html").arg(gLogDir).arg(fileNameDt));
+    //这里开始锁起来，多线程安全
+    mutex.lock();
+    bool exist = file.exists();
+    //写 | 追加的方式
+    file.open(QIODevice::WriteOnly | QIODevice::Append);
+    //文件流
+    QTextStream text_stream(&amp;file);
+    //注意字符编码
+    text_stream.setCodec("UTF-8");
+    if (!exist)
+    {
+        //文件不存在的情况下，先把我们的html模板写进去。
+        text_stream &lt;&lt; logTemplate &lt;&lt; "\r\n";
+    }
+    //往文件流里面追加数据
+    text_stream &lt;&lt; htmlMessage;
+
+    file.close();
+    mutex.unlock();
+    //解锁
+    
+    //把log都写到文件了，QtCreator 或者VS 不就看不到输出了？
+    //这里用Win32的方式多加了一次输出，当然也可以使用std::cout fprintf。不能再使用qDebug了，因为这是在qDebug的回调里，会无限递归调用的。
+    ::OutputDebugString(message.toStdWString().data());
+    ::OutputDebugString(L"\r\n");
+}
+</code></pre>
+<h2>github仓库链接</h2>
+<p>源代码代码去github吧。</p>
+<p><a href="https://github.com/jaredtao/TaoLogger">TaoLogger</a></p>

@@ -1,0 +1,190 @@
+<h2>原文：<a href="https://objcoding.com/2017/05/30/Shiro(2">Shiro密码加密与校验</a>)</h2>
+<hr/>
+<h2>layout: post
+title:  "Shiro密码加密与校验"
+categories: Shiro
+tags: Shiro SecurityFramework
+author: 张乘辉</h2>
+<ul>
+<li>content
+{:toc}
+在这里主要讲如何利用md5散列算法对密码进行加密与校验，md5是一种不可逆的散列算法，因此广泛应用与密码的加密，以及文件的md5校验等。</li>
+</ul>
+<h2>SimpleHash生成密码散列值：</h2>
+<h3>自定义密码加密类</h3>
+<pre><code class="language-java">public class PasswordEncrypter&lt;T extends ManageAdmin&gt; {
+
+    private RandomNumberGenerator randomNumberGenerator = new SecureRandomNumberGenerator();
+    // 散列算法
+    private String algorithmName = "md5";
+    // 散列次数
+    private int hashIterations = 2;
+
+    public void encryptPassword(T t) {
+        // 随机生成盐
+        t.setSalt(randomNumberGenerator.nextBytes().toHex());
+        // 加密
+        String encryptPwd = new SimpleHash(algorithmName, t.getPassword(),
+                ByteSource.Util.bytes(t.getSalt()), hashIterations).toHex();
+        t.setPassword(encryptPwd);
+    }
+
+    public void setAlgorithmName(String algorithmName) {
+        this.algorithmName = algorithmName;
+    }
+
+    public void setHashIterations(int hashIterations) {
+        this.hashIterations = hashIterations;
+    }
+
+    public String getAlgorithmName() {
+        return algorithmName;
+    }
+
+    public int getHashIterations() {
+        return hashIterations;
+    }
+}
+</code></pre>
+<p>自定义类设置了散列算法与散列次数，还对加密算法随机加盐处理，这样即使用户设置了相同的密码，在数据库生成的密码散列值也不一样，增加了用户的安全级别。</p>
+<p><img alt="加密后的密码散列值" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/shiro5.png"/></p>
+<p>如上图所示，每个用户的盐值都是随机生成的值，而用户密码都相同，但是生成的密码散列值都不相同。</p>
+<p>生成密码散列值使用了Shiro提供的SimpleHash类，其内部使用了Java的MessageDigest实现。</p>
+<h3>添加用户</h3>
+<pre><code class="language-java">@Service
+@SuppressWarnings({"SpringAutowiredFieldsWarningInspection", "SpringJavaAutowiringInspection"})
+public class AuthorizationService {
+
+	//省略部分代码
+
+    public JSONObject addManageAdmin(AddManageAdmin addManageAdmin) {
+        PasswordEncrypter passwordEncrypter = new PasswordEncrypter&lt;AddManageAdmin&gt;();
+        passwordEncrypter.encryptPassword(addManageAdmin);
+        addManageAdmin.setCreateTime(System.currentTimeMillis());
+        JSONObject shopServerResult = restTemplate.postForObject("http://shop-server/api/manage/add", addManageAdmin, JSONObject.class);
+        if (shopServerResult.getInteger("errcode") != 0) {
+            return new RestResultBuilder(403, shopServerResult.getString("errmsg")).build();
+        }
+        return new RestResultBuilder(0).build();
+    }
+    
+    //省略部分代码
+}
+</code></pre>
+<p>添加用户时创建自定义密码加密类PasswordEncrypter，调用encryptPassword方法，把用户对象传进去，就可以为用户随机生成盐值和相应的密码散列值。</p>
+<h3>修改密码</h3>
+<pre><code class="language-java">@Service
+@SuppressWarnings({"SpringAutowiredFieldsWarningInspection", "SpringJavaAutowiringInspection"})
+public class AuthorizationService {
+
+	//省略部分代码
+
+   public JSONObject editPassword(SaveManageAdmin saveManageAdmin) {
+        // 判断输入的旧密码是否正确
+        PasswordEncrypter passwordEncrypter = new PasswordEncrypter&lt;&gt;();
+        ManageAdmin manageAdmin = JsonUtil.JsonStr2Object(SecurityUtils.getSubject().getSession().getAttribute("admin").toString(), ManageAdmin.class);
+        String oldPassword = new SimpleHash(passwordEncrypter.getAlgorithmName(), saveManageAdmin.getOldPassword(),
+                ByteSource.Util.bytes(manageAdmin.getSalt()), passwordEncrypter.getHashIterations()).toHex();
+        if (!oldPassword.equals(manageAdmin.getPassword())) {
+            return new RestResultBuilder(WebGatewayErrcodeConstant.passwordErr, WebGatewayErrcodeConstant.passwordErrStr).build();
+        }
+        // 设置新密码
+        String newPassword = new SimpleHash(passwordEncrypter.getAlgorithmName(), saveManageAdmin.getNewPassword(),
+                ByteSource.Util.bytes(manageAdmin.getSalt()), passwordEncrypter.getHashIterations()).toHex();
+        saveManageAdmin.setNewPassword(newPassword);
+        saveManageAdmin.setUsername(manageAdmin.getUsername());
+
+        JSONObject shopServerResult = restTemplate.postForObject("http://shop-server/api/manage/password", saveManageAdmin, JSONObject.class);
+        if (shopServerResult.getInteger("errcode") != 0) {
+            return new RestResultBuilder(403, shopServerResult.getString("errmsg")).build();
+        }
+        return new RestResultBuilder(0).build();
+    }
+    
+    //省略部分代码
+}
+</code></pre>
+<p>修改密码同样使用SimpleHash类生成密码散列值，这里还需要对用户输入的旧密码进行判断，如果输入的旧密码与当前用户密码不相同，则返回错误信息，当前用户信息从Shiro的session会话中获取。</p>
+<h2>HashedCredentialsMatcher实现密码验证服务</h2>
+<h3>在shiro配置类中设置HashedCredentialsMatcher</h3>
+<pre><code class="language-java">@Configuration
+public class ShiroConfig {
+
+	//省略部分代码
+
+    /**
+     * 这里需要设置成与PasswordEncrypter类相同的加密规则
+     *
+     * 在doGetAuthenticationInfo认证登陆返回SimpleAuthenticationInfo时会使用hashedCredentialsMatcher
+     * 把用户填入密码加密后生成散列码与数据库对应的散列码进行对比
+     *
+     * HashedCredentialsMatcher会自动根据AuthenticationInfo的类型是否是SaltedAuthenticationInfo来获取credentialsSalt盐
+     *
+     * @return
+     */
+    @Bean
+    public HashedCredentialsMatcher hashedCredentialsMatcher() {
+        HashedCredentialsMatcher hashedCredentialsMatcher = new HashedCredentialsMatcher();
+        hashedCredentialsMatcher.setHashAlgorithmName("MD5");// 散列算法, 与注册时使用的散列算法相同
+        hashedCredentialsMatcher.setHashIterations(2);// 散列次数, 与注册时使用的散列册数相同
+        hashedCredentialsMatcher.setStoredCredentialsHexEncoded(true);// 生成16进制, 与注册时的生成格式相同
+        return hashedCredentialsMatcher;
+    }
+
+    @Bean
+    public AuthRealm authRealm() {
+        AuthRealm authRealm = new AuthRealm();
+        // 设置加密算法
+        authRealm.setCredentialsMatcher(hashedCredentialsMatcher());
+        return authRealm;
+    }
+    
+	//省略部分代码
+	
+}
+</code></pre>
+<p>shiro配置类已经在前文中有所涉及，<em>HashedCredentialsMatcher是shiro其中一种加密验证服务，<strong>它只用于密码验证</strong>，且可以提供自己的盐，而不是随机生成盐，且生成密码散列值的算法需要自己写，因为能提供自己的盐。</em></p>
+<p><strong>这里需要设置与自定义密码加密类PasswordEncrypter相同散列算法和散列次数以及16进制散列值格式，因为验证密码时用户输入的密码方式需要与数据库密码加密方式相同，才能如果密码输入正确，才能生成相同的密码散列值。</strong>自定义authRealm可以调用setCredentialsMatcher(hashedCredentialsMatcher())设置HashedCredentialsMatcher。</p>
+<h3>密码验证</h3>
+<ul>
+<li>用户登录</li>
+</ul>
+<pre><code class="language-java"> @RequestMapping(value = "/login", method = RequestMethod.POST)
+    public JSONObject login(@RequestBody ManageAdmin manageAdmin) {
+        //省略部分代码
+        try {
+            subject.login(usernamepasswordToken);
+        } catch (UnknownAccountException uae) {
+        	//省略部分代码
+        }
+        //省略部分代码
+    }
+</code></pre>
+<ul>
+<li>Realm用户校验：</li>
+</ul>
+<pre><code class="language-java">public class AuthRealm extends AuthorizingRealm {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthRealm.class);
+
+    @Autowired
+    private AuthorizationService authorizationService;
+    
+    //省略部分代码
+
+    @Override
+    protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken) throws AuthenticationException {
+        MUsernamepasswordToken token = (MUsernamepasswordToken) authenticationToken;
+        String username = token.getUsername();
+        logger.info("验证当前Subject时获取到token类型为：" + token.getLoginType());
+
+        ManageAdmin manageAdmin = authorizationService.getManageAdminByUsername(username);
+        if (manageAdmin == null) {
+            throw new UnknownAccountException();
+        }
+
+        return new SimpleAuthenticationInfo(manageAdmin.getUsername(), manageAdmin.getPassword(), ByteSource.Util.bytes(manageAdmin.getSalt()), getName());
+    }
+}
+</code></pre>
+<p>subject.login(usernamepasswordToken)会自动调用doGetAuthenticationInfo()方法，如果从数据库获取的用户信息不为空，则把用户信息（<strong>特别注意如果在添加用户生成密码散列值时使用了加盐处理，这里还需要传入用户的盐值</strong>）传入SimpleAuthenticationInfo中，Shiro会默认会使用HashedCredentialsMatcher中的方式（盐值已经在SimpleAuthenticationInfo中传入了）把用户输入的密码生成散列值与数据库的密码作比较，如果相同，则通过校验，否则抛出异常。</p>

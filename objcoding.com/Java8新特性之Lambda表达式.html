@@ -1,0 +1,147 @@
+<h2>原文：[Java8新特性之Lambda表达式](https://objcoding.com/2017/07/12/The Lambda expression of the new properties of Java8)</h2>
+<hr/>
+<h2>layout: post
+title: "Java8新特性之Lambda表达式"
+categories: Java
+tags: Java8 Lambda
+author: 张乘辉</h2>
+<ul>
+<li>content
+{:toc}
+前面的文章很多都用到了Lambda表达式，Lambda表达式是一种函数式编程的风格，以前我们是这样实现多线程编程的：</li>
+</ul>
+<pre><code class="language-java">new Thread(new Runnable(){
+  public void run(){
+    System.out.println("帅比辉");
+  }
+};
+).start();
+</code></pre>
+<p>如上，用到了匿名内部类，但这样做会造成代码重复率多，且臃肿，不易阅读，我们通过Lambda表达式改进一下：</p>
+<pre><code class="language-java">new Thread(() -&gt; {
+  System.out.println("傻比罗");
+}).start();
+</code></pre>
+<h2>函数式接口</h2>
+<p>想要用Lambda表达式需要满足方法参数需要是一个接口类型的参数，比如Thread的构造方法的参数就是一个Runnable接口，且接口只能有一个需要实现的方法，Runnable接口只有一个实现方法run()，Java8本身提供了很多这种函数式接口，如：</p>
+<ul>
+<li>Predicate 接口只有一个参数，返回boolean类型。该接口包含多种默认方法来将Predicate组合成其他复杂的逻辑（比如：与，或，非）：</li>
+</ul>
+<pre><code class="language-java">// 源码
+@FunctionalInterface
+public interface Predicate&lt;T&gt; {
+
+    boolean test(T t);
+
+    default Predicate&lt;T&gt; and(Predicate&lt;? super T&gt; other) {
+        Objects.requireNonNull(other);
+        return (t) -&gt; test(t) &amp;&amp; other.test(t);
+    }
+
+    default Predicate&lt;T&gt; negate() {
+        return (t) -&gt; !test(t);
+    }
+
+    default Predicate&lt;T&gt; or(Predicate&lt;? super T&gt; other) {
+        Objects.requireNonNull(other);
+        return (t) -&gt; test(t) || other.test(t);
+    }
+  
+    static &lt;T&gt; Predicate&lt;T&gt; isEqual(Object targetRef) {
+        return (null == targetRef)
+                ? Objects::isNull
+                : object -&gt; targetRef.equals(object);
+    }
+}
+</code></pre>
+<pre><code class="language-java">Predicate&lt;String&gt; p = (s) -&gt; s.length() &gt; 0;
+</code></pre>
+<ul>
+<li>Function接口有一个参数并且返回一个结果，并附带了一些可以和其他函数组合的默认方法（compose, andThen）：</li>
+</ul>
+<pre><code class="language-java">// 源码
+@FunctionalInterface
+public interface Function&lt;T, R&gt; {
+
+    R apply(T t);
+  
+    default &lt;V&gt; Function&lt;V, R&gt; compose(Function&lt;? super V, ? extends T&gt; before) {
+        Objects.requireNonNull(before);
+        return (V v) -&gt; apply(before.apply(v));
+    }
+  
+    default &lt;V&gt; Function&lt;T, V&gt; andThen(Function&lt;? super R, ? extends V&gt; after) {
+        Objects.requireNonNull(after);
+        return (T t) -&gt; after.apply(apply(t));
+    }
+  
+    static &lt;T&gt; Function&lt;T, T&gt; identity() {
+        return t -&gt; t;
+    }
+}
+</code></pre>
+<pre><code class="language-java">Function&lt;String, Integer&gt; toInteger = (s) -&gt; Integer.valueOf(s);
+Function&lt;String, String&gt; backToString = toInteger.andThen((i) -&gt; String.valueOf(i));
+backToString.apply("123");
+</code></pre>
+<ul>
+<li>Supplier接口返回一个任意范型的值，和Function接口不同的是该接口没有任何参数：</li>
+</ul>
+<pre><code class="language-java">// 源码
+@FunctionalInterface
+public interface Supplier&lt;T&gt; {
+    T get();
+}
+</code></pre>
+<pre><code class="language-java">Supplier&lt;String&gt; supplier = () -&gt; "帅比辉";
+</code></pre>
+<ul>
+<li>Consumer接口表示执行在单个参数上的操作：</li>
+</ul>
+<pre><code class="language-java">@FunctionalInterface
+public interface Consumer&lt;T&gt; {
+
+    void accept(T t);
+
+    default Consumer&lt;T&gt; andThen(Consumer&lt;? super T&gt; after) {
+        Objects.requireNonNull(after);
+        return (T t) -&gt; { accept(t); after.accept(t); };
+    }
+}
+</code></pre>
+<pre><code class="language-java">Consumer&lt;Person&gt; greeter = (p) -&gt; System.out.println("Hello, " + p.firstName);
+greeter.accept(new Person("傻狗", "罗小狗"));
+</code></pre>
+<p>Java8自带还有很多这样的函数式接口，这里就不一一介绍了。</p>
+<p>我们也可以自定以一个函数式接口：</p>
+<pre><code class="language-java">@FunctionalInterface
+public interface MyFunction&lt;T&gt; {
+    T get(T t);
+}
+</code></pre>
+<pre><code class="language-java">MyFunction&lt;Integer&gt; function = (t) -&gt; 100 * t;
+</code></pre>
+<h2>语法</h2>
+<p>从上面例子中可看到，Lambda表达式的基本语法：</p>
+<pre><code class="language-java">(parameters) -&gt; expression
+</code></pre>
+<p>或者是语句块：</p>
+<pre><code class="language-java">(parameters) -&gt; { statements; }
+</code></pre>
+<p>lambda表达式的语法由参数列表、箭头符号<code>-&gt;</code>和函数体组成，而函数体可以是表达式也可以是语句块，其中，parameters表示接口方法的参数，如果没有指定类型，会根据上下文自动推断其类型：</p>
+<ul>
+<li>表达式：可以被执行并返回其结果值，这相当于默认是匿名方法中return的内容；</li>
+<li>语句块：按顺序执行语句块中的内容，如果有return返回值，则会交给匿名方法去调用。</li>
+</ul>
+<p>现在我们知道了其实Lambda表达式就是简便了我们实现接口（该接口只能有一个抽象方法）的写法而已。</p>
+<h2>方法引用</h2>
+<p>其实把Function那个实例改成方法引用更为恰当：</p>
+<pre><code class="language-java">Function&lt;String, Integer&gt; toInteger = Integer::valueOf;
+Function&lt;String, String&gt; backToString = toInteger.andThen(String::valueOf);
+backToString.apply("123");
+</code></pre>
+<p>方法引用又是Lambda表达式的一种简化写法，其基本写法是左边是类名称，右边是方法，主要分为：</p>
+<ol>
+<li>方法引用：<code>ClassName::methodName</code></li>
+<li>构造方法引用：<code>Class::new</code></li>
+</ol>

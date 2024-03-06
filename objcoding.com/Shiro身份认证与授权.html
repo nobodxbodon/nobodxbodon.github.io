@@ -1,0 +1,348 @@
+<h2>原文：<a href="https://objcoding.com/2017/05/27/Shiro(1">Shiro身份认证与授权</a>)</h2>
+<hr/>
+<h2>layout: post
+title:  "Shiro身份认证与授权"
+categories: Shiro
+tags: Shiro SecurityFramework
+author: 张乘辉</h2>
+<ul>
+<li>content
+{:toc}
+对于一个好的框架，那必然有易于使用和理解的API，我们从外部看shiro，即从应用程序角度来看shiro是如何来完成工作的：</li>
+</ul>
+<p><img alt="shiro工作流程" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/shiro1.png"/></p>
+<p>从上图可看到，程序与shiro直接的交互对象是Subject，它是shiro对外交互的核心API：</p>
+<ul>
+<li><strong>Subject</strong>：主体，代表了当前“用户”，这个用户不一定是一个具体的人，与当前应用交互的任何东西都是Subject，如网络爬虫，机器人等；即一个抽象概念；所有Subject都绑定到SecurityManager，与Subject的所有交互都会委托给SecurityManager；可以把Subject认为是一个门面；SecurityManager才是实际的执行者；</li>
+<li><strong>SecurityManager</strong>：安全管理器；即所有与安全有关的操作都会与SecurityManager交互；且它管理着所有Subject；可以看出它是Shiro的核心，它负责与后边介绍的其他组件进行交互，如果学习过SpringMVC，你可以把它看成DispatcherServlet前端控制器；</li>
+<li><strong>Realm</strong>：域，Shiro从从Realm获取安全数据（如用户、角色、权限），就是说SecurityManager要验证用户身份，那么它需要从Realm获取相应的用户进行比较以确定用户身份是否合法；<strong>也需要从Realm得到用户相应的角色/权限进行验证用户是否能进行操作；可以把Realm看成DataSource，即安全数据源</strong>。<em>也就是说shiro本身并不提供维护用户的权限，而是让开发者自己来注入。</em></li>
+</ul>
+<h2>实现身份认证与授权</h2>
+<h3>准备环境</h3>
+<ul>
+<li>加入maven依赖：</li>
+</ul>
+<pre><code class="language-xml"> &lt;!-- shiro+redis缓存插件 --&gt;
+ &lt;dependency&gt;
+   &lt;groupId&gt;org.apache.shiro&lt;/groupId&gt;
+   &lt;artifactId&gt;shiro-spring&lt;/artifactId&gt;
+   &lt;version&gt;1.2.2&lt;/version&gt;
+ &lt;/dependency&gt;
+ &lt;dependency&gt;
+   &lt;groupId&gt;org.crazycake&lt;/groupId&gt;
+   &lt;artifactId&gt;shiro-redis&lt;/artifactId&gt;
+   &lt;version&gt;2.4.2.1-RELEASE&lt;/version&gt;
+ &lt;/dependency&gt;
+</code></pre>
+<ul>
+<li>创建shiro配置类：</li>
+</ul>
+<pre><code class="language-java">@Configuration
+public class ShiroConfig {
+
+    @Autowired
+    AuthorizationService authorizationService;
+
+    @Value("${spring.redis.host}")
+    private String host;
+
+    @Value("${spring.redis.port}")
+    private int port;
+
+    @Value("${spring.redis.password}")
+    private String password;
+
+    @Bean
+    public ShiroFilterFactoryBean shirFilter(DefaultWebSecurityManager securityManager) {
+        ShiroFilterFactoryBean shiroFilterFactoryBean = new MShiroFilterFactoryBean();
+        // 必须设置 SecurityManager
+        shiroFilterFactoryBean.setSecurityManager(securityManager);
+        // 如果不设置默认会自动寻找Web工程根目录下的"/login.jsp"页面
+        shiroFilterFactoryBean.setLoginUrl("/webmanage/login");
+        // 登录成功后要跳转的连接
+        shiroFilterFactoryBean.setSuccessUrl("/webmanage/index");
+        shiroFilterFactoryBean.setUnauthorizedUrl("/error");
+
+        shiroFilterFactoryBean.setFilterChainDefinitionMap(authorizationService.loadShiroFilterChainDefinitionMap());
+        return shiroFilterFactoryBean;
+    }
+
+    @Bean(name = "securityManager")
+    public DefaultWebSecurityManager securityManager() {
+        DefaultWebSecurityManager securityManager = new DefaultWebSecurityManager();
+
+
+        // 设置realm.
+        securityManager.setRealm(authRealm());
+        // 自定义缓存实现 使用redis
+        securityManager.setCacheManager(cacheManager());
+        // 自定义session管理 使用redis
+        securityManager.setSessionManager(SessionManager());
+        return securityManager;
+    }
+
+    /**
+     * 这里需要设置成与PasswordEncrypter类相同的加密规则
+     *
+     * 在doGetAuthenticationInfo认证登陆返回SimpleAuthenticationInfo时会使用hashedCredentialsMatcher
+     * 把用户填入密码加密后生成散列码与数据库对应的散列码进行对比
+     *
+     * HashedCredentialsMatcher会自动根据AuthenticationInfo的类型是否是SaltedAuthenticationInfo来获取credentialsSalt盐
+     *
+     * @return
+     */
+    @Bean
+    public HashedCredentialsMatcher hashedCredentialsMatcher() {
+        HashedCredentialsMatcher hashedCredentialsMatcher = new HashedCredentialsMatcher();
+        hashedCredentialsMatcher.setHashAlgorithmName("MD5");// 散列算法, 与注册时使用的散列算法相同
+        hashedCredentialsMatcher.setHashIterations(2);// 散列次数, 与注册时使用的散列册数相同
+        hashedCredentialsMatcher.setStoredCredentialsHexEncoded(true);// 生成16进制, 与注册时的生成格式相同
+        return hashedCredentialsMatcher;
+    }
+
+    /**
+     * 身份认证realm
+     *
+     * @return
+     */
+    @Bean
+    public AuthRealm authRealm() {
+        AuthRealm authRealm = new AuthRealm();
+        // 设置加密算法
+        authRealm.setCredentialsMatcher(hashedCredentialsMatcher());
+        return authRealm;
+    }
+
+
+    /**
+     * 配置shiro redisManager
+     *
+     * @return
+     */
+    public RedisManager redisManager() {
+        RedisManager redisManager = new RedisManager();
+        redisManager.setHost(host);
+        redisManager.setPort(port);
+        redisManager.setExpire(1800);// 配置过期时间
+        // redisManager.setTimeout(timeout);
+        redisManager.setPassword(password);
+        return redisManager;
+    }
+
+    /**
+     * cacheManager 缓存 redis实现
+     *
+     * @return
+     */
+    public RedisCacheManager cacheManager() {
+        RedisCacheManager redisCacheManager = new RedisCacheManager();
+        redisCacheManager.setRedisManager(redisManager());
+        return redisCacheManager;
+    }
+
+    /**
+     * RedisSessionDAO shiro sessionDao层的实现 通过redis
+     */
+    public RedisSessionDAO redisSessionDAO() {
+        RedisSessionDAO redisSessionDAO = new RedisSessionDAO();
+        redisSessionDAO.setRedisManager(redisManager());
+        return redisSessionDAO;
+    }
+
+    /**
+     * shiro session的管理
+     */
+    public DefaultWebSessionManager SessionManager() {
+        DefaultWebSessionManager sessionManager = new DefaultWebSessionManager();
+        sessionManager.setSessionDAO(redisSessionDAO());
+        sessionManager.setGlobalSessionTimeout(1800000L);
+        sessionManager.setDeleteInvalidSessions(true);
+        sessionManager.setSessionValidationSchedulerEnabled(true);
+        return sessionManager;
+    }
+
+}
+</code></pre>
+<p>该配置类创建shiro的核心过滤器shiroFilterFactoryBean，为它设置安全管理器，并为安全管理器配置了用户自定义Realm，缓存机制，session会话以及加密机制hashedCredentialsMatcher等。</p>
+<ul>
+<li>登陆与登出代码：</li>
+</ul>
+<pre><code class="language-java">@RequestMapping(value = "/login", method = RequestMethod.POST)
+    public JSONObject login(@RequestBody ManageAdmin manageAdmin) {
+        String username = manageAdmin.getUsername();
+        String password = manageAdmin.getPassword();
+        Subject subject = SecurityUtils.getSubject();
+        MUsernamepasswordToken usernamepasswordToken = new MUsernamepasswordToken(username, password);
+        usernamepasswordToken.setLoginType(MUsernamepasswordToken.LOGIN_TYPE.webside.toString());
+        String errmsg = "";
+        try {
+            logger.info("对用户[" + username + "]进行登录验证..验证开始");
+            subject.login(usernamepasswordToken);
+        } catch (UnknownAccountException uae) {
+            logger.info("对用户[" + username + "]进行登录验证..验证未通过,未知账户");
+            errmsg = "对用户[" + username + "]进行登录验证..验证未通过,未知账户";
+        } catch (IncorrectCredentialsException ice) {
+            logger.info("对用户[" + username + "]进行登录验证..验证未通过,错误的凭证");
+            errmsg = "对用户[" + username + "]进行登录验证..验证未通过,错误的凭证";
+        } catch (LockedAccountException lae) {
+            logger.info("对用户[" + username + "]进行登录验证..验证未通过,账户已锁定");
+            errmsg = "对用户[" + username + "]进行登录验证..验证未通过,账户已锁定";
+        } catch (ExcessiveAttemptsException eae) {
+            logger.info("对用户[" + username + "]进行登录验证..验证未通过,错误次数过多");
+            errmsg = "对用户[" + username + "]进行登录验证..验证未通过,错误次数过多";
+        } catch (AuthenticationException ae) {
+            logger.info("对用户[" + username + "]进行登录验证..验证未通过,堆栈轨迹如下");
+            errmsg = "对用户[" + username + "]进行登录验证..验证未通过";
+            ae.printStackTrace();
+        }
+        if (subject.isAuthenticated()) {
+            errmsg = "用户[" + username + "]进行登录验证..验证通过";
+            ManageAdmin manageAdminLogin = authorizationService.getManageAdminByUsername(username);
+            subject.getSession().setAttribute("admin", JsonUtil.Object2JsonStr(manageAdminLogin));
+            return new RestResultBuilder(0, errmsg).build();
+        } else {
+            usernamepasswordToken.clear();
+            return new RestResultBuilder(304, errmsg).build();
+        }
+    }
+</code></pre>
+<pre><code class="language-java">@RequestMapping(value = "/logout", method = RequestMethod.GET)
+    public JSONObject logout() {
+        Subject subject = SecurityUtils.getSubject();
+        if (!subject.isAuthenticated()) {
+            return new RestResultBuilder(WebGatewayErrcodeConstant.logoutFail, WebGatewayErrcodeConstant.logoutFailStr).build();
+        } else {
+            subject.logout(); // session 会销毁，在SessionListener监听session销毁，清理权限缓存
+            return new RestResultBuilder(0).build();
+        }
+    }
+</code></pre>
+<p>从上面代码得出：</p>
+<p>通过shiro工具类SubjectUtils的getSubject()获取Subject类，通过Subject类的login()实现用户的登陆，如果身份认证失败就会抛出对应的异常。</p>
+<h3>身份认证</h3>
+<p><img alt="身份认证流程" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/shiro3.png"/></p>
+<ul>
+<li>Subject类的login()会自动委托给SecurityManager.login()；</li>
+<li>SecurityManager负责真正的身份验证逻辑；它会委托给Authenticator进行身份验证；</li>
+<li>Authenticator是真正认证身份的认证者，Shiro API中核心的身份认证入口点，此处可以自定义插入自己的实现；</li>
+<li>如果有多个Realm域，Authenticator还会委托给AuthenticationStrategy进行多身份认证；</li>
+<li>Authenticator会把响应的token传入自定义的Realm域，并从Realm域获取身份验证信息。</li>
+</ul>
+<p>编写身份验证Realm代码：</p>
+<pre><code class="language-java">public class AuthRealm extends AuthorizingRealm {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthRealm.class);
+
+    @Autowired
+    private AuthorizationService authorizationService;
+
+    @Override
+    protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken) throws AuthenticationException {
+        MUsernamepasswordToken token = (MUsernamepasswordToken) authenticationToken;
+        String username = token.getUsername();
+        logger.info("验证当前Subject时获取到token类型为：" + token.getLoginType());
+
+        ManageAdmin manageAdmin = authorizationService.getManageAdminByUsername(username);
+        if (manageAdmin == null) {
+            throw new UnknownAccountException();
+        }
+
+        return new SimpleAuthenticationInfo(manageAdmin.getUsername(), manageAdmin.getPassword(),
+                ByteSource.Util.bytes(manageAdmin.getSalt()), getName());
+    }
+}
+</code></pre>
+<p><strong>SimpleAuthenticationInfo会默认将数据库查出来的密码与用户输入的密码对比，如果相同则通过，否则抛出异常。</strong></p>
+<h3>授权</h3>
+<p>授权，也叫访问控制，即在应用中控制谁能访问哪些资源。在授权中需了解的几个关键对象：主体（Subject）、资源（Resource）、权限（Permission）、角色（Role）。</p>
+<p>主体：指使用Subject登陆的用户，只有经过shiro授权才能登陆和访问相关资源。</p>
+<p>资源：在系统中能够访问的东西，用户也只能经过授权后才能访问。</p>
+<p>权限：指允许在系统中进行CRUD某个资源的权力，比如访问某个页面，查看某个文档，修改那些设置，删除某些数据等操作。</p>
+<p>角色：可以理解为权限的集合，比如超级管理员可以拥有系统的全部权限，普通用户只拥有系统的一部分权限，而如果用户拥有多个角色，则用户的权限为多个角色拥有的权限的集合。</p>
+<ul>
+<li>自定义Realm：</li>
+</ul>
+<pre><code class="language-java">public class AuthRealm extends AuthorizingRealm {
+
+    private static final Logger logger = LoggerFactory.getLogger(AuthRealm.class);
+
+    @Autowired
+    private AuthorizationService authorizationService;
+
+    /**
+     * 权限认证，为当前登录的Subject授予角色和权限
+     * &lt;p&gt;
+     * 方法的调用时机为需授权资源被访问时
+     * 若每次访问需授权资源时都会执行方法中的逻辑，这表明并未启用AuthorizationCache
+     */
+    @Override
+    protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principalCollection) {
+        //获取当前登录输入的用户名，等价于(String) principalCollection.fromRealm(getName()).iterator().next();
+        String username = (String) super.getAvailablePrincipal(principalCollection);
+
+        //权限信息对象info,用来存放查出的用户的所有的角色（role）及权限（permission）
+        SimpleAuthorizationInfo info = new SimpleAuthorizationInfo();
+        ManageAdmin manageAdmin = authorizationService.getManageAdminByUsername(username);
+
+        // 添加管理员角色列表
+        info.addRoles(manageAdmin.getRoles());
+        // 添加管理员权限列表
+        info.addStringPermissions(manageAdmin.getPermissions());
+
+        return info;
+    }
+
+}
+</code></pre>
+<ul>
+<li>为系统配置权限：</li>
+</ul>
+<pre><code class="language-java">	 /**
+     * 加载shiroFilter权限控制规则（从数据库读取然后配置）
+     */
+    public Map&lt;String, String&gt; loadShiroFilterChainDefinitionMap() {
+
+        Map&lt;String, String&gt; filterChainDefinitionMap = new LinkedHashMap&lt;&gt;();
+
+        filterChainDefinitionMap.put("/webmanage/index", "authc");// 首页
+        filterChainDefinitionMap.put("/webmanage/login", "anon");// 登陆页面
+
+        /** 商户模块 */
+        filterChainDefinitionMap.put("/shop/api/shop/edit", "roles[super_admin]");// 商户修改
+        filterChainDefinitionMap.put("/shop/api/shop/shopStatus", "roles[super_admin]");// 商户状态修改
+        filterChainDefinitionMap.put("/shop/api/shop/add", "roles[super_admin, common_admin]");// 添加商户
+        filterChainDefinitionMap.put("/api/manage/manageAdmin", "roles[super_admin]");// 添加管理员
+        /** 设备模块 */
+        filterChainDefinitionMap.put("/device/api/device/add", "roles[super_admin, common_admin]");// 添加设备
+        filterChainDefinitionMap.put("/device/api/device/edit", "roles[super_admin]");// 修改设备
+        filterChainDefinitionMap.put("/device/api/device/bind", "roles[super_admin]");// 绑定设备
+        filterChainDefinitionMap.put("/device/api/device/unbind", "roles[super_admin]");// 绑定设备
+        filterChainDefinitionMap.put("/device/api/device/disabledDevice/**", "roles[super_admin]");// 启用禁用设备
+        /** 会员模块 */
+        filterChainDefinitionMap.put("/member/member/disabledMember/**", "roles[super_admin]");// 会员启用禁用
+
+        filterChainDefinitionMap.put("/**", "anon");// 默认
+
+        return filterChainDefinitionMap;
+    }
+ }
+</code></pre>
+<blockquote>
+<p>默认过滤器(10个)</p>
+<p>anon -- org.apache.shiro.web.filter.authc.AnonymousFilter  authc -- org.apache.shiro.web.filter.authc.FormAuthenticationFilter  authcBasic -- org.apache.shiro.web.filter.authc.BasicHttpAuthenticationFilter  perms -- org.apache.shiro.web.filter.authz.PermissionsAuthorizationFilter  port -- org.apache.shiro.web.filter.authz.PortFilter  rest -- org.apache.shiro.web.filter.authz.HttpMethodPermissionFilter  roles -- org.apache.shiro.web.filter.authz.RolesAuthorizationFilter  ssl -- org.apache.shiro.web.filter.authz.SslFilter  user -- org.apache.shiro.web.filter.authc.UserFilter  logout -- org.apache.shiro.web.filter.authc.LogoutFilter</p>
+</blockquote>
+<blockquote>
+<p>anon:例子/admins/** =anon 没有参数，表示可以匿名使用。   authc:例如/admins/user/** =authc表示需要认证(登录)才能使用，没有参数</p>
+<p>roles：例子/admins/user/** =roles[admin],参数可以写多个，多个时必须加上引号，并且参数之间用逗号分割，当有多个参数时，例如admins/user/**=roles["admin,guest"],每个参数通过才算通过，相当于hasAllRoles()方法。</p>
+<p>perms：例子/admins/user/** =perms[user:add:<em>],参数可以写多个，多个时必须加上引号，并且参数之间用逗号分割，例如/admins/user/**=perms["user:add:</em>,user:modify:*"]，当有多个参数时必须每个参数都通过才通过，想当于isPermitedAll()方法。</p>
+<p>rest：例子/admins/user/** =rest[user],根据请求的方法，相当于/admins/user/**=perms[user:method] ,其中method为post，get，delete等。</p>
+<p>port：例子/admins/user/** =port[8081],当请求的url的端口不是8081是跳转到schemal://serverName:8081?queryString,其中schmal是协议http或https等，serverName是你访问的host,8081是url配置里port的端口，queryString是你访问的url里的？后面的参数。   authcBasic：例如/admins/user/** =authcBasic没有参数表示httpBasic认证   ssl:例子/admins/user/** =ssl没有参数，表示安全的url请求，协议为https   user:例如/admins/user/**=user没有参数表示必须存在用户，当登入操作时不做检查</p>
+</blockquote>
+<p><em>这个方法已经在shiro配置类中注入shiro核心过滤器时已经调用。</em></p>
+<p><img alt="授权流程" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/shiro4.png"/></p>
+<p>第三步骤，当身份验证通过且调用了Realm类的AuthorizationInfo方法之后，该用户就拥有了指定的权限，Authorizer会判断Realm的角色/权限是否和传入的匹配。</p>
+<h2>总结</h2>
+<p>通过SubjectUtils获取subject实例，并调用login()方法开始shiro身份验证，login()方法会委托给SecurityManager安全管理器的login()方法，之后SecurityManager会调用自定义Realm类的doGetAuthenticationInfo()方法进行身份验证，当身份验证不通过则抛出异常，当验证逻辑通过后，会把用户名和密码放到SimpleAuthenticationInfo中，Shiro会自动根据用户输入的密码和查询到的密码进行匹配，如果密码匹配，执行doGetAuthorizationInfo()进行相应的权限验证。doGetAuthorizationInfo()方法的处理逻辑也比较简单，根据用户名获取到他所拥有的角色以及权限，然后赋值到SimpleAuthorizationInfo对象中即可，Shiro就会按照我们配置的XX角色对应XX权限来进行判断。接下来为系统资源配置指定权限树。这样，身份验证与授权流程基本完成。</p>
+<p>参考原文地址：</p>
+<p>http://jinnianshilongnian.iteye.com/blog/2019547</p>
+<p>http://jinnianshilongnian.iteye.com/blog/2020017</p>

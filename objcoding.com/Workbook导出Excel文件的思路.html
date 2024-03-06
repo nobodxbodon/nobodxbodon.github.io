@@ -1,0 +1,171 @@
+<h2>原文：<a href="https://objcoding.com/2017/06/07/Workbook">Workbook导出Excel文件的思路</a></h2>
+<hr/>
+<h2>layout: post
+title: "Workbook导出Excel文件的思路"
+categories: Tools
+tags: Workbook Excel 文件导出 IO
+author: 张乘辉</h2>
+<ul>
+<li>content
+{:toc}
+一个Workbook类可以看成一个Excel文件（即工作簿）：</li>
+</ul>
+<pre><code class="language-java">Sheet sheet = Workbook.createSheet("sheetName");// 创建一个Sheet类，Sheet为工作簿中的工作表
+</code></pre>
+<pre><code class="language-java">Row row = sheet.createRow("rowName");// 创建一个Row类，Row为工作表中的某一行
+</code></pre>
+<pre><code class="language-java">Cell cell = row.createCell("cellName");// 创建一个Cell类，Cell为某一行中的单元格的值
+</code></pre>
+<p><img alt="excel" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/workbook.png"/></p>
+<h2>创建一个生成Workbook和响应输出流的工具类</h2>
+<pre><code class="language-java">public class ExcelUtil {
+
+    /**
+     * excel导出到输出流，谁调用谁负责关闭输出流
+     *
+     * @param os           输出流
+     * @param excelExtName excel文件的扩展名，支持xls和xlsx，不带点号
+     * @param data         Map[sheetName,rowList[cellList[cellValue]]]
+     * @throws IOException
+     */
+    public static void writeExcel(OutputStream os, String excelExtName, Map&lt;String, List&lt;List&lt;String&gt;&gt;&gt; data)
+            throws IOException {
+        Workbook wb = null;
+        try {
+            if ("xls".equals(excelExtName)) {
+                wb = new HSSFWorkbook();
+            } else if ("xlsx".equals(excelExtName)) {
+                wb = new XSSFWorkbook();
+            } else {
+                throw new Exception("当前文件不是excel文件");
+            }
+
+            for (String sheetName : data.keySet()) {
+                Sheet sheet = wb.createSheet(sheetName);
+                List&lt;List&lt;String&gt;&gt; rowList = data.get(sheetName);
+                for (int i = 0; i &lt; rowList.size(); i++) {
+                    List&lt;String&gt; cellList = rowList.get(i);
+                    Row row = sheet.createRow(i);
+                    for (int j = 0; j &lt; cellList.size(); j++) {
+                        Cell cell = row.createCell(j);
+                        cell.setCellValue(cellList.get(j));
+                    }
+                }
+            }
+            wb.write(os);
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (wb != null) {
+                wb.close();
+            }
+        }
+    }
+}
+</code></pre>
+<h2>在业务层封装好需要填充到Workbook的数据</h2>
+<pre><code class="language-java">@Service
+public class AccountAdjustmentService {
+
+	@Autowired
+    AccountAdjustmentMapper accountAdjustmentMapper;
+    public Map&lt;String, List&lt;List&lt;String&gt;&gt;&gt; encapsulateAccountingAdjustment(Long startDate, Long endDate, String shopCode, String tradeNo) {
+
+        List&lt;AccountAdjustment&gt; accountAdjustments = accountAdjustmentMapper.getAccountAdjustments(startDate, endDate, shopCode, tradeNo);
+
+        Map sheetMap = new HashMap&lt;String, List&lt;List&lt;String&gt;&gt;&gt;();// 每个工作表对应一个键值对
+        List&lt;List&lt;String&gt;&gt; rowList = new ArrayList&lt;List&lt;String&gt;&gt;();// 工作表行数据集
+        List&lt;String&gt; cell0List = new ArrayList&lt;String&gt;();// 工作表第一行数据
+        cell0List.add("日期");
+        cell0List.add("商户识别码");
+        cell0List.add("商户名称");
+        cell0List.add("订单号");
+        cell0List.add("调账内容");
+        cell0List.add("调账结果");
+        rowList.add(cell0List);
+
+        // 填充工作表的每行数据
+        for (AccountAdjustment a : accountAdjustments) {
+            List&lt;String&gt; cellList = new ArrayList&lt;String&gt;();// 工作表每行的数据
+            cellList.add(DateUtil.defaultFormat(a.getDate()));
+            cellList.add(a.getShopCode());
+            cellList.add(a.getShopName());
+            cellList.add(a.getTradeNo());
+            cellList.add(a.getApplyContent());
+            cellList.add(a.getResultFeedbackContent());
+            rowList.add(cellList);
+        }
+
+        sheetMap.put("调账单", rowList);
+        return sheetMap;
+    }
+}
+</code></pre>
+<h2>在控制层中设置响应头和输出流相应给客户端</h2>
+<pre><code class="language-java">@Api(value = "调账申请与记录接口")
+@RestController
+@RequestMapping("/AccountingAdjustment")
+public class AccountAdjustmentController {
+  
+	@Autowired
+    private AccountAdjustmentService accountAdjustmentService;
+  
+    @RequestMapping(value = "/export", method = RequestMethod.POST)
+    public void exportAccountingAdjustment(HttpServletResponse response, 				@RequestParam("startDate") Long startDate, @RequestParam("endDate") Long endDate, @RequestParam("shopCode") String shopCode, @RequestParam("tradeNo") String tradeNo) {
+
+            OutputStream os = null;
+            Map&lt;String, List&lt;List&lt;String&gt;&gt;&gt; sheetMap = accountAdjustmentService.encapsulateAccountingAdjustment(startDate, endDate, shopCode, tradeNo);
+
+            try {
+                String title = URLEncoder.encode("调账单." + CodeConstant.ms_xls, "UTF-8");
+                response.setContentType("application/x-msdownload");
+                response.setHeader("Content-disposition", "attachment;filename=" + title);
+                response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                response.setHeader("Pragma", "no-cache");
+                response.setHeader("Expires", "0");
+                response.setHeader("charset", "utf-8");
+                os = response.getOutputStream();
+
+                ExcelUtil.writeExcel(os, CodeConstant.ms_xls, sheetMap);
+
+            } catch (IOException e) {
+                if (null != os) {
+                    try {
+                        os.close();
+                    } catch (IOException e1) {
+                        e1.printStackTrace();
+                    }
+                }
+            }
+    }
+}
+</code></pre>
+<h2>页面表单请求</h2>
+<pre><code class="language-html">&lt;!--导出表单--&gt;
+    &lt;form id="exportExcel" name="fileExport" method="POST" target="_blank"&gt;
+        &lt;div class="form-group"&gt;
+            &lt;input type="hidden" name="startDate"&gt;
+            &lt;input type="hidden" name="endDate"&gt;
+            &lt;input type="hidden" name="shopCode"&gt;
+            &lt;input type="hidden" name="tradeNo"&gt;
+        &lt;/div&gt;
+    &lt;/form&gt;
+    
+    
+// 按钮
+&lt;button type="button" class="btn btn-info form-group" ng-click="exportBtnClick()"&gt;导出&lt;/button&gt;
+</code></pre>
+<pre><code class="language-javascript"> // 导出
+ $scope.exportBtnClick = function () {
+     $("input[name='startDate']").val(new Date(start).getTime());
+     $("input[name='endDate']").val(new Date(end).getTime());
+     $("input[name='shopCode']").val($scope.searchParams.shopCode);// 从angular作用域中取值
+     $("input[name='tradeNo']").val($scope.searchParams.tradeNo);
+     // 表单提交
+     var form = $("#exportExcel");
+     form.attr("action", HostManageService._intergralHost" + "/AccountingAdjustment/export");
+     form.submit();
+ };
+</code></pre>
+<h2>总结</h2>
+<p>导出Excel文件也就是相当于下载，就是向客户端响应字节数据，先把从数据库查询出来的数据封装到workbook对象中，再使用response.getOutputStream()向客户端响应workbook的数据，并设置相应的响应头让浏览器知道这是个下载文件的响应。</p>
