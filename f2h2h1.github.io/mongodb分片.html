@@ -1,0 +1,147 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/mongodb%E5%88%86%E7%89%87">mongodb分片</a></h2>
+<h1>mongodb分片</h1>
+<h2>MongoDB集群规划表</h2>
+<p>节点|主机|端口|副本集
+-|-|-|-|
+路由服务器0|Router|27017|
+配置集节点0|ConfigServer1|27018|cfg
+配置集节点1|ConfigServer2|27019|cfg
+分片0节点0|rs0_0|27020|rs0
+分片0节点1|rs0_1|27021|rs0
+分片0节点2|rs0_2|27022|rs0
+分片1节点0|rs1_0|27023|rs1
+分片1节点1|rs1_1|27024|rs1
+分片1节点2|rs1_2|27025|rs1</p>
+<p>一个路由服务器
+两个配置节点，一主一副本
+两个分片，两个分片都是三个节点，一主二副本</p>
+<h2>集群部署的步骤</h2>
+<h3>0.新建一些必要的文件和文件夹</h3>
+<p>日志文件，pid文件，以及存放数据的文件夹</p>
+<pre><code>rm -r -f /data/log &amp;&amp; \
+rm -r -f /data/pid &amp;&amp; \
+rm -r -f /data/mydb &amp;&amp; \
+mkdir /data/log &amp;&amp; \
+mkdir /data/pid &amp;&amp; \
+mkdir /data/mydb &amp;&amp; \
+mkdir /data/mydb/config0 &amp;&amp; \
+mkdir /data/mydb/config1 &amp;&amp; \
+mkdir /data/mydb/rs0_0 &amp;&amp; \
+mkdir /data/mydb/rs0_1 &amp;&amp; \
+mkdir /data/mydb/rs0_2 &amp;&amp; \
+mkdir /data/mydb/rs1_0 &amp;&amp; \
+mkdir /data/mydb/rs1_1 &amp;&amp; \
+mkdir /data/mydb/rs1_2 &amp;&amp; \
+touch /data/log/config0.log &amp;&amp; \
+touch /data/log/config1.log &amp;&amp; \
+touch /data/log/rs0_0.log &amp;&amp; \
+touch /data/log/rs0_1.log &amp;&amp; \
+touch /data/log/rs0_2.log &amp;&amp; \
+touch /data/log/rs1_0.log &amp;&amp; \
+touch /data/log/rs1_1.log &amp;&amp; \
+touch /data/log/rs1_2.log &amp;&amp; \
+touch /data/log/mongos.log &amp;&amp; \
+touch /data/pid/config0.pid &amp;&amp; \
+touch /data/pid/config1.pid &amp;&amp; \
+touch /data/pid/rs0_0.pid &amp;&amp; \
+touch /data/pid/rs0_1.pid &amp;&amp; \
+touch /data/pid/rs0_2.pid &amp;&amp; \
+touch /data/pid/rs1_0.pid &amp;&amp; \
+touch /data/pid/rs1_1.pid &amp;&amp; \
+touch /data/pid/rs1_2.pid &amp;&amp; \
+touch /data/pid/mongos.pid
+</code></pre>
+<h3>1.部署配置节点</h3>
+<p>启动两个配置节点</p>
+<pre><code class="language-bash">mongod --configsvr --replSet "cfg" --bind_ip_all --port 27018 --fork --logpath /data/log/config0.log --logappend --pidfilepath /data/pid/config0.pid --dbpath /data/mydb/config0
+
+mongod --configsvr --replSet "cfg" --bind_ip_all --port 27019 --fork --logpath /data/log/config1.log --logappend --pidfilepath /data/pid/config1.pid --dbpath /data/mydb/config1
+</code></pre>
+<p>进入第一个配置节点</p>
+<pre><code class="language-bash">mongo --port 27018
+</code></pre>
+<p>把配置节点加入副本集</p>
+<pre><code class="language-js">rs.initiate( {
+   _id: "cfg",
+   configsvr: true,
+   members: [
+      { _id: 0, host: "127.0.0.1:27018" },
+      { _id: 1, host: "127.0.0.1:27019" }
+   ]
+} )
+</code></pre>
+<ul>
+<li>配置副本集最好有三个以上，一般配置副本集不需要仲裁服务器</li>
+</ul>
+<h3>2.部署分片节点</h3>
+<p>启动第一个分片的副本集</p>
+<pre><code class="language-bash">mongod --shardsvr --replSet "rs0" --bind_ip_all --port 27020 --fork --logpath /data/log/rs0_0.log --logappend --pidfilepath /data/pid/rs0_0.pid --dbpath /data/mydb/rs0_0
+
+mongod --shardsvr --replSet "rs0" --bind_ip_all --port 27021 --fork --logpath /data/log/rs0_1.log --logappend --pidfilepath /data/pid/rs0_1.pid --dbpath /data/mydb/rs0_1
+
+mongod --shardsvr --replSet "rs0" --bind_ip_all --port 27022 --fork --logpath /data/log/rs0_2.log --logappend --pidfilepath /data/pid/rs0_2.pid --dbpath /data/mydb/rs0_2
+</code></pre>
+<p>进入第一个分片的副本集的第一个节点</p>
+<pre><code class="language-bash">mongo --port 27020
+</code></pre>
+<p>把分片节点加入副本集</p>
+<pre><code class="language-js">rs.initiate( {
+   _id : "rs0",
+   members: [
+      { _id: 0, host: "127.0.0.1:27020" },
+      { _id: 1, host: "127.0.0.1:27021" },
+      { _id: 2, host: "127.0.0.1:27022" }
+   ]
+})
+</code></pre>
+<p>启动第二个分片的副本集</p>
+<pre><code class="language-bash">mongod --shardsvr --replSet "rs1" --bind_ip_all --port 27023 --fork --logpath /data/log/rs1_0.log --logappend --pidfilepath /data/pid/rs1_0.pid --dbpath /data/mydb/rs1_0
+
+mongod --shardsvr --replSet "rs1" --bind_ip_all --port 27024 --fork --logpath /data/log/rs1_1.log --logappend --pidfilepath /data/pid/rs1_1.pid --dbpath /data/mydb/rs1_1
+
+mongod --shardsvr --replSet "rs1" --bind_ip_all --port 27025 --fork --logpath /data/log/rs1_2.log --logappend --pidfilepath /data/pid/rs1_2.pid --dbpath /data/mydb/rs1_2
+</code></pre>
+<p>进入第二个分片的副本集的第一个节点</p>
+<pre><code class="language-bash">mongo --port 27023
+</code></pre>
+<p>把分片节点加入副本集</p>
+<pre><code class="language-js">rs.initiate( {
+   _id : "rs0",
+   members: [
+      { _id: 0, host: "127.0.0.1:27023" },
+      { _id: 1, host: "127.0.0.1:27024" },
+      { _id: 2, host: "127.0.0.1:27025" }
+   ]
+})
+</code></pre>
+<ul>
+<li>副本集里应该至少有一个仲裁服务器</li>
+</ul>
+<h3>3.部署路由节点</h3>
+<p>启动路由节点</p>
+<pre><code class="language-bash">mongos --configdb cfg/127.0.0.1:27018,127.0.0.1:27019 --bind_ip_all --port 27017 --fork --logpath /data/log/mongos.log --logappend --pidfilepath /data/pid/mongos.pid
+</code></pre>
+<p>进入路由节点</p>
+<pre><code class="language-bash">mongo --port 27017
+</code></pre>
+<p>把两个分片加入到路由里</p>
+<pre><code class="language-js">sh.addShard("rs0/127.0.0.1:27020,127.0.0.1:27021,127.0.0.1:27022")
+sh.addShard("rs1/127.0.0.1:27023,127.0.0.1:27024,127.0.0.1:27025")
+</code></pre>
+<p>创建分片集合</p>
+<pre><code>sh.enableSharding('需要分片的库名')
+sh.shardCollection('需要分片的库名.需要分片集合名', {'片键':'hashed'})
+</code></pre>
+<ul>
+<li>如果有多个路由，只需要配置一个即可</li>
+</ul>
+<h2>一些常用的命令</h2>
+<p>查看集群状态</p>
+<pre><code class="language-js">sh.status()
+</code></pre>
+<p>查看分片状态</p>
+<pre><code class="language-js">db.stats()
+</code></pre>
+<p>查看是否为主节点</p>
+<pre><code class="language-js">db.isMaster()
+</code></pre>

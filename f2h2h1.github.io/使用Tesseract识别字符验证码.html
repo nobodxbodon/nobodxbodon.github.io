@@ -1,0 +1,229 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/%E4%BD%BF%E7%94%A8Tesseract%E8%AF%86%E5%88%AB%E5%AD%97%E7%AC%A6%E9%AA%8C%E8%AF%81%E7%A0%81">使用Tesseract识别字符验证码</a></h2>
+<h1>使用 Tesseract 识别字符验证码</h1>
+<h2>依赖</h2>
+<ul>
+<li>tesseract v5.0.0-alpha.20210811</li>
+<li>python 3.9</li>
+<li>pillow 8.3</li>
+</ul>
+<p>依赖的安装</p>
+<ul>
+<li>tesseract 和 python 直接在官网下载即可</li>
+<li>pillow 的安装 <code>pip install pillow</code></li>
+</ul>
+<h2>字符验证码识别的一般套路</h2>
+<ul>
+<li>载入图片</li>
+<li>灰度</li>
+<li>二值化</li>
+<li>降噪</li>
+<li>分割字符</li>
+<li>归一化</li>
+<li>识别</li>
+</ul>
+<h2>使用 python 进行预处理</h2>
+<p>引入 pillow</p>
+<pre><code class="language-python">from PIL import Image
+</code></pre>
+<p>载入图片</p>
+<pre><code class="language-python">image = Image.open('CAPTCHA.png')
+</code></pre>
+<p>灰度</p>
+<pre><code class="language-python">imgry = image.convert('L')
+</code></pre>
+<p>二值化</p>
+<pre><code class="language-python">def get_bin_table(threshold=128):
+    '''获取灰度转二值的映射table,0表示黑色,1表示白色'''
+    table = []
+    for i in range(256):
+        if i &lt; threshold:
+            table.append(0)
+        else:
+            table.append(1)
+    return table
+binary = imgry.point(get_bin_table(), '1')
+</code></pre>
+<p>降噪</p>
+<pre><code class="language-python">def sum_9_region_new(img, x, y):
+    '''确定噪点 '''
+    cur_pixel = img.getpixel((x, y)) # 当前像素点的值
+    width = img.width
+    height = img.height
+  
+    if cur_pixel == 1: # 如果当前点为白色区域,则不统计邻域值
+        return 0
+  
+    # 因当前图片的四周都有黑点，所以周围的黑点可以去除
+    if y &lt; 3: # 本例中，前两行的黑点都可以去除
+        return 1
+    elif y &gt; height - 3: # 最下面两行
+        return 1
+    else: # y不在边界
+        if x &lt; 3: # 前两列
+            return 1
+        elif x == width - 1: # 右边非顶点
+            return 1
+        else: # 具备9领域条件的
+            sum = img.getpixel((x - 1, y - 1)) \
+                 + img.getpixel((x - 1, y)) \
+                 + img.getpixel((x - 1, y + 1)) \
+                 + img.getpixel((x, y - 1)) \
+                 + cur_pixel \
+                 + img.getpixel((x, y + 1)) \
+                 + img.getpixel((x + 1, y - 1)) \
+                 + img.getpixel((x + 1, y)) \
+                 + img.getpixel((x + 1, y + 1))
+            return 9 - sum
+  
+def collect_noise_point(img):
+    '''收集所有的噪点'''
+    noise_point_list = []
+    for x in range(img.width):
+        for y in range(img.height):
+            res_9 = sum_9_region_new(img, x, y)
+            if (0 &lt; res_9 &lt; 3) and img.getpixel((x, y)) == 0: # 找到孤立点
+                pos = (x, y)
+                noise_point_list.append(pos)
+    return noise_point_list
+  
+def remove_noise_pixel(img, noise_point_list):
+    '''根据噪点的位置信息，消除二值图片的黑点噪声'''
+    for item in noise_point_list:
+        img.putpixel((item[0], item[1]), 1)
+
+noise_point_list = collect_noise_point(binary)
+remove_noise_pixel(binary, noise_point_list)
+</code></pre>
+<p>分割字符 和 归一化 都是为了方便识别，大多数情况下 分割字符 和 归一化 都是难点，
+这里就直接交给 tesseract 识别了。</p>
+<h2>使用 tesseract 识别</h2>
+<p>保存预处理的图片</p>
+<pre><code class="language-python">image_path = 'pre.png'
+binary.save(image_path)
+</code></pre>
+<p>调用 tesseract 命令识别</p>
+<pre><code class="language-python">cmd = 'tesseract ' + image_path  + ' stdout -l osd --psm 7 digits'
+res = os.popen(cmd)
+print(res.buffer.read().decode('utf-8'))
+</code></pre>
+<h3>命令参数解释</h3>
+<p>这是上文出现的 tesseract 命令</p>
+<pre><code>tesseract image_path stdout -l osd --psm 7 digits
+</code></pre>
+<ul>
+<li><p>image_path 图片路径</p>
+</li>
+<li><p>stdout 把结果输出到标准输出</p>
+</li>
+<li><p>-l osd 识别语言为 osd</p>
+</li>
+<li><p>--psm 7 识别模式为 psm 7</p>
+</li>
+<li><p>digits 识别数字和英文字母</p>
+</li>
+<li><p>osd = Orientation and script detection (方向 和 脚本 检测)
+其实笔者并不理解，为什么 osd 会作为一种语言的选项</p>
+</li>
+<li><p>psm = Page segmentation modes (页面 分割 模式)</p>
+<ul>
+<li>psm 有很多种，对于识别字符验证码，比较常用的是 6 7 10 13</li>
+<li>6 Assume a single uniform block of text. 6 假设一个统一的文本块。</li>
+<li>7 Treat the image as a single text line. 7 将图像视为单个文本行。</li>
+<li>10 Treat the image as a single character. 10 将图像视为单个字符。</li>
+<li>13 Raw line. Treat the image as a single text line. 13 原始行，将图像视为单个文本行。</li>
+</ul>
+</li>
+</ul>
+<p>可以通过这两个命令来查看命令行的帮助</p>
+<pre><code>tesseract --help
+tesseract --help-extra
+</code></pre>
+<h3>限定要识别的文字</h3>
+<ol start="0">
+<li>找到 tesseract 的安装目录</li>
+<li>找到 安装目录\tessdata\configs</li>
+<li>在这里新建一个名为 digits_new 的文件，并写入以下内容<pre><code>tessedit_char_whitelist 0123456789abcdefghijklnmopqrstuvwsyz
+</code></pre>
+</li>
+<li>表示只识别 0-9 a-z 这 36 个字符，可以参考这个目录 安装目录\tessdata\configs 下的其它文件的写法<ul>
+<li>例如上文提及的命令里的 digits</li>
+</ul>
+</li>
+<li>在命令行里这样使用<pre><code>tesseract image_path stdout -l osd --psm 7 digits_new
+</code></pre>
+</li>
+</ol>
+<p>限定要识别的文字 能有效提高识别的准确率。</p>
+<h3>字库训练</h3>
+<h2>完整的 python 代码</h2>
+<pre><code class="language-python">from PIL import Image
+
+image = Image.open('CAPTCHA.png')
+
+imgry = image.convert('L')
+
+def get_bin_table(threshold=128):
+    '''获取灰度转二值的映射table,0表示黑色,1表示白色'''
+    table = []
+    for i in range(256):
+        if i &lt; threshold:
+            table.append(0)
+        else:
+            table.append(1)
+    return table
+binary = imgry.point(get_bin_table(), '1')
+
+def sum_9_region_new(img, x, y):
+    '''确定噪点 '''
+    cur_pixel = img.getpixel((x, y)) # 当前像素点的值
+    width = img.width
+    height = img.height
+  
+    if cur_pixel == 1: # 如果当前点为白色区域,则不统计邻域值
+        return 0
+  
+    # 因当前图片的四周都有黑点，所以周围的黑点可以去除
+    if y &lt; 3: # 本例中，前两行的黑点都可以去除
+        return 1
+    elif y &gt; height - 3: # 最下面两行
+        return 1
+    else: # y不在边界
+        if x &lt; 3: # 前两列
+            return 1
+        elif x == width - 1: # 右边非顶点
+            return 1
+        else: # 具备9领域条件的
+            sum = img.getpixel((x - 1, y - 1)) \
+                 + img.getpixel((x - 1, y)) \
+                 + img.getpixel((x - 1, y + 1)) \
+                 + img.getpixel((x, y - 1)) \
+                 + cur_pixel \
+                 + img.getpixel((x, y + 1)) \
+                 + img.getpixel((x + 1, y - 1)) \
+                 + img.getpixel((x + 1, y)) \
+                 + img.getpixel((x + 1, y + 1))
+            return 9 - sum
+  
+def collect_noise_point(img):
+    '''收集所有的噪点'''
+    noise_point_list = []
+    for x in range(img.width):
+        for y in range(img.height):
+            res_9 = sum_9_region_new(img, x, y)
+            if (0 &lt; res_9 &lt; 3) and img.getpixel((x, y)) == 0: # 找到孤立点
+                pos = (x, y)
+                noise_point_list.append(pos)
+    return noise_point_list
+  
+def remove_noise_pixel(img, noise_point_list):
+    '''根据噪点的位置信息，消除二值图片的黑点噪声'''
+    for item in noise_point_list:
+        img.putpixel((item[0], item[1]), 1)
+
+noise_point_list = collect_noise_point(binary)
+remove_noise_pixel(binary, noise_point_list)
+
+cmd = 'tesseract ' + image_path  + ' stdout -l osd --psm 7 digits'
+res = os.popen(cmd)
+print(res.buffer.read().decode('utf-8'))
+</code></pre>

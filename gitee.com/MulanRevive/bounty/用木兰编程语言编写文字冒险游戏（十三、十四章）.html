@@ -1,0 +1,92 @@
+<h2>原文：<a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2021-01-04-%E7%94%A8%E6%9C%A8%E5%85%B0%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%E7%BC%96%E5%86%99%E6%96%87%E5%AD%97%E5%86%92%E9%99%A9%E6%B8%B8%E6%88%8F%EF%BC%88%E5%8D%81%E4%B8%89%E3%80%81%E5%8D%81%E5%9B%9B%E7%AB%A0%EF%BC%89.md">用木兰编程语言编写文字冒险游戏（十三、十四章）</a></h2>
+<p>继续改写 Python <a href="https://gitee.com/zhishi/text-adventure-game-demo">文字冒险游戏</a>，第十三章的主要添加了玩家在每格的行动限制：</p>
+<pre><code class="language-java">func 选择命令(位置, 玩家) {
+    行动 = nil
+    while !行动 {
+        可选行动 = 取可选行动(位置, 玩家)
+        选择 = input("行动: ")
+        行动 = 可选行动.get(选择)
+        if 行动 {
+            // 为避免如此特殊处理, 其他行动也需加"环境"参数
+            if (行动 == 玩家.攻击) {
+                行动(位置.敌人)
+            } else {
+                行动()
+            }
+        } else {
+            println("选择无效!")
+        }
+    }
+}
+</code></pre>
+<p>另外地图改成表示如下，连同对应解析方法：</p>
+<pre><code class="language-java">地图描述 =
+"|  |VT|  |\n" +
+"|  |EN|  |\n" +
+"|EN|ST|EN|\n" +
+"|  |EN|  |\n"
+</code></pre>
+<p>十四章又添加了一个商贩角色，可以购买装备。另外，将地图解析方法改进为可以读取起始位置：</p>
+<pre><code class="language-java">func 解析地图描述 {
+    if !检查无误(地图描述) {
+        throw SyntaxError("描述 is invalid!")
+    }
+
+    各行 = 地图描述.splitlines()
+    各行 = list(filter(x -&gt; x, 各行))
+
+    for y, 行 in enumerate(各行) {
+        行数据 = []
+        各块 = 行.split("|")
+        各块 = list(filter(c -&gt; c, 各块))
+        for x, 块 in enumerate(各块) {
+            地块类型 = 地块类型表[块]
+            if 地块类型 == 起始位置 {
+                extern 起始点
+                起始点 = tuple(x, y)
+            }
+            行数据.append(地块类型 ? 地块类型(x, y) : nil)
+        }
+
+        地图.append(行数据)
+    }
+}
+</code></pre>
+<h2>木兰语言相关注意点</h2>
+<ol>
+<li><p><code>? :</code> 是表达式，不能单独作为声明使用。因此 <code>print( 2&lt;4 ? 3 : 4)</code> 这样可以，<code>if 2&gt;1{ 2&lt;4 ? print(3) : print(4) }</code> 就不可以。</p>
+</li>
+<li><p>python 的 global 对应木兰的 extern，发现在引用时有个奇特之处。简化演示如下：</p>
+</li>
+</ol>
+<p>如下声明 x，函数 a 对其作修改：</p>
+<pre><code class="language-java">x = 1
+
+func a() {
+    extern x
+    x = x * 3
+}
+
+println("原值：`x`")
+</code></pre>
+<p>如果这样引用：</p>
+<pre><code class="language-java">using * in 原值
+
+a()
+println("修改后：`x`")
+</code></pre>
+<p>输出如下，可见修改未果：</p>
+<pre><code>原值：1
+修改后：1
+</code></pre>
+<p>这样调用才修改有效：</p>
+<pre><code class="language-java">using 原值
+
+原值.a()
+println("修改后：`原值.x`")
+</code></pre>
+<p>输出：</p>
+<pre><code>原值：1
+修改后：3
+</code></pre>
+<p>Python 行为也相同。待研究，不知是否与之前发现的 <a href="https://zhuanlan.zhihu.com/p/339033162">引用机制</a> 有何关联。</p>

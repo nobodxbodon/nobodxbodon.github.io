@@ -1,0 +1,40 @@
+<h2>原文：<a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2020-05-19-%E9%87%8D%E7%8E%B0%E6%9C%A8%E5%85%B0%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%EF%BC%88%E5%8D%81%EF%BC%89%E2%80%94%E2%80%94%E6%AF%94%E8%BE%83%E3%80%81%E5%BE%AA%E7%8E%AF%EF%BC%8C%E4%B8%80%E4%B8%AA%E8%AF%AD%E6%B3%95%E8%AE%BE%E8%AE%A1%E7%89%B9%E8%89%B2.markdown">重现木兰编程语言（十）——比较、循环，一个语法设计特色</a></h2>
+<p><em>此刻支持的语法示例：</em></p>
+<pre><code>sum = 0
+number = 1
+while number &lt; 4 {
+  sum = sum + number
+  number = number + 1
+}
+print(sum)
+</code></pre>
+<p>添加了比较（包括且、或）、while循环相关语法，详见<a href="https://github.com/MulanRevive/prototype#%E5%B7%B2%E5%AE%9E%E7%8E%B0%E8%AF%AD%E6%B3%95">语法描述</a>。一个有意思的细节是支持这样的布尔操作：<code>xx or yy and zz</code>，其中<code>and</code>优先级高。</p>
+<p>RPly 源码中，看到词法分析的机制很单纯。就是<a href="https://github.com/alex/rply/blob/6e16262dc6d434fc467eed83ed31ca764ba01a34/rply/lexer.py#L48">按顺序匹配</a>词法规则中的正则表达式, 匹配的就识别为一个词。难怪之前词法规则的添加顺序不同直接影响分析结果。词法规则设计感觉挺容易出错，回头研究下有没有啥辅助工具。</p>
+<p>参照逆向工程，做了一下代码整理，以尽量接近源码结构，以便今后更加方便对比。包括将词法分析器提取到单独文件，将语法分析规则的顺序调整为与逆向相同。在此过程中，居然发现了两处语法分析规则的错误，其中一处比较严重：</p>
+<pre><code>表达式声明 : 表达式   &lt;---- 此处木兰原本为“表达式前缀”（prefix_expr）
+
+赋值 : 表达式前缀 = 表达式
+
+表达式 : 二元表达式
+      | 表达式前缀
+      | 数
+
+表达式前缀 : 变量
+         | 调用
+</code></pre>
+<p>在改正之前，像“2”（数）、“2+1”（二元表达式）这样的表达式是单一“表达式声明”的合法代码。而改为“表达式前缀”后，这些都不合法，也导致了不少相关测试需要修改（还好早发现）。</p>
+<p>BTW 木兰交互控制台（REPL）中支持运行<code>2+1</code>是因为套了层 print：</p>
+<pre><code class="language-python">node = self.parser.parse('___=(%s);__print__(___)' % self.stmt, '&lt;STDIN&gt;')
+</code></pre>
+<p>这样设计暂时没看出啥硬伤，也许还有些好处。比如下面这样的 Python 代码是可运行的，输出为 2。但也许程序员原本希望看到的是 3，只是误写代码：</p>
+<pre><code class="language-python">a = 2
+a + 1
+print(a)
+</code></pre>
+<p>而在木兰中，同样的代码运行会报错（报错信息是大短板）：</p>
+<pre><code>SyntaxError: File "xxx.ul", line 2:3, unexpected token "+"
+a + 1
+  ^
+</code></pre>
+<p>从这个角度来说，这样的设计似乎可以更早发现不必要的代码误写。</p>
+<p>语法分析器 220 行（不包括 ast 库的 API <a href="https://github.com/MulanRevive/prototype/blob/master/%E8%AF%AD%E6%B3%95%E6%A0%91.py">中文封装</a>部分），还早着。</p>

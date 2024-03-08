@@ -1,0 +1,776 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/%E5%9C%A8Windows%E4%B8%8B%E9%85%8D%E7%BD%AEPHP%E6%9C%8D%E5%8A%A1%E5%99%A8">在Windows下配置PHP服务器</a></h2>
+<h1>在Windows下配置PHP服务器</h1>
+<h2>环境依赖</h2>
+<ul>
+<li>Windows 10 (x64) 20H2</li>
+<li>php 7.4</li>
+<li>MySQL 8 或 5.7</li>
+<li>apache 2.4</li>
+<li>nginx 1.12</li>
+<li>redis 3.2.1 (redis 的 windows 版已经很久没更新了，虽然还是能用)</li>
+<li>git for windows 2.33<ul>
+<li>虽然 git 和运行 php 没有关系，但用 composer 安装依赖时有些时候会直接从 github 里拉取代码，如果这时系统里没有安装 git 可能会报错</li>
+<li>git 也要加到环境变量里（一般安装完后重启一次环境变量里就有 git 的了）</li>
+</ul>
+</li>
+</ul>
+<p>&lt;!--
+- elasticsearch 7.9.3
+- kibana 7.6.2
+
+elasticsearch 和 kibana 都在这里下载
+https://www.elastic.co/cn/downloads/past-releases
+
+从官网下载 elasticsearch
+下载完后解压
+运行这个文件就能运行 elasticsearch 了
+bin/elasticsearch.bat
+
+从官网下载 kibana
+下载完后解压
+运行这个文件就能运行 kibana 了
+bin/kibana.bat
+http://127.0.0.1:5601
+进入Kibana的DevTools界面操作ES
+
+要先运行 elasticsearch 后运行 kibana
+kibana 的版本要和 elasticsearch 对应，不然 kibana 运行不了
+如果运行失败要留意命令行的输出
+
+只要双方都是默认配置，那么就可以直接运行的了
+elasticsearch 的配置文件 config/elasticsearch.yml
+kibana 的配置文件 config/kibana.yml
+
+curl -v --user user:passwd 'http://localhost:9200/_cat/nodes?v'
+curl -v 'http://127.0.0.1:9200/_cat/nodes?v'
+curl -v 'http://127.0.0.1:9200'
+
+--&gt;</p>
+<h2>php</h2>
+<h3>下载 php</h3>
+<pre><code class="language-plaintext">http://php.net/downloads.php
+</code></pre>
+<p>这里要注意，如果用 apahce_mod 运行 php ， 那么 php 需要是 ts 版， 因为 ts 版才有这个模块 php7apache2_4.dll</p>
+<p>php 需要安装 vc 依赖，在 php 下载页面的左边有 vc 库的下载链接的，用心找一下</p>
+<p>不同版本的 php 对应 的 vc 版本是不一样的，如果不清楚这个对应关系，就把全部的 vc 版本都安装一次（只要能安装上）</p>
+<h3>配置 php</h3>
+<ol>
+<li><p>解压下载下来的压缩包</p>
+</li>
+<li><p>把解压后的文件夹重命名为 php</p>
+</li>
+<li><p>把 php 文件夹复制到 C 盘的根目录下（这里可以是任意目录）</p>
+</li>
+<li><p>把 php 文件夹的路径添加到环境变量</p>
+</li>
+<li><p>进入 php 文件夹，把 php.ini-development 复制一份，并把复制那份文件重命名为 php.ini</p>
+</li>
+<li><p>打开 php.ini</p>
+<ul>
+<li>修改拓展目录 <code>extension_dir = "ext"</code></li>
+<li>开启以下拓展，这些只是比较常用的拓展，拓展的开关要根据实际需求来确定<pre><code class="language-plaintext">extension=curl
+extension=fileinfo
+extension=gd2
+extension=gettext
+extension=gmp
+extension=intl
+extension=mbstring
+extension=exif
+extension=mysqli
+extension=openssl
+extension=pdo_mysql
+extension=pdo_sqlite
+extension=sockets
+extension=sqlite3
+extension=xsl
+</code></pre>
+</li>
+<li>除了拓展之外，还有一些比较常用的配置修改<pre><code>file_uploads 是否允许上传文件
+upload_max_filesize 上传文件的最大值
+max_file_uploads 上传文件数量的最大值
+post_max_size post 请求的最大值
+short_open_tag 是否开启短标签
+memory_limit 运行内存的最大值
+max_execution_time 运行时间的最大值
+short_open_tag 是否启用短标签
+</code></pre>
+</li>
+</ul>
+</li>
+<li><p>最好也启用 opcache ，启用 opcache 需要在配置文件的 [opcache] 下加上这样一句</p>
+<pre><code>zend_extension = "php path\ext\php_opcache.dll" # 如果 php_opcache.dll 在其它目录就填这句，这是绝对路径
+zend_extension = "php_opcache.dll" # 如果 php_opcache.dll 在 ext 目录就填这句
+</code></pre>
+</li>
+<li><p>还有就是命令行运行也启用 opcache <code>opcache.enable_cli=1</code></p>
+</li>
+</ol>
+<h3>composer</h3>
+<ul>
+<li>下面的命令要在 php 的安装目录里运行</li>
+</ul>
+<ol>
+<li>下载安装脚本</li>
+</ol>
+<pre><code>php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+</code></pre>
+<ol start="3">
+<li>安装</li>
+</ol>
+<pre><code># 安装最新的版本
+php composer-setup.php
+# 安装版本 2.2 ， 2.2 是 lts
+php composer-setup.php --2.2
+# 安装版本 2 中最新的版本
+php composer-setup.php --2
+# 安装版本 1 中最新的版本
+php composer-setup.php --1
+</code></pre>
+<p>安装 composer 时遇到这种错误</p>
+<pre><code>PHP Warning: copy(): SSL operation failed with code 1
+</code></pre>
+<p>在 php 的安装目录里运行这句</p>
+<pre><code>curl --remote-name cacert.pem https://curl.se/ca/cacert.pem
+</code></pre>
+<p>然后修改 php.ini</p>
+<pre><code>openssl.cafile = "/etc/ssl/certs/cacert.pem" # 如果 cacert.pem 在其它目录就填这句，这是绝对路径
+openssl.cafile = ./cacert.pem # 如果 cacert.pem 在php的安装目录就填这句
+</code></pre>
+<ol start="4">
+<li>删除安装脚本</li>
+</ol>
+<pre><code>php -r "unlink('composer-setup.php');"
+</code></pre>
+<ol start="5">
+<li>使用中国镜像</li>
+</ol>
+<pre><code>composer config -g repo.packagist composer https://packagist.phpcomposer.com
+</code></pre>
+<ol start="6">
+<li>在 PHP 的文件夹下新建一个名为 composer.bat 的文件，把以下内容复制进去，然后保存</li>
+</ol>
+<pre><code>@"%~dp0php.exe" "%~dp0composer.phar" %*
+</code></pre>
+<ol start="7">
+<li>在 PHP 的文件夹下新建一个名为 composer 的文件，把以下内容复制进去，然后保存，这样在 git bash 里也可以直接用 composer 的命令了</li>
+</ol>
+<pre><code>#!/usr/bin/env sh
+dp0=$(dirname "$0")
+"$dp0"/php.exe "$dp0"/composer.phar $*
+</code></pre>
+<p>写成别名的形式，加到 ~/.bashrc 里也是可以的，但 composer.phar 要写成绝对路径</p>
+<pre><code>alias composer="php /c/Users/a/dev/php/composer.phar"
+</code></pre>
+<p>powershell 的版本 composer.ps1</p>
+<pre><code class="language-powershell">$dp0 = Split-Path -Parent $MyInvocation.MyCommand.Source
+$php = (Join-Path -Path $dp0 -ChildPath php.exe)
+$composer = (Join-Path -Path $dp0 -ChildPath composer.phar)
+PowerShell -command $php $composer $args
+</code></pre>
+<p>composer 的脚本文件使用绝对路径是为了方便安装多个版本的 php</p>
+<pre><code>bat 下的绝对路径
+"%~dp0php.exe"
+powershell 下的绝对路径
+Split-Path -Parent $MyInvocation.MyCommand.Source
+sh 下的绝对路径
+"$(dirname "$0")"/php.exe
+</code></pre>
+<ol start="8">
+<li>最好提前准备好 github 的 oauth toekn<ul>
+<li>因为 composer 下载包时会经常从 github 里下载，如果没有 token 会很快就出发匿名 api 的访问限制</li>
+<li>https://getcomposer.org/doc/articles/authentication-for-private-packages.md#github-oauth</li>
+<li>同样地最好提前设置好代理，因为 github 总是间歇性访问不了</li>
+<li>oauth token 填在 auth.json 里<pre><code>这个文件 auth.json 可以放在项目的根目录里，
+也可以放在全局的配置里 C:\Users\a\AppData\Roaming\Composer\auth.json
+{
+    "github-oauth": {
+        "github.com": "123qwMbCqG4nOVFc1wx3kuwvZ3lwObrWny2nRe39"
+    }
+}
+</code></pre>
+</li>
+</ul>
+</li>
+</ol>
+<h3>xdebug</h3>
+<p>xdebug 的配置可以参考这篇文章 《在 VSCode 里调试 PHP》</p>
+<h2>MySQL</h2>
+<h3>下载 MySQL</h3>
+<ol start="0">
+<li>目标，下载 MySQL 8 的社区版的 ZIP 版本</li>
+<li>打开 MySQL 的官网</li>
+</ol>
+<pre><code class="language-plaintext">https://dev.mysql.com/
+</code></pre>
+<ol start="2">
+<li>点击上方的 DOWNLOAD</li>
+<li>拉到页面的最下面，点击 Community (GPL) Downloads ，这个是社区版，只有社区版是免费的</li>
+<li>点击 MySQL Community Server</li>
+<li>拉到页面下面，找到 Other Downloads 选择里面的 ZIP 版本，点击 Download</li>
+<li>点击 No thanks, just start my download</li>
+</ol>
+<h3>配置 MySQL</h3>
+<ol>
+<li><p>在 C 盘的根目录下新建一个名为 mysql 的文件夹，解压下载后的文件，把文件解压到 C:/mysql （这里可以是任意目录）</p>
+</li>
+<li><p>把 C:/mysql/bin 添加进环境变量 Path</p>
+</li>
+<li><p>在 mysql 文件夹里新建一个名为 data 的文件夹</p>
+</li>
+<li><p>在 mysql 文件夹里新建一个名为 my.ini 的文件</p>
+<pre><code class="language-ini">[mysqld]
+# 设置3306端口
+port=3306
+# 设置mysql的安装目录
+basedir=C:\\mysql
+# 设置mysql数据库的数据的存放目录
+#datadir=C:\\mysql\\data
+# 允许最大连接数
+max_connections=200
+# 允许连接失败的次数。这是为了防止有人从该主机试图攻击数据库系统
+max_connect_errors=10
+# 服务端使用的字符集默认为UTF8
+character-set-server=utf8mb4
+# 创建新表时将使用的默认存储引擎
+default-storage-engine=INNODB
+[mysql]
+# 设置mysql客户端默认字符集
+default-character-set=utf8mb4
+[client]
+# 设置mysql客户端连接服务端时默认使用的端口
+port=3306
+default-character-set=utf8mb4
+</code></pre>
+<ul>
+<li>my.ini 的编码必须为 utf-8 无 bom，换行符使用 \n</li>
+<li>遇到错误时，可以去查看 data 文件夹里， err 后缀的文件</li>
+</ul>
+</li>
+<li><p>初始化</p>
+<ul>
+<li>初始化命令<pre><code>mysqld --initialize
+</code></pre>
+</li>
+<li>注意，执行完之后，会自动生成一个密码，这个密码需要记下来，这个是命令行登录的密码。如果命令行里没有输出密码，那么就去 data 文件夹里，找到 err 后缀的文件，密码再这里面</li>
+<li>初始化后，第一次运行 mysqld ，要用命令行登录，然后修改密码。初始化的密码如果不修改好像不能通过 php 或其它客户端连接</li>
+<li>第一次运行时的密码修改<pre><code># 以这样的方式运行 mysqld
+mysqld --skip-grant-tables --shared-memory --console
+# 使用 mysql 登录并修改密码
+mysql -uroot -p
+use mysql;
+flush privileges;
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '新密码';
+flush privileges;
+quit
+</code></pre>
+</li>
+</ul>
+</li>
+<li><p>运行</p>
+<ul>
+<li>直接在命令行运行<pre><code>mysqld --console
+</code></pre>
+</li>
+<li>以服务的形式运行
+在管理员模式的命令行下 cd 进 C:/mysql/bin 目录，以次运行以下命令，虽然已经添加进环境变量，但然要在目录下运行。<ul>
+<li>注册服务 <code>mysqld install mysql</code></li>
+<li>启动服务 <code>net start mysql</code></li>
+<li>停止服务 <code>net stop mysql</code></li>
+<li>移除服务 <code>mysqld remove mysql</code></li>
+<li>上面命令的服务名是 mysql ，这个服务名可以自定以的。启动服务前需要先注册服务，移除服务前需要先停止服务。</li>
+</ul>
+</li>
+<li>只能以一种方式运行，因为是 zip 版，笔者更倾向于用 命令行运行</li>
+</ul>
+</li>
+<li><p>修改密码，依次运行以下命令</p>
+<pre><code># 登入 mysql
+mysql -uroot -p
+# 使用 mysql 库
+use mysql;
+# 修改密码
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '你的密码';
+# 刷新权限
+flush privileges;
+</code></pre>
+</li>
+<li><p>MySQL 的 ZIP 版本容易出现各种奇怪的错误，安装版能省心一点</p>
+</li>
+<li><p>如果 mysql8 遇到这种错误</p>
+<pre><code>Please use caching_sha2_password instead
+</code></pre>
+<p>用命令行进入 mysql 再修改一次密码</p>
+<pre><code>ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '新密码';
+flush privileges;
+</code></pre>
+<p>查看用用户的验证器插件</p>
+<pre><code>select Host, User, Plugin from user;
+</code></pre>
+</li>
+<li><p>如果遇到这种错误，用命令行登录一次，然后改密码就好了</p>
+<pre><code>Your password has expired. To log in you must change it using a client that supports expired
+</code></pre>
+</li>
+</ol>
+<h3>5.7</h3>
+<ol>
+<li>下载 zip 版</li>
+<li>从官网下载时，要用心找一下，因为 5.7 算是旧版了，下载地址不像 8 那样显眼</li>
+<li>5.7 的配置和 8 基本一致</li>
+<li>如果没有加入到环境变量，需要显式声明配置文件的地址，像这样<pre><code>初始化 mysql
+mysqld --defaults-file="C:\Program Files\mysql-5.7.34-winx64\my.ini" --initialize
+</code></pre>
+</li>
+<li>5.7 第一次运行时使用这样的命令， --skip-grant-tables 是忽略权限验证的意思<pre><code>mysqld --defaults-file="C:\Program Files\mysql-5.7.34-winx64\my.ini" --console --skip-grant-tables
+</code></pre>
+<ol>
+<li>第一次运行时要修改 root 密码</li>
+<li>用命令行运行mysql的客户端<pre><code>mysql -uroot -p
+</code></pre>
+</li>
+<li>进入 mysql 后，依次运行下面的命令<pre><code>use mysql;
+update user set authentication_string=password('1234') where user='root';
+flush privileges;
+</code></pre>
+</li>
+</ol>
+</li>
+<li>之后就可以退出mysql客户端和mysqld了，关掉 mysqld ，以后运行 mysqld 就用这样的命令<pre><code>mysqld --defaults-file="C:\Program Files\mysql-5.7.34-winx64\my.ini" --console
+</code></pre>
+</li>
+<li>因为没有加入到环境变量，所以需要显式声明配置文件的路径，运行目录也需要是 安装路径/bin</li>
+<li>从安装配置的角度来看， 5.7 和 8 最大的不同是，修改密码的方式<ul>
+<li>5.7 和 8 修改密码的 sql 语句也有一点差别</li>
+</ul>
+</li>
+</ol>
+<h2>Apache</h2>
+<h3>下载 Apache</h3>
+<pre><code class="language-plaintext">https://www.apachelounge.com/download/
+</code></pre>
+<p>Apache 官方只提供源码，二进制文件都是第三方编译的，这里选择 Apache Lounge 提供的二进制文件</p>
+<h3>配置 Apache</h3>
+<ol>
+<li><p>把 Apache 添加进环境变量</p>
+</li>
+<li><p>把 php 目录下的 php7apache2_4.dll 复制到 Apache 目录下的 modules</p>
+</li>
+<li><p>打开 Apache 的配置文件 httpd.conf，往 httpd.conf 里添加 php 的模块，httpd.conf 这个文件在 Apache 安装目录的 conf 文件夹里</p>
+<pre><code class="language-plaintext">LoadModule php7_module modules/php7apache2_4.dll
+
+AddHandler application/x-httpd-php .php
+PHPIniDir "C:/php"
+</code></pre>
+<ul>
+<li>这段配置，加在 httpd.conf 的 179 行左右，就是加载模块那部分的尾部</li>
+<li>如果遇到这种错误<pre><code>httpd.exe: Syntax error on line 187 of Apache24/conf/httpd.conf: Cannot load modules/php8apache2_4.dll into server:
+</code></pre>
+</li>
+<li>可以尝试这样解决<ul>
+<li>检查 httpd.conf 里的 SRVROOT 是否有填好</li>
+<li>检查 Apache 与 PHP 版本的位数是否一致<ul>
+<li>必须是 都是 32 位或都是 64 位</li>
+</ul>
+</li>
+<li>试试 模块名由 php8_module 改成没有版本号的 php_module</li>
+<li>试试 模块的路径填绝对路径<ul>
+<li>例如 这样 C:/php/php8apache2_4.dll</li>
+<li>但 这样的路径却不行 C:/apache/modules/php8apache2_4.dll ，虽然不知道为什么</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>打开 httpd.conf，将里面的 #ServerName localhost:80 注释去掉。</p>
+</li>
+<li><p>在 httpd.conf 里找到这一段</p>
+</li>
+</ol>
+<pre><code class="language-plaintext">&lt;Directory /&gt;
+    AllowOverride none
+    Require all denied
+&lt;/Directory&gt;
+</code></pre>
+<p>把这一段修改为</p>
+<pre><code class="language-plaintext">&lt;Directory /&gt;
+    AllowOverride none
+    Require all granted
+&lt;/Directory&gt;
+</code></pre>
+<ol start="6">
+<li>把 httpd.conf 里的 #Include conf/extra/httpd-vhosts.conf 注释去掉。</li>
+<li>打开 httpd-vhosts.conf，把里面的例子删掉</li>
+<li>在 httpd-vhosts.conf 里添加一个站点</li>
+</ol>
+<pre><code class="language-plaintext">&lt;VirtualHost *:80&gt;
+    ServerAdmin webmaster@dummy-host3.example.com
+    # 站点根目录
+    DocumentRoot "C:\www\wwwroot\dummy-host2.example.com.cn"
+    # 站点域名
+    ServerName dummy-host2.example.com.cn
+    # 错误日志
+    ErrorLog "C:\www\wwwlog\dummy-host2.example.com-error.log"
+    # 日志
+    CustomLog "C:\www\wwwlog\dummy-host2.example.com-access.log" common
+    # 默认文件名
+    &lt;IfModule dir_module&gt;
+        DirectoryIndex index.html index.php
+    &lt;/IfModule&gt;
+&lt;/VirtualHost&gt;
+</code></pre>
+<p>注意，这里的站点目录和日志目录需要在自己新建</p>
+<p>测试配置文件</p>
+<pre><code>httpd -t
+</code></pre>
+<p>查看帮助</p>
+<pre><code>httpd -h
+</code></pre>
+<ol start="9">
+<li>启动 Apache，在命令行里运行</li>
+</ol>
+<pre><code class="language-plaintext">httpd
+</code></pre>
+<ol start="10">
+<li>以服务的形式运行 Apache，先注册服务，然后再启动服务。停止 Apache 的时候就停止服务，卸载 Apache 的时候需要先移除服务。</li>
+</ol>
+<ul>
+<li>注册服务</li>
+</ul>
+<pre><code class="language-plaintext">httpd -k install
+</code></pre>
+<ul>
+<li>移除服务</li>
+</ul>
+<pre><code class="language-plaintext">httpd -k uninstall
+</code></pre>
+<ul>
+<li>启动服务</li>
+</ul>
+<pre><code class="language-plaintext">httpd -k start
+</code></pre>
+<ul>
+<li>停止服务</li>
+</ul>
+<pre><code class="language-plaintext">httpd -k stop
+</code></pre>
+<ul>
+<li>重启服务</li>
+</ul>
+<pre><code class="language-plaintext">httpd -k restart
+</code></pre>
+<p>注意，在调用 httpd 注册 Apache 的服务时，弹出这句话</p>
+<pre><code>Errors reported here must be corrected before the service can be started
+</code></pre>
+<p>并不是 error ，而是提示：如果这行下边出现错误则解决错误后再启动！</p>
+<ol start="11">
+<li>https 配置<ol>
+<li>安装 ssl 模块 mod_ssl.so ，大多数情况下 mod_ssl.so 是默认安装好的</li>
+<li>启用 mod_ssl.so ，就是在 httpd.conf 文件里把那句 mod_ssl.so 的注释删掉</li>
+<li>监听 443 端口 listen 443</li>
+<li>在 VirtualHost 里至少加上这几个字段<pre><code>SSLEngine on
+SSLCertificateFile "${SRVROOT}/conf/ssl/domain.crt"
+SSLCertificateKeyFile "${SRVROOT}/conf/ssl/rsa_private_key.pem"
+</code></pre>
+</li>
+<li>大概的例子<pre><code>&lt;VirtualHost _default_:443&gt;
+DocumentRoot "${SRVROOT}/htdocs"
+ServerName 2.example.com:443
+ServerAlias 3.example.com 4.example.com
+SSLEngine on
+SSLCertificateFile "${SRVROOT}/conf/ssl/domain.crt"
+SSLCertificateKeyFile "${SRVROOT}/conf/ssl/rsa_private_key.pem"
+&lt;/VirtualHost&gt;
+</code></pre>
+</li>
+</ol>
+</li>
+<li>http2 配置<ol>
+<li>安装 ssl 模块 mod_http2.so ，大多数情况下 mod_http2.so 是默认安装好的</li>
+<li>启用 mod_http2.so ，就是在 httpd.conf 文件里把那句 mod_http2.so 的注释删掉</li>
+<li>在 VirtualHost 里至少加上这个字段<pre><code>Protocols h2 h2c http/1.1 http/1.0
+</code></pre>
+</li>
+<li>大概的例子<pre><code>&lt;VirtualHost _default_:443&gt;
+DocumentRoot "${SRVROOT}/htdocs"
+ServerName 2.example.com:443
+ServerAlias 3.example.com 4.example.com
+SSLEngine on
+SSLCertificateFile "${SRVROOT}/conf/ssl/domain.crt"
+SSLCertificateKeyFile "${SRVROOT}/conf/ssl/rsa_private_key.pem"
+Protocols h2 h2c http/1.1 http/1.0
+&lt;/VirtualHost&gt;
+</code></pre>
+</li>
+<li>启用 http2 必须先启用 https</li>
+</ol>
+</li>
+</ol>
+<h2>nginx</h2>
+<h3>下载 nginx</h3>
+<pre><code class="language-plaintext">http://nginx.org/download/nginx-1.21.1.zip
+</code></pre>
+<h3>配置 nginx</h3>
+<ol>
+<li><p>解压下载的压缩包</p>
+</li>
+<li><p>修改 config/nginx.conf 这个文件</p>
+<ul>
+<li>worker_processes 设为 cpu 逻辑核心数的两倍，例如 cpu 是 2 核 4 线程，那么 worker_processes 就是 8 ，但 worker_processes 的值最好不要超过 8</li>
+<li>加上站点的配置， nginx.conf 里原本就有一个站点的配置例子，可以在那个例子上修改，或者把那个例子整个注释掉，然后加上这段配置<pre><code>server {
+    listen       80;
+    server_name  localhost;
+
+    access_log  logs/localhost.access.log;
+    error_log  logs/localhost.error.log;
+
+    location / {
+        root   C:/wwwroot; # 这是站点根目录的路径
+        index  index.html index.htm;
+    }
+
+    location ~ \.php$ {
+        root           C:/wwwroot; # 这是站点根目录的路径
+        fastcgi_pass   127.0.0.1:9001;
+        fastcgi_index  index.php;
+        include        fastcgi.conf;
+    }
+}
+</code></pre>
+</li>
+</ul>
+</li>
+<li><p>https 的配置</p>
+<ul>
+<li>在 server 块里加上这三句</li>
+<li>ssl_certificate 是证书路径， ssl_certificate_key 是私钥路径</li>
+<li>ssl_certificate 和 ssl_certificate_key 的路径，要么填绝对路径，要么填相对于 nginx 根目录的路径</li>
+<li>http2 不是必须的，但现在的浏览器都支持了，多加一句能稍微提升一下性能</li>
+</ul>
+<pre><code>listen       443 ssl http2;
+ssl_certificate  ./crt/127.0.0.1/domain.crt;
+ssl_certificate_key ./crt/127.0.0.1/rsa_private_key.pem;
+</code></pre>
+</li>
+</ol>
+<h3>启动 nginx</h3>
+<ol>
+<li><p>启动 php-cgi ，端口号要和 nginx 的配置里一致， PHP_FCGI_CHILDREN 如果不设置，默认值是 1 ，性能会比较差，大部分情况下和 nginx 的 worker_processes 设为一样就可以了</p>
+<pre><code>set PHP_FCGI_CHILDREN=8
+php-cgi -b 127.0.0.1:9001
+</code></pre>
+</li>
+<li><p>启动 nginx ，直接在 nginx 的根目录下运行 nginx 就可以了</p>
+</li>
+<li><p>一些常用的命令，这些命令也是需要在 nginx 的根目录下运行</p>
+<ul>
+<li>退出 nginx <code>nginx -s quit</code></li>
+<li>停止 nginx <code>nginx -s stop</code></li>
+<li>重载配置 <code>nginx -s reload</code></li>
+<li>测试配置文件 <code>nginx -T</code></li>
+<li>查看帮助 <code>nginx -h</code></li>
+</ul>
+</li>
+<li><p>退出 nginx 最好使用信号的方式退出，直接关掉 nginx 的进程，可能会有 nginx 子进程残留</p>
+</li>
+</ol>
+<h2>redis</h2>
+<h3>下载 redis</h3>
+<pre><code class="language-plaintext">https://github.com/MicrosoftArchive/redis/releases
+
+这是新的 redis windows 版，虽然不是官方版本，但总比没有好
+https://github.com/redis-windows/redis-windows
+</code></pre>
+<p>这里推荐下载 zip 版</p>
+<p>redis 的 windows 版已经很久没更新了。
+redis 的官方好像是推荐用 wsl2 在 windows 里安装 redis</p>
+<ul>
+<li>https://redis.com/blog/redis-on-windows-10/</li>
+<li>https://redis.io/docs/getting-started/installation/install-redis-on-windows/</li>
+</ul>
+<p>据说 redis 无法支持 windows 的原因是 windows 没有 fork 系统调用（和 fpm 不支持 windows 的原因是一样的）。
+好像是没有 fork 功能，redis 就无法执行某些必要的数据库保存方法。</p>
+<h3>运行 redis</h3>
+<p>下载完后解压，然后 cd 进目录，然后运行这段</p>
+<pre><code>redis-server.exe redis.windows.conf
+</code></pre>
+<h3>php 的 redis 扩展</h3>
+<p>下载 https://pecl.php.net/package/redis</p>
+<p>下载完后，把 dll 文件放在 php 的 ext 目录。</p>
+<p>然后修改 php.ini ，加上下面这一行，最好加在那些拓展的位置</p>
+<pre><code>extension=php_redis.dll
+</code></pre>
+<h3>参考</h3>
+<p>https://www.redis.com.cn/redis-installation.html</p>
+<h2>其它</h2>
+<p>nginx 和 apache 大多数情况下安装一个就可以，当然啦 nginx 反代 apache 也是可以的。</p>
+<p>相比于 xampp 和 wampp 这类集成环境，笔者更喜欢，全部软件都自行安装。因为这样可以更好地控制各个软件的配置，和方便地安装同一个软件的多个版本 ~~（所以这篇文章里的 mysql 才会选 zip 版来安装）~~ 。</p>
+<p>笔者对 Windows 的服务并不了解，所以大多数软件都是通过命令行直接运行的。</p>
+<p>可以用 NSSM 把像 php-cgi 这类在命令行运行的程序封装成服务。
+或者用 instsrv 和 srvany 配合，也可以把任意 exe 封装成服务。
+instsrv.exe 和 srvany.exe 是 Microsoft Windows Resource Kits 工具集中的两个实用工具。</p>
+<p>https 自签证书的生成，可以参考这篇文章 《密码学入门简明指南》 的这个章节 OpenSSL 的一般使用 。</p>
+<h3>phpmyadmin</h3>
+<ol>
+<li>下载 phpmyadmin<pre><code>https://www.phpmyadmin.net/
+</code></pre>
+</li>
+<li>下载完后解压</li>
+<li>打开这两个文件 <code>/libraries/config.default.php</code> <code>/config.sample.inc.php</code> ，设置这两个文件里的这个值，这个值的长度要大于 64<pre><code>$cfg['blowfish_secret'] = ''
+</code></pre>
+</li>
+<li>可以在这个文件里 <code>/config.sample.inc.php</code> 修改 mysql 的连接参数</li>
+<li>配置好站点就可以直接运行了，当然也可以在根目录里用 php 的内置服务器运行</li>
+<li>除了 phpmyadmin 外，这里还推荐使用 dbeaver 或 heidisql 作为数据库的管理工具</li>
+</ol>
+<h3>phpredisadmin</h3>
+<ol>
+<li><p>下载 phpredisadmin</p>
+<pre><code>https://github.com/ErikDubbelboer/phpRedisAdmin
+</code></pre>
+</li>
+<li><p>解压后，配置好站点就可以直接运行了，当然也可以在根目录里用 php 的内置服务器运行</p>
+</li>
+<li><p>现在的 redis 也提供 gui 工具了 https://redis.com/redis-enterprise/redis-insight/</p>
+</li>
+</ol>
+<h3>hosts</h3>
+<p>hosts 是用来修改本地的域名解释</p>
+<p>hosts 的文件位置是 <code>%WINDIR%\System32\drivers\etc\hosts</code></p>
+<p>其中 %WINDIR% 是系统所在目录，一般是 <code>%HOMEDRIVE%\WINDOWS</code></p>
+<p>其中 %HOMEDRIVE% 是系统所在分区，一般是 <code>C:</code></p>
+<p>所以一般情况下 hosts 的文件位置是 <code>C:\WINDOWS\System32\drivers\etc\hosts</code></p>
+<p>修改 hosts 需要管理员权限，直接用记事本修改会保存失败的，可以用 vscode 修改</p>
+<p>或者打开管理员的命令行，再在命令行里打开记事本，再用记事本打开 hosts
+或者用 vscode 打开， vscode 在保存时会自动提示管理员权限的授权
+例如这样</p>
+<pre><code>notepad %WINDIR%\System32\drivers\etc\hosts
+notepad $env:windir\system32\drivers\etc\hosts
+notepad "$WINDIR/system32/drivers/etc/hosts"
+
+code %WINDIR%\System32\drivers\etc\hosts
+code $env:windir\system32\drivers\etc\hosts
+code "$WINDIR/system32/drivers/etc/hosts"
+</code></pre>
+<p>hosts 修改后，要记得刷新 DNS ，可以用这个命令刷新 DNS</p>
+<pre><code>ipconfig /flushdns
+</code></pre>
+<p>hosts 修改后，可以用这个命令 <code>nslookup 域名</code> 来判断有没有生效</p>
+<p>windows 的 hosts 文件需要是 ascii 编码或 ansi 编码，用其它编码 hosts 可能会无效</p>
+<p>如果没有权限修改 hosts 文件，可以在本地自建一个 DNS 服务</p>
+<h3>一些实用的命令</h3>
+<ul>
+<li><p>netstat</p>
+<pre><code>查看端口占用，第二列是本地监听的地址和端口，第二列是远程监听的地址和端口，最后一列是 pid
+netstat -ano
+列出进程名
+netstat -anob
+只查看 TCP
+netstat -anob -p TCP
+查看 TCP 下的 80 端口占用
+netstat -anob -p TCP | findstr "80"
+</code></pre>
+</li>
+<li><p>tasklist</p>
+<pre><code>tasklist /V /FI "WINDOWTITLE eq titlename"
+tasklist /V /FI "PID eq 9088"
+tasklist /V /FI "IMAGENAME eq nginx.exe"
+tasklist /V /FI "IMAGENAME eq nginx.exe" /FI "WINDOWTITLE eq titlename"
+</code></pre>
+</li>
+<li><p>taskkill</p>
+<pre><code>taskkill /T /F /FI "WINDOWTITLE eq titlename"
+taskkill /T /F /FI "PID eq 9088"
+taskkill /T /F /FI "IMAGENAME eq nginx.exe"
+</code></pre>
+</li>
+</ul>
+<p>&lt;!--
+各种启动脚本
+bat
+
+nginx.bat
+```
+title nginx
+chcp 65001
+C:
+cd C:\Users\a\dev\nginx-1.21.4
+call nginxquit.bat
+nginx -T
+nginx || echo %errorlevel% &amp; pause
+exit
+```
+
+nginxquit.bat
+```
+C:
+cd C:\Users\a\dev\nginx-1.21.4
+nginx -s quit
+timeout 6
+taskkill /T /F /FI "IMAGENAME eq nginx.exe"
+```
+
+php-cgi.bat
+```
+title php-cgi
+chcp 65001
+C:
+cd C:\Users\a\dev\php-8.1.16-nts-Win32-vs16-x64
+set PHP_FCGI_CHILDREN=16
+set PHP_FCGI_MAX_REQUESTS=100
+php-cgi -b 127.0.0.1:9001 || echo %errorlevel% &amp; pause
+```
+
+elasticsearch.bat
+```
+title elasticsearch
+chcp 65001
+C:
+cd C:\Users\a\dev\elasticsearch-7.9.3\bin
+elasticsearch.bat
+```
+
+mysql.bat
+```
+title mysqld
+chcp 65001
+C:
+cd C:\Users\a\dev\mysql-8.0.27-winx64\bin
+mysqld --defaults-file="C:\Users\a\dev\mysql-8.0.27-winx64\my.ini" --console || echo %errorlevel% &amp; pause
+```
+
+redis.bat
+```
+title redis
+chcp 65001
+C:
+cd C:\Users\a\dev\Redis-x64-3.2.100
+redis-server.exe || echo %errorlevel% &amp; pause
+```
+
+一次启动全部 startup.bat
+```
+cmd /c start php-cgi.bat
+cmd /c start nginx.bat
+cmd /c start mysql.bat
+cmd /c start redis.bat
+cmd /c start elasticsearch.bat
+```
+
+一次关闭全部 shutdown.bat
+```
+taskkill /T /F /FI "WINDOWTITLE eq php-cgi"
+taskkill /T /F /FI "WINDOWTITLE eq mysqld"
+taskkill /T /F /FI "WINDOWTITLE eq elasticsearch"
+taskkill /T /F /FI "WINDOWTITLE eq redis"
+call nginxquit.bat
+```
+
+一次重启全部 reload.bat
+```
+cmd /c shutdown.bat
+timeout 2
+cmd /c startup.bat
+```
+
+--&gt;</p>

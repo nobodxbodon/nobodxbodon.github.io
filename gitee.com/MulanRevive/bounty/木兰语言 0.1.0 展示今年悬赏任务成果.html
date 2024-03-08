@@ -1,0 +1,142 @@
+<h2>原文：[木兰语言 0.1.0 展示今年悬赏任务成果](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2022-12-18-木兰语言 0.1.0 展示今年悬赏任务成果.md)</h2>
+<p>【安装：<code>pip install ulang</code>，用法与例程请见 <a href="https://pypi.org/project/ulang/">PyPI</a>。源码位于<a href="https://gitee.com/MulanRevive/mulan-rework">开源中国</a>。 <em><strong>注意：必需 python 3.7，源码文件需 UTF-8 编码</strong></em>】</p>
+<h2>2022年小结</h2>
+<p>去年，七月发布 0.0.22 版之后项目静默了一段时间。今年一月末开始 <a href="https://my.oschina.net/u/4552012/blog/5610901">悬赏任务又开始大步推进</a>。重现功能量较大，因此发布大版本。</p>
+<p>*** 感激所有参与者的合作、耐心和探究精神！***</p>
+<h2>此版本重现功能</h2>
+<p>按各悬赏任务的完成先后顺序逐个介绍。</p>
+<h3>更多增量运算</h3>
+<p>早先完成了 += -=，现已完成余下的 *= ^= |= &amp;= /= %= 等：</p>
+<pre><code>&gt; a = 10
+&gt; a %= 4
+&gt; a
+2
+</code></pre>
+<h3>木兰源码转换为 Python</h3>
+<p>现在 --dump-python 命令行选项可以将木兰源码转换为 Python 源码：</p>
+<pre><code>&gt; 木兰 --dump-python 测试\算法\排序\冒泡.ul
+import sys
+from math import *
+ARGV = sys.argv[1:]
+def 冒泡(数列):
+  换过 = True
+  while 换过:
+    换过 = False
+    for i in range(0, len(数列) - 2 + 1):
+      前项 = 数列[i]
+      后项 = 数列[i + 1]
+      if (前项 &gt; 后项):
+        (数列[i], 数列[i + 1]) = (后项, 前项)
+        换过 = True
+打乱数列 = [5, 2, 1, 8, 4]
+冒泡(打乱数列)
+print(打乱数列)
+</code></pre>
+<h3>匿名函数支持多参数与无参数</h3>
+<p>以及注解参数类型</p>
+<pre><code>&gt; 体积 = (长:int, 宽:int, 高:int) -&gt; 长*宽*高
+print(体积(2, 3, 4))
+24
+&gt; a = () -&gt; 3
+print(a())
+3
+</code></pre>
+<p>期间发现第一个形参 <a href="https://gitee.com/MulanRevive/mulan-rework/pulls/34#note_11132450_conversation_55695156">不支持默认值</a>，不解原因。</p>
+<h3>函数支持若干形参（点点点）</h3>
+<p>包括普通函数</p>
+<pre><code>&gt;func 哈(...) {{
+    __varargs__ = tuple('ha', 'ha')
+    print(...)
+}
+哈(2, 3, 3, 3)
+hah
+</code></pre>
+<p>和匿名函数</p>
+<pre><code>&gt;b = (...) -&gt; max(...))
+print(b(3, 1, 2))
+3
+</code></pre>
+<p>以下是十月末之后完成的。</p>
+<h3>.. 作为模块路径</h3>
+<p><a href="https://gitee.com/MulanRevive/mulan-rework/pulls/39">详见此 pr</a></p>
+<pre><code>using * in ..
+
+func talk() {
+    module_py.talk('..')
+}
+</code></pre>
+<h3>更多超类语法，但运行报错，不明用意</h3>
+<p>见最后两行示例。运行有报错，与原始木兰行为相同，因而仅添加了语法树测试。详见 <a href="https://gitee.com/MulanRevive/mulan-rework/pulls/40">此pr</a>。</p>
+<pre><code>type Person : list {
+  func $Person {
+    super.__init__()
+  }
+}
+p = Person()
+v = p.super
+Person.super(None)
+</code></pre>
+<h3>在类型内定义类型</h3>
+<pre><code>type Animal {
+    type Child {
+        func $Child(name) {
+            $name = name
+        }
+    }
+    func getChildName() {
+        c = Animal.Child('Animal.Child').name
+        return c
+    }
+}
+
+p = Animal()
+print(p.getChildName())
+</code></pre>
+<h3>十六进制数字</h3>
+<pre><code>&gt; n = 12 + 0x1F + 0X1a + 0xab + 0XCD
+print(n)
+445
+</code></pre>
+<p>但格式有误时报错比较费解：</p>
+<pre><code>&gt; print(0xg)
+ 😰 请先定义‘xg’再使用，见第1行
+</code></pre>
+<p>应该是木兰支持 <a href="https://zhuanlan.zhihu.com/p/205190684">乘法省略乘号</a> 的副作用。</p>
+<h3>（语义待确定）复杂类型注解</h3>
+<p>详见 <a href="https://gitee.com/MulanRevive/mulan-rework/pulls/43">此pr</a>，语法上支持嵌套的类型注解，但不知用意和建议用法为何。</p>
+<pre><code>func hello(a : tuple [ int ]) : int [ float, list [ str ], dict ] {
+  print(a)
+}
+a : list [ int ] = 2
+</code></pre>
+<h3>补全 try ... catch ... finally</h3>
+<pre><code>try f=open('__init__.py', 'r') {
+  print(len(f.read()))
+  print([][int('0')])
+} catch e : ValueError {
+  print('v')
+} catch e : IndexError {
+  print('i')
+} finally {
+  print('f')
+}
+</code></pre>
+<h3>重载余下所有操作符，包括二元、一元等</h3>
+<p>包括下例的 26 个操作符，详见 <a href="https://gitee.com/MulanRevive/mulan-rework/blob/master/%E6%96%87%E6%A1%A3/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E6%93%8D%E4%BD%9C%E7%AC%A6.md">此文档</a>。</p>
+<pre><code>type P : str {
+    operator + (a) {
+        return str(self) + str(a) + '啊'
+    }
+    
+    {}
+}
+a = P("你")
+b = P("好")
+print(a+b)  // 输出“你好啊”
+</code></pre>
+<h2>其他维护</h2>
+<ul>
+<li><a href="https://gitee.com/MulanRevive/mulan-rework/issues/I5F7MC">测试.unittest.原始可执行文件 报错问题</a>，期间研究了编解码问题。</li>
+<li><a href="https://gitee.com/MulanRevive/dashboard?issue_id=I5V08V">添加github workflow与对应徽章</a></li>
+<li>两周来的一系列代码和文档规整和清理</li>
+</ul>

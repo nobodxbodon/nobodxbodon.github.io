@@ -1,0 +1,225 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/nginx+ffmpeg+websocket%E5%AE%9E%E7%8E%B0%E7%9A%84%E7%9B%B4%E6%92%AD%E4%BE%8B%E5%AD%90">nginx+ffmpeg+websocket实现的直播例子</a></h2>
+<h1>nginx+ffmpeg+websocket实现的直播例子</h1>
+<h2>环境</h2>
+<ul>
+<li>Windows 10</li>
+<li>nginx 1.7.11.3 Gryphon</li>
+<li>nginx-rtmp-module 1.1.4</li>
+<li>ffmpeg n5.0.1-4</li>
+</ul>
+<p>虽然不知道为什么，但笔者尝试了很多次，都只有从 http://nginx-win.ecsds.eu/download/ 下载的 nginx 1.7.11.3 能运行 nginx-rtmp-module 插件</p>
+<h2>安装</h2>
+<ol>
+<li>从 http://nginx-win.ecsds.eu/download/ 下载的 nginx 1.7.11.3<ul>
+<li>这个版本的 nginx 需要 vc 2010 ，32位和64位版本都要装上</li>
+</ul>
+</li>
+<li>从 github 下载 nginx-rtmp-module 的源码</li>
+<li>把 nginx-rtmp-module 的源码解压后复制进 nginx 的根目录，并重命名为 nginx-rtmp-module<ul>
+<li>要确保证 stat.xls 的路径是 nginx根目录\nginx-rtmp-module\stat.xsl</li>
+</ul>
+</li>
+<li>下载 ffmpeg 并把 ffmpeg 加入到环境变量<ul>
+<li>在 Windows server 上运行 ffmpeg 需要安装桌面体验，直接运行可能会提示这种错误 缺失 mfplat.dll</li>
+</ul>
+</li>
+<li>在 nginx 的 etc 目录下新建一个文件 nginx-win-rtmp.conf ，配置文件里的 hls 和 vod 的路径要提前新建好<pre><code>#user  nobody;
+# multiple workers works !
+worker_processes  2;
+
+#error_log  logs/error.log;
+#error_log  logs/error.log  notice;
+#error_log  logs/error.log  info;
+
+#pid        logs/nginx.pid;
+
+events {
+    worker_connections  8192;
+    # max value 32768, nginx recycling connections+registry optimization =
+    #   this.value * 20 = max concurrent connections currently tested with one worker
+    #   C1000K should be possible depending there is enough ram/cpu power
+    # multi_accept on;
+}
+
+rtmp {
+    server {
+        listen 1935;
+        application live {   #//rtmp直播
+            live on;
+        }
+        application hls {     #//hls直播
+            live on;
+            hls on;
+            hls_path C:/rtmp/temp/hls/;
+            hls_fragment 5s;
+        }
+
+        chunk_size 4096;   #//数据传输块的大小
+        #Video on demand
+
+        application vod {    #//点播
+            play C:/rtmp/video; #//视频文件存放位置。
+        }
+
+        #Video on demand over HTTP
+        application vod_http {
+            #myserver.com及服务器地址，如果只是本地播放，填写127.0.0.1:端口号 就行，端口好看配置文件中http监听的端口下同
+            play http://127.0.0.1:8080/vod/;
+        }
+    }
+}
+http {
+    server {
+        listen       8080;
+        server_name  localhost;
+        #charset koi8-r;
+        #access_log  logs/host.access.log  main;
+
+        add_header Access-Control-Allow-Origin *;
+        add_header Access-Control-Allow-Credentials true;
+        add_header Access-Control-Allow-Methods GET,POST;
+
+        location / {
+            root html;
+            index index.html;
+        }
+
+        location /hls {
+            #server hls fragments
+            types{
+                application/vnd.apple.mpegurl m3u8;
+                video/mp2t ts;
+            }
+            alias C:/Baidu_download/temp/hls;
+            expires -1;
+            #root G:/Baidu_download/temp/hls;
+            #add_header Cache-Control no-cache;
+        }
+
+        # 用于查看 rtmp 的状态
+        location /stat {
+            rtmp_stat all;
+            rtmp_stat_stylesheet stat.xsl;
+        }
+        location /stat.xsl {
+            root nginx-rtmp-module/;
+        }
+    }
+}
+</code></pre>
+</li>
+<li>在 nginx 的根目录下启动 nginx<pre><code>nginx.exe -c conf\nginx-win-rtmp.conf
+</code></pre>
+</li>
+</ol>
+<p>&lt;!--
+nginx.exe -c conf\nginx-win-rtmp.conf -T
+nginx.exe -c conf\nginx-win-rtmp.conf -s reload
+nginx.exe -c conf\nginx-win-rtmp.conf -s quit
+tasklist /V /FI "IMAGENAME eq nginx.exe"
+taskkill /T /F /FI "IMAGENAME eq nginx.exe"
+--&gt;</p>
+<h2>推流和拉流的测试</h2>
+<p>ffmpeg 查看电脑设备，这个命令可以查看到各个设备的名称</p>
+<pre><code>ffmpeg -list_devices true -f dshow -i dummy
+</code></pre>
+<p>测试摄像头是否可用</p>
+<pre><code>ffplay -f dshow -i video="e2eSoft iVCam"
+ffplay -f vfwcap -i 0
+</code></pre>
+<p>查看摄像头和麦克风信息</p>
+<pre><code>ffmpeg -list_options true -f dshow -i video="e2eSoft iVCam"
+ffmpeg -list_options true -f dshow -i audio="麦克风 (e2eSoft iVCam)"
+</code></pre>
+<p>ffmpeg 的推流</p>
+<pre><code>ffmpeg.exe -re -i C:\Users\a\Downloads\movie.mp4 -vcodec libx264 -acodec aac -f flv rtmp://127.0.0.1:1935/hls/movie
+ffmpeg.exe -re -i C:\Users\a\Downloads\movie.mp4 -vcodec libx264 -acodec aac -f flv rtmp://127.0.0.1:1935/live/movie
+循环无限次
+ffmpeg.exe -re -stream_loop -1 -i C:\Users\a\Downloads\movie.mp4 -vcodec libx264 -acodec aac -f flv rtmp://127.0.0.1:1935/hls/loop
+</code></pre>
+<p>obs 的推流</p>
+<ol>
+<li>推流地址设为 rtmp://127.0.0.1:1935/hls 或 rtmp://127.0.0.1:1935/live</li>
+<li>密钥设为 movie</li>
+<li>然后播放的地址就是 http://127.0.0.1:8080/hls/movie.m3u8 或 rtmp://127.0.0.1:1935/live/test0</li>
+<li>密钥是播放地址的这部分 http://localhost:8080/hls/{密钥}.m3u8</li>
+</ol>
+<p>ffplay 直接播放视频文件</p>
+<pre><code>ffplay.exe C:\Users\a\Downloads\movie.mp4
+</code></pre>
+<p>ffplay 播放 rtmp</p>
+<pre><code>ffplay -fs rtmp://127.0.0.1:1935/live/test0
+</code></pre>
+<p>ffplay 播放 hsl</p>
+<pre><code>ffplay -i "http://127.0.0.1:8080/hls/movie.m3u8"
+</code></pre>
+<p>前端播放 hls 的例子，需要注意的是 m3u8 的文件需要跨域</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;meta charset=utf-8 /&gt;
+&lt;title&gt;videojs-contrib-hls embed&lt;/title&gt;
+  &lt;link href="https://unpkg.com/video.js/dist/video-js.css" rel="stylesheet"&gt;
+  &lt;script src="https://unpkg.com/video.js/dist/video.js"&gt;&lt;/script&gt;
+  &lt;script src="https://unpkg.com/videojs-contrib-hls/dist/videojs-contrib-hls.js"&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;Video.js Example Embed&lt;/h1&gt;
+  &lt;video class="video-js vjs-default-skin" controls preload="auto" width="640" height="268" data-setup='{}'&gt;
+    &lt;source src="http://127.0.0.1:8080/hls/movie.m3u8" type="application/x-mpegURL"&gt;
+  &lt;/video&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>可以通过这个地址 http://127.0.0.1/stat 来查看 rtmp 的状态</p>
+<h2>使用 getUserMedia 和 websocket 实现的推流端</h2>
+<p>目标是为了让推流端也可以在浏览器上实现。</p>
+<p>使用这个库 https://github.com/chenxiaoqino/getusermedia-to-rtmp</p>
+<p>大致的原理</p>
+<ol>
+<li>使用 getUserMedia 获取摄像头数据</li>
+<li>使用 websocket 把视频流推送到后端</li>
+<li>在后端把视频流推送到 nginx</li>
+</ol>
+<p>大致的使用流程</p>
+<ul>
+<li>下载源码后运行 npm insatll<ul>
+<li>要把 ffmpeg 加入到环境变量</li>
+</ul>
+</li>
+<li>node server.js</li>
+<li>启动后打开页面</li>
+<li>填好对应的参数<ul>
+<li>Socket.io Destination: 填本机地址，就是当前的网址，但不需要路径部分</li>
+<li>flv_soruce Destination 设为空</li>
+<li>RTMP Destination 填推流地址，可以支持 hls</li>
+</ul>
+</li>
+<li>填好配置后<ul>
+<li>先点击 Connect_server ，再点击 Start streaming</li>
+<li>不要点击这个按钮 Set flvsource</li>
+</ul>
+</li>
+<li>这个库应该还有 bug<ul>
+<li>起码验证了从推流端到客户端都可以在浏览器上实现</li>
+</ul>
+</li>
+</ul>
+<h3>使用手机作为电脑的摄像头测试</h3>
+<p>手机作为电脑摄像头，虽然有水印，但测试用的话就没关系啦
+https://www.e2esoft.cn/ivcam/</p>
+<p>其它同类应用</p>
+<ul>
+<li>IVcam（支持双端），下载地址：https://www.e2esoft.cn/ivcam/</li>
+<li>Iriun（支持双端），下载地址：https://www.Iriun.com/</li>
+<li>无他相机（支持双端），下载地址：https://www.wuta-cam.com/</li>
+<li>DroidCam（支持双端），下载地址：https://www.dev47apps.com/</li>
+<li>Epoccam（仅限ios），下载地址：https://www.elgato.com/zh-CN/epoccam/</li>
+<li>Camo（支持双端），下载地址：https://reincubate.com/zh/support/camo/</li>
+</ul>
+<h2>参考</h2>
+<ul>
+<li>https://www.nginx.org.cn/article/detail/259</li>
+<li>https://blog.csdn.net/little__SuperMan/article/details/89071764</li>
+<li>https://blog.csdn.net/wa1tzy/article/details/117249275</li>
+</ul>

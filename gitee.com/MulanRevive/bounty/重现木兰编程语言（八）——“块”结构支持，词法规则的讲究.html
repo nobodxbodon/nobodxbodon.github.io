@@ -1,0 +1,90 @@
+<h2>原文：<a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2020-05-11-%E9%87%8D%E7%8E%B0%E6%9C%A8%E5%85%B0%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%EF%BC%88%E5%85%AB%EF%BC%89%E2%80%94%E2%80%94%E2%80%9C%E5%9D%97%E2%80%9D%E7%BB%93%E6%9E%84%E6%94%AF%E6%8C%81%EF%BC%8C%E8%AF%8D%E6%B3%95%E8%A7%84%E5%88%99%E7%9A%84%E8%AE%B2%E7%A9%B6.markdown">重现木兰编程语言（八）——“块”结构支持，词法规则的讲究</a></h2>
+<p><em>此刻支持的语法</em></p>
+<pre><code>{
+print(3)
+}
+</code></pre>
+<p>项目地址仍<a href="https://github.com/MulanRevive/prototype">在此</a>。</p>
+<p>接续<a href="https://zhuanlan.zhihu.com/p/138253566">上文</a>，添加“块”结构的支持。</p>
+<p>首先在之前所有词法规则 <em><strong>之后</strong></em> 添加了如下<a href="https://github.com/MulanRevive/prototype/commit/af3a239f1f7c37664928a88c5bd95fce18e75278">两条词法规则</a>：</p>
+<pre><code class="language-python">分词器母机.add('前括号', '{\\r*\\n*')
+分词器母机.add('后括号', '\\r*\\n*}')
+</code></pre>
+<p>相关语法修改如下：</p>
+<pre><code>声明 : 表达式声明
+      | 赋值
+      | 块
+
+块 : 前括号 声明列表 后括号
+</code></pre>
+<p>块结构的语法树转换比较有趣。</p>
+<pre><code class="language-python">    @分析器母机.production('声明 : 块')
+    def 单块(片段):
+        return 语法树.如果(
+            条件=语法树.常数(True, 片段),
+            主体=片段[0],
+            否则=[],
+            片段=片段)
+</code></pre>
+<p>Python 的<a href="https://docs.python.org/3.7/library/ast.html#abstract-grammar">语法描述</a>中并无<code>block</code>一说。</p>
+<p>看样子就是将<code>{print(2)}</code>等价为了这样的 Python 代码：</p>
+<pre><code class="language-python">if True:
+  print(2)
+</code></pre>
+<p>与下面 python 生成的语法树比对，的确如此。</p>
+<pre><code>&gt;&gt;&gt; ast.dump(ast.parse("if True:\n\tprint(2)"), True, True)
+"Module(body=[If(test=NameConstant(value=True, lineno=1, col_offset=3), body=[Expr(value=Call(func=Name(id='print', ctx=Load(), lineno=2, col_offset=1), args=[Num(n=2, lineno=2, col_offset=7)], keywords=[], lineno=2, col_offset=1), lineno=2, col_offset=1)], orelse=[], lineno=1, col_offset=0)])"
+</code></pre>
+<p>什么是NameConstant？<a href="https://greentreesnakes.readthedocs.io/en/latest/nodes.html?highlight=NameConstant#NameConstant">这里</a>说：</p>
+<blockquote>
+<p>True, False or None. value holds one of those constants.</p>
+</blockquote>
+<p>看起来就是用于<code>真/假/空</code>三个值。Python 3.8 后就被<code>Constant</code>替代了。</p>
+<p>接下来困惑于前后括号正则表达式中的<code>\\r*\\n*</code>部分许久。乍一看是为了支持括号前后带换行。</p>
+<p>如果仅前括号之后有换行：</p>
+<pre><code>{
+print(3)}
+</code></pre>
+<p>词法分析结果为：</p>
+<pre><code>Token('前括号', '{\n')
+Token('标识符', 'print')
+Token('(', '(')
+Token('整数', '3')
+Token(')', ')')
+Token('后括号', '}')
+</code></pre>
+<p>语法分析无误，运行输出 3.</p>
+<p>但是，如果源码的后括号之前有换行：</p>
+<pre><code>{
+print(3)
+}
+</code></pre>
+<p>则词法分析出了个”换行“：</p>
+<pre><code>Token('前括号', '{\n')
+Token('标识符', 'print')
+Token('(', '(')
+Token('整数', '3')
+Token(')', ')')
+Token('换行', '\n')
+Token('后括号', '}')
+</code></pre>
+<p>对比原始木兰的词法解析结果：</p>
+<pre><code>Token('LBRACE', '{\n')
+Token('IDENTIFIER', 'print')
+Token('(', '(')
+Token('INTEGER_LITERAL', '3')
+Token(')', ')')
+Token('RBRACE', '\n}')
+</code></pre>
+<p>为何 \n 能被合在后括号中呢？</p>
+<p>对照逆向工程各种尝试，最后发现是这条词法规则放置位置的问题：</p>
+<pre><code>分词器母机.add('换行', '\n')
+</code></pre>
+<p>这条规则在逆向中，置于所有 add 的规则最后，在 ignore 规则之前。同样处理之后，词法分析和运行结果即如预期。</p>
+<p>看来，词法规则添加的先后决定了词法分析的优先级。只在所有前面的规则无法匹配时，才尝试后面的规则。</p>
+<p>就这么点进展，可还是留下了一个隐隐的坑。在这个词法规则中：</p>
+<pre><code>分词器母机.add('前括号', '{\\r*\\n*')
+</code></pre>
+<p>逆向中最后还有个参数<code>flags=(re.DOTALL)</code></p>
+<p>根据 <a href="https://github.com/alex/rply/blob/6e16262dc6d434fc467eed83ed31ca764ba01a34/rply/lexergenerator.py#L22">rply 源码</a>，这个参数在正则匹配时使用，但不解的是，python 文档中的<a href="https://docs.python.org/3.7/library/re.html#re.DOTALL">re.DOTALL</a>似乎只对正则中的<code>.</code>有效，而前后括号的正则描述中并无<code>.</code>，那么这个参数是做什么用的呢？</p>
+<p>暂且绕过继续。</p>
