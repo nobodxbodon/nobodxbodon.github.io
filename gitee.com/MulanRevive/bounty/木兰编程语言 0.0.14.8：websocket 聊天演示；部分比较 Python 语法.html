@@ -1,0 +1,122 @@
+<h2>原文：[木兰编程语言 0.0.14.8：websocket 聊天演示；部分比较 Python 语法](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2020-11-04-木兰编程语言 0.0.14.8：websocket 聊天演示；部分比较 Python 语法.md)</h2>
+<p>【安装：<code>pip install ulang</code>，用法与例程请见 <a href="https://pypi.org/project/ulang/">PyPI</a>。源码位于<a href="https://gitee.com/MulanRevive/mulan-rework">开源中国</a>。 <em><strong>注意：必需 python 3.7，源码文件需 UTF-8 编码</strong></em>】</p>
+<p>本周将 Python 框架 <a href="https://github.com/tornadoweb/tornado">tornado</a>自带的用 websocket 实现聊天的例程改为木兰实现。顺便将该例程涉及的木兰与 Python 语法对比小结，包括本周重现的 super 语法等。</p>
+<h2>1 实例演示</h2>
+<p><img alt="演示" src="/media/wwww/share/study/聚聚/源数据/博客聚合/gitee.com/MulanRevive/bounty%E6%88%AA%E5%9B%BE/2020-11-06_websocket%E8%81%8A%E5%A4%A9.gif"/></p>
+<p>主要木兰代码如下（完整代码<a href="https://gitee.com/MulanRevive/mulan-rework/blob/master/%E6%B5%8B%E8%AF%95/%E5%AE%9E%E7%94%A8/%E6%9C%8D%E5%8A%A1/websocket/%E8%81%8A%E5%A4%A9%E6%BC%94%E7%A4%BA.ul">在此</a>）</p>
+<pre><code class="language-java">type 聊天渠道 : tornado.websocket.WebSocketHandler {
+  {
+    接收端 = set()
+    历史 = []
+    历史长度 = 200
+  }
+
+  func $get_compression_options {
+    // Non-None enables compression with default options.
+    return {:}
+  }
+
+  func $open {
+    聊天渠道.接收端.add($)
+  }
+
+  func $on_close {
+    聊天渠道.接收端.remove($)
+  }
+
+  func 更新历史(消息) {
+    // 必须指定类
+    聊天渠道.历史.append(消息)
+    if len(聊天渠道.历史) &gt; 聊天渠道.历史长度 {
+      聊天渠道.历史 = 聊天渠道.历史[-聊天渠道.历史长度 :]
+    }
+  }
+
+  func 广播(消息) {
+    logging.info("发到%d个接收端", len(聊天渠道.接收端))
+    for 某接收端 in 聊天渠道.接收端 {
+      // TODO: try catch 尚待重现
+      //try:
+      某接收端.write_message(消息)
+      //except:
+      //    logging.error("Error sending message", exc_info=True)
+    }
+  }
+
+  func $on_message(内容) {
+    logging.info("收到消息: %r", 内容)
+    parsed = tornado.escape.json_decode(内容)
+    消息 = {"id": str(uuid.uuid4()), "body": parsed["body"]}
+    消息["html"] = tornado.escape.to_basestring(
+      $render_string("message.html", message=消息)
+    )
+
+    聊天渠道.更新历史(消息)
+    聊天渠道.广播(消息)
+  }
+}
+</code></pre>
+<h2>2 与例程涉及的 Python 语法对比</h2>
+<p><em><strong>下面都基于当前对木兰的认识，今后随重现项目进展可能修改</strong></em></p>
+<h3>必须（否则报错）</h3>
+<ul>
+<li>如碰到形参的关键词为 type，需改为位置形参。如原始例程中的：</li>
+</ul>
+<pre><code class="language-python">define("port", default=8888, help="run on the given port", type=int)
+</code></pre>
+<p>最后一个形参的 keyword 为 type，正好是木兰的语法关键词。因此只能改为位置形参（顺便中文化封装）：</p>
+<pre><code>func 定义(名称 : str, 默认=nil, 类型=nil, 帮助=nil) {
+  define(名称, 默认, 类型, 帮助)
+}
+定义("port", 默认=8888, 帮助="在此端口运行服务", 类型=int)
+</code></pre>
+<ul>
+<li>木兰只有静态方法（staticmethod）。碰到 Python 的 classmethod 时，引用类变量时用类名取代cls。见上面的 <code>更新历史</code> 方法。</li>
+<li>需 tuple() 初始化元组，见<a href="https://zhuanlan.zhihu.com/p/266428706">前文介绍</a></li>
+<li>所有块改为 {}，取代 Python 中的冒号</li>
+<li>class 变 type，用冒号指定类型，包括指定形参类型、超类等</li>
+<li>注释段用 /* */，注释行用 //</li>
+<li>import 变 using</li>
+<li>None 变 nil</li>
+<li>def 变 func</li>
+<li>【本周】super() 变 super</li>
+<li>【本周】不支持 **，改用列举形参</li>
+<li>类变量需用｛｝包围</li>
+<li>字典初始化 {:}</li>
+</ul>
+<h3>可选</h3>
+<ul>
+<li>self 变 $，见<a href="https://zhuanlan.zhihu.com/p/261048633">前文介绍</a></li>
+<li>构造函数用类名而非__init__</li>
+<li>无参数函数定义时可省略 ()</li>
+</ul>
+<hr/>
+<h3><em><strong>附：代码量统计</strong></em></h3>
+<p>主要部分的代码行数统计，格式为：上次-&gt;现在。</p>
+<ul>
+<li>木兰代码量 2965 -&gt; 3114<ul>
+<li>编辑器，实现与测试都是木兰代码：432 -&gt; 431 （在为分为前后端实现调研网络服务框架）</li>
+<li>木兰测试用例，包括部分实用小程序（如井字棋）：2533 -&gt; 2683</li>
+</ul>
+</li>
+<li>Python 代码量（木兰实现与测试框架）：2594 -&gt; 2612<ul>
+<li><code>分析器/语法分析器.py</code>：1008 -&gt; 1019</li>
+<li><code>分析器/词法分析器.py</code>：204 -&gt; 207</li>
+<li><code>测试/运行所有.py</code>，检验所有木兰测试代码片段：192 -&gt; 194</li>
+<li><code>环境.py</code>，定义全局方法：171 -&gt; 172</li>
+<li><code>分析器/语法成分.py</code>，从语法分析器中提取出来的枚举常量：81 -&gt; 82</li>
+<li><code>功用/反馈信息.py</code>：65 -&gt; 67</li>
+<li><code>测试/unittest/语法树.py</code>，确保生成的语法树与原始版本一致：67 -&gt; 66</li>
+<li>未变<ul>
+<li><code>分析器/语法树.py</code>：202</li>
+<li><code>交互.py</code>，交互环境（REPL）：138</li>
+<li><code>中.py</code>，主程序：74</li>
+<li><code>功用/调试辅助.py</code>，：57</li>
+<li><code>setup.py</code>, 34</li>
+<li><code>分析器/错误.py</code>：17</li>
+<li><code>测试/unittest/交互.py</code>，交互环境相关测试：28</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>

@@ -1,0 +1,482 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/%E5%9C%A8Windows%E4%B8%8B%E6%90%AD%E5%BB%BAgit%E6%9C%8D%E5%8A%A1">在Windows下搭建git服务</a></h2>
+<h1>在 Windows 下搭建 git 服务</h1>
+<p>[TOC]</p>
+<ul>
+<li>本文所提及的所有命令都在 git bash 里运行</li>
+<li>本文所提及的命令大部分也能在 liunx 里运行</li>
+</ul>
+<h2>git for windows 和 git for windows sdk</h2>
+<ul>
+<li>git for windows sdk 有一套完成的 cygwin 工具链，有 gcc make 等工具，还能用 pacman 方便地安装各种包</li>
+<li>git for windows 虽然也有一个 cygwin 的环境，但只包含 git bash 和 git bash 相关的依赖</li>
+<li>git for windows sdk 也是在 git for windows 的网页里下载，用心找一下就能找到下载链接了。
+因为网络的问题，下载速度可能有点慢，
+因为网络的问题，安装的速度可能有点慢，或者总是安装失败，
+安装目录必须是一个空目录，如果安装失败，又重新在原本的目录安装，需要清空原本的目录。</li>
+<li>笔者本人比较推荐安装 git for windows sdk ，因为这样就不用装一套 git bash 又装一套 cygwin 了。</li>
+<li>但使用 sdk 的话又无法把 git 的选项加入到右键菜单里</li>
+</ul>
+<h2>git 的仓库</h2>
+<p>git 有两种仓库，普通仓库和裸仓。普通仓库有工作目录，裸仓没有工作目录。</p>
+<p>一般情况下，裸仓是用于远程仓库的。
+初始化仓库时加上 <code>--bare</code> 参数就能新建裸仓了。裸仓的仓库名一般是以 .git 来结尾的。</p>
+<p>一般情况下，需要先在仓库根目录里运行这句命令，才能把仓库作为远程仓库。</p>
+<pre><code>git update-server-info
+</code></pre>
+<p>一般情况下，普通仓库不能接受推送。普通仓库如果要接受推送需要在仓库的根目录执行这句命令。</p>
+<pre><code>git config receive.denyCurrentBranch ignore
+</code></pre>
+<p>不是裸仓的远程仓库被推送后，和最新版本有冲突的文件的状态会变为已暂存的修改。
+在远程仓库的根目录运行这句就能把工作目录的文件同步到最新的版本。</p>
+<pre><code>git reset --hard
+</code></pre>
+<h2>git 的协议</h2>
+<p>git 连接远程仓库有四种协议。文件协议，http 协议，ssh 协议和 git 协议。</p>
+<p>http 协议又分为哑 http 协议和 smart http 协议，主要区别是哑 http 协议不能推送。</p>
+<h2>文件协议</h2>
+<p>文件协议，用得比较少，网上的教程基本都是围绕 http 协议和 ssh 协议的。</p>
+<p>文件协议一般都是用在本地的，远程仓库的地址直接填本地的绝对路径可以了，例如这样</p>
+<pre><code>[remote "origin"]
+    url = C:/git/test/.git
+    fetch = +refs/heads/*:refs/remotes/origin/*
+</code></pre>
+<p>如果要用文件协议搞远程仓库，可能需要 nfs 或 smb 。</p>
+<p>除此之外， git 其实还支持 ftp sftp 和 rsync 。在 git 的文档里有提及，但不建议使用 https://git-scm.com/docs/git-push/2.1.4#_git_urls</p>
+<h2>哑 http 协议</h2>
+<p>要部署哑 http 协议非常简单，只要让 .git 目录能被访问到就可以的了。</p>
+<p>假设仓库不是裸仓，仓库的绝对路径是 <code>C:\git\test</code></p>
+<p>apache 的配置可以写成这样。修改完配置后记得要重启 apache</p>
+<pre><code>Listen 81
+&lt;VirtualHost *:81&gt;
+DocumentRoot "C:\git"
+  &lt;Directory "C:\git"&gt;
+    Options -Indexes -FollowSymLinks +ExecCGI
+    AllowOverride All
+    Order allow,deny
+    Allow from all
+    Require all granted
+  &lt;/Directory&gt;
+&lt;/VirtualHost&gt;
+</code></pre>
+<p>在 <code>C:\git</code> 目录里运行 python 的一句话服务器也可以 <code>python -m http.server -b 0.0.0.0 81</code></p>
+<p>在 <code>C:\git</code> 目录里运行 php 的一句话服务器也可以 <code>php -S 0.0.0.0:81</code></p>
+<p>然后使用类似这样的命令 <code>git clone http://127.0.0.1:81/test/.git</code> 来 clone 仓库</p>
+<h2>smart http 协议</h2>
+<p>smart http 协议本质上就是把 http 请求转发给 git-http-backend 来处理。</p>
+<p>git-http-backend 在 windows 系统里的路径一般是这个 <code>C:\Program Files\Git\mingw64\libexec\git-core\git-http-backend.exe</code></p>
+<p>git-http-backend 在 linux 系统里的路径一般是这个 <code>/usr/lib/git-core/git-http-backend</code></p>
+<p>假设仓库不是裸仓，仓库的绝对路径是 <code>C:\git\test</code></p>
+<p>apache 需要启用这几个模块 cgi alias env 。
+apache 的配置可以写成这样。修改完配置后记得要重启 apache</p>
+<pre><code>Listen 82
+&lt;VirtualHost *:82&gt;
+    DocumentRoot "C:\git"
+    &lt;Directory "C:\git"&gt;
+        Options -Indexes -FollowSymLinks +ExecCGI
+    &lt;/Directory&gt;
+        SetEnv GIT_PROJECT_ROOT "C:/git"
+        SetEnv GIT_HTTP_EXPORT_ALL
+        ScriptAlias / "C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe/"
+    &lt;Files "git-http-backend.exe"&gt;
+        AuthName "test"
+        AuthType basic
+        AuthUserFile "C:\Apache\conf\mypasswd"
+        Require expr !(%{QUERY_STRING} -strmatch '*service=git-receive-pack*' || %{REQUEST_URI} =~ m#/git-receive-pack$#)
+        require valid-user
+    &lt;/Files&gt;
+&lt;/VirtualHost&gt;
+</code></pre>
+<p>然后使用类似这样的命令 <code>git clone http://127.0.0.1:82/test/.git</code> 来 clone 仓库</p>
+<p>默认情况下 http 协议的推送是需要认证的。</p>
+<p>git-http-backend 需要这几个环境变量
+|变量名|备注|
+|:--|:--|
+|PATH_INFO|仓库路径|
+|REMOTE_USER|认证的用户名|
+|REMOTE_ADDR| |
+|CONTENT_TYPE| |
+|QUERY_STRING| |
+|REQUEST_METHOD| |
+|GIT_PROJECT_ROOT|仓库的根目录，一般是仓库的上一级路径|
+|GIT_HTTP_EXPORT_ALL|如果存在这个变量，那么全部仓库都可以访问，否则会使用 git-daemon-export-ok 来判断仓库是否可以访问|</p>
+<ul>
+<li>GIT_PROJECT_ROOT + PATH_INFO = 仓库的绝对路径</li>
+<li>只要按照 cgi 协议把请求转发给 git-http-backend 处理就可以的了</li>
+</ul>
+<h2>ssh 协议</h2>
+<p>ssh 协议部署起来也很简单。只要开启了 sshd 服务，且登录的用户有权限读写仓库目录就可以了。</p>
+<p>假设仓库不是裸仓，仓库的绝对路径是 <code>C:/git/test</code></p>
+<p>那么 clone 的命令就是 <code>git clone ssh://127.0.0.1/c/git/test/.git</code></p>
+<p>如果 clone 遇到需要输入密码的，一般就是开启 sshd 用户的密码，如果系统里有其它账号且有权限读写仓库目录，也可以用其它账号登录，但要在链接里加上账号名，例如这样 <code>git clone ssh://guest@127.0.0.1/c/git/test/.git</code></p>
+<p>ssh 协议的缺点是即使是 pull 也需要授权，这样不利于搞开源</p>
+<h3>用 git bash 来启用 sshd 服务</h3>
+<ol>
+<li>打开 git bash</li>
+<li>然后运行这句 /usr/bin/sshd<ul>
+<li>如果运行 /usr/bin/sshd 遇到这种错误 sshd: no hostkeys available -- exiting</li>
+<li>那么就先用管理员打开 git bash 然后运行这句 <code>ssh-keygen -A</code></li>
+<li>运行这句 <code>ssh-keygen -A</code> 失败，可以用管理员权限打开 git bash 再运行一次</li>
+</ul>
+</li>
+<li>如果要关闭 sshd<ul>
+<li>先通过 ps -elf 找到对应的 pid ，然后 kill pid</li>
+<li>或者像这样一句话删除 <code>kill $(ps -elf | grep /usr/bin/sshd | awk '{print $2}')</code></li>
+</ul>
+</li>
+</ol>
+<h2>git 协议</h2>
+<p>git 协议就是启用 git 的守护进行。</p>
+<p>假设仓库不是裸仓，仓库的绝对路径是 <code>C:/git/test</code></p>
+<ol>
+<li>在仓库的 .git 目录里新建一个名为 git-daemon-export-ok 的文件 <code>touch git-daemon-export-ok</code></li>
+<li>运行这句命令 <code>git daemon --reuseaddr --base-path=/c/git /c/git</code></li>
+<li>那么 clone 的命令就是 <code>git clone git://127.0.0.1/test/.git</code></li>
+</ol>
+<p>|参数|备注|
+|:--|:--|
+|daemon|启用 git 的守护进程|
+|--reuseaddr|选项允许服务器在无需等待旧连接超时的情况下重启|
+|--base-path|选项允许用户在未完全指定路径的条件下克隆项目|
+|结尾的路径|告诉 Git 守护进程从何处寻找仓库来导出|
+|--port|默认会监听9418端口，可以用这个参数来修改监听端口|</p>
+<ul>
+<li>在 windows 下，路径要写成 unix 的形式</li>
+<li>防火墙要放行监听的端口</li>
+<li>--base-path 和结尾的路径最好一致</li>
+<li>仓库的 .git 目录下需要有这个文件 <code>git-daemon-export-ok</code> ，这个文件里是没有内容的</li>
+</ul>
+<p>git 协议没有授权，要么谁都可以推送，要么谁都不可以推送。
+git 协议的速度是最快的。</p>
+<h2>gitweb</h2>
+<p>gitweb 是一段 perl 的 cgi 脚本，是一个基于网页的简易查看器。</p>
+<p>在 windows 下是没有这段脚本的，在 linux 里可以直接使用这样的命令来启用这段脚本 <code>git instaweb</code> 或 <code>git instaweb --httpd=python</code></p>
+<p>要在 windows 里启用 gitweb 步骤有一点的繁琐</p>
+<ol>
+<li>克隆 git 的仓库 <code>git clone git://git.kernel.org/pub/scm/git/git.git</code></li>
+<li>生成 cgi 脚本，在 git 仓库的根目录运行 <code>make GITWEB_PROJECTROOT="/c/git" prefix="/c/Program Files/Git" gitweb</code><ul>
+<li>GITWEB_PROJECTROOT 一般是仓库根目录的上一级路径</li>
+<li>prefix 是 git 的安装目录</li>
+<li>路径要写成 unix 的形式</li>
+</ul>
+</li>
+<li>上一步会生成一个名为 gitweb.cgi 的 perl 脚本。打开这个脚本，然后大概在 87 行左右的位置，找到 <code>our $projectroot</code>。把这个变量的值改成<pre><code>our $projectroot = "/c/git"
+</code></pre>
+</li>
+<li>这里还需要把 gitweb.cgi 文件里的第一句修改成，就是 git bash 里的 perl 的绝对路径<pre><code>#!C:\Program Files\Git\usr\bin\perl.exe
+</code></pre>
+</li>
+<li>在这里 http://search.cpan.org/~markstos/CGI/ 下载 cgi.pm</li>
+<li>下载后解压，把 lib 文件夹下全部文件复制到这个目录里 <code>/usr/lib/perl5/site_perl</code> ，这是实际的目录路径 <code>git的安装目录\usr\lib\perl5\site_perl</code> ，如果没有 site_perl 这个文件夹就新建一个。</li>
+</ol>
+<p>假设 gitweb 的绝对路径是 <code>C:\git\git\gitweb</code></p>
+<p>apache 的配置可以写成这样。修改完配置后记得要重启 apache</p>
+<pre><code>Listen 83
+&lt;VirtualHost *:83&gt;
+    ServerName gitserver
+    DocumentRoot C:\git\git\gitweb
+    &lt;Directory C:\git\git\gitweb&gt;
+        Options +ExecCGI +FollowSymLinks +SymLinksIfOwnerMatch
+        AllowOverride All
+        order allow,deny
+        Allow from all
+        AddHandler cgi-script cgi
+        DirectoryIndex gitweb.cgi
+    &lt;/Directory&gt;
+&lt;/VirtualHost&gt;
+</code></pre>
+<p>然后使用类似这样的网址 <code>http://127.0.0.1:83/gitweb.cgi</code> 在浏览器访问 gitweb</p>
+<p>gitweb.cgi 需要这几个环境变量</p>
+<p>|变量名|备注|
+|:--|:--|
+|PATH_INFO| 文件路径，如果 gitweb.cgi 就在网站根目录，这里可以是空 |
+|REMOTE_ADDR| |
+|CONTENT_TYPE| |
+|QUERY_STRING| |
+|REQUEST_METHOD| |
+|SCRIPT_NAME| 脚本名，一般是 gitweb.cgi |
+|SERVER_NAME| 服务器名，会显示在页面的 title 里 |</p>
+<ul>
+<li>只要按照 cgi 协议把请求转发给 gitweb.cgi 处理就可以的了，同时要注意一下 static 文件的路径。</li>
+</ul>
+<h3>让 git bash 支持 make</h3>
+<p>默认情况下 git bash 是没有 make 的。但如果系统里有安装 make 那么在 git bash 里也能直接使用，下面是系统里也没有安装 make 的情况。</p>
+<ol>
+<li>到 https://sourceforge.net/projects/ezwinports/files/ 去下载 make-4.3-without-guile-w32-bin.zip 这个文件。4.3 是版本号，后续可能会有更新。</li>
+<li>把该文件进行解压</li>
+<li>把解压出来的文件全部复制到 <code>git的安装目录\mingw64\</code> ，如果跳出来需要替换的文件要选择不替换</li>
+</ol>
+<h2>gitblit 和 gitea</h2>
+<p>实际上现在很少人会这像上文一样这么折腾 git 服务。一般都是直接用开源的 git 服务。</p>
+<p>笔者比较推荐 gitblit 和 gitea</p>
+<p>笔者了解到的 Git 服务器主要有这几个</p>
+<ul>
+<li>cgit</li>
+<li>gitiles</li>
+<li>gitlab</li>
+<li>gitblit</li>
+<li>gitea</li>
+<li>gogs</li>
+</ul>
+<p>cgit 的界面和 gitweb 差不多，但 cgit 已经很久没更新了。</p>
+<p>gitiles 由谷歌推出的，基于 java 的， git 仓库浏览工具。是 gerrit 的一个组件。 Gerrit 是 Google 为 Android 系统研发量身定制的一套免费开源的代码审核系统。</p>
+<p>gitlab 功能非常强大，但对性能的要求比较高，如果只是搞远程仓库不搞其它奇技淫巧 gitlab 就有点大才小用了。</p>
+<p>gitblit 这个是笔者当前在用的，后端用 java 写成，虽然功能没有 gitea 多，但速度更快。</p>
+<p>gitea 这个最近很流行，后端用 go 写成，网上不少教程都在推荐这个。</p>
+<p>gogs 是 gitea 的原版，好像因为社区的原因，gitea 从 gogs 分裂出来，据说分裂后的 gitea 发展得更好。</p>
+<h2>一段能兼容 smart http 和 gitweb 的 php 脚本</h2>
+<ol>
+<li>在 gitweb 的文件夹里新建一个名为 HTTPServerRequestHandler.php 的文件，并写入下面的内容</li>
+<li>打开 gitweb.cgi ，然后大概在 87 行左右的位置，找到 <code>our $projectroot</code> 和 <code>our $GIT</code> 修改成<pre><code>our $GIT = $ENV{'GIT_BIN'};
+our $projectroot = $ENV{'GIT_PROJECT_ROOT'};
+</code></pre>
+</li>
+<li>要注意修改 GIT_PROJECT_ROOT 和 GIT_BIN ，GIT_BIN 就是 git 可执行文件的路径</li>
+<li>然后运行这句命令<pre><code>php -S 0.0.0.0:84 HTTPServerRequestHandler.php
+</code></pre>
+</li>
+<li>然后使用类似这样的网址 <code>http://127.0.0.1:84/gitweb.cgi</code> 在浏览器访问 gitweb</li>
+<li>然后使用类似这样的命令 <code>git clone http://127.0.0.1:84/test/.git</code> 来 clone 仓库</li>
+</ol>
+<pre><code class="language-php">&lt;?php
+
+class HTTPServerRequestHandler
+{
+    private string $logfile;
+    private bool $auth;
+    private array $userList;
+    private array $handler;
+    private string $username = 'anonymous';
+
+    public function __construct($config)
+    {
+        $default = [
+            'logfile' =&gt; get_class() . '.log',
+            'auth' =&gt; true,
+            'userList' =&gt; [],
+        ];
+
+        $config = array_merge($default, $config);
+
+        $this-&gt;logfile = $config['logfile'];
+        $this-&gt;auth = $config['auth'];
+        $this-&gt;userList = $config['userList'];
+        $this-&gt;handler = $config['handler'];
+    }
+
+    public function getUsername()
+    {
+        return $this-&gt;username;
+    }
+
+    private function auth(array $userList): string
+    {
+        if (!isset($_SERVER['PHP_AUTH_USER'])) {
+            header('WWW-Authenticate: Basic realm="git auth"');
+            header('HTTP/1.0 401 Unauthorized');
+            echo 'Authorization Required.';
+            exit;
+        }
+
+        $PHP_AUTH_USER = $_SERVER['PHP_AUTH_USER'] ?? '';
+        $PHP_AUTH_PW = $_SERVER['PHP_AUTH_PW'] ?? '';
+        if (!isset($userList[$PHP_AUTH_USER]) || $userList[$PHP_AUTH_USER] != $PHP_AUTH_PW) {
+            header('HTTP/1.0 403 Forbidden');
+            echo '403 Forbidden';
+            exit;
+        }
+
+        return $PHP_AUTH_USER;
+    }
+
+    public function logger($log)
+    {
+        if (empty($this-&gt;logfile)) {
+            return;
+        }
+        if (!(is_string($log) || is_numeric($log))) {
+            $log = print_r($log, true);
+        }
+        if (strlen($log) &gt; 2048) {
+            $log = substr($log, 0, 2048);
+            $log = "str is greater than 2048\n" . $log;
+        }
+
+        file_put_contents($this-&gt;logfile, $log, FILE_APPEND);
+    }
+
+    public function cgiHandler($cmd, $env)
+    {
+        $tmpfname = tempnam(sys_get_temp_dir(), "CGI");
+        $input = file_get_contents("php://input");
+        $contentLength = strlen($input);
+        file_put_contents($tmpfname, $input);
+
+        $desc = [
+            0 =&gt; ['file', $tmpfname, 'r'],
+            1 =&gt; ['pipe', 'w'],
+            2 =&gt; ["file", "error-output.txt", "a"],
+        ];
+        $cwd = null;
+
+        $env['PATH'] = getenv('PATH');
+        $env['CONTENT-LENGTH'] = $contentLength;
+
+        $this-&gt;logger($input . "\n\n");
+        $this-&gt;logger($env);
+        $this-&gt;logger($_SERVER);
+        $this-&gt;logger(apache_request_headers());
+        $this-&gt;logger("\n\n*******************\n\n");
+
+        $process = proc_open($cmd, $desc, $pipes, $cwd, $env);
+        if (is_resource($process)) {
+
+            $out = stream_get_contents($pipes[1]);
+            // 切记：在调用 proc_close 之前关闭所有的管道以避免死锁。
+            $return_value = proc_close($process);
+
+            $header = strstr($out, "\r\n\r\n", true);
+            $header = trim($header);
+            $body = strstr($out, "\r\n\r\n");
+            $body = trim($body);
+            $header = explode("\r\n", $header);
+            $this-&gt;logger($header);
+
+            $headerArr = [];
+            foreach ($header as $item) {
+                $key = strstr($item, ':', true);
+                $key = trim($key);
+                $value = strstr($item, ':');
+                $value = trim($value);
+                $headerArr[$key] = $value;
+            }
+            if (isset($headerArr['Status'])) {
+                $headerArr['Status'];
+                preg_match('/\d/', $headerArr['Status'], $matches);
+                http_response_code($matches[0]);
+            }
+            $headerArr['Content-Length'] = ': ' . (strlen($body));
+            foreach ($headerArr as $key =&gt; $value) {
+                header($key . $value, true);
+            }
+            echo $body;
+
+            $this-&gt;logger(apache_response_headers());
+            $this-&gt;logger($body);
+            $this-&gt;logger("\nlen:" . strlen($out) . "\treturn_value:" . $return_value);
+        } else {
+            // 出错了
+            header('HTTP/1.0 500 Internal Server Error');
+            $this-&gt;logger("process is not resource\n");
+        }
+    }
+
+    public function proxy($url)
+    {
+        $raw = file_get_contents('php://input');
+        $header = array_reduce(apache_request_headers(), function ($carry, $item) {
+            $carry = $item . "\r\n";
+            return $carry;
+        }, '') . "\r\n";
+        $context = stream_context_create([
+            'http' =&gt; [
+                'method' =&gt; $_SERVER['REQUEST_METHOD'] ?? 'GET',
+                'header' =&gt; $header,
+                'content' =&gt; $raw,
+                'timeout' =&gt; 300
+            ]
+        ]);
+        $response = file_get_contents($url, false, $context);
+        if (is_array($http_response_header)) {
+            foreach ($http_response_header as $row) {
+                header($row);
+            }
+        }
+        echo $response;
+    }
+
+    public function run()
+    {
+        if ($this-&gt;auth) {
+            $this-&gt;username = $this-&gt;auth($this-&gt;userList);
+        }
+        $handler = $this-&gt;handler;
+        uksort($handler, function ($a, $b) { // 按字符串长度降序排列
+            $len1 = mb_strlen($a, 'UTF-8');
+            $len2 = mb_strlen($b, 'UTF-8');
+            if ($len1 == $len2) {
+                return 0;
+            } else {
+                return ($len1 &lt; $len2) ? 1 : -1;
+            }
+        });
+        foreach ($handler as $key =&gt; $value) {
+            if (($key == 'default' &amp;&amp; $_SERVER['REQUEST_URI'] == '/') ||
+                (substr($key, 0, 1) == '/' &amp;&amp; substr($key, -1) == '/' &amp;&amp;
+                    filter_var($_SERVER['REQUEST_URI'], FILTER_VALIDATE_REGEXP, ['options' =&gt; ['regexp' =&gt; $key]])) ||
+                ($_SERVER['REQUEST_URI'] == $key)) {
+                call_user_func($value, $this);
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+$config = [
+    'logfile' =&gt; 'HTTPServerRequestHandler.log',
+    'auth' =&gt; true,
+    'userList' =&gt; [
+        'Tom' =&gt; '123456',
+    ],
+    'handler' =&gt; [
+        'default' =&gt; function (HTTPServerRequestHandler $handler) {
+            header("Location: /gitweb.cgi");
+        },
+        '/^\/gitweb.cgi(.*)/' =&gt; function (HTTPServerRequestHandler $handler) {
+            $env = [];
+            $env['PATH_INFO'] = '';
+            $env['REMOTE_ADDR'] = $_SERVER['REMOTE_ADDR'] ?? '';
+            $env['CONTENT_TYPE'] = $_SERVER['CONTENT_TYPE'] ?? '';
+            $env['QUERY_STRING'] = $_SERVER['QUERY_STRING'] ?? '';
+            $env['REQUEST_METHOD'] = $_SERVER['REQUEST_METHOD'] ?? '';
+            $env['SCRIPT_NAME'] = $_SERVER['SCRIPT_NAME'] ?? '';
+            $env['SERVER_NAME'] = 'php server';
+            $env['GIT_BIN'] = 'C:/Program Files/Git/bin/git';
+            $env['GIT_PROJECT_ROOT'] = '/c/git'; // 这里要用 unix 的格式
+            $cmd = '"C:\Program Files\Git\usr\bin\perl.exe" "gitweb.cgi"';
+            $handler-&gt;cgiHandler($cmd, $env);
+            $handler-&gt;logger("\n\n" . date('Y-m-d H:i:s') . "----------------------------------\n\n");
+        },
+        '/^\/git/' =&gt; function (HTTPServerRequestHandler $handler) {
+            $GIT_PROJECT_ROOT = 'C:/git'; // 这里要用 windows 的格式
+            $env = [];
+            $env['GIT_PROJECT_ROOT'] = $GIT_PROJECT_ROOT;
+            $env['GIT_HTTP_EXPORT_ALL'] = ' ';
+            $QUERY_STRING = $_SERVER['QUERY_STRING'] ?? '';
+            $REQUEST_URI = $_SERVER['REQUEST_URI'] ?? '';
+            if (filter_var($QUERY_STRING, FILTER_VALIDATE_REGEXP, ['options' =&gt; ['regexp' =&gt; '/service=git-receive-pack/']]) ||
+                filter_var($REQUEST_URI, FILTER_VALIDATE_REGEXP, ['options' =&gt; ['regexp' =&gt; '/\/git-receive-pack$/']])) {
+                    $env['AUTHREQUIRED'] = 'yes';
+            }
+            $env['PATH_INFO'] = preg_replace('/^\/git(.*)/', '$1', $_SERVER['SCRIPT_NAME']);
+            $env['REMOTE_USER'] = $handler-&gt;getUsername();
+            $env['REMOTE_ADDR'] = $_SERVER['REMOTE_ADDR'] ?? '';
+            $env['CONTENT_TYPE'] = $_SERVER['CONTENT_TYPE'] ?? '';
+            $env['QUERY_STRING'] = $QUERY_STRING;
+            $env['REQUEST_METHOD'] = $_SERVER['REQUEST_METHOD'] ?? '';
+            $cmd = '"C:/Program Files/Git/mingw64/libexec/git-core/git-http-backend.exe"';
+            $handler-&gt;cgiHandler($cmd, $env);
+            $handler-&gt;logger("\n\n" . date('Y-m-d H:i:s') . "----------------------------------\n\n");
+        },
+        '/logout' =&gt; function (HTTPServerRequestHandler $handler) {
+            header('HTTP/1.0 401 Unauthorized');
+            echo 'logout';
+        }
+    ],
+];
+
+if (!(new HTTPServerRequestHandler($config))-&gt;run()) {
+    return false;
+};
+
+</code></pre>

@@ -1,0 +1,49 @@
+<h2>原文：<a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2020-12-28-%E6%9C%A8%E5%85%B0%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%E4%B8%8D%E5%90%8C%E8%BF%90%E8%A1%8C%E7%89%88%E6%9C%AC%E7%9A%84Python%E8%B7%AF%E5%BE%84%E5%B7%AE%E5%BC%82%E5%B0%8F%E7%BB%93.md">木兰编程语言不同运行版本的Python路径差异小结</a></h2>
+<p><a href="https://zhuanlan.zhihu.com/p/339033162">上文中</a>的两个问题之一，是<a href="https://zhuanlan.zhihu.com/p/265695809">发布到 PyPI 的版本</a>（即 <code>pip install ulang</code>）在运行时有个测试未通过：<code>测试/引用/引用本地包内py.ul</code>，而开发版和木兰原始可执行文件是通过的。</p>
+<p>由于这是第一次发觉 PyPI 发布版本的行为差异，于是优先研究。</p>
+<h2>问题描述</h2>
+<p>测试源码如下：</p>
+<pre><code class="language-java">using test.package.module_py
+test.package.module_py.talk()
+</code></pre>
+<p>在项目根目录下（后文如无特别说明，命令运行都在根目录下），有如下测试包结构：</p>
+<ul>
+<li>test<ul>
+<li>package<ul>
+<li>module_py.py</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>test_module_py.py   &lt;--- 该模块在根目录下</li>
+</ul>
+<p>开发版如下运行测试无误：</p>
+<pre><code>$ python3 -m 木兰 测试/引用/引用本地包内py.ul
+</code></pre>
+<p>但如果安装<a href="https://pypi.org/project/ulang/">在 PyPI 的发布版</a>，再如下运行相同测试用例则报错（见<a href="https://gitee.com/MulanRevive/mulan-rework/issues/I1U2HP?from=project-issue#note_3835483">此 issue</a>）：</p>
+<pre><code>$ 木兰 测试/引用/引用本地包内py.ul
+ 😰 没找到模块：‘test.package’
+调用层级如下
+见第1行：using test.package.module_py
+</code></pre>
+<p>但是，发布版如下引用当前目录下的模块并无问题：</p>
+<pre><code class="language-java">using test_module_py
+test_module_py.talk()
+</code></pre>
+<p>为何？</p>
+<h2>调查过程</h2>
+<p>由于木兰原始可执行文件运行该测试无误，于是首先对木兰重现项目用 PyInstaller 生成（参考<a href="https://zhuanlan.zhihu.com/p/107836848">前文</a>）exe 文件进行测试，引用并无问题。</p>
+<p>由于无头绪，建立<a href="https://github.com/nobodxbodon/test-package-for-pypi">最简项目</a>重现问题，再次确认当前运行目录需添加到 sys.path 才能引用当前目录下的模块 test_module_py（在<a href="https://gitee.com/MulanRevive/mulan-rework/commit/535a1e8b4c8d507c89eb3e7c6da2dc22a0fd40a2">此前的 commit</a> 中实现）。接下去围绕 sys.path 做一系列测试。</p>
+<p>期间试着将 test 目录改名为 tes，结果引用成功。又直接使用 <code>print(__import__('test'))</code>，才发现在 Python3 的包路径中，原就存在一个 test 包。</p>
+<h2>结论</h2>
+<p>sys.path 在不同运行版本的区别如下：</p>
+<ul>
+<li>PyPI 发布版：虽然添加了运行当前目录到 sys.path，但位于末尾。在 sys.path 中更靠前的路径中包含 Python3 的包路径，其中恰好存在其他 test 包，而且该包中没有 package 子目录，因而报错。</li>
+<li>exe 发布版（用 PyInstaller 生成）：sys.path 中不包含 Python3 的包路径，因而不会认错 test 包。</li>
+<li>开发版：运行的当前目录位于 sys.path 第一个。sys.path 中虽也包含 Python3 的包路径，但由于顺序靠后，并不起作用，因而不认错 test 包。</li>
+</ul>
+<p>由此来看重现项目两种发布版的优劣势：</p>
+<ul>
+<li>PyPI 发布版：由于自带 Python3 包路径，那么只要是当前 Python3 环境下可用的包，木兰即可引用。副效应就是万一碰到上面这样的同名包，会优先引用 Python3 自带包，而 Python 的行为是优先引用自定义包。</li>
+<li>exe 发布版：由于不带 Python3 包路径，木兰将不能引用 Python3 环境下安装的包。当然也就没有同名包的优先问题。但如果用户自行配置了环境变量，使得系统路径中包含 Python3 的包路径，是否会有同样问题尚待确认。</li>
+</ul>

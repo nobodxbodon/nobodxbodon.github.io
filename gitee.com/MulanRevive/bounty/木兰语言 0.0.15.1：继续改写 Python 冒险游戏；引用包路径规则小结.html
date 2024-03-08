@@ -1,0 +1,113 @@
+<h2>原文：[木兰语言 0.0.15.1：继续改写 Python 冒险游戏；引用包路径规则小结](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2020-12-13-木兰语言 0.0.15.1：继续改写 Python 冒险游戏；引用包路径规则小结.md)</h2>
+<p>这几天在用木兰语言继续改写 <a href="https://zhuanlan.zhihu.com/p/336568481">Python 文字冒险游戏例程</a>时，又体验到引用模块时使用的包路径与 Python 的差别，之前虽然写过相关测试但未整理成文档，在此小结一下。</p>
+<p>以下面的文件目录为例（注意：不需在包目录中添加 <code>__init__.py</code> 之类的文件）：</p>
+<ul>
+<li>一级包<ul>
+<li>二级包<ul>
+<li>甲.ul</li>
+<li>乙.ul</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>甲和乙为木兰源码，内容如下，<code>甲.ul</code>：</p>
+<pre><code>a = 3
+</code></pre>
+<p><code>乙.ul</code> 中引用甲模块：</p>
+<pre><code>using 甲
+
+print(甲.a)
+</code></pre>
+<p>如果在“二级包”目录下运行：</p>
+<pre><code>$ 木兰 乙.ul
+</code></pre>
+<p>输出 3 无误。</p>
+<p>但如果在“二级包”的上一级目录“一级包”下运行则会报错：</p>
+<pre><code>$ 木兰 二级包/乙.ul 
+ 😰 没找到模块：‘甲’
+调用层级如下
+见第1行：using 甲
+</code></pre>
+<p>需要将 <code>乙.ul</code> 中的包路径改为才能正确运行：</p>
+<pre><code>using 二级包.甲
+
+print(二级包.甲.a)
+</code></pre>
+<p>此时如果有另一个二级包：</p>
+<ul>
+<li>一级包<ul>
+<li>二级包<ul>
+<li>甲.ul</li>
+<li>乙.ul</li>
+</ul>
+</li>
+<li>二级包2<ul>
+<li>丙.ul</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>也可以在乙中引用丙：</p>
+<pre><code>using 二级包2.丙
+
+print(二级包2.丙.b)
+</code></pre>
+<p><code>丙.ul</code>内容：</p>
+<pre><code>b = 4
+</code></pre>
+<p>在“一级包”下运行 <code>$ 木兰 二级包/乙.ul</code> 输出 4</p>
+<p>类似的，如果在“二级包”下运行则会报错：</p>
+<pre><code>$ 木兰 乙.ul
+ 😰 没找到模块：‘二级包2’
+调用层级如下
+见第1行：using 二级包2.丙
+</code></pre>
+<p>简言之，现在看来的包路径规则是：</p>
+<p><em><strong>当前运行目录 + 包路径（将.替换为/）= 模块路径</strong></em></p>
+<p>比如上面在“一级包”下运行时，运行目录为：一级包</p>
+<p>引用的模块“甲”的路径为：一级包/二级包/甲</p>
+<p>那么包路径就要：二级包/甲（代码中是 <code>using 二级包.甲</code>）</p>
+<p>这样的包路径设定规则比较直观，但也意味着，对于存在引用的模块，必须在一个特定目录下运行，在任何其他目录下运行都会出现无法找到模块的错误。</p>
+<p>下面是 0.0.15.1 版重现的几个小功能：</p>
+<ul>
+<li>throw 语法，对应 Python 的 raise</li>
+<li>isa 内置函数，对应 Python 的 isinstance</li>
+<li>改进部分报错信息</li>
+</ul>
+<p>文档方面，为便于有意者参与木兰项目的开发维护，编写了<a href="https://gitee.com/MulanRevive/mulan-rework/blob/master/%E6%96%87%E6%A1%A3/%E5%BC%80%E5%8F%91%E4%B8%8A%E6%89%8B.md">开发流程与项目结构简介</a>，今后逐步完善。另开始小结<a href="https://gitee.com/MulanRevive/mulan-rework/blob/master/%E6%96%87%E6%A1%A3/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E6%AF%94%E8%BE%83Python/%E8%AF%AD%E6%B3%95%E5%AF%B9%E6%AF%94.md">与 Python 的语法对比</a>。</p>
+<hr/>
+<h3><em><strong>附：代码量统计</strong></em></h3>
+<p>主要部分的代码行数统计，格式为：上次-&gt;现在。</p>
+<ul>
+<li>木兰代码量 3260 -&gt; 3307<ul>
+<li>运行环境，实现与测试大部为木兰代码：582</li>
+<li>木兰测试用例，包括部分实用小程序（如井字棋）：2678 -&gt; 2725 (报错信息测试用例替代了源码中的注释)</li>
+</ul>
+</li>
+<li>Python 代码量（木兰实现与测试框架）：2721 -&gt; 2920<ul>
+<li><code>分析器/语法分析器.py</code>：1015 -&gt; 1021</li>
+<li><code>分析器/词法分析器.py</code>：207 -&gt; 213</li>
+<li><code>分析器/语法树.py</code>：202 -&gt; 209</li>
+<li><code>环境.py</code>，定义全局方法：172 -&gt; 174</li>
+<li><code>测试/期望值表.py</code>（从“运行所有.py”中提取）：131 -&gt; 133</li>
+<li><code>功用/规律.py</code>，正则表达式 API 原型：100</li>
+<li><code>分析器/语法成分.py</code>，从语法分析器中提取出来的枚举常量：82 -&gt; 83</li>
+<li><code>功用/反馈信息.py</code>：71 -&gt; 75</li>
+<li><code>测试/运行所有.py</code>，检验所有木兰测试代码片段：62 -&gt; 71</li>
+<li>未变<ul>
+<li><code>交互.py</code>，交互环境（REPL）：148</li>
+<li><code>中.py</code>，主程序：74</li>
+<li><code>功用/调试辅助.py</code>，：57</li>
+<li><code>setup.py</code>, 34</li>
+<li><code>测试/unittest/语法树.py</code>，确保生成的语法树与原始版本一致：88</li>
+<li><code>测试/unittest/正则.py</code>：62</li>
+<li><code>测试/unittest/交互.py</code>，交互环境相关测试：28</li>
+<li><code>测试/unittest/所有用例.py</code>：24</li>
+<li><code>分析器/错误.py</code>：26</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>

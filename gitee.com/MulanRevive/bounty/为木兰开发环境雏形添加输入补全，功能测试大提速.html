@@ -1,0 +1,67 @@
+<h2>原文：<a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2020-11-25-%E4%B8%BA%E6%9C%A8%E5%85%B0%E5%BC%80%E5%8F%91%E7%8E%AF%E5%A2%83%E9%9B%8F%E5%BD%A2%E6%B7%BB%E5%8A%A0%E8%BE%93%E5%85%A5%E8%A1%A5%E5%85%A8%EF%BC%8C%E5%8A%9F%E8%83%BD%E6%B5%8B%E8%AF%95%E5%A4%A7%E6%8F%90%E9%80%9F.md">为木兰开发环境雏形添加输入补全，功能测试大提速</a></h2>
+<p>之前用木兰代码基于 tornado 框架编写服务后端，完成了代码编辑、运行的最基本操作。本周为其添加了 sqlite 数据库，用于保存输入历史并提供简单的补全功能，效果如下（输入“运行”后下拉框提示以往包含“运行”的输入）：</p>
+<p><img alt="演示" src="/media/wwww/share/study/聚聚/源数据/博客聚合/gitee.com/MulanRevive/bounty%E6%88%AA%E5%9B%BE/2020-11-25_%E6%BC%94%E7%A4%BA.png"/></p>
+<p>【安装：<code>pip install ulang</code>，用法与例程请见 <a href="https://pypi.org/project/ulang/">PyPI</a>。源码位于<a href="https://gitee.com/MulanRevive/mulan-rework">开源中国</a>。 <em><strong>注意：必需 python 3.7，源码文件需 UTF-8 编码</strong></em>】</p>
+<p>下面是访问数据库以提供补全项的木兰代码：</p>
+<pre><code class="language-java">type 预估请求: SessionMixin, tornado.web.RequestHandler {
+  func $get {
+    提示 = self.get_argument('term', nil)
+    所有请求 = []
+
+    // TODO: 优化?
+    历史请求 = self.session.query(过往请求)
+    if 提示 != nil {
+      历史请求 = 历史请求.filter(过往请求.请求.like("%" + 提示 + "%"))
+    }
+    历史请求 = 历史请求.order_by(desc(过往请求.时间)).group_by(过往请求.请求).distinct()
+
+    // logging.info(str(历史请求))  // 可查看 sql 语句
+    // TODO: 通过拼音补全
+    for 记录 in 历史请求 {
+      所有请求.append(记录.请求)
+    }
+    $write({"历史" : 所有请求})
+  }
+}
+</code></pre>
+<p>期间发现，sqlalchemy 库中有个 func 方法，与木兰关键词重名。尚未想到如何在木兰中如何调用，暂不深究，今后需要此方法时再说。</p>
+<h3>改进测试</h3>
+<p>之前一直用运行木兰进程获取输出的方式进行功能测试，好处是 1）与用户使用方式很接近，能确保测试有效 2）可用同样方式测试原始木兰可执行文件 ulang-0.2.2.exe。但运行很慢，100 多个用例，每个都起一个进程，本机大约 30 秒。正好上周为开发环境获取输出内容，通过重定向标准输出的方式可以获得 exec 的输出，于是重用在测试中，并改写为 unittest 测试，现在测试所有用例耗时半秒左右。但发现 windows 下<a href="https://gitee.com/MulanRevive/mulan-rework/issues/I1U2HP?from=project-issue#note_3701763">字符串相关测试未过</a>，尚需研究。</p>
+<p>另外，改为重定向输出后，现在也可以对报错信息（如 <code>词不识.ul</code> ）进行测试了。</p>
+<h3>其他</h3>
+<ul>
+<li>修正语法错误中的列位置</li>
+<li>添加 <code>try 表达式 {}</code> 语法，但未发布 pypi 新版本，因为暂没用在实例中</li>
+</ul>
+<hr/>
+<h3><em><strong>附：代码量统计</strong></em></h3>
+<p>主要部分的代码行数统计，格式为：上次-&gt;现在。</p>
+<ul>
+<li>木兰代码量 3204 -&gt; 3260<ul>
+<li>运行环境，实现与测试大部为木兰代码：524 -&gt; 582</li>
+<li>木兰测试用例，包括部分实用小程序（如井字棋）：2680 -&gt; 2678 (报错信息测试用例替代了源码中的注释)</li>
+</ul>
+</li>
+<li>Python 代码量（木兰实现与测试框架）：2675 -&gt; 2721<ul>
+<li><code>分析器/语法分析器.py</code>：1013 -&gt; 1015</li>
+<li><code>分析器/词法分析器.py</code>：207</li>
+<li><code>测试/期望值表.py</code>（从“运行所有.py”中提取）：131</li>
+<li><code>测试/unittest/语法树.py</code>，确保生成的语法树与原始版本一致：66 -&gt; 88</li>
+<li><code>测试/运行所有.py</code>，检验所有木兰测试代码片段：195 -&gt; 62</li>
+<li><code>测试/unittest/所有用例.py</code>：24</li>
+<li>未变<ul>
+<li><code>分析器/语法树.py</code>：202</li>
+<li><code>环境.py</code>，定义全局方法：172</li>
+<li><code>交互.py</code>，交互环境（REPL）：148</li>
+<li><code>分析器/语法成分.py</code>，从语法分析器中提取出来的枚举常量：82</li>
+<li><code>中.py</code>，主程序：74</li>
+<li><code>功用/反馈信息.py</code>：71</li>
+<li><code>功用/调试辅助.py</code>，：57</li>
+<li><code>setup.py</code>, 34</li>
+<li><code>测试/unittest/交互.py</code>，交互环境相关测试：28</li>
+<li><code>分析器/错误.py</code>：26</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>

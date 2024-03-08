@@ -1,0 +1,132 @@
+<h2>原文：[木兰编程语言 0.0.14.7：功能覆盖初版用户手册；Gitee Go 流水线尝鲜](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2020-10-31-木兰编程语言 0.0.14.7：功能覆盖初版用户手册；Gitee Go 流水线尝鲜.md)</h2>
+<p><em><strong><a href="https://www.oschina.net/p/mulan-rework">木兰编程语言</a> 在 2020 年度 OSC 中国开源项目评选 中已获得 26 票，请投票支持！</strong></em></p>
+<p>年初对<a href="https://gitee.com/MulanRevive/bounty/tree/master/%E5%8E%9F%E5%A7%8B%E8%B5%84%E6%96%99/%E5%8F%AF%E6%89%A7%E8%A1%8C%E6%96%87%E4%BB%B6">原始木兰可执行文件</a> ulang-0.2.2.exe 作了些功能上的摸索尝试，将基本功能写在<a href="https://gitee.com/MulanRevive/bounty/tree/master/%E5%A4%8D%E7%8E%B0%E6%96%87%E6%A1%A3/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C">初版用户手册</a>。开展重现项目之后，一直没重走一遍手册中的例程。上周终于完成了这个综合各部分功能的”小测验“，大部分例程在上一版本就能正确运行，<a href="https://gitee.com/MulanRevive/mulan-rework/issues/I1U36D?from=project-issue#note_3497547">余下的小部分</a>在这个版本中也通过了。</p>
+<p>【安装：<code>pip install ulang</code>，用法与例程请见 <a href="https://pypi.org/project/ulang/">PyPI</a>。源码位于<a href="https://gitee.com/MulanRevive/mulan-rework">开源中国</a>。 <em><strong>注意：必需 python 3.7，源码文件需 UTF-8 编码</strong></em>】</p>
+<h2>此版本重现功能</h2>
+<h3>字符串转义</h3>
+<p>比较特别的是反斜杠（木兰交互环境下效果）：</p>
+<pre><code>&gt; 'c\\\'+'name'
+c\name
+</code></pre>
+<p>在 Python 中反斜杠如果未配对，会报语法错误：</p>
+<pre><code class="language-python">&gt;&gt;&gt; print('\')
+  File "&lt;stdin&gt;", line 1
+    print('\')
+             ^
+SyntaxError: EOL while scanning string literal
+&gt;&gt;&gt; print('\\\')
+  File "&lt;stdin&gt;", line 1
+    print('\\\')
+               ^
+SyntaxError: EOL while scanning string literal
+</code></pre>
+<p>配对后 Python 的效果：</p>
+<pre><code>&gt;&gt;&gt; print('\\')
+\
+&gt;&gt;&gt; print('\\\\')
+\\
+</code></pre>
+<p>比照木兰中反斜杠转义效果：</p>
+<pre><code class="language-java">&gt; println('\')
+
+&gt; println('\\')
+
+&gt; println('\\\')
+\
+&gt; println('\\\\')
+\
+&gt; println('\\\\\')
+\\
+&gt; println('\\\\\\')
+\\
+</code></pre>
+<p>实现细节可见源码，个人感觉初用有些别扭，这种使用场景应该不多。</p>
+<p>另外引号与换行转义无需多言：</p>
+<pre><code>&gt; 'doesn\'t'
+doesn't
+&gt; "\"吃了么？\""
+"吃了么？"
+&gt; '第一行\n第二行'
+第一行
+第二行
+</code></pre>
+<h3>函数参数指定类型</h3>
+<pre><code>&gt; type Person {
+&gt;&gt;   func $Person(name) {
+&gt;&gt;     $name = name
+&gt;&gt;   }
+&gt;&gt; }
+&gt; func hello(p : Person) {
+&gt;&gt; println("hi " + p.name)
+&gt;&gt; }
+&gt; hello(Person("木兰"))
+hi 木兰
+</code></pre>
+<h3>当前路径下 Python 模块导入</h3>
+<p>比如当前路径下有 <code>larger.py</code>：</p>
+<pre><code class="language-python">def larger(a, b):
+    if a &gt; b:
+        print(a)
+    else:
+        print(b)
+</code></pre>
+<p>木兰交互环境下：</p>
+<pre><code>&gt; using larger
+&gt; larger.larger(5,6)
+6
+</code></pre>
+<h3>内置 enumerate 函数</h3>
+<p>可以更方便地定义枚举了：</p>
+<pre><code class="language-java">&gt; for i, v in enumerate(['小', '中', '大']) { println(i, v) }
+0 小
+1 中
+2 大
+</code></pre>
+<h3>求余运算</h3>
+<pre><code>&gt; 11%3
+2
+</code></pre>
+<h2>其他</h2>
+<h3>Gitee Go 流水线</h3>
+<p>惊喜发现 Gitee Go 开通后获赠了 1000 分钟构建时间，而且非常幸运，构建环境的 Python 版本正好支持本项目需要的 3.7。在新手模板基础上作了一点修改，较顺利地添加了一个费时少又较关键的 unittest 测试集（确认语法树生成正确），挂件看起来不错：</p>
+<p><img alt="挂件" src="/media/wwww/share/study/聚聚/源数据/博客聚合/gitee.com/MulanRevive/bounty%E6%88%AA%E5%9B%BE/2020-11-01_%E6%8C%82%E4%BB%B6.png"/></p>
+<p>触发后好像需要一点时间等待分配构建资源，感觉等待挺短，也许是尚未有很多用户设置了流水线？期间只发现了一个日志中的中文显示问题，已<a href="https://gitee.com/oschina/git-osc/issues/I23BD4?from=project-issue">提交报告给官方</a>，期待早日解决~</p>
+<h3>web.py 尚无法使用</h3>
+<p>由于 <a href="https://webpy.org/docs/0.3/tutorial">web.py 的例程</a>需要调用 globals()：</p>
+<pre><code class="language-python">web.application(urls, globals())
+</code></pre>
+<p>而尚未找到 globals() 在木兰中的对应方法，因而暂时无法使用。希望找到一个合用、轻量级的网络服务框架，欢迎建议。</p>
+<h3>更多报错信息中文化</h3>
+<pre><code>&gt; using  不存在
+ 😰 没找到模块：‘不存在’，见第1行
+</code></pre>
+<hr/>
+<h3><em><strong>附：代码量统计</strong></em></h3>
+<p>主要部分的代码行数统计，格式为：上次-&gt;现在。</p>
+<ul>
+<li>木兰代码量 2920 -&gt; 2965<ul>
+<li>编辑器，实现与测试都是木兰代码：432 （在为分为前后端实现调研网络服务框架）</li>
+<li>木兰测试用例，包括部分实用小程序（如井字棋）：2488 -&gt; 2533</li>
+</ul>
+</li>
+<li>Python 代码量（木兰实现与测试框架）：2574 -&gt; 2594<ul>
+<li><code>分析器/语法分析器.py</code>：1002 -&gt; 1008</li>
+<li><code>分析器/词法分析器.py</code>：201 -&gt; 204</li>
+<li><code>测试/运行所有.py</code>，检验所有木兰测试代码片段：191 -&gt; 192</li>
+<li><code>环境.py</code>，定义全局方法：162 -&gt; 171</li>
+<li>未变<ul>
+<li><code>分析器/语法树.py</code>：202</li>
+<li><code>交互.py</code>，交互环境（REPL）：138</li>
+<li><code>分析器/语法成分.py</code>，从语法分析器中提取出来的枚举常量：81</li>
+<li><code>中.py</code>，主程序：74</li>
+<li><code>功用/反馈信息.py</code>：65</li>
+<li><code>功用/调试辅助.py</code>，：57</li>
+<li><code>setup.py</code>, 34</li>
+<li><code>分析器/错误.py</code>：17</li>
+<li><code>测试/unittest/语法树.py</code>，确保生成的语法树与原始版本一致：67</li>
+<li><code>测试/unittest/交互.py</code>，交互环境相关测试：28</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>

@@ -1,0 +1,2016 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/%E5%85%B3%E4%BA%8E%E5%AD%97%E7%AC%A6%E7%BC%96%E7%A0%81%E7%9A%84%E4%B8%80%E4%BA%9B%E5%9D%91">关于字符编码的一些坑</a></h2>
+<h1>关于字符编码的一些坑</h1>
+<h2>1 常见的字符集和编码</h2>
+<h3>字符集</h3>
+<pre><code>ASCII
+GB2312
+GBK
+GB18030
+BIG5
+BIG5-HKSCS
+Unicode
+ISO-8859-1 Latin1
+ISO/IEC 10646 UCS</code></pre>
+<h3>编码</h3>
+<pre><code>Hex
+ASCII
+EASCII
+EUC-CN
+UTF-8
+UTF-16
+UTF-32
+UCS-2
+UCS-4
+Base64
+UrlEncode</code></pre>
+<h2>2 常见的名词解释</h2>
+<h3>真值/原码/反码/补码/移码/机器数</h3>
+<ul>
+<li>真值<ul>
+<li>真实的值</li>
+<li>绝大多数情况下，真值就是十进制的数字</li>
+</ul>
+</li>
+<li>原码<ul>
+<li>真值的二进制</li>
+</ul>
+</li>
+<li>反码 (1's Complement)<ul>
+<li>正数: 和原码一样</li>
+<li>负数: 除符号位之外，其它7位按位取反</li>
+</ul>
+</li>
+<li>补码 (2's Complement)<ul>
+<li>正数: 和原码一样</li>
+<li>负数: 反码加一</li>
+</ul>
+</li>
+<li>移码 (Offset binary)<ul>
+<li>补码的符号位取反</li>
+</ul>
+</li>
+<li>机器数<ul>
+<li>和真值相对的，实际存储在计算机里的值。绝大多数情况下，就是二进制的数</li>
+<li>不同的实现，机器数可能不同，有一些是用补码（绝大多数情况下），有一些是用原码，也可能有其它</li>
+</ul>
+</li>
+</ul>
+<p>反码 和 补码 的出现主要是为方便负数的二进制计算。</p>
+<h3>BIN/OCT/DEC/HEX</h3>
+<ul>
+<li>BIN Binary 二进制</li>
+<li>OCT Octal 八进制</li>
+<li>DEC Decimal 十进制</li>
+<li>HEX Hexadecimal 十六进制</li>
+</ul>
+<p>八进制或十六进制缩短了二进制数，但保持了二进制数的表达特点。</p>
+<h3>位/比特/bit</h3>
+<p>计算机里最小的单位，只有两个值，1 和 0；一般缩写为小写 b ；二进制数字(binary digit)的缩写</p>
+<h3>字节/拜特/byte</h3>
+<p>8 bit 等于 1 byte；一般缩写为大写 B</p>
+<h3>位串/比特串/bit string</h3>
+<p>一连串的位(比特)</p>
+<h3>字节串/byte string</h3>
+<p>一连串的字节</p>
+<h3>字节序/byte order</h3>
+<p>&lt;!--
+
+大端字节序 big-endian (BE)
+小端字节序 little-endian (LE)
+
+大端 符合 人的阅读顺序 从左边开始
+小端 不符合 人的阅读顺序 从右边开始
+
+小端序更符合计算机的内部处理方式，因为计算都是从低位开始的，所以小端序可以提高运算效率。
+大端序更符合人类的阅读习惯，因为高位字节在前，低位字节在后，所以大端序可以提高数据可读性
+
+字符串 Hello 的 大端 小端 例子
+|地址|大端|小端|
+|-|-|-|
+|0x2000| H  72 0x48 01001000 | o 111 0x6F 01101111 |
+|0x2001| e 101 0x65 01100101 | l 108 0x6C 01100101 |
+|0x2002| l 108 0x6C 01100101 | l 108 0x6C 01100101 |
+|0x2003| l 108 0x6C 01100101 | e 101 0x65 01100101 |
+|0x2004| o 111 0x6F 01101111 | H  72 0x48 01001000 |
+
+
+主机（本地）字节序
+    主机字节序通常是 小端字节序。这个主要取决于 CPU
+    x86 是 小端字节序； arm ppc mips RISC-V 既有小端也有大端，要看具体的 CPU 型号
+网络字节序
+    绝大多数情况下 网络字节序 是 大端字节序，
+    rfc1700 里就提及到 网络字节序 是 大端字节序
+    在 socket 的 api 里有一套函数用于转换 主机字节序 和 网络字节序
+        netinet/in.h ntohl, ntohs, htonl, htons
+        ntohl() 函数是将一个32位的无符号整数从网络字节序转换为主机字节序。
+        ntohs() 函数是将一个16位的无符号整数从网络字节序转换为主机字节序。
+        htonl() 函数是将一个32位的无符号整数从主机字节序转换为网络字节序。
+        htons() 函数是将一个16位的无符号整数从主机字节序转换为网络字节序。
+
+字节序中的大端和小端，只针对大于一字节的整数才有意义。
+比特序的话，对内存中的数据来说也没什么意义，因为字节已经是最小的寻址单元了。
+
+
+判断字节序
+    通过联合体union判断
+        #include&lt;stdio.h&gt;
+        union un
+        {
+            char a;
+            int b;
+        };
+        int main()
+        {
+            union un un1;
+            un1.b = 1;
+            if (un1.a == 1) {
+                printf("little-endian\n");
+            } else {
+                printf("big-endian\n");
+            }
+            return 0;
+        }
+    通过指针判断
+        #include &lt;stdio.h&gt;
+        int main ()
+        {
+            unsigned int x = 0x12345678;
+            char *c = (char*)&amp;x;
+            if (*c == 0x78) {
+                printf("Little endian");
+            } else {
+                printf("Big endian");
+            }
+            return 0;
+        }
+    通过强制类型转换判断
+        #include &lt;stdio.h&gt;
+        int main()
+        {
+            int i = 1;
+            (*(char*)&amp;i == 1) ? printf("little-endian\n") : printf("Big-endian\n");
+            return 0;
+        }
+    通过宏定义判断
+        __BYTE_ORDER
+        __LITTLE_ENDIAN
+        __BIG_ENDIAN
+
+        linux kernel中把字节序和比特序都放在byteorder.h里面定义。
+        __BIG_ENDIAN 字节序
+        __BIG_ENDIAN_BITFIELD 比特序
+
+        &lt;endian.h&gt;
+
+        windows 有没有这类的宏定义？
+
+除了大端小端还有更复杂的 middle-endian 和 mixed-endian 。因为很少遇到所以就忽略了。
+
+在tcp上传输 utf-16 le 的字符串，过程是怎样的？
+
+--&gt;</p>
+<h3>比特序/bit order</h3>
+<h3>字/word</h3>
+<p>cpu 一次能处理的位串，称为一个计算机字，简称字。
+字长(word size)，一个 word 的位数，通常是 2 的倍数，例如 16位，32位。
+因为英特尔的术语里，一个 word 通常是 16 位。
+因为 8086 的字长是 16 位的，后续的处理器为了兼容 8086 也是把一个 word 定义为 16 位。
+如果要表达大于 16 位的字长时。通常会使用 dword(double word, 32位) qword(quadruple word, 64位) dqword(double quadruple word, 128位) 。
+字(word)这个概念其实和字符编码的关系有点远，这个通常是硬件的概念。
+但因为很容易和字符编码的相关概念混淆，所以这里也记录一下。
+btw: 二十世纪九十年代时，游戏机里提及的 8 位游戏机、 16 位游戏机、 32 位游戏机，指的就是字长。</p>
+<h3>字/字符/character</h3>
+<p>在这里 字/字符 代表就是形式上的汉字或英文字母，一个字/字符就代表一个汉字或一个英文字母；一般缩写为 char</p>
+<h3>字符串/char string/string</h3>
+<p>一连串的字符，
+就是多个字符(char)，一个字符也可以作为一个字符串</p>
+<h3>文本/text</h3>
+<p>没有转义字符的字符串</p>
+<p>字符串 例子</p>
+<pre><code>字符串\n例子
+</code></pre>
+<p>文本 例子</p>
+<pre><code>文本
+例子
+</code></pre>
+<h3>纯文本/plain text</h3>
+<p>纯文本就是没有用于描述格式的字符的文本，又或者即使有用于描述格式的字符，也不渲染格式只输出字符</p>
+<p>例子</p>
+<pre><code>&lt;p&gt;这是文本&lt;/p&gt;
+这是纯文本
+</code></pre>
+<h3>字符集/charset</h3>
+<p>字面上的理解就是字符的集合，是一个自然语言文字系统支持的所有抽象字符的集合。字符是各种文字和符号的总称，包括文字、数字、字母、音节、标点符号、图形符号等。计算机系统中提到的字符集准确地来说，指的是已编号的字符的有序集合(但不一定是连续的)。</p>
+<h3>编码规则/encoding</h3>
+<p>一个字符集里的字符转换成二进制数据的规则。</p>
+<h3>编码/encode</h3>
+<p>编码作为名词时，
+有时是指编码规则，
+有时是指一个字符里在某个编码规则里对应的二进制数字。
+例如，拉丁字母 <code>A</code> 在 ascii 里所对应的编码是 01000001 ，汉字 <code>一</code> 在 utf-8 里所对应的编码是 11100100 10111000 10000000 。</p>
+<p>编码作为动词时是指把字符转换为二进制数据的过程，又或者是一种二进制数据转换成另一种二进制数据的过程（例如 base64 的编码）。</p>
+<p>编码具体的意思还是要看具体的语境。</p>
+<h3>字符编码/character encoding</h3>
+<p>可以简单地理解为 字符集 + 编码规则</p>
+<h3>定长编码/变长编码</h3>
+<p>定长编码，就是指一个编码里，每个字符的位数都是相同的，例如 ascii 里每个字符都是 7 位， utf-32 里每个字符都是 32 位。
+变长编码，就是指一个编码里，字符的位数可以不相同，例如，在 utf-8 里， ascii 部分的字符都是一个字节，但一些不常用的字符，可以是四字节甚至是六字节。</p>
+<h3>单字节编码/双字节编码/多字节编码</h3>
+<p>单字节编码，就是指一个编码里，每个字符都是一个字节。例如， ascii
+双字节编码，就是指一个编码里，每个字符都是两个字节的。例如， UCS-2
+多字节编码，就是指一个编码里，单个字符的字节可能会多于两个。例如， utf-8 。在 utf-8 ， utf-32 这类字符能多于两个字节的编码出现之前，双字节编码也会被称为多字节编码。</p>
+<h3>ASCII/CP437</h3>
+<p>ASCII 是 ANSI（美国国家标准学会）制定的一套编码标准。
+是应用最广泛的编码，大部分的编码都能兼容 ASCII 。
+CP437 是 windows 里的代码页，基本和 ASCII 一致，但一些控制字符被替换成了其它能显示的字符。</p>
+<h3>ANSI/ISO 8859-1/CP1252</h3>
+<p>ANSI 编码是 ANSI（美国国家标准学会）制定的一套编码草案，该草案最终成为 ISO 8859-1 ，正式标准 ISO 8859-1 和 ANSI 编码草案不完全相同。
+ANSI 编码在 windows 的代码页为 cp1252 ，但 cp1252 和 ANSI 编码草案不完全相同。
+cp1252 在 ISO 8859-1 定稿之前实施，所以和 ISO 8859-1 也有一点不一样。
+在 windows 系统里 ANSI 编码一般是指本地编码，如果语言设为英语， ANSI 就是 cp1252 ，如果语言设为中文，ANSI 就是 GBK</p>
+<h2>3 字符编码的发展历史</h2>
+<h3>ASCII 时期</h3>
+<p>这一时期字符集和编码没有区分，ASCII 只支持英文，使用 7 位代表一个字符，一个字符占一个字节，最高位为 0，多余的一位没有作用。</p>
+<h3>本地化时期</h3>
+<p>因为 ASCII 只支持英文，同时为了保证前向兼容，所以其它国家在 ASCII 的基础上作出各自的拓展。一般的拓展都是把 ASCII 中的最高位利用起，这种兼容 ASCII 的字符编码那时会被成为 EASCII (Extended ASCII)。
+ASCII 拓展的字符集中比较有影响的是 ISO 8859-1，这是拉丁字母的拓展，基本覆盖西欧各国的字母，所以也被称为 latin-1，这个字符集也是 JAVA 的默认字符集。ISO 8859 除了 lation-1 之外还有 14 个字符集，用来表示欧洲各个国家的文字。
+因为 ISO 10646 的出现和发展，ISO 8859 现在已经停止开发。</p>
+<p>而汉字因为字符非常多，所以即使用了 ASCII 最高位也无法表示全部汉字，为了尽可能多地收录汉字，就出现了两个字节代表一个字符的字符集，例如 GB2312，BIG-5，这些字符集通常被成为双字节字符集（DBCS,Double Byte Character Set）或多字节字符集（Multi Byte Character Set）。</p>
+<p>笔者认为 ISO 8859-1 的制定是 ASCII 时期向本地化时期过渡的标志。在本地化时期，字符集和编码开始分离，但一个字符集几乎只有一个编码，所以这个时期字符编码仍是被放在一起的。</p>
+<h3>国际化时期</h3>
+<p>在本地化时期出现的各种 ASCII 拓展，绝大部分是互不兼容的，为了使国际间信息交流更加方便，于是由 Xerox、Apple 等软件制造商于1988年组成的统一码联盟。统一码联盟制定了 Unicode，这一能表示几乎全部字符的字符集。Unicode 定义了一个现代化的字符编码模型，把字符和编码解耦了。Unicode 是一个字符集，而实现这个字符集的编码有三种，UTF-16，UTF-32，UTF-8。刚开始时，Unicode 只有 UTF-16，这一双字节的编码，但后来发现，双字节容量仍不够大，于是就在双字节的基础上翻一倍，出现了四字节的编码，也就是 UTF-32。UTF-8 是一种可变长的编码，可以使用一到六个字节来表示一个字符，例如，兼容 ASCII 部分就是使用一个字节，常用汉字就使用两个字节，一些生僻的字符就是用四个字节或六个字节。UTF-8 是当下使用最广泛的一种编码。UTF 后面跟着的数字是代表这个编码里最少可以使用多少位来表示一个字符。</p>
+<p>笔者认为 Unicode 的制定是本地化时期向国际化时期过渡的标志。从 Unicode 开始，字符集和编码被准确地划分。</p>
+<h2>4 中文字符集</h2>
+<p>现在比较流行的中文字符集大概有五种（GB2312，GBK，GB18030，BIG5，BIG5-HKSCS），以及包含中文的 Unicode 。</p>
+<h3>GB2312</h3>
+<p>GB2312 只包含常用的 6000多个常用简体汉字和 ascii 码，除了一些老掉牙的网站基本和一些对性能有极端要求的单片机，基本没地方在用了。</p>
+<h3>GB13000</h3>
+<p>GB13000 93年发布，字符集大概等同于Unicode 1.1.1 ，编码大概等同于 usc2 。GB13000 包含 20902 个汉字，但因为不兼容 ascii 和 GB2312 所以应用得比较少。</p>
+<h3>GBK</h3>
+<p>GBK 是对 GB2312 的拓展，GBK 能兼容 GB2312，据说 GBK 是 guo（国） biao（标） kuo（扩） 的缩写。包含了更多的汉字，也收录了一部分的繁体汉字。
+GBK 能兼容 GB2312。windows 的系统语言设为中文，那么 系统里的 ASNI 编码就是 GBK 。
+GBK 不是国家标准，只是技术规范指导性文件，但后续的 GB18030 兼容 GBK 而不是 GB13000 。
+GBK 收录的汉字比 GB1300 多，但 GBK 没有收录彦文。</p>
+<p>有说是微软在GB2312的基础上扩展制订了GBK,然后GBK才成为“国家标准”(也有说GBK不是国家标准,只是“技术规范指导性文件”);但网上也有资料说是先有GBK(由全国信息技术标准化技术委员会于1995年12月1日制定),然后微软才在其内部所用的CP936代码页中以GBK为参考进行了扩展。</p>
+<p>关于 GBK 的来历，中文互联网上大概有两种说法，
+一种是微软先在 GB2312 上扩展了，然后才有 GBK 的指导文件。
+另一种是， GBK 先发布，然后微软才在 Windows95 里使用。</p>
+<p>笔者在网上搜索了一下相关的资料，并列了一个时间线。</p>
+<ul>
+<li>1994年12月8日，电子工业部与美国微软公司签署《Windows 95中文版项目合作备忘录》</li>
+<li>1995年8月， Windows95 上市。</li>
+<li>1995年8月31日， Windows95 中文测试版 发布。</li>
+<li>1995年9月20日，电子工业部与美国微软公司签署《Windows 95中文版项目标准规范合作协议书》</li>
+<li>1995年12月， 电子工业部以技术标函文件的形式发布 GBK 。</li>
+<li>1996年3月， Windows95 中文版发布。</li>
+</ul>
+<h3>GB18030</h3>
+<p>GB18030 是对 GBK 的拓展， GB18030 能兼容 GBK 。同样地收录了更多的汉字，常用的繁体字基本也收录完了，还收录了一些少数民族的文字。因为 utf8 的广泛使用，这个字符集也用得比较少。</p>
+<h3>全角和半角</h3>
+<p>GB2312 虽然是双字节编码，但却也兼容 ascii ，所以 ascii 的字符仍然是一个字节的。在 GB2312 的 ascii 的字符会被称为半角。但 GB2312 里还有一套完整的双字节的英文字符和符号，这些双字节的英文字符和符号会被称为全角。通常情况下，半角字符只占全角字符的一半宽度。据说，全角字符的出现是为了让中英排版时好看一些。</p>
+<h3>BIG5 和 BIG5-HKSCS</h3>
+<p>BIG5 (大五码) 是台湾人搞的中文字符集，收录的字数比 GB2312 多，但没有简体字，在大陆这边几乎没用。</p>
+<p>BIG5-HKSCS (Hong Kong Supplementary Character Set, 香港增补字符集) 是香港人基于 BIG5 搞的一套字符集，就是在 BIG5 基础上加上一些粤语字和一部分简体字。</p>
+<p>BIG5 的由来</p>
+<ul>
+<li>BIG5 是五大中文套装软件共同使用的中文编码</li>
+<li>五大中文套装软件是1984年台湾的资讯工业策进会邀集13家台湾厂商共同制作及推广的商业软件，被称为“五大软件专案”<ul>
+<li>文字处理</li>
+<li>数据库</li>
+<li>表格</li>
+<li>通讯</li>
+<li>绘图</li>
+</ul>
+</li>
+<li>虽然这五个软件没有成功，但这五个软件的中文编码却成为繁体中文编码的主流</li>
+<li>BIG5 虽普及于台湾、香港、澳门等繁体中文区域，但长期以来并非当地的国家/地区标准或官方标准，而只是业界标准</li>
+<li>BIG5 之前的繁体中文编码<ul>
+<li>王安码</li>
+<li>IBM 5550 码</li>
+<li>中文资讯交换码（CCCII）</li>
+<li>笔者观察到在一些繁体中文的文章里会把二十世纪八十年代称为中文编码的“万码奔腾”时期</li>
+</ul>
+</li>
+</ul>
+<p>BIG5 的乱码和冲码问题</p>
+<h3>CCCII 和 CNS 11643</h3>
+<p>中文资讯交换码（Chinese Character Code for Information Interchange，简称CCCII）</p>
+<ul>
+<li>应该是最早的中文编码，在 1980 年发布</li>
+<li>收录的汉字也比 BIG5 和 GB2312 多，可能是因为使用三字节的编码，所以未能得到广泛的应用</li>
+<li>只在一些大学图书馆有应用，但因为 unicode 的发展， CCCII 正逐渐被替换为 unicode</li>
+</ul>
+<p>中文标准交换码（CSIC, Chinese Standard Interchange Code），编号CNS 11643，旧名国家标准中文交换码（CISCII, Chinese Ideographic Standard Code for Information Interchange）</p>
+<h3>GB 字符集的各种码</h3>
+<ul>
+<li>区位码<ul>
+<li>GB 将所有汉字编入一个的二维表中，行和列共同定位一个字，</li>
+<li>行就是“区”，列就是“位”，合并就为区内码。</li>
+<li>区位码是一组4位十进制的数，前两位是区码，后两位是位码。</li>
+<li>区位码是从 1 开始， ascii 是从 0 开始</li>
+<li>例子<ul>
+<li>大 的区位码是 2083 ， 转换成 16 进制是 1453H</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>国标码（交换码、国标交换码）<ul>
+<li>在区位码的基础上加上 32 ， 16 进制可以表示成 20H 或 0x20</li>
+<li>区码 和 位码 是分开计算的</li>
+<li>例子<ul>
+<li>大 的区位码是 2083=（20, 83）=（14H， 53H）</li>
+<li>大 的国标码是 （20+32, 83+32）=（52, 115）=（34H，73H）=3473H</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>内码（机内码）<ul>
+<li>在国标码的基础上加上 128 ， 16 进制可以表示成 80H 或 0x80</li>
+<li>在区位码的基础上加上 160 ， 16 进制可以表示成 A0H 或 0xA0</li>
+<li>大多数语境下的 gb 编码指的是内码</li>
+<li>例子<ul>
+<li>大 的内码<ul>
+<li>国标码 + 80H</li>
+<li>（52 + 128, 83 + 128）=（14H + 80H， 53H + 80H）=（B4H， F3H）=B4F3H</li>
+</ul>
+</li>
+<li>大 的内码<ul>
+<li>区位码 + A0H</li>
+<li>（20, 83）=（20 + 160, 83 + 160）=（14H + 80H， 53H + 80H）=（B4H， F3H）=B4F3H</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>外码（输入码、输入法编码）</li>
+<li>字形码（字型码、字模码、输出码）</li>
+</ul>
+<p>十六进制数既可通过添加后缀 H 来表示，也可通过添加前缀 0x 来表示。</p>
+<p>为什么要区分 区位码 国标码 和 内码，笔者没在互联网上找到确切的答案。
+笔者猜测可能和 EUC-CN  以及 iso 2022 有关，
+也可能和二十世纪八十年代，大量出现的中文输入法有关，
+也可能是为了和 ascii 兼容，忽略和 ascii 重叠的编号。</p>
+<p>&lt;!--
+确实和 EUC-CN 以及 iso 2022 有关
+gb 的内码大概对应 big5
+gb 的交换码大概对应 CCCII 或 CNS 11643
+
+ISO 2022-CN 是交换码
+EUC-CN 是机内码
+EUC-TW 是机内码，是 CNS 11643 的机内码
+
+|国家标准|ISO 2022|EUC|
+|-|-|-|
+|GB2312|ISO 2022-CN|EUC-CN|
+|JIS X 0208|ISO 2022-JP|EUC-JP|
+|KS X 1001|ISO 2022-KR|EUC-KR|
+
+W3C的编码技术指南规定，应将gb2312字节流视为GBK编码，与GB18030一并使用同一解码器解码。
+
+区位码和交换码好像并没有多少实际的应用
+平时遇到的 gb2312 都是机内码，所以很多时候，查看字符编码时 gb2312 会直接显示成 EUC-CN
+
+rfc1922
+
+--&gt;</p>
+<h3>ISO 2022 和 EUC-CN</h3>
+<h3>各种中文输入法</h3>
+<ul>
+<li>数字编码<ul>
+<li>四角号码</li>
+<li>区位码</li>
+</ul>
+</li>
+<li>发音<ul>
+<li>拼音</li>
+<li>双拼</li>
+<li>注音符号</li>
+</ul>
+</li>
+<li>字形<ul>
+<li>五笔</li>
+<li>郑码</li>
+<li>仓颉</li>
+<li>速成</li>
+<li>笔画</li>
+<li>九方</li>
+</ul>
+</li>
+</ul>
+<h3>总结</h3>
+<ul>
+<li>实际上 GB2312，GBK，GB18030，BIG5，BIG5-HKSCS 都是不定长编码，因为兼容 ascii 部分是单字节，中文部分是双字节。</li>
+<li>GB18030 还有四字节的编码，不兼容 GBK 部分通常用四字节编码。</li>
+<li>在笔者实际的编程开发中，接收外部字符串时会先判断编码类型，然后再统一转换成 utf-8 ，只要是转换失败，都会返回参数错误。</li>
+<li>如果确定程序只运行在简体中文的环境，使用 gb 系列的编码会比 utf 系列的编码更节省空间。<ul>
+<li>gb 系列能兼容 ascii ，英文部分是 1 字节， utf-16 英文部分也是 2 字节</li>
+<li>gb 系列的大部分汉字都是 2 字节，utf-8 常用部分汉字都是 3 字节</li>
+</ul>
+</li>
+</ul>
+<h2>5 Unicode 和 ISO 10646</h2>
+<p>ISO 10646 来自国际标准化组织（ISO）。1991年前后，统一码联盟（Unicode）和国际标准化组织（ISO）的参与者都认识到，世界不需要两个不兼容的字符集。于是，它们开始合并双方的工作成果，但字符集依然是独立发布的。</p>
+<p>ISO/IEC 10646 全称 Information technology -- Universal Coded Character Set (通用字符集) ，缩写为UCS。UCS 有两套编码， UCS-2 , UCS-4 。
+UCS-2 大致等于 utf-16 ，UCS-4 大致等于 utf-32 。大致等于并不完全相等，例如，utf-16 双字节的部分和 UCS-2 基本一致，但 utf-16 辅助平面部分是四字节的编码，这里就和 UCS-2 不一样了。
+utf-16 辅助平面 通常被称为增补字符。</p>
+<p>汉字 一 的 Unicode 下各个字符集的编码</p>
+<p>编码|hex|dec (bytes)|dec|binary
+-|-|-|-|-|
+UTF-8|E4 B8 80|228 184 128|14989440|11100100 10111000 10000000
+UTF-16BE|4E 00|78 0|19968|01001110 00000000
+UTF-16LE|00 4E|0 78|78|00000000 01001110
+UTF-32BE|00 00 4E 00|0 0 78 0|19968|00000000 00000000 01001110 00000000
+UTF-32LE|00 4E 00 00|0 78 0 0|5111808|00000000 01001110 00000000 00000000</p>
+<p>Unicode 编号，一般是指 utf-32 BE 编码去掉前导 0 的部分，例如 汉字 一 的 Unicode 编号就是 4E00 。
+更多的情况下 Unicode 会写成 hex 的形式 4E 00 。在不同的编程语言里可能会写成 <code>\u4E00</code> <code>\x4E00</code> <code>\4E00</code> <code>U+4E00</code></p>
+<p>在 Windows 系统下，按住 alt ，然后键入 Unicode 编号的十进制，就能输入对应的字符。</p>
+<ul>
+<li>例如，输入汉字 一 ，住 alt ，然后键入 19968 。</li>
+<li>这个好像和具体的应用有关<ul>
+<li>https://zhuanlan.zhihu.com/p/107738938</li>
+<li>https://www.zhihu.com/question/342293193</li>
+</ul>
+</li>
+</ul>
+<p>可以在这个网站查询字符对应的编码 https://unicode-table.com/</p>
+<h3>字符编码模型(Character Encoding Model)</h3>
+<p>Unicode 字符编码模型分为四个层级(level)</p>
+<ul>
+<li>ACR: Abstract Character Repertoire 抽象字符库</li>
+<li>CCS: Coded Character Set 已编码字符集</li>
+<li>CEF: Character Encoding Form 字符编码模式</li>
+<li>CES: Character Encoding Scheme 字符编码方案</li>
+</ul>
+<p>除了以上四个层级外，另外还有两个有用的概念：</p>
+<ul>
+<li>CM: Character Map 字符映射<ul>
+<li>从抽象字符库的成员序列到序列化字节序列的映射称为字符映射（CM）</li>
+<li>大概就是把上面四个层级都包括在一起，就是 ACR 映射到 CES 的过程</li>
+</ul>
+</li>
+<li>TES: Transfer Encoding Syntax 传输编码语法</li>
+</ul>
+<p>模型|解释|例子
+-|-|-
+ACR|抽象的字符|汉字 一
+CCS|字符的编号 码点|汉字 一 的 unicode 十进制编号 19968
+CEF|用基本数据类型表示字符 码元|汉字 一 的 unicode 二进制编号 4E00 ，通常带有前缀 0
+CES|作为字节流的字符 字节流|汉字 一 具体的编码，例如 utf-16be 4E00 或 utf-16le 004E 或 utf-8 E4B880
+TES|传输编码|把汉字 一 具体的编码再转换成 base64 或 urlencode 这类编码</p>
+<p>一些文章会把字符编码模型分为五层 ACR CCS CEF CES TES</p>
+<p>参考 https://www.unicode.org/reports/tr17/</p>
+<h3>Code Point, Code Unit, Code Value, Code Space</h3>
+<ul>
+<li>Code Point<ul>
+<li>码点，又称之为码点值或码点编号</li>
+<li>码点就是字符的编号<ul>
+<li>一般情况下，一个码点对应一个字符</li>
+<li>特殊的情况，例如 utf-16 的代理区</li>
+</ul>
+</li>
+<li>可以简单地理解为 二维表中行与列相交的点</li>
+<li>码点和抽象字符的集合一起组成一个字符集</li>
+</ul>
+</li>
+<li>Code Position<ul>
+<li>码位</li>
+<li>Code Point 的同义词，一般用在 ISO 标准的字符集里</li>
+</ul>
+</li>
+<li>Code Unit<ul>
+<li>码元</li>
+<li>表示一个码点所需要的最小比特位组合</li>
+<li>例如 utf-8 是 8 位码元， utf-16 是 16 位码元</li>
+<li>一个 Code Point 可能由一个或多个 Code Unit 表示</li>
+<li>码元 这个概念似乎是来自计算机网络或通讯原理</li>
+<li>从写代码的角度来看，就是解码器每次需要读取多少个字节<ul>
+<li>8位码元 -&gt; 每次读取一个字节</li>
+<li>16位码元 -&gt; 每次读取两个字节</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Code Value<ul>
+<li>代码值</li>
+<li>在中文互联网里的一些文章会把 Code Value 描述为 Code Point 经过编码后的值</li>
+<li>在 unicode 的官网里 Code Value 是 Code Unit 过时的同义词</li>
+<li>~~其实笔者更认可中文互联网的描述，但这些只是名词的解释而已，不用太过在意~~</li>
+</ul>
+</li>
+<li>Code Space<ul>
+<li>码点空间</li>
+<li>字符集中可用于对字符进行编码的数值范围，又称之为编号空间、代码空间、编码空间、码空间</li>
+<li>例如 unicode 的 码点空间是 0 - 17*2^16</li>
+</ul>
+</li>
+</ul>
+<p>参考 http://www.unicode.org/glossary/</p>
+<h3>平面</h3>
+<p>unicode 目前有 17 个平面(plane)。
+每个平面有 65536(2^16 或 256^2) 个码点(code point)。
+一共有 17*2^16 个码点，大概能表示一百万个字符。
+17 个平面 21 位比特就能表示完了。</p>
+<p>第一平面称为 0 号平面 或 基础多语言平面(Basic Multilingual Plane, BMP)。
+其余的 16 个平面称为 辅助平面 或 补充平面 或 增补平面(Supplementary Plane, SP)。</p>
+<p>通常一个平面会以一个 16<em>16 的二维表格表示，其中一个格子表示 256 个字符。
+然后每个格子展开后又是一个 16</em>16 的二维表格，最后才是一个格子表示一个字符。</p>
+<p>每个平面里，还会划分多个区块(block)，每个区块都是一类 文字或符号 。但不是每个区块都刚好是 256 的倍数。
+例如 编号 0000—007F 是基础拉丁文(Basic Latin)，编号 4E00—9FFF 是 中日韩统一表意字(CJK Unified Ideographs)。</p>
+<p>平面|起始编号|名称
+-|-|-|
+0 号平面|U+0000 - U+FFFF|基本多文种平面 (Basic Multilingual Plane，BMP)
+1 号平面|U+10000 - U+1FFFF|多文种补充平面 (Supplementary Multilingual Plane，SMP)
+2 号平面|U+20000 - U+2FFFF|表意文字补充平面 (Supplementary Ideographic Plane，SIP)
+3 号平面|U+30000 - U+3FFFF|表意文字第三平面 (Tertiary Ideographic Plane，TIP)
+4 号平面 至 13号平面|U+40000 - U+DFFF|（尚未使用）
+14 号平面|U+E0000 - U+EFFFF|特别用途补充平面 (Supplementary Special-purpose Plane，SSP)
+15 号平面|U+F0000 - U+FFFFF|保留作为私人使用区（A区） (Private Use Area-A，PUA-A)
+16 号平面|U+100000 - U+10FFFF|保留作为私人使用区（B区） (Private Use Area-B，PUA-B)</p>
+<p>BMP 里也有一个 PUA 区块，编号 0xE000-0xF8FF 。</p>
+<p>14 号辅助平面，目前仅摆放“语言编码标签”和“字形变换选取器”，它们都是控制字符。</p>
+<p>在辅助平面的字符，通常会被称为 增补字符 。
+在 utf-16 里，这些字符需要用到 4 个字节来表示。</p>
+<p>传说， unicode 一开始只是规定了 65536 个码点，所以 utf-16 一开始也是两个字节。
+那时的 unicode 可能是觉得 65536 就能表示人类的全部字符了。
+但后来发现 65536 个码点，完全不够用，于是又增加了平面的概念。
+一开始的 65536 个码点称为基本平面，后续新增的 16 个平面称为辅助平面，每个平面 65536 个码点。
+所以，后续的 ucs-4 和 utf-32 都是四个字节，编码空间暂时还是很充裕。</p>
+<h3>utf-16 的代理机制</h3>
+<p>为了让 utf-16 能表示增补平面的字符， 于是 utf-16 增加了代理机制（surrogate）。</p>
+<p>在 BMP 里有一个代理区块(Surrogate Zone)专门用于 utf-16 的代理。
+代理区有 8 个区块，一共 2048（256*8） 个码点，代理区的范围是 0xD800-0xDFFF 。</p>
+<p>代理机制，大概就是用一个代理区码点和一个非代理区码点组成一个代理码元，
+两个代理码元表示一个增补平面的字符。
+两个码元就是 4 个码点就是 4 个字节。
+这两个代理码元会被称为 代理项对（Surrogate Pair） 。</p>
+<p>utf-16 的代理对刚好能表示完 16 个增补平面。</p>
+<p>大致的代理规则</p>
+<p>代理码元1|代理码元2
+-|-
+1101 10pp ppxx xxxx|1101 11xx xxxx xxxx</p>
+<ul>
+<li>代理码元1 会被称为 高位代理 或 引导代理 ，总而言之就是在前面的，不论是 大端字节序还是小端字节序</li>
+<li>代理码元2 会被称为 低位代理 或 尾随代理 ，总而言之就是在后面的，不论是 大端字节序还是小端字节序</li>
+<li>代理码元1中的 110110 、代理码元2中的 110111 是定数， p ， x 是变数</li>
+<li>去掉定数后组合起来就是 pppp xxxx xxxx xxxx xxxx，共20位(2^20=1048576)，20位刚好能够表示目前 16 个增补平面的全部码点((256^2)*16=1048576)</li>
+<li>其中 pppp 共 4 位，表示 16 个增补平面之一的编号(2^4=16)</li>
+<li>紧接着的 16 位 x 表示某个增补平面内的某个码点</li>
+</ul>
+<p>大致的算法</p>
+<ol>
+<li>把增补平面的码点值减 0x10000</li>
+<li>获得一个 20 位长的比特串，把这个比特串分为两部分，高位 10 比特和低位 10 比特</li>
+<li>把高位 10 比特加上 0xD800 ，得到 引导码元</li>
+<li>把低位 10 比特加上 0xDC00 ，得到 尾随码元</li>
+<li>把引导码元和尾随码元组和起来就是 utf-16 在增补平面的码元了</li>
+</ol>
+<p>例子</p>
+<ol>
+<li>汉字 𤭢 的 unicode 编号为 150370</li>
+<li>把 unicode 编号转换位 32 位的二进制 00000000 00000010 01001011 01100010</li>
+<li>码点值减去 0x10000 获得 00000000 00000001 01001011 01100010<ul>
+<li>获得一个 20 位的比特串 00010100101101100010</li>
+</ul>
+</li>
+<li>分割高 10 位和低 10 位的比特串<ul>
+<li>高 10 位 0001010010 0x0052</li>
+<li>低 10 位 1101100010 0x0362</li>
+</ul>
+</li>
+<li>高 10 位的比特串加上 0xD800 得到 引导码元， 0xD800 + 0x0052 = 0xD852</li>
+<li>低 10 位的比特串加上 0xDC00 得到 尾随码元， 0xDC00 + 0x0362 = 0xDF62</li>
+<li>把引导码元和尾随码元组和起来， 0xD852 0xDF62</li>
+</ol>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;uchar.h&gt;
+#include &lt;string.h&gt;
+#include &lt;locale.h&gt;
+void dump_bytes(char* str, int len)
+{
+    for (int i = 0; i &lt; len; ++i)
+    {
+        printf("%p %x\n", str+i, *(str+i));
+    }
+}
+void printf_utf16(unsigned int unicode)
+{
+    char buf[5] = {'\0', '\0', '\0', '\0', '\0'};
+    mbstate_t ps;
+    memset(&amp;ps, 0, sizeof(ps));
+    if (unicode &lt; 0x10000) // 0x10000 00010000000000000000 65536
+    {
+        dump_bytes((char*)(&amp;unicode), 2);
+        c16rtomb(buf, (char16_t)unicode, &amp;ps);
+        printf("%s\n", buf);
+    }
+    else
+    {
+        unicode = unicode - 0x10000;
+        char32_t b;
+        b = (char32_t)0xd800 + (unicode &gt;&gt; 10);
+        b = b &lt;&lt; 16;
+        b = b | (0xdc00 + (unicode &amp; 0x3ff));
+        dump_bytes((char*)(&amp;b), 4);
+        printf("%x\n", b);
+    }
+}
+int main()
+{
+    setlocale(LC_ALL, "en_US.UTF-8");
+    unsigned int utf16_1 = 19968; // 二字节编码的例子
+    unsigned int utf16_2 = 150370; // 四字节编码的例子
+    printf_utf16(utf16_1);
+    printf("\n");
+    printf_utf16(utf16_2);
+    printf("\n");
+    return 0;
+}
+</code></pre>
+<blockquote>
+<p>C 语言的标准库的 c16rtomb 函数并不能处理两个码元的 utf-16 编码 https://en.cppreference.com/w/c/string/multibyte/c16rtomb</p>
+</blockquote>
+<blockquote>
+<p>在 C11 刚发布时，不同于转换变宽多字节（如 UTF-8 ）到变宽 16 位（如 UTF-16 ）编码的 mbrtoc16 ，此函数只能转换单个单元的 16 位编码，这表示尽管此函数的原目的如此，它仍不能转换 UTF-16 到 UTF-8 。这为 C11 后的缺陷报告 <a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n2059.htm#dr_488">DR488</a> 所更正。</p>
+</blockquote>
+<h3>utf-8</h3>
+<p>UTF-8 的编码规则很简单，有二条：</p>
+<ol>
+<li>对于单字节的符号，且第一位为0，后面7位为 Unicode 码. 因此对于英语字母，UTF-8 编码和 ASCII 码是相同的</li>
+<li>对于 n 字节的符号（n &gt; 1），第一个字节的前n位都设为1，第n + 1位设为0，后面字节的前两位一律设为10。剩下的没有提及的二进制位，全部为这个符号的 Unicode 码。</li>
+</ol>
+<p>unicode 符号范围（十进制）|unicode 符号范围（十六进制）|utf-8 编码方式
+-|-|-
+0 - 127|0x00 - 0x7f|0xxxxxxx
+128 - 2047|0x80 - 0x7ff|110xxxxx 10xxxxxx
+2048 - 65535|0x800 - 0xffff|1110xxxx 10xxxxxx 10xxxxxx
+65536 - 2097151|0x10000 - 0x1fffff|11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+2097152 - 67108863|0x200000 - 0x3ffffff|111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx
+67108864 - 2147483647|0x4000000 - 0x7fffffff|1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx</p>
+<p>utf-8 实际上最多只能使用 31 位和 utf-32 相比还少了 1 位，但和 17 个平面的 21 位相比还是很宽裕的。</p>
+<p>下面是一个简单的，把 unicode 转换成 utf-8 的例子，但不考虑超过 4 字节的 utf-8 ，因为 4 字节的 utf-8 足够表示 17 个平面的字符了。</p>
+<p>基本的流程就是</p>
+<ol>
+<li>先用 右移 获取一个字节的有效位</li>
+<li>再用 与 清空其它位</li>
+<li>再用 或 加上 utf-8 的前缀</li>
+<li>如果已经是最后一个字节，就不用右移了</li>
+</ol>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+void printf_utf8(unsigned int unicode)
+{
+    char str[5] = {'\0', '\0', '\0', '\0', '\0'};
+    if (unicode &lt;= 0x7f) // 0x7f 01111111 127
+    {
+        str[0] = (char)unicode;
+    }
+    else if (unicode &gt;= 0x80 &amp;&amp; unicode &lt;= 0x7ff)
+    {
+        str[0] = 0xc0 | ((unicode &gt;&gt; 6) &amp; 0x1f); // 0xc0 11000000 0x1f 00011111
+        str[1] = 0x80 | (unicode &amp; 0x3f); // 0x80 10000000 0x3f 00111111
+    }
+    else if (unicode &gt;= 0x800 &amp;&amp; unicode &lt;= 0xffff)
+    {
+        str[0] = 0xe0 | ((unicode &gt;&gt; (6 * 2)) &amp; 0x0f); // 0xe0 11100000 0x0f 00001111
+        str[1] = 0x80 | ((unicode &gt;&gt; 6) &amp; 0x3f);
+        str[2] = 0x80 | (unicode &amp; 0x3f);
+    }
+    else if (unicode &gt;= 0x10000 &amp;&amp; unicode &lt;= 0x10ffff)
+    {
+        str[0] = 0xf0 | ((unicode &gt;&gt; (6 * 3)) &amp; 0x07); // 0xf0 11110000 0x07 00000111
+        str[1] = 0x80 | ((unicode &gt;&gt; (6 * 2)) &amp; 0x3f);
+        str[2] = 0x80 | ((unicode &gt;&gt; 6) &amp; 0x3f);
+        str[3] = 0x80 | (unicode &amp; 0x3f);
+    }
+    printf("%s", str);
+}
+int main()
+{
+    unsigned int utf8_1 = 65; // 和 ascii 码兼容的例子
+    unsigned int utf8_2 = 415; // 二字节编码的例子
+    unsigned int utf8_3 = 19968; // 三字节编码的例子
+    unsigned int utf8_4 = 131954; // 四字节编码的例子
+    printf_utf8(utf8_1);
+    printf("\n");
+    printf_utf8(utf8_2);
+    printf("\n");
+    printf_utf8(utf8_3);
+    printf("\n");
+    printf_utf8(utf8_4);
+    return 0;
+}
+</code></pre>
+<h3>utf-32 和 ucs-4</h3>
+<h3>组合字</h3>
+<h3>其它</h3>
+<p>通用区域数据存储库 (Common Locale Data Repository, CLDR)</p>
+<ul>
+<li>CLDR 是 Unicode 联盟下属的一个项目</li>
+<li>CLDR 为支持全球语言的软件提供了关键构建块，并提供了最大、最广泛的区域设置数据标准存储库。</li>
+<li>这些数据被广泛的公司用于其软件国际化和本地化，使软件适应不同语言的约定，以执行此类常见的软件任务。<ul>
+<li>用于格式设置和分析的区域设置特定模式：日期、时间、时区、数字和货币值、度量单位,...</li>
+<li>名称的翻译：语言、脚本、国家和地区、货币、纪元、月份、工作日、日期间、时区、城市和时间单位、表情符号字符和序列（以及搜索关键字）,...</li>
+<li>语言和脚本信息：使用的字符;复数大小写;列表的性别;大写;排序和搜索规则;书写方向;音译规则;拼写数字的规则;将文本分割成字形、单词和句子的规则;键盘布局......</li>
+<li>国家/地区信息：语言用法、货币信息、日历首选项、周惯例,...</li>
+<li>有效性：Unicode 区域设置、语言、脚本、区域和扩展的定义、别名和有效性信息,...</li>
+</ul>
+</li>
+<li>参考<ul>
+<li>https://cldr.unicode.org/</li>
+<li>https://en.wikipedia.org/wiki/Common_Locale_Data_Repository</li>
+</ul>
+</li>
+</ul>
+<p>Unicode 国际组件 (International Components for Unicode, ICU)</p>
+<ul>
+<li>ICU 是一套成熟、广泛使用的 C/C++ 和 Java 库，为软件应用程序提供 Unicode 和全球化支持。ICU 具有广泛的可移植性</li>
+<li>ICU 项目是 Unicode 联盟的一个技术委员会，由 IBM 和许多其他公司赞助、支持和使用</li>
+<li>以下是ICU提供的服务<ul>
+<li>代码页转换：将文本数据与 Unicode 以及几乎任何其他字符集或编码相互转换。ICU 的转换表基于 IBM 几十年来收集的字符集数据，是任何地方最完整的转换表。</li>
+<li>排序规则：根据特定语言、地区或国家的约定和标准比较字符串。ICU 的排序规则基于 Unicode 排序规则算法以及来自 CLDR 中特定于区域设置的比较规则。</li>
+<li>格式设置：根据所选区域设置的约定设置数字、日期、时间和货币金额的格式。这包括将月份和日期名称翻译成所选语言，选择适当的缩写，正确排序字段等。</li>
+<li>时间计算：除了传统的公历之外，还提供了多种类型的日历。提供了一套全面的时区计算 API。</li>
+<li>Unicode 支持：ICU 密切跟踪 Unicode 标准，提供对所有许多 Unicode 字符属性、Unicode 规范化、大小写折叠以及  Unicode 标准指定的其他基本操作的轻松访问。</li>
+<li>正则表达式：ICU的正则表达式完全支持Unicode，同时提供非常有竞争力的性能。</li>
+<li>Bidi：支持处理包含从左到右（英语）和从右到左（阿拉伯语或希伯来语）混合数据的文本。</li>
+<li>文本边界：在文本范围内定位单词、句子、段落的位置，或标识在显示文本时适合换行的位置。</li>
+</ul>
+</li>
+<li>ICU 在非限制性开源许可证下发布，适用于商业软件和其他开源或免费软件。</li>
+<li>参考<ul>
+<li>http://site.icu-project.org/</li>
+<li>https://en.wikipedia.org/wiki/International_Components_for_Unicode</li>
+</ul>
+</li>
+</ul>
+<p>UCA</p>
+<ul>
+<li>Unicode Collation Algorithm</li>
+<li>Unicode 排序 算法</li>
+<li>具体的排序往往还需要考虑 CLDR</li>
+<li>参考 http://www.unicode.org/reports/tr10/</li>
+</ul>
+<p>rtl (right-to-left)</p>
+<ul>
+<li>一般是用于描述从右到左的文字或从右到左的排版</li>
+<li>常见的 rtl 文字<ul>
+<li>阿拉伯文(ar)</li>
+<li>希伯来文(he)</li>
+</ul>
+</li>
+</ul>
+<p>bidi</p>
+<ul>
+<li>双向文本 (bidirectional text)</li>
+<li>双向文字就是一个字符串中包含了两种文字，既包含从左到右的文字又包含从右到左的文字。</li>
+<li>在现代计算机应用中，最常用来处理双向文字的算法是 Unicode 双向算法（Unicode Bidirectional Algorithm, UBA），</li>
+<li>在 Unicode 里有一些方向格式化字符能改变后续文字的方向，例如<ul>
+<li>U+202E RLO (right to left override) <code>‮这是一段测试用的文字</code></li>
+</ul>
+</li>
+</ul>
+<p>CJKUI 中日韩统一表意字</p>
+<ul>
+<li>统一表意字 Unified Ideographs</li>
+<li>目的是要把分别来自中文、日文、韩文、越南文、壮文、琉球文中，起源相同、本义相同、形状一样或稍异的表意文字，在ISO 10646及Unicode标准赋予相同编码。</li>
+<li>由 表意文字小组 (Ideographic Research Group, IRG) 整理， IRG 的前身是 CJK-JRG（China, Japan, Korea Joint Research Group）</li>
+<li>参考<ul>
+<li>https://en.wikipedia.org/wiki/CJK_Unified_Ideographs</li>
+<li>https://glyphwiki.org/</li>
+</ul>
+</li>
+</ul>
+<p>国际表意文字核心（International Ideographs Core，简称 IICore 或易扩）</p>
+<ul>
+<li>IICore 是现时汉字编码的最小标准。</li>
+<li>它总共记载了东亚地区的一万个常用字</li>
+<li>这一万个字所包含的，并不单单限于中日韩统一表意文字基本字面的汉字。当中有42个字位于扩展区A、62个字位于扩展区B。</li>
+<li>国际表意文字核心是中日韩统一表意文字的基本子集。</li>
+<li>IICore 推出的目的，主要是用作硬件上不能容纳整个中日韩统一表意文字的方案。</li>
+<li>参考<ul>
+<li>https://en.wikipedia.org/wiki/International_Ideographs_Core</li>
+<li>https://www.ccli.gov.hk/sc/iicore/</li>
+</ul>
+</li>
+</ul>
+<p>Unihan</p>
+<ul>
+<li>统汉字数据库（英语：Unihan）是统一码联盟所维护的数据库文件。其为统汉字的每个汉字做了说明，内容包含：<ul>
+<li>统一码与各国家、地区标准及各工业标准的对应。</li>
+<li>依据重要字典（如康熙字典）的排序索引。</li>
+<li>经过编码的异体字。</li>
+<li>汉字在各种语言中的发音。</li>
+<li>英文释义。</li>
+</ul>
+</li>
+<li>txt文本文件 https://www.unicode.org/Public/UNIDATA/Unihan.zip</li>
+</ul>
+<p>mysql 的 utf8 和 utf8mb3 和 utf8mb4</p>
+<ul>
+<li>MySQL 在 5.5.3 之前版本的 utf8 只支持 3 字节编码，也就是只支持 bmp 的字符，不支持 sp 的字符</li>
+<li>MySQL 在 5.5.3 之后新增了 utf8mb4 支持 4 字节编码，mb4 即 most bytes 4</li>
+<li>MySQL 为了向前兼容，在后续的版本里依然保留只支持 3 字节编码的 utf8 和支持 4 字节编码的 utf8mb4</li>
+<li>utf8mb3 就是 utf8 ，据说为了防止 utf8 和 utf8mb4 混淆所以加了一个 utf8mb3 的别名？</li>
+<li>在新项目的开发里字符集都选 utf8mb4 排序规则都选 utf8mb4_unicode_ci 是大概率不会错的</li>
+</ul>
+<p>unicode 里关于汉字的问题</p>
+<p>emoji 表情</p>
+<ul>
+<li>其实表情也算是一种字符</li>
+<li>https://www.emojiall.com/</li>
+<li>表情也有组合字</li>
+</ul>
+<p>为什么没有 utf-24 https://www.v2ex.com/t/399575</p>
+<h2>6 关于 BOM</h2>
+<p>BOM（Byte Order Mark），字节顺序标记，出现在文本文件头部，Unicode 编码标准中用于标识文件是采用哪种格式的编码。
+在 UFT-8 编码格式的文本中，如果添加了BOM，则只用它来标示该文本是由 UTF-8 编码方式编码的，而不用来说明字节序，因为 UTF-8 编码不存在字节序问题。</p>
+<p>unicode 里有一个名为 零宽度非断空格符 (ZERO WIDTH NO-BREAK SPACE, zwnbsp) 的不可见字符，用于阻止特殊位置的换行分隔。
+同时也是用于标识字节序。
+通常会作为文本或字节流的开头。</p>
+<ul>
+<li>如果文本或字节流的开头是 FE FF 就表明这个文本或字节流是 UTF-16 Big-Endian 编码。</li>
+<li>如果文本或字节流的开头是 FF FE 就表明这个文本或字节流是 UTF-16 Little-Endian 编码。</li>
+<li>如果文本或字节流的开头是 00 00 FE FF 就表明这个文本或字节流是 UTF-32 Big-Endian 编码。</li>
+<li>如果文本或字节流的开头是 FF FE 00 00 就表明这个文本或字节流是 UTF-32 Little-Endian 编码。</li>
+<li>如果文本或字节流的开头是 EF BB BF 就表明这个文本或字节流是 UTF-8 编码。但大多数情况下 UTF-8 都不需要 BOM 。</li>
+</ul>
+<p>GB2312、GBK、GB18030 都是兼容 ASCII，区分 ASCII 的方法是高字节的最高位为0。
+在读取字符流时，只要遇到高位为1的字节，就可以将下两个字节作为一个双字节编码，而不用管低字节的高位是什么。
+big5 和 ISO 8859 也是用类似的方式兼容 ASCII 。
+所以 GB2312、GBK、GB18030、big5、ISO 8859 是没有 BOM 的问题的。</p>
+<h2>7 Hex，base64 和 UrlEncode</h2>
+<p>Hex 是十六进制的意思，一般就是把二进制数据转换成十六进制显示，例如 00001100 转换成十六进制 c ，一般会以 0x 开头，所以会写成 0xc 。</p>
+<pre><code>echo -e -n "\xe8\x4d\x3a\xa5" | xxd -plain
+echo -e -n "\xe8\x4d\x3a\xa5" | od -t x1 -An
+</code></pre>
+<p>base64 就是把二进制数据用 ascii 里的 65 个字符表示，A ~ Z a ~ z 0 ~ 9 + / = 。</p>
+<pre><code>echo 123 | base64
+echo MTIzCg== | base64 -d
+echo 123 | openssl enc -base64 -e
+echo MTIzCg== | openssl enc -base64 -d
+</code></pre>
+<p>UrlEncode 类似于 base64 ，也是用 ascii 字符来表示数据，一般用在 url 里的地址部分 或 提交表格的 body 里。</p>
+<pre><code>似乎没有命令能直接编码 url
+相关的标准 RFC1738 RFC3986
+
+使用 python 实现的，标准输入中一定要有数据，不然会一直等待
+编码
+echo -n $graphqlquery | python -c "import sys;import urllib.parse;data=sys.stdin.read();print(urllib.parse.quote_plus(data));"
+解码
+echo -n $graphqlquery | python -c "import sys;import urllib.parse;data=sys.stdin.read();print(urllib.parse.unquote(data));"
+python 中的相关方法
+quote 不编码保留字符，类似于 js 的 encodeURIComponent
+quote_plus 编码保留字符，类似于 js 的 encodeURI
+unquote 解码
+
+使用 php 的实现
+编码 RFC1738
+echo -n $graphqlquery | php -r 'print(urlencode(file_get_content("php://stdin")));'
+解码 RFC1738
+echo -n $graphqlquery | php -r 'print(urldecode(file_get_content("php://stdin")));'
+编码 RFC3986
+echo -n $graphqlquery | php -r 'print(rawurlencode(file_get_content("php://stdin")));'
+解码 RFC3986
+echo -n $graphqlquery | php -r 'print(rawurldecode(file_get_content("php://stdin")));'
+
+使用 sed 实现的，但没能处理好换行符，只要不介意换行符，这就是能使用的了
+编码
+echo -n $graphqlquery | tr "\r\n" " " | tr "\n" " " | while IFS=''; read -n 1 c; do echo -n $c | sed -n -r '/[^a-zA-Z0-9_\.~\-]/!b Print;s/(.{1})/bash -c "echo -n \\"\1\\" | xxd -plain "/e;s/([a-zA-Z0-9]{2})/%\0/g;:Print;p'; done;
+解码
+echo -n $graphqlquery | sed -r -n 's/%([a-zA-Z0-9]{2})/\\x\1/g;s/.*/echo -e -n "\0" /e;p'
+</code></pre>
+<p>punycode 是用于域名里非 ascii 字符的编码，类似于 UrlEncode 。例如，中文域名就是先转换成 punycode 再查询 DNS 的。punycode 就由26个字母+10个数字，还有“-”组成。</p>
+<p>base58 就是把二进制数据用 ascii 里的 58 个字符表示，A ~ Z (去除大写字母 O ，大写字母 I) a ~ z (小写字母 l) 1 ~ 9 。
+大写字母 O ，大写字母 I ，小写字母 l 数字 0 比较容易混淆。</p>
+<p>Base58Check 在 base58 的基础上加上校验机制，主要用于表示 Bitcoin 的钱包地址。</p>
+<h2>8 Windows 系统下的字符编码</h2>
+<h3>Windows 代码页</h3>
+<p>在 Windows 系统中字符编码通常会用代码页(code page, cp)来表示</p>
+<p>&lt;!--
+为什么是 cp ？
+--&gt;</p>
+<p>Windows 代码页和字符集的对应关系
+代码页|字符集|备注
+-|-|-|
+cp 437|IBM437|
+cp 936|GBK|
+cp 54936|GB18030|
+cp 950|BIG5|
+cp 65001|UTF-8|
+cp 1252|ISO-8859-1|
+cp 1200|UTF-16 little endian|
+cp 1201|UTF-16 big endian|
+cp 12000|UTF-32 little endian|
+cp 12001|UTF-32 big endian|</p>
+<p>参考 https://docs.microsoft.com/en-us/windows/win32/intl/code-page-identifiers</p>
+<h3>Windows 的系统编码</h3>
+<ul>
+<li>Windows 9x 及之前的系统编码是根据语言来决定的<ul>
+<li>例如 英文就是 cp1252 ，简体中文就是 cp936</li>
+</ul>
+</li>
+<li>Win2000 之前的 NT 用的是 UCS-2</li>
+<li>Win2000 之后的 NT 用的是 UTF-16LE</li>
+</ul>
+<h3>Windows api 的编码</h3>
+<p>Windows 通常以以下三种格式之一来实现操作字符的 API 函数：</p>
+<ul>
+<li>可针对 Windows 代码页或 Unicode 进行编译的泛型版本</li>
+<li>用字母 "A" 表示 "ANSI" 的 Windows 代码页版本</li>
+<li>用字母 "W" 表示 "宽" 的 Unicode 版本
+某些较新的函数仅支持 Unicode 版本。</li>
+</ul>
+<h3>Windows 记事本的编码</h3>
+<ul>
+<li>ANSI -&gt; 当前代码页</li>
+<li>Unicode -&gt; utf-16 little endian</li>
+<li>Unicode big endian -&gt; utf-16 big endian</li>
+<li>UTF-8 -&gt; UTF-8 with BOM</li>
+</ul>
+<h3>Windows 命令行的编码</h3>
+<ul>
+<li>可以用 chcp 命令查看和修改编码</li>
+<li>不是所有代码页 chcp 都支持， cp1200 ， cp1201 ， cp12000 ， cp12001 都不支持，但支持 cp65001</li>
+<li>chcp 能修改输出的编码，但输入的编码好像不能修改，所以输出乱码时用 chcp 修改编码是有效果的，但输入乱码时 chcp 未必有效果，可能需要调用其他系统 api</li>
+<li>在不调用其它系统 api 时，只有 cp936 和 cp950 能输入中文</li>
+<li>cmd 和 powershell 都一样，但 git bash 可以输入和输出 utf-8</li>
+</ul>
+<h3>参考</h3>
+<p>https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/chcp</p>
+<p>https://docs.microsoft.com/zh-cn/windows/win32/intl/unicode-and-character-sets</p>
+<h2>9 一条短信为什么是 70 个汉字</h2>
+<p>按照 GSM 900/1800/1900 的标准，每条短信最多发送1120位，也就是（1120÷8=140一个字节占8位）140字节的内容。
+如果发送纯 ASCII 码字符，ASCII 采用7位编码，所以1120位的限额可以传送1120÷7=160个字符。这里不会像一般的程序那样，一个字符占一字节（8位），空余一个位出来，而是一个字符占7位。
+如果发送的内容里含有非 ASCII 字符，就会自动转换为 UCS-2 编码，这时所有字符都采用2个字节的8位编码，所以1120位的限额可以传送1120÷(8*2)=70个字符。
+所以，只要短信里含有汉字，那么短信的编码就是 UCS-2 ，所以一条短信最多只能有 70 个汉字</p>
+<p>运营商限制单条短信长度70字，但是允许拼接，即多条短信组合成一条短信。发送时根据协议将短信拆分，接收时根据协议将短信合并，这样就可以突破字数限制。</p>
+<p>~~太长就不能称为短信了~~</p>
+<h2>10 字体和字库</h2>
+<p>字体 = FONT</p>
+<p>字库 = 字体库 = FONT LIBRARY</p>
+<h3>硬件的字库</h3>
+<p>在一些嵌入式系统里，因为可用的内存十分的少，为了存储汉字或其他东亚文字的字形位图，需要一个单独的芯片。
+这种单独的芯片通常会被称为字库或字库芯片。
+这种芯片往往是只读不可写的。</p>
+<p>旧时代的手机也有类似的设计。
+在智能手机时代，严谨意义上的字库芯片已经没有了，但依然会把手机里的那块 flash memory 称为字库。</p>
+<h3>软件的字库</h3>
+<p>从一个写上层应用的程序员角度来看，字体 == 字库。</p>
+<p>字体有很多种格式，但基本上都是根据编码输出对应的字形位图。</p>
+<p>字体的渲染过程大致是这样的</p>
+<ol>
+<li>加载字体</li>
+<li>输入字符的编码</li>
+<li>根据字体文件里的 cmap 把字符的编码转换成对应的字形索引（GlyphID）</li>
+<li>根据索引从字体中加载这个字形</li>
+<li>把字形渲染成位图</li>
+</ol>
+<p>&lt;!--
+字体的渲染是一个巨坑，渲染出来还要考虑布局和排版，例如 换行 双向文本 组合字 之类的
+FreeType
+HarfBuzz
+pango
+--&gt;</p>
+<p>字体可以简单但不严谨地理解为一个很大的编码对字形索引的键值对。这个键值对会被称为 Character to Glyph Index Mapping Table 简称 Cmap table 或 cmap 。</p>
+<p>现时（2022）的字体格式都是最多只能包含 65535 个字符，这是因为字形索引的长度最多是 16 位。
+~~据说 HarfBuzz4.0 已经突破了 65535 的限制~~</p>
+<p>字体的具体实现其实挺复杂的，可以参考一下 OpenType 的文档</p>
+<ul>
+<li>https://docs.microsoft.com/zh-cn/typography/opentype/spec/cmap</li>
+<li>https://docs.microsoft.com/zh-cn/typography/opentype/spec/</li>
+</ul>
+<p>FreeType2 Tutorial 这是一个关于如何实现字体的教程，相当的硬核</p>
+<ul>
+<li>https://www.freetype.org/freetype2/docs/tutorial/index.html</li>
+</ul>
+<p>一些常见的字体格式</p>
+<ul>
+<li><p>TTF (TrueType Font) 字体格式是由苹果和微软为 PostScript 而开发的字体格式。
+在 Mac 和 Windows 操作系统上，TTF 一直是最常见的格式，所有主流浏览器都支持它。</p>
+</li>
+<li><p>OTF (OpenType Font) 由 TTF 演化而来，是 Adobe 和微软共同努力的结果。
+OTF 字体包含一部分屏幕和打印机字体数据。</p>
+</li>
+<li><p>EOT (Embedded Open Type) 字体是微软设计用来在 Web 上使用的字体。
+是一个在网页上试图绕过 TTF 和 OTF 版权的方案。可惜 EOT 格式只有 IE 支持。</p>
+</li>
+<li><p>WOFF (Web Open Font Format) 本质上是 metadata + 基于 SFNT 的字体（如 TTF、OTF 或其他开放字体格式）。
+该格式完全是为了 Web 而创建，由 Mozilla 基金会、微软和 Opera 软件公司合作推出。</p>
+</li>
+<li><p>WOFF2 是 WOFF 的下一代。 WOFF2 格式在原有的基础上提升了 30% 的压缩率。</p>
+</li>
+</ul>
+<p>&lt;!--
+
+常见的“宋体”、“黑体”、“楷体”并不是具体的字体名，它们是一类中文字体的总称。
+
+字体基本概念
+    字符（Character）：字母、数字、汉字、符号等，是一种抽象实体。
+    字形（Glyph）：单个「字符」的具体表达，一个字可有多个不同的字形。原则上 Unicode 中只对字，而非字形编码。
+    字型（Font）：印刷行业中，指某一整套具有同样样式和尺码的字形，如一整套中易宋体 5 号字、一整套 9 磅 Helvetica 粗体字。
+    字体（Typeface）：若干个「字型」在若干个尺寸上的集合。
+        「书体」- 宋体、仿宋体、黑体等。例如 Windows 自带的「宋体」实为「中易宋体」。
+随着计算机字体 (computer font) 的普及，
+可缩放的矢量字体的出现使得「字型」与「字体」的界限逐渐模糊，
+现今这两个概念在数字排印领域越来越多地被当做同义词使用。
+
+字体分类
+    按有无衬线
+        衬线字体 (serif)
+        无衬线字体 (sans serif)
+    按显示类型
+        比例字体 (proportional) - 适合普通文本
+        等宽字体 (monospace) - 适合代码、ASCII art
+    按数据格式 (计算机字体)
+        点阵字体 (bitmap / raster)
+            本质上是点阵图片的集合。
+            渲染极快
+            显示效果稳定
+            容易创建
+            在小字号、多笔画时渲染效果较好
+            视觉效果较差
+            不适合缩放
+        轮廓字体 (outline)
+            是向量图的集合，用 Bézier 曲线描述字形，适合缩放。
+            PostScript 字体
+                Adobe 开发
+                用三次 Bézier 曲线描述字形。
+                私有 hinting，价格昂贵
+                质量高，适合打印专业质量的印刷出版物
+                又细分为 Type1 / Type3 / CID 等类型
+            TrueType 字体
+                Apple 为对抗 Adobe 的 Type1 与 Microsoft 共同开发
+                用二次 Bézier 曲线描述字形，渲染较快
+                可内置点阵字体
+                在 OS X 和 Windows 中是最常见的字体格式
+            OpenType 字体
+                源于 Microsoft 独自开发的 TrueType Open
+                后 Adobe 加入开发，增加对 PostScript 轮廓的支持
+                PostScript flavor / TrueType flavor
+        笔画字体 (stroke)
+
+建议
+    尽量显式声明，避免让浏览器/操作系统选择字体
+    西文字体在中文前、将平台独有的字体在通用字体前、generic family 列最后。
+        "Lucida Grande", Verdana, "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    特殊 family name 两边加引号
+    包含空格符、数字、除 "-" 外的特殊字符时建议加，但非必须。
+    family name 名称统一
+    大小写建议统一，也尽量避免「宋体」、「SimSun」混用，有利于 gzip。
+    中文 font-size 至少 12px (SimSun &lt; 12px 时难以辨识)
+
+——摘录自顾轶灵《字体漫谈》Slide
+
+--&gt;</p>
+<h2>11 一个字节为什么是 8 位</h2>
+<p>一个字节占 8 位，好像没有哪个标准文件里有提及，但事实上又都是这样。</p>
+<p>实际上一个字节可以不是 8 位， C 语言标准头文件 &lt;limits.h&gt; 中定有一个宏 CHAR_BIT，用以表示字节位数。
+从一个写上层应用的程序员角度来看，一个字节就是 8 位。</p>
+<p>IBM在 1950 年设计 IBM 7030 Stretch 的时候引入 byte 的概念，表示程序访问内存的最小单位。
+叫 byte 就是为了跟 bit 有所区分。
+7030 一个 byte 可能包含 1-bit 到 8-bit 不等，但最多是 8-bit 。
+到了 1964 年，IBM 设计出 IBM System/360 大型机，取得重大成功。
+而 System/360 的一个 byte 就是 8-bit。
+而 System/360 的一个 byte 之所以是 8-bit ，据说是为了兼容打孔卡的数据。</p>
+<p>还有一个原因就是， ASCII 一个字符是 7 位，然后加上 1 位校验码，刚好是 8 位。</p>
+<h2>12 C 语言中的字符和字符串</h2>
+<p>C 语言标准库中有三套字符串处理函数，分别是</p>
+<ul>
+<li>字符 或 窄字符 (char)</li>
+<li>宽字符 (wide char) 函数名一般以 w 开头</li>
+<li>多字节字符 (multibyte char) 函数名一般以 mb 开头</li>
+</ul>
+<p>但输入和输出函数只有 字符 和 宽字符 的版本。</p>
+<p>对于 ASCII 用普通的字符串处理函数就可以了。
+对于 GBK utf-16 utf-32 这种，用 宽字符 版本的函数，但要先设置好 locale 。
+对于 utf-8 这种是最麻烦的了，一般是先转换成 utf-32 然后再用 宽字节 版本的函数处理。</p>
+<h3>字符</h3>
+<p>在 C 语言中字符通常是指 char 类型。
+C 语言中还有其它字符类型。</p>
+<p>| 类型 | 描述 |
+|-|-|
+|char| 一个字节|
+|char16_t| 16位，两个字节|
+|char32_t| 32位，四个字节|
+|wchar_t| 一般是两个字节，但其实是通过 locale 的设置决定的。其实就是因为 wchar_t 无法确定具体的字节数，才会有 char16_t 和 char32_t 这两种类型的出现|</p>
+<p>几个容易混淆的符号</p>
+<p>| | |
+|-|-|
+|null|一般指空指针，直接使用会提示未定义|
+|0|是数字0，一般是 int 类型，全部位数都是0|
+|'0'|是字符0，一般是 char 类型，对应的ascii码 48|
+|'\0'|是字符串结束的字符，一般是 char 类型，全部位数都是0|
+|"0"|是字符串，实质是一个字符数组 {'0', '\0'}|
+|"\0"|是字符串，实质是一个字符数组 {'\0', '\0'}|
+|""|是字符串，实质是一个字符数组 {'\0'}|
+|NULL|宏定义，实质是 ((void*)0)，是一个指针|</p>
+<p>'\0' 的意思就是 ascii 的第一个字符，
+反斜杠后面跟着的其实就是 ascii 码的八进制数字。</p>
+<p>&lt;!--
+
+#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+int main()
+{
+    char a[] = {'\0'};
+    char b[] = {'\0', '\0'};
+    char c[] = "";
+    char d[] = "\0";
+    int length;
+
+    length=sizeof(a)/sizeof(a[0]);
+    printf("length of a=%d, strlen=%d \n", length, strlen(a)); // 1 0
+
+    length=sizeof(b)/sizeof(b[0]);
+    printf("length of b=%d, strlen=%d \n", length, strlen(b)); // 2 0
+
+    length=sizeof(c)/sizeof(c[0]);
+    printf("length of c=%d, strlen=%d \n", length, strlen(c)); // 1 0
+
+    length=sizeof(d)/sizeof(d[0]);
+    printf("length of d=%d, strlen=%d \n", length, strlen(d)); // 2 0
+
+    return 0;
+}
+
+--&gt;</p>
+<p>对于 char16_t char32_t wchar_t 这类字符的声明，需要在前面加上一个标识的符号</p>
+<p>| 类型 | 符号 | 例子 |
+|-|-|-|
+|char16_t| u |char16_t chr = u'中' |
+|char32_t| U |char32_t chr = U'中' |
+|wchar_t| L |wchar_t chr = L'中' |</p>
+<p>同样地，对应类型的字符串也是需要加上对应的符号</p>
+<p>不然会有这种警告的</p>
+<pre><code>warning: multi-character character constant [-Wmultichar]
+</code></pre>
+<p>还可以使用转义符 \ 来表示字符，在字符串里同样也适用</p>
+<p>| 格式 | 描述 | 例子 |
+|-|-|-|
+|\hhh|	ASCII 编码的八进制表示，可以省略前导 0| \0 \101|
+|\xhh|	ASCII 编码的十六进制表示，可以省略前导 0| \x0 \x41|
+|\uhhhh| utf-16 be 编码的十六进制表示，不可以省略前导 0| \u4e2d|
+|\Uhhhhhhhh| utf-32 be 编码的十六进制表示，不可以省略前导 0| \U00006587|</p>
+<p>但 ascii 好像不能用 unicode 编码表示，笔者是用 gcc9.2 c17 实践的</p>
+<p>这是一个使用转义符来表示字符的例子</p>
+<pre><code>#include &lt;stdio.h&gt;
+int main()
+{
+    char* ascii = "A\101\x41";
+    char* unicode = "\u4e2d\U00006587";
+    printf("%s\n", ascii);
+    printf("%s\n", unicode);
+    return 0;
+}
+</code></pre>
+<p>输出</p>
+<pre><code>AAA
+中文
+</code></pre>
+<p>这是一个按字节输出各种类型字符的例子</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include &lt;wchar.h&gt;
+#include &lt;uchar.h&gt;
+
+void dump_bytes(char* str, int len)
+{
+    for (int i = 0; i &lt; len; ++i)
+    {
+        printf("%p %x\n", str+i, *(str+i));
+    }
+}
+
+int main()
+{
+    char chr1 = 'a';
+    wchar_t chr2 = L'中';
+    char16_t chr3 = u'中';
+    char32_t chr4 = U'中';
+
+    printf("ascii ----------------\n");
+    dump_bytes((char*)&amp;chr1, sizeof chr1);
+    printf("wchar_t ----------------\n");
+    dump_bytes((char*)&amp;chr2, sizeof chr2);
+    printf("char16_t ----------------\n");
+    dump_bytes((char*)&amp;chr3, sizeof chr3);
+    printf("char32_t ----------------\n");
+    dump_bytes((char*)&amp;chr4, sizeof chr4);
+
+    return 0;
+}
+</code></pre>
+<p>输出</p>
+<pre><code>ascii ----------------
+0x7fff8fb4c8d5 61
+wchar_t ----------------
+0x7fff8fb4c8d8 ffffffad
+0x7fff8fb4c8d9 ffffffb8
+0x7fff8fb4c8da ffffffe4
+0x7fff8fb4c8db 0
+char16_t ----------------
+0x7fff8fb4c8d6 ffffffad
+0x7fff8fb4c8d7 ffffffb8
+char32_t ----------------
+0x7fff8fb4c8dc ffffffad
+0x7fff8fb4c8dd ffffffb8
+0x7fff8fb4c8de ffffffe4
+0x7fff8fb4c8df 0
+</code></pre>
+<p>wchar_t 是根据 locale 决定的，不同的主机环境可能不一样</p>
+<h3>字符串</h3>
+<p>在 C 语言中没有字符串类型，
+字符串通常是指以 '\0' 结尾的字符数组。
+一些多字节编码或变长编码可能会使用结构体来实现。
+下文只讨论使用基本类型的字符。</p>
+<p>字符串的长度，就是指一个字符串里除了结束标志字符之外的字符个数。
+要获得准确的字符串长度，要使用编码对应版本的字符串处理函数。</p>
+<p>字符串的大小，就是指一个字符串所占用的字节数。
+要获得准确的字符串大小，最好用 sizeof 而不是 strlen 。
+strlen 本质上是在计算从开始地址遇到 \0 之前的字节数量。</p>
+<p>&lt;!--
+对于 unicode 的编码而言，其实还有两个值，
+码点的数量 和 码位的数量
+对于 utf-16 而言，其实有一个挺大的坑的，毕竟有 代理机制
+--&gt;</p>
+<p>声明字符数组</p>
+<pre><code>char a[] = {'a', 'b'}; // 数组长度是2，这个不是字符串，因为最后一位不是'\0'，strlen这时是不可预计的，因为最后一位不是'\0'
+char a[] = "ab"; // 数组长度是3，strlen是2，因为会自动补足一位'\0'
+char a[] = {"ab"}; // 这个和上面那个一样
+char a[] = {'a', 'b', '\0'}; // 这个和上面那个一样
+// 这几个和上面是一样的，声明数组时赋值可以忽略长度
+char a[2] = {'a', 'b'};
+char a[3] = "ab";
+char a[3] = {"ab"};
+char a[3] = {'a', 'b', '\0'};
+// 这种，未赋值的元素会自动初始化为 '\0';
+char a[3] = {'a', 'b'};
+</code></pre>
+<p>字符数组和字符指针是不一样的。
+字符数组是数组，字符指针是指针，虽然两个都可以当作字符串那样来使用。</p>
+<p>字符指针声明后需要初始化才能赋值。</p>
+<pre><code>// 正确
+char *s = (char*)malloc(6*sizeof(char));
+s[0] = 'a';
+// 错误
+char *s;
+s[0] = 'a';
+</code></pre>
+<p>字符指针可以在声明时初始化</p>
+<pre><code>char *s = "ab";
+</code></pre>
+<p>可以直接把字符串赋值给字符指针</p>
+<pre><code>char *s;
+s = "ab";
+</code></pre>
+<p>字符指针可以通过下标来访问</p>
+<pre><code>char *s = "ab";
+s[0]; // a
+*(s+1); // b
+</code></pre>
+<p>直接把字符串赋值字符指针，不能通过下标来修改字符串里的某个字符，但可以整体重新赋值。
+之所以不能单独修改某个字符，是因为直接写在代码里的字符串会被存放在数据区里，这部分数据不能被修改。
+但可以整体重新赋值，是因为修改的指针指向的地址，相当于只是修改一个变量的值。</p>
+<pre><code>// 错误
+char *s = "ab";
+s[0] = 'a';
+// 正确
+char *s = "ab";
+s = "cd";
+</code></pre>
+<p>这是一个按字节输出各种类型字符串的例子</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include &lt;wchar.h&gt;
+#include &lt;uchar.h&gt;
+
+void dump_bytes(char* str, int len)
+{
+    for (int i = 0; i &lt; len; ++i)
+    {
+        printf("%p %x\n", str+i, *(str+i));
+    }
+}
+
+int main()
+{
+    char str1[] = "general string";
+    wchar_t str2[] = L"这是 wchar_t";
+    char16_t str3[] = u"这是 char16_t";
+    char32_t str4[] = U"这是 char32_t";
+    char str5[] = u8"这是 utf-8";
+
+    printf("ascii ----------------\n");
+    dump_bytes((char*)str1, sizeof str1);
+    printf("wchar_t ----------------\n");
+    dump_bytes((char*)str2, sizeof str2);
+    printf("char16_t ----------------\n");
+    dump_bytes((char*)str3, sizeof str3);
+    printf("char32_t ----------------\n");
+    dump_bytes((char*)str4, sizeof str4);
+    printf("utf-8 ----------------\n");
+    dump_bytes((char*)str5, sizeof str5);
+
+    return 0;
+}
+</code></pre>
+<p>输出</p>
+<pre><code>ascii ----------------
+0x7ffe009c5401 67
+0x7ffe009c5402 65
+0x7ffe009c5403 6e
+0x7ffe009c5404 65
+0x7ffe009c5405 72
+0x7ffe009c5406 61
+0x7ffe009c5407 6c
+0x7ffe009c5408 20
+0x7ffe009c5409 73
+0x7ffe009c540a 74
+0x7ffe009c540b 72
+0x7ffe009c540c 69
+0x7ffe009c540d 6e
+0x7ffe009c540e 67
+0x7ffe009c540f 0
+wchar_t ----------------
+0x7ffe009c5430 ffffffd9
+0x7ffe009c5431 ffffff8f
+0x7ffe009c5432 0
+0x7ffe009c5433 0
+0x7ffe009c5434 2f
+0x7ffe009c5435 66
+0x7ffe009c5436 0
+0x7ffe009c5437 0
+0x7ffe009c5438 20
+0x7ffe009c5439 0
+0x7ffe009c543a 0
+0x7ffe009c543b 0
+0x7ffe009c543c 77
+0x7ffe009c543d 0
+0x7ffe009c543e 0
+0x7ffe009c543f 0
+0x7ffe009c5440 63
+0x7ffe009c5441 0
+0x7ffe009c5442 0
+0x7ffe009c5443 0
+0x7ffe009c5444 68
+0x7ffe009c5445 0
+0x7ffe009c5446 0
+0x7ffe009c5447 0
+0x7ffe009c5448 61
+0x7ffe009c5449 0
+0x7ffe009c544a 0
+0x7ffe009c544b 0
+0x7ffe009c544c 72
+0x7ffe009c544d 0
+0x7ffe009c544e 0
+0x7ffe009c544f 0
+0x7ffe009c5450 5f
+0x7ffe009c5451 0
+0x7ffe009c5452 0
+0x7ffe009c5453 0
+0x7ffe009c5454 74
+0x7ffe009c5455 0
+0x7ffe009c5456 0
+0x7ffe009c5457 0
+0x7ffe009c5458 0
+0x7ffe009c5459 0
+0x7ffe009c545a 0
+0x7ffe009c545b 0
+char16_t ----------------
+0x7ffe009c5410 ffffffd9
+0x7ffe009c5411 ffffff8f
+0x7ffe009c5412 2f
+0x7ffe009c5413 66
+0x7ffe009c5414 20
+0x7ffe009c5415 0
+0x7ffe009c5416 63
+0x7ffe009c5417 0
+0x7ffe009c5418 68
+0x7ffe009c5419 0
+0x7ffe009c541a 61
+0x7ffe009c541b 0
+0x7ffe009c541c 72
+0x7ffe009c541d 0
+0x7ffe009c541e 31
+0x7ffe009c541f 0
+0x7ffe009c5420 36
+0x7ffe009c5421 0
+0x7ffe009c5422 5f
+0x7ffe009c5423 0
+0x7ffe009c5424 74
+0x7ffe009c5425 0
+0x7ffe009c5426 0
+0x7ffe009c5427 0
+char32_t ----------------
+0x7ffe009c5460 ffffffd9
+0x7ffe009c5461 ffffff8f
+0x7ffe009c5462 0
+0x7ffe009c5463 0
+0x7ffe009c5464 2f
+0x7ffe009c5465 66
+0x7ffe009c5466 0
+0x7ffe009c5467 0
+0x7ffe009c5468 20
+0x7ffe009c5469 0
+0x7ffe009c546a 0
+0x7ffe009c546b 0
+0x7ffe009c546c 63
+0x7ffe009c546d 0
+0x7ffe009c546e 0
+0x7ffe009c546f 0
+0x7ffe009c5470 68
+0x7ffe009c5471 0
+0x7ffe009c5472 0
+0x7ffe009c5473 0
+0x7ffe009c5474 61
+0x7ffe009c5475 0
+0x7ffe009c5476 0
+0x7ffe009c5477 0
+0x7ffe009c5478 72
+0x7ffe009c5479 0
+0x7ffe009c547a 0
+0x7ffe009c547b 0
+0x7ffe009c547c 33
+0x7ffe009c547d 0
+0x7ffe009c547e 0
+0x7ffe009c547f 0
+0x7ffe009c5480 32
+0x7ffe009c5481 0
+0x7ffe009c5482 0
+0x7ffe009c5483 0
+0x7ffe009c5484 5f
+0x7ffe009c5485 0
+0x7ffe009c5486 0
+0x7ffe009c5487 0
+0x7ffe009c5488 74
+0x7ffe009c5489 0
+0x7ffe009c548a 0
+0x7ffe009c548b 0
+0x7ffe009c548c 0
+0x7ffe009c548d 0
+0x7ffe009c548e 0
+0x7ffe009c548f 0
+utf-8 ----------------
+0x7ffe009c53f4 ffffffe8
+0x7ffe009c53f5 ffffffbf
+0x7ffe009c53f6 ffffff99
+0x7ffe009c53f7 ffffffe6
+0x7ffe009c53f8 ffffff98
+0x7ffe009c53f9 ffffffaf
+0x7ffe009c53fa 20
+0x7ffe009c53fb 75
+0x7ffe009c53fc 74
+0x7ffe009c53fd 66
+0x7ffe009c53fe 2d
+0x7ffe009c53ff 38
+0x7ffe009c5400 0
+</code></pre>
+<p>wchar_t 是根据 locale 决定的，不同的主机环境可能不一样</p>
+<h3>个人认为的最佳实践</h3>
+<ol start="0">
+<li>假设这不是嵌入式环境</li>
+<li>源码全部用 utf-8 无 bom 编码</li>
+<li>尽量用 icu 或 iconv 处理编码<ul>
+<li>windows 从 windows10 1703 开始就提供了 icu 的接口</li>
+<li>https://learn.microsoft.com/zh-cn/windows/win32/intl/international-components-for-unicode--icu-</li>
+</ul>
+</li>
+<li>尽量使用标准库的函数<ul>
+<li>如果确定程序只在 windows 下运行，可以用 windows 的 api</li>
+<li>其实笔者觉得 windows 的 api 比 icu 或 iconv 都要好用</li>
+</ul>
+</li>
+<li>从外部接收字符串时，统一转换成一种编码再处理<ul>
+<li>如果不是 c 的话其实全部转换成 utf-8 就好了，但 c 处理 utf-8 不像其它语言那样方便。</li>
+<li>笔者比较喜欢把编码转换成 utf-32 。因为 ascii 不能显示中文， utf-8 和 utf-16 不是定长编码。 utf-32 虽然有点浪费内存，但代码写起来会简单不少。</li>
+<li>又或者只处理 ascii 完全忽略中文</li>
+</ul>
+</li>
+<li>输入和输出的编码通过配置来确定<ul>
+<li>命令行参数</li>
+<li>环境变量</li>
+<li>配置文件</li>
+</ul>
+</li>
+<li>程序可以在运行时修改输入和输出的编码</li>
+<li>编译时显式声明源码的编码和运行时的编码</li>
+<li>程序运行时要确保 shell 和终端能接收和输出对应的编码</li>
+</ol>
+<h3>参考</h3>
+<p>https://zh.cppreference.com/w/c/string/byte</p>
+<p>https://zh.cppreference.com/w/c/string/multibyte</p>
+<p>https://zh.cppreference.com/w/c/string/wide</p>
+<p>https://docs.microsoft.com/zh-cn/cpp/c-runtime-library/string-manipulation-crt?view=msvc-160</p>
+<h2>13 C++ 里的字符串</h2>
+<p>C++ 里的字符处理大致和 C 一致。</p>
+<p>C++ 里的字符串处理，就比 C 稍微方便一点。</p>
+<p>C++ 处理字符串大致有这几种方式</p>
+<ul>
+<li>C 风格的字符数组</li>
+<li>std 的 string<ul>
+<li>C++ 里同样也是有一套 wstring u8string u16string u32string ......</li>
+</ul>
+</li>
+<li>ATL 里的 CString<ul>
+<li>在 windows 环境下用得比较多， MFC 里的 CString 就是调用 ATL 的。</li>
+</ul>
+</li>
+<li>qt 里的 QString</li>
+<li>C++ 同样也能调用 icu 和 iconv</li>
+<li>boots 里也有一堆处理字符串的方法</li>
+</ul>
+<h2>14 各种乱码</h2>
+<h3>原因</h3>
+<p>乱码出现的原因通常是程序没有用正确的解码器进行解码和编码。
+例如</p>
+<ul>
+<li>以 utf-8 的方式读取 gbk 或以 gbk 的方式读取 utf-8</li>
+<li>以 ISO8859-1 的方式读取 gbk 或以 ISO8859-1 的方式读取 utf-8</li>
+</ul>
+<p>这里只描述因为编码原因而导致的乱码，这里不讨论因为字体的原因而导致的乱码</p>
+<h3>和 vs 相关</h3>
+<p>一般情况下， windows 的系统语言设为简体中文，那么 cmd 的默认编码是 cp936 也就是 gbk 。</p>
+<p>vc 会用一些初值来填充未赋初值或回收后的内存空间，
+当这些填充的值按字符输出时，就会按照 cmd 的默认编码来显示字符。</p>
+<p>烫 屯 葺 就是这类问题</p>
+<ul>
+<li>未分配或静态分配而未赋初值的内存空间，初值用 0xCC 填充<ul>
+<li>按字符输出为 0xCCCC ，在 gbk 里对应的字符就是 烫</li>
+<li>按 int 输出为 -858993460（0xCCCCCCCC）</li>
+</ul>
+</li>
+<li>动态分配（new，malloc）而未赋初值的内存空间，用 0xCD 填充<ul>
+<li>按字符输出为 0xCDCD ，在 gbk 里对应的字符就是 屯</li>
+<li>按 int 输出为-842150451（0xCDCDCDCD）</li>
+</ul>
+</li>
+<li>动态分配后被回收掉的内存空间（如先new后delete），用 0xDD 填充<ul>
+<li>按字符输出为 0xDDDD ，在 gbk 里对应的字符就是 葺</li>
+<li>按 int 输出为 -572662307（0xDDDDDDDD）</li>
+</ul>
+</li>
+</ul>
+<p>|||
+|-|-|
+|烫|CC CC|
+|屯|CD CD|
+|葺|DD DD|</p>
+<h3>和 utf-8 bom 相关</h3>
+<p>表现</p>
+<ul>
+<li>出现在文件头部的 锘</li>
+<li>出现在网页里的 锘 或 锘匡豢</li>
+</ul>
+<p>原因</p>
+<ul>
+<li>文件是 utf-8 bom 编码，却以 gbk 解释</li>
+</ul>
+<p>更详细的解释</p>
+<ul>
+<li><p>utf-8 的 bom 是 零宽度空格
+零宽度空格在 utf-8 的编码是
+EF BB BF</p>
+</li>
+<li><p>单独一个的 UTF-8 零宽度空格在 gbk 里会被解释为 锘 。</p>
+</li>
+<li><p>两个连续的 UTF-8 零宽度空格 EF BB BF EF BB BF ，
+这 6 个字节在 gbk 里刚好能被解释成三个字符 锘匡豢 。</p>
+<p>|||
+|-|-|
+|锘|EF BB|
+|匡|BF EF|
+|豢|BB BF|</p>
+</li>
+<li><p>一个网页里会出现多个 utf-8 bom 可能是因为这个网页由多个文件组成，例如 php 或 ssi 里的 include 语法</p>
+</li>
+</ul>
+<h3>和 UTF-8 的替换字符相关</h3>
+<p>unicode 里有一个替换字符用于表示无法识别的字符</p>
+<p>|||
+|-|-|
+|Replacement Character| � |
+|Unicode number | 65533 |
+|UTF-8 | EF BF BD |
+|UTF-16 | FF FD |</p>
+<p>当以 UTF-8 方式读取 GBK 编码的中文时，就会把大量的字符显示为 � ，
+这时保存文件，就会把原本 GBK 编码的字符替换成 � 。
+保存后又用 GBK 格式再次读取，
+文件的内容就会被显示为 锟斤拷 。</p>
+<p>两个连续的 UTF-8 替换字符 EF BF BD EF BF BD ，
+这 6 个字节在 gbk 里刚好能被解释成三个字符 锟斤拷 。</p>
+<p>|||
+|-|-|
+|锟|EF BF|
+|斤|BD EF|
+|拷|BF BD|</p>
+<h3>其它</h3>
+<p>「古文码」</p>
+<ul>
+<li>表现: 大部分为不认识的古文，夹杂日韩文 <code>鎴戣兘鍚炰笅鐜荤拑鑰屼笉浼よ韩浣撱</code></li>
+<li>原因: 以 GBK 方式读取 UTF-8 编码的中文</li>
+</ul>
+<p>「符号码」</p>
+<ul>
+<li>表现: 大部分字符为符号 <code>å·¡éŸ³ãƒ«ã‚«</code></li>
+<li>原因: 以 ISO8859-1 方式读取 UTF-8 编码的中文</li>
+</ul>
+<p>「拼音码」</p>
+<ul>
+<li>表现: 大部分字符为头顶带有各种声调符号的字母 <code>Ñ²Òô¥ë¥«</code></li>
+<li>原因: 以 ISO8859-1 方式读取 GBK 编码的中文</li>
+</ul>
+<p>「符号码」 和 「拼音码」 在 eclipse 里比较常见，因为 eclipse 的默认编码是 ISO8859-1 。
+~~据说新版的 eclipse 已经将默认编码改为 utf-8~~</p>
+<h3>当文件出现乱码时</h3>
+<ol>
+<li>不要修改文件</li>
+<li>不要保存文件</li>
+<li>最好先把原文件备份</li>
+<li>让编辑器自动地识别文件的编码</li>
+<li>编辑器无法正确地识别编码时，手动选择编码</li>
+<li>把各种编码都尝试完后，还是乱码，那么文件可能已经损坏了</li>
+<li>尽量以 utf-8 无 bom 编码来新建文件</li>
+</ol>
+<h2>14 python 的编码问题</h2>
+<h3>python2</h3>
+<ol>
+<li>在未声明编码的情况下会以 ASCII 编码运行<ul>
+<li>所以 python 的源文件的第一行或第二行都是声明编码</li>
+</ul>
+</li>
+<li>和字符相关的是这两种类型 str 和 unicode</li>
+<li>str 本质上是一个单字节的字符数组，类似于 c 里的 char[]<ul>
+<li>如果只处理 ASCII 确实没有问题，但中文编码都是多字节编码</li>
+<li>直接用单引号或双引号声明的变量是 str 类型<pre><code>"str"
+"中文"
+</code></pre>
+</li>
+</ul>
+</li>
+<li>unicode 才是现代编程语言里的字符<ul>
+<li>需要在单引号或双引号前面加一个字母 u<pre><code>u"str"
+u"中文"
+</code></pre>
+</li>
+</ul>
+</li>
+<li>在输入或输出时都需要 str 类型<ul>
+<li>所以从文件或爬虫里获取的数据时，需要先转换成 unicode 才能继续处理（如果只是 ASCII 就不需要转换），不然就是一堆乱码<pre><code>a.decode("gbk")
+</code></pre>
+</li>
+<li>所以输出或写入文件时，需要先把 unicode 转换成 str ，不然会报各种错误<pre><code>b.encode("gbk")
+</code></pre>
+</li>
+</ul>
+</li>
+</ol>
+<h3>python3</h3>
+<ol>
+<li>在未声明编码的情况下会以 utf-8 编码运行<ul>
+<li>虽然默认以 utf-8 编码运行，但声明编码这个传统还是保留下来了</li>
+</ul>
+</li>
+<li>python2 的 str 类型修改成 bytes 类型<ul>
+<li>需要声明 bytes 的变量需要在单引号或双引号前面加一个b</li>
+<li>但不能直接声明包含中文的变量<pre><code>b"byets"
+b"中文" # 这样会报错
+</code></pre>
+</li>
+</ul>
+</li>
+<li>python2 的 unicode 类型修改成 str 类型<ul>
+<li>直接用单引号或双引号声明的变量是 str 类型<pre><code>"byets"
+"中文"
+</code></pre>
+</li>
+</ul>
+</li>
+<li>两种字符的类型不能直接互相操作，在 python2 里是可以的</li>
+<li>对于输入和输出的处理和 python2 是类似的</li>
+</ol>
+<p>&lt;!--
+## 15 常见的特殊字符
+
+shell的转义字符？转义字符的本质是什么？
+    转义字符 escape character
+    转义序列 escape sequence
+    可见字符 visible characters
+    不可见字符 Invisible characters
+    控制字符 control characters
+和电传打字机有什么联系？
+
+序列 sequence
+字符串 string
+这两个有什么区别？
+sequence 有很多种
+string 是一种 sequence
+字符序列 就是 字符串
+char sequence == string
+除了 char sequence 之外，
+还有
+比特序列 bit sequence
+字节序列 byte sequence
+比特序列 包含 字节序列
+字节序列 包含 字符序列
+但同样也可以有 bit string 和 byte string
+
+/ slash 斜杠
+\ backslash 反斜杠
+
+转义 -&gt; 转化含义
+
+如何获得真实的输入？
+
+需要转义的字符？
+要区分转义字符和需要转义的字符
+
+港台	跳脱字元，逸出字元
+
+
+转义字符即标志着转义序列开始的那个字符
+转义字符也是元字符
+
+
+元字符（Metacharacter），
+指SHELL直译器或正则表达式（regex）引擎等计算机程序中具有特殊意义的字符。
+在POSIX扩展正则表达式里，定义了14个元字符，
+它们被作为一般的字符使用时，必须要通过“转义”（前面加一个反斜杠“\”）来去除他们本身的特殊意义，
+这些元字符包括：
+    开和闭方括号："["和"]"
+    反斜线："\"
+    脱字符："^"
+    美元符号："$"
+    句号/点："."
+    竖线/管道符："|"
+    问号："?"
+    星号："*"
+    加号："+"
+    开和闭 花括号："{"和"}"
+    开和闭 小括号："("和")"
+
+ANSI转义序列（ANSI escape sequences）
+ESC+[（一般显示为 ^[[ ， ^[ 表示 ESC ）
+
+
+C0与C1控制字符是ISO/IEC 2022定义的控制字符集。
+C0控制字符集的码位范围00HEX–1FHEX；C1控制字符集的码位范围 80HEX–9FHEX。 默认的C0控制字符集起源于ISO 646 (ASCII)的定义。默认的C1控制字符集起源于ECMA-48 (后为ISO 6429)的定义。
+
+脱字符表示法（Caret notation）是对ASCII码不可打印的控制字符的一种表示法。
+用一个脱字符 (^)后跟一个大写字符来表示一个控制字符的ASCII码值。
+
+特殊字符的表示方式
+二进制	十进制	十六进制	缩写	Unicode表示法	脱字符表示法	名称／意义
+
+
+不同语言或协议中对转义字符的处理？
+
+c 中的转义字符
+\
+\hhh
+\xhh
+\uhhhh
+\Uhhhhhhhh
+printf 中的 %
+
+sql 中的转义字符
+'
+
+html 中的转义字符
+&amp;
+&amp;#
+
+bash 中的转义字符
+here document
+here string
+bash 中的命令嵌套？
+
+js 中的转义字符
+\
+
+php 中的转义字符
+\
+
+
+字符串中的引号
+单引号
+双引号
+
+存在多次转义的情况下要如何处理？
+从一个环境到另一个环境的转义要如何处理？
+原始的字符串 -&gt; 中间环境的字符串 -&gt; 最终目标环境的字符串
+
+转义和编码的区别？
+
+
+- 只讨论 ascii 和 unicode
+
+空格  空白字符 不可见字符 EOL EOF
+
+### 控制字符
+
+一般语境下不可见字符就是控制字符
+
+控制字符被设计分为若干组：打印和显示控制、数据结构化、传输控制、以及其他零散用途。
+
+unicode 的 14 号辅助平面
+
+用于标记换行的控制字符（control characters）
+
+制表
+回车 CR (Carriage Return) \r return
+换行 LF (Line Feed) \n new line
+
+VT	Vertical Tab（垂直制表） \v
+FF	Form Feed（换页） \f
+ESC	Escape（转义）
+
+这两个有什么区别
+BS	Backspace（退格） \b
+DEL	Delete（删除）
+
+在键盘中如何输入
+在编程中如何输出
+如何判断终端是否支持这两个字符
+
+
+### 空白字符
+
+一般语境下就是指 空格 和 水平制表符，
+但 unicode 里还有很多种类型的占位的空格
+
+一般的空格 ` `
+GB2312 20
+BIG5 20
+GBK 20
+GB18030 20
+Unicode 00000020
+UTF-8 20
+UTF-16BE 0020
+UTF-16LE 2000
+
+全角的空格 `　`
+GB2312 A1A1
+BIG5 A140
+GBK A1A1
+GB18030 A1A1
+Unicode 00003000
+UTF-8 E38080
+UTF-16BE 3000
+UTF-16LE 0030
+
+水平制表符 `	`
+GB2312 09
+BIG5 09
+GBK 09
+GB1803 009
+Unicode 00000009
+UTF-8 09
+UTF-16BE 0009
+UTF-16LE 0900
+
+### EOL 和 EOF
+
+EOL (End Of Line) 就是换行符，就是 CR 和 LF
+
+EOF (End Of File) 并不是一个具体的字符
+EOF 通常是一个宏定义 -1 。
+在 fgetc 这类函数中，返回 EOF 通常就表示读取到文件末尾了。
+
+https://en.cppreference.com/w/c/io/feof
+
+## 16 C 语言的输入/输出
+
+C 语言的 输入/输出 单纯从代码中理解，就都是对文件的读写，
+stdin，stdout，stderr，这几个逻辑上都可以看作是文件。
+socket 从逻辑上也可以看作是文件。
+
+输入 大概就是 读取文件。
+输出 大概就是 写入文件。
+
+### 文件读写
+fread
+fwrite
+
+### 无格式输入/输出
+- 文件流
+    - fgetc
+    - fgets
+    - fputc
+    - fputs
+- std
+    - getchar
+    - gets
+    - putchar
+    - puts
+
+std 的函数都能改写成 文件流 的形式
+类似于这样
+```
+FILE *fp;
+char str1[] = "hello world\n";
+fp = fopen("output.txt", "w+");
+fputs(str1, fp); // 这是输出到文件
+fputs(str1, stdout); // 这是输出到 stdout
+puts(str1); // 这是输出到 stdout
+```
+
+fread 和 fwrite 能读取和写入任意数据。
+fgets 和 fputs 只能读取和写入字符串。
+
+### 有格式输入/输出
+- 输入
+    - scanf
+    - fscanf
+    - sscanf
+- 输出
+    - printf
+    - fprintf
+    - sprintf
+
+
+printf -&gt; vprintf -&gt; vfprintf -&gt; fputs -&gt; fwrite
+fprintf-&gt; vfprintf -&gt; fputs -&gt; fwrite
+
+printf -&gt; vprintf
+fprintf -&gt; vfprintf
+sprintf -&gt; vsprintf
+
+
+va_list
+
+iso c
+XPG
+posix
+gun c
+msvc
+
+https://zh.cppreference.com/w/c/io
+
+输入缓冲区
+
+readline 库？
+
+如何输入密码？
+    输入不显示？
+        关闭回显就可以了
+    输入转换成 * ？
+        关闭回显但每次输入都重新输出一个 *
+
+
+使用 getch 这个函数
+从控制台读取一个字符，但不显示在屏幕上
+需要这个头文件 conio.h
+
+conio.h 不是 C 标准库中的头文件，在 ISO 和 POSIX 标准中均未定义。
+conio 是 Console Input/Output（控制台输入输出）的简写，
+其中定义了通过控制台进行数据输入和数据输出的函数，
+主要是一些用户通过按键盘产生的对应操作。
+DOS Windows 平台上 C 编译器通常会提供此文件
+UNIX 和 Linux 平台的 C 编译器本身通常不包含此头文件。
+
+
+termios.h 是一个用于控制终端输入输出方式的头文件，
+termios 是 terminal I/O system 的简写，
+它在 Linux 和 Unix 系统中是标准的，但在 Windows 系统中并不是。
+可以尝试用 conio.h 替代 termios.h
+
+
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#ifndef _WIN32                   // Linux platform
+    #include &lt;termio.h&gt;
+    #ifndef STDIN_FILENO
+        #define STDIN_FILENO 0
+    #endif
+    int getch(void) {
+        struct termios tm, tm_old;
+        int fd = STDIN_FILENO, c;
+        if(tcgetattr(fd, &amp;tm) &lt; 0)
+            return -1;
+        tm_old = tm;
+        cfmakeraw(&amp;tm);
+        if(tcsetattr(fd, TCSANOW, &amp;tm) &lt; 0)
+            return -1;
+        c = fgetc(stdin);
+        if(tcsetattr(fd, TCSANOW, &amp;tm_old) &lt; 0)
+            return -1;
+        return c;
+    }
+#else                            // WIN32 platform
+    #include &lt;conio.h&gt;
+#endif
+
+
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+int main(){
+    char c;
+    printf("Input a char:\n");
+    system("stty -echo"); // 关闭回显
+    c = getchar();
+    system("stty echo"); // 打开回显
+    printf("You have inputed:%c \n",c);
+    return 0;
+}
+
+
+--&gt;</p>

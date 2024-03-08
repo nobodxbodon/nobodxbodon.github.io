@@ -1,0 +1,380 @@
+<h2>原文：<a href="https://f2h2h1.github.io/article/%E8%A7%82%E5%AF%9F%E7%BD%91%E7%AB%99%E6%80%A7%E8%83%BD">观察网站性能</a></h2>
+<h1>观察网站性能</h1>
+<h2>ab</h2>
+<p>一般的使用命令</p>
+<ul>
+<li>模拟 10 个客户端，一共请求 1000 次，或者可以理解为模拟 10 个并发，一共请求 1000 次，或者可以理解为一次发送 10 个请求，一共请求 1000 次</li>
+</ul>
+<pre><code>./ab -c 10 -n 1000 http://www.baidu.com/
+./ab --enable ssl -c 10 -n 1000 https://www.baidu.com/
+./abs -c 10 -n 1000 https://www.baidu.com/
+</code></pre>
+<ul>
+<li><p>~~ab 测试工具不能直接支持 https 。要么加上 --enable ssl ，要么用 abs 工具， abs 和 ab 基本一致，只是支持 https 。新版的 ab 好像能直接用 https 协议~~</p>
+</li>
+<li><p>加上 -w 能输出 html</p>
+</li>
+<li><p>-h 参数，能查看帮助</p>
+</li>
+</ul>
+<p>输出的解释</p>
+<pre><code>Server Software:        BWS/1.1 # 响应的服务器类型
+Server Hostname:        www.baidu.com # 请求的 URL 主机名
+Server Port:            443 # 请求端口
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-AES128-GCM-SHA256,2048,128 # https 的版本和密码套件
+
+Document Path:          / # 请求路径
+Document Length:        227 bytes # HTTP响应数据的正文长度
+
+Concurrency Level:      10 # 并发用户数，就是 -c 参数的值
+Time taken for tests:   21.376 seconds  # 所有这些请求被处理完成所花费的总时间 单位秒
+Complete requests:      1000 # 总请求数量，就是 -n 参数的值
+Failed requests:        0 # 表示失败的请求数量
+Total transferred:      1081951 bytes # 所有请求的响应数据长度总和。包括每个 HTTP 响应数据的头信息和正文数据的长度
+HTML transferred:       227000 bytes # 所有请求的响应数据中正文数据的总和，也就是减去了 Total transferred 中 HTTP 响应数据中的头信息的长度
+Requests per second:    46.78 [#/sec] (mean) # 吞吐量，计算公式: Complete requests/Time taken for tests  总请求数/处理完成这些请求数所花费的时间
+Time per request:       213.762 [ms] (mean) # 用户平均请求等待时间，计算公式: Time token for tests/（Complete requests/Concurrency Level）。处理完成所有请求数所花费的时间/（总请求数/并发用户数）
+Time per request:       21.376 [ms] (mean, across all concurrent requests) # 服务器平均请求等待时间，计算公式: Time taken for tests/Complete requests，正好是吞吐率的倒数。也可以这么统计: Time per request/Concurrency Level
+Transfer rate:          49.43 [Kbytes/sec] received # 表示这些请求在单位时间内从服务器获取的数据长度，计算公式: Total trnasferred/ Time taken for tests，这个统计很好的说明服务器的处理能力达到极限时，其出口宽带的需求量。
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:       31  132 203.5     85    1204 # Connect 建立 tcp 连接的耗时
+Processing:     0   81 150.7     55    1141 # Processing 总耗时减去 Connect
+Waiting:        0   53 122.5     35    1103 # Waiting 客户端发送完请求信息的最后一个字节 到 接收响应信息的的第一个字节 的耗时
+Total:         85  213 250.9    145    1304 # Total 总的耗时，从建立连接到关闭连接的耗时
+
+# min 最小值， mean 平均值， [+/-sd] 标准差， median 中位数， max 最大值
+
+Percentage of the requests served within a certain time (ms)
+  50%    145 # 50% 的请求在 145ms 内返回
+  66%    154
+  75%    160
+  80%    165
+  90%    192
+  95%   1133
+  98%   1186 # 98% 的请求在 1186ms 内返回
+  99%   1235
+ 100%   1304 (longest request)
+</code></pre>
+<h3>ab 更详细的用法</h3>
+<ul>
+<li>-C 设置 cookie ，可以多次使用</li>
+<li>-H 设置请求头，可以多次使用，也可以在请求头里设置 cookie</li>
+<li>-T 设置 Content-Type 请求头信息</li>
+<li>-p 设置 post 的数据，是一个文件路径</li>
+<li>-u 设置 put 的数据，是一个文件路径</li>
+<li>大多数情况下，需要关注 Requests per second ，这个值越大越好</li>
+</ul>
+<p>ab 请求时设置 cookie</p>
+<pre><code>./ab -c 10 -n 1000 \
+-C "name=ball;age=99;sex=male" \
+http://localhsot/
+
+./ab -c 10 -n 1000 \
+-H "Cookie: name=ball;age=36" \
+http://localhsot/
+</code></pre>
+<p>ab 发送 post 或 put</p>
+<pre><code>./ab -c 10 -n 1000 \
+-p 'post.txt' -T 'application/x-www-form-urlencoded' \
+http://localhsot/
+
+./ab -c 10 -n 1000 \
+-u 'put.txt' -T 'application/x-www-form-urlencoded' \
+http://localhsot/
+</code></pre>
+<p>如果发送的内容是 application/x-www-form-urlencoded ，那么 post.txt 或 put.txt 里的内容也要经过编码</p>
+<p>ab 发送文件和普通的 post 或 put 是一样的</p>
+<pre><code>./ab -c 10 -n 1000 \
+-p 'post.txt' -T 'multipart/form-data; boundary=----WebKitFormBoundaryRO0YA4pq9oCgwTkt' \
+http://localhsot/
+</code></pre>
+<p>post.txt 文件的内容</p>
+<pre><code>------WebKitFormBoundaryRO0YA4pq9oCgwTkt
+Content-Disposition: form-data; name="fileUpload"; filename="test.png"
+Content-Type: image/png
+iVBORw0KGg.............................................
+------WebKitFormBoundaryRO0YA4pq9oCgwTkt--
+</code></pre>
+<p>实质上就是手工实现 rfc 1867 1521 1522 这几个标准</p>
+<p>ab 只能进行一些简单的压力测试，一些更详细的测试还是要用 jmeter</p>
+<h2>curl</h2>
+<p>一般的使用命令</p>
+<pre><code>curl -o /dev/null -s -w %{time_namelookup}::%{time_connect}::%{time_starttransfer}::%{time_total}::%{speed_download}"\n" "https://www.baidu.com"
+</code></pre>
+<ul>
+<li>这段命令只能在 git bash 或 linux 里运行</li>
+</ul>
+<p>命令解释</p>
+<pre><code>-o: 把 curl 返回的 html js 写到 /dev/null
+-s: 去掉所有状态
+-w: 按照后面的格式输出
+time_namelookup: DNS 解析域名 www.baidu.com 的时间
+time_commect: client 和 server 端建立 TCP 连接的时间， 包括前一项的时间
+time_starttransfer: 从 client 发出请求到 web 的 server 响应第一个字节的时间， 包括前二项的时间
+time_total: client 发出请求到 web 的 server 发送会所有的相应数据的时间， 包括前三项的时间
+speed_download: 下载速度 单位 byte/s
+</code></pre>
+<ul>
+<li>除了 speed_download 外，其它值越小越好</li>
+<li>time_total 最好小于 0.06</li>
+</ul>
+<p>这是一段根据上面 curl 命令写成的，可以连续执行的，能显示多次执行平均值的 bash 脚本</p>
+<pre><code class="language-bash"># TEST_COUTE=10
+# TEST_URL="https://www.baidu.com"
+# ./testwebsite.sh 10 "https://www.baidu.com"
+
+TEST_COUTE=$1
+TEST_URL=$2
+
+echo "TEST_COUTE" $TEST_COUTE
+echo "TEST_URL" $TEST_URL
+
+time_namelookup=0
+time_commect=0
+time_starttransfer=0
+time_total=0
+speed_download=0
+
+echo "time_namelookup::time_commect::time_starttransfer::time_total::speed_download"
+for ((i=1;i&lt;=$TEST_COUTE;i++))
+do
+    ans=$(curl -o /dev/null -s -w %{time_namelookup}::%{time_connect}::%{time_starttransfer}::%{time_total}::%{speed_download}"\n" $TEST_URL)
+    echo $ans
+
+    temp=`echo $ans | awk -v FS='::' '{printf ("%.6f\n", $1)}'`
+    time_namelookup=`echo $temp $time_namelookup | awk '{printf ("%.6f\n", $1+$2)}'`
+
+    temp=`echo $ans | awk -v FS='::' '{printf ("%.6f\n", $2)}'`
+    time_commect=`echo $temp $time_commect | awk '{printf ("%.6f\n", $1+$2)}'`
+
+    temp=`echo $ans | awk -v FS='::' '{printf ("%.6f\n", $3)}'`
+    time_starttransfer=`echo $temp $time_starttransfer | awk '{printf ("%.6f\n", $1+$2)}'`
+
+    temp=`echo $ans | awk -v FS='::' '{printf ("%.6f\n", $4)}'`
+    time_total=`echo $temp $time_total | awk '{printf ("%.6f\n", $1+$2)}'`
+
+    temp=`echo $ans | awk -v FS='::' '{printf ("%.6f\n", $5)}'`
+    speed_download=`echo $temp $speed_download | awk '{printf ("%.6f\n", $1+$2)}'`
+done
+echo "total"
+echo $time_namelookup"::"$time_commect"::"$time_starttransfer"::"$time_total"::"$speed_download
+echo "mean"
+echo `echo $TEST_COUTE $time_namelookup | awk '{printf ("%.6f\n", $2/$1)}'`"::"\
+`echo $TEST_COUTE $time_commect | awk '{printf ("%.6f\n", $2/$1)}'`"::"\
+`echo $TEST_COUTE $time_starttransfer | awk '{printf ("%.6f\n", $2/$1)}'`"::"\
+`echo $TEST_COUTE $time_total | awk '{printf ("%.6f\n", $2/$1)}'`"::"\
+`echo $TEST_COUTE $speed_download | awk '{printf ("%.6f\n", $2/$1)}'`
+</code></pre>
+<p>这是上面那段脚本的运行结果 <code>./testwebsite.sh 10 "https://www.baidu.com"</code></p>
+<pre><code>TEST_COUTE 10
+TEST_URL https://www.baidu.com
+time_namelookup::time_commect::time_starttransfer::time_total::speed_download
+0.005223::0.032470::0.075645::0.075783::32573.000
+0.004661::0.010493::0.050055::0.050138::48860.000
+0.004319::0.011194::0.051169::0.051273::47901.000
+0.004192::0.012334::0.051118::0.051183::47901.000
+0.004367::0.011130::0.050391::0.050472::48860.000
+0.004902::0.011672::0.048436::0.048614::50895.000
+0.004449::0.010758::0.045324::0.045450::54288.000
+0.004305::0.011931::0.050933::0.050999::48860.000
+0.004828::0.012194::0.052479::0.052609::46980.000
+0.004216::0.009486::0.134916::0.134998::18231.000
+total
+0.045462::0.133662::0.610466::0.611519::445349.000000
+mean
+0.004546::0.013366::0.061047::0.061152::44534.900000
+</code></pre>
+<p>运行结果的解释</p>
+<ul>
+<li>连续执行 10 次</li>
+<li>测试 url 是 https://www.baidu.com</li>
+<li>输出每次的结果</li>
+<li>输出总计数值</li>
+<li>输出平均值</li>
+</ul>
+<p>这样的脚本并不能测试并发</p>
+<h2>lighthouse</h2>
+<p>一个是浏览器自带的 lighthouse （基于 chromium 的浏览器才有）。
+一个是谷歌在线的 lighthouse https://developers.google.com/speed/pagespeed/insights/ 。
+还有一个 chromium 的插件，但实际上和开发者工具里的 lighthouse 是一样的。</p>
+<ul>
+<li>lighthouse 的分数计算器 https://googlechrome.github.io/lighthouse/scorecalc/</li>
+<li>谷歌在线的 lighthouse 可能访问不了</li>
+<li>要注意 设备的类型 (Device type) 是 桌面 (desktop) 还是 移动 (mobile)</li>
+<li>lighthouse 会给出优化建议，大部分情况下按着建议优化就可以了</li>
+</ul>
+<p>评分一共有五部分</p>
+<ul>
+<li>性能 (Performance)</li>
+<li>访问无障碍 (Accessibility)</li>
+<li>最佳实践 (Best Practice)</li>
+<li>搜索引擎优化 (SEO)</li>
+<li>PWA (Progressive Web App)</li>
+</ul>
+<p>一般情况下，只需要关注这三部分即可，分数越高越好</p>
+<ul>
+<li>Performance</li>
+<li>Best Practice</li>
+<li>SEO</li>
+</ul>
+<p>一般情况下，如果低于这个分数就要优化</p>
+<ul>
+<li>Performance &lt;= 70</li>
+<li>Best Practice &lt;= 80</li>
+<li>SEO &lt;= 80</li>
+</ul>
+<h2>浏览器开发者工具</h2>
+<p>相关文档</p>
+<ul>
+<li>火狐 https://developer.mozilla.org/zh-CN/docs/Tools/Network_Monitor</li>
+<li>edge https://docs.microsoft.com/zh-cn/microsoft-edge/devtools-guide-chromium/network/reference</li>
+<li>chrome https://developer.chrome.com/docs/devtools/network/</li>
+</ul>
+<p>请求列表里有一个 时间 的列，但这个时间一般会包含队列等待，dns解释，stl握手。</p>
+<p>从后端的角度来看，大部分情况下只需要关注，请求详情里的这三个参数</p>
+<ol start="0">
+<li>Request sent 请求第一个字节发出前到最后一个字节发出后的时间，也就是上传时间</li>
+<li>Waiting 请求发出后，到收到响应的第一个字节所花费的时间 (Time To First Byte)</li>
+<li>Content Download 收到响应的第一个字节，到接受完最后一个字节的时间，就是下载时间</li>
+</ol>
+<ul>
+<li>Waiting 最好小于 300ms</li>
+</ul>
+<h2>其它</h2>
+<p>其它工具</p>
+<ul>
+<li>各种 云供应商 提供的测试工具，一般都是要收费的</li>
+<li>一些网站也会提供测速的工具<ul>
+<li>https://www.webpagetest.org/ （这个有比较完整的测试报告，是笔者除了 lighthouse 之外最常用的测试工具，但和 lighthouse 一样，可能访问不了）</li>
+<li>http://tool.chinaz.com/speedworld/</li>
+<li>http://cdn.chinaz.com/</li>
+<li>http://tool.chinaz.com/sitespeed</li>
+</ul>
+</li>
+</ul>
+<p>查找问题</p>
+<ul>
+<li>curl 输出完整的请求流程</li>
+</ul>
+<pre><code>curl -i -v -L www.baidu.com
+# -i 输出 http 头
+# -v 输出通信的整个过程，用于调试
+# -L 让 HTTP 请求跟随服务器的重定向。curl 默认不跟随重定向。
+</code></pre>
+<ul>
+<li>判断域名是否有正常解释</li>
+</ul>
+<pre><code># dns 查询
+nslookup www.baidu.com
+# dns 反查
+nslookup -qt=ptr 14.215.177.38
+</code></pre>
+<ul>
+<li>判断能否访问到服务器， ping 不通也有可能是服务器禁用了 icmp</li>
+</ul>
+<pre><code>ping www.baidu.com
+</code></pre>
+<ul>
+<li>判断对应的端口是否有开启</li>
+</ul>
+<pre><code>telnet 127.0.0.1 80
+# 如果端口没有开放，会提示连接失败
+curl --no-buffer --connect-timeout 30 -i -v telnet://127.0.0.1:80
+# 如果输出 connected 表示端口有开启
+</code></pre>
+<ul>
+<li>路由追踪，显示出本机与服务器之间的路由，有助于判断故障位置，通过显示的时间 IP 等信息了解数据的流向</li>
+</ul>
+<pre><code># linux 用 traceroute
+traceroute www.baidu.com
+# windows 用 tracert
+tracert www.baidu.com
+</code></pre>
+<h2>网站性能的一些准则</h2>
+<ul>
+<li><p>性能测试里，如果压力机性能不够的话，测试的结果参考价值会比较低。所以，如果在本地测试，最好把其它进程都关闭了，只保留测试工具的进程。</p>
+</li>
+<li><p>接口的响应速度最好小于等于 300ms</p>
+</li>
+<li><p>一般页面的加载速度最好小于等于 2s</p>
+</li>
+<li><p>笔者认为的，页面加载速度分级</p>
+<p>| | |
+|:--|:--|
+|优| 小于等于 2s|
+|良| 2s - 5s|
+|中| 5s - 8s|
+|差| 大于等于 8s|</p>
+</li>
+<li><p>笔者认为的，页面加载速度如果大于 5s ，就需要优化，如果实在无法优化，可以弄个加载动画或者加载骨架之类的，反正就是要分散用户的注意力</p>
+</li>
+<li><p>这里提及的页面加载速度，指的是用户能感知到的速度，完整的页面内容，可以在完成首屏渲染后，在后面慢慢加载也是没问题的。</p>
+</li>
+</ul>
+<p>&lt;!--
+## 浏览器开发者工具里的 network `经过` 就是一个请求消耗的时间
+
+
+
+在谷歌判断网站是否有收录
+site: domain.com
+
+谷歌的网站测速，可以看到优化建议
+https://developers.google.com/speed/pagespeed/insights
+是否适合移动设备浏览
+https://search.google.com/test/mobile-friendly
+检查 html
+https://validator.w3.org/nu/
+检查 css
+http://jigsaw.w3.org/css-validator/
+检查 https
+https://myssl.com/ssl.html
+https://myssl.com/ats.html
+
+Web 辅助功能评估工具
+https://wave.webaim.org/
+
+另一个网页评价工具
+https://www.webpagetest.org/
+
+
+
+查看 网站速度，查看 cdn 速度
+http://tool.chinaz.com/speedworld/
+http://cdn.chinaz.com/
+http://tool.chinaz.com/sitespeed
+
+
+
+http://report.chinaz.com/tool.chinaz.com
+
+
+您的网站是否已被 Google 搜索引擎收录?
+可在 Google 搜索引擎中对您的网站的首页网址执行“site:”搜索。
+如果您能看到结果，则表明您的网站在索引中。如“site:wikipedia.org”。
+
+
+
+site:www.my-domain.com/subdirectory/
+只显示/subdirectory/目录下的页面
+site:www.my-domain.com 词语
+只显示页面中包含这个词语的关键词
+site:www.my-domain.com inurl:词语
+只显示URL中包含这个短语的
+site:www.my-domain.com intitel:词语
+只显示标题中包含这个短语的
+site:www.my-domain.com filetype:pdf
+只显示被收录的pdf文件
+
+
+2h4g2m 就够用了
+
+
+
+在互联网上对于用户响应时间，有一个普遍的标准。2/5/10秒原则。
+
+也就是说，在2秒之内给客户响应被用户认为是“非常有吸引力”的用户体验。在5秒之内响应客户被认为“比较不错”的用户体验，在10秒内给用户响应被认为“糟糕”的用户体验。如果超过10秒还没有得到响应，那么大多用户会认为这次请求是失败的。
+
+--&gt;</p>

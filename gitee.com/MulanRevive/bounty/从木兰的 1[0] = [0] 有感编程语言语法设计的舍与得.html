@@ -1,0 +1,69 @@
+<h2>原文：[从木兰的 1[0] = [0] 有感编程语言语法设计的舍与得](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2021-02-24-从木兰的 1[0] = [0] 有感编程语言语法设计的舍与得.md)</h2>
+<p>2023-01-11 补:</p>
+<p><a href="https://gitee.com/MulanRevive/mulan-rework/pulls/42#note_14175475_conversation_67591381">在复现十六进制数时</a>，发现如果 print(0xg)，python 3.8 会报错 “SyntaxError: invalid hexadecimal literal”， 3.7报错 "invalid token"。</p>
+<p>但ulang是报 NameError: name 'xg' is not defined, 即xg被识别为标识符。从语法树看是作为 0 乘 xg 处理：</p>
+<pre><code>Module(body=[Expr(value=Call(func=Name(id='print', ctx=Load(), lineno=1, col_offset=1), args=[BinOp(left=Num(n=0, lineno=1, col_offset=7), op=Mult(), right=Name(id='xg', ctx=Load(), lineno=1, col_offset=8), lineno=1, col_offset=7)], keywords=[], lineno=1, col_offset=1), lineno=1, col_offset=1)])
+</code></pre>
+<p>这也是乘法省略乘号这一语法特性的关联影响。</p>
+<hr/>
+<p>2021-02-24 原文：</p>
+<p>前几天在用木兰写 <a href="https://gitee.com/zhishi/collection-of-chinese-blogs/blob/master/%E5%8E%9F%E5%9E%8B/git%E5%90%8C%E6%AD%A5.ul">同步多个 git 仓库的脚本</a> 时，碰到个熟悉的报错： <code>TypeError：'NoneType' object is not subscriptable</code>。于是照例试图将此报错添加到 <a href="https://zhuanlan.zhihu.com/p/351483957">之前的测试用例</a>。</p>
+<p>先试了 <code>print(nil[0])</code>，报语法错误，暂不深究，改为如下：</p>
+<pre><code>a = nil
+print(a[0])
+</code></pre>
+<p>如期报错。</p>
+<p>如果 true 值，类似报错：<code>TypeError：'bool' object is not subscriptable</code></p>
+<p>再试了整数类型：</p>
+<pre><code>a = 1
+print(a[0])
+</code></pre>
+<p>如期报类似错：<code>TypeError：'int' object is not subscriptable。</code></p>
+<p>顺便一试 <code>print(1[0])</code>，结果，输出了 <code>[0]</code>！</p>
+<p>@_@ 咋回事？？</p>
+<p>一时没头绪，照例看它生成的 Python 语法树：</p>
+<pre><code>【略】
+        args=[BinOp(
+            left=Num(
+              n=1
+              lineno=1
+              col_offset=7
+            )
+            op=Mult()  &lt;---- 乘法
+            right=List(
+              elts=[Num(
+                  n=0
+                  lineno=1
+                  col_offset=9
+【略】
+</code></pre>
+<p>这才想起半年前发现木兰对 <a href="https://zhuanlan.zhihu.com/p/205190684">省略乘号的乘法支持</a>，自然也适用于整数与数组、字符串的乘法。在木兰交互环境演示如下：</p>
+<pre><code>&gt; 长=4;宽=3
+&gt; 4长 + 3宽
+25
+&gt; 2[0]
+[0, 0]
+&gt; 3"鹅"
+鹅鹅鹅 
+</code></pre>
+<p>回头看此语法，仅当数在表达式前时成立，似乎没什么不妥。但对比下面这两个用法，就觉得有些别扭。</p>
+<pre><code>&gt; a=1
+&gt; a[0]
+   TypeError：'int' object is not subscriptable，见第1行
+&gt; 1[0]
+[0]
+</code></pre>
+<p>对比 Python 下的行为，看着就比较“一致”：</p>
+<pre><code>&gt;&gt;&gt; a=1
+&gt;&gt;&gt; a[0]
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: 'int' object is not subscriptable
+&gt;&gt;&gt; 1[0]
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: 'int' object is not subscriptable 
+</code></pre>
+<p>空值和布尔值也是类似。</p>
+<p>感觉木兰似乎在这点上是违反了一个“潜规则”（请教相关编程语言术语是什么呢？）：表达式中的变量可以替换为一个常量，而且得到的反馈应与变量为此值时相同。比方 <code>a=3; b=4; a*3+b*4</code> 与 <code>3*3+4*4</code> 两个表达式的结果相同。</p>
+<p>木兰选择支持更接近数学表达式的效果，比如 <code>3a+4b</code>，但用过其他编程语言的用户就需要克服“思维惯性”来适应。算是有舍有得的一个例子吧。</p>

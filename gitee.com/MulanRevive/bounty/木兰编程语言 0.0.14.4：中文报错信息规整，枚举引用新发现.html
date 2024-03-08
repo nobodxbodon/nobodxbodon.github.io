@@ -1,0 +1,99 @@
+<h2>原文：[木兰编程语言 0.0.14.4：中文报错信息规整，枚举引用新发现](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2020-10-21-木兰编程语言 0.0.14.4：中文报错信息规整，枚举引用新发现.md)</h2>
+<p>安装方法：<code>pip install ulang</code>，使用方法与例程请见 pypi 项目首页（源于<a href="https://gitee.com/MulanRevive/mulan-rework">码云首页</a>）。 <em><strong>注意：必需 python 3.7</strong></em></p>
+<p>木兰原始可执行文件的报错信息非常简单，并不包含出错位置和调用层级信息：</p>
+<pre><code>&gt;ulang-0.2.2.exe 测试\错误处理\引用模块.ul
+IndexError: list index out of range
+</code></pre>
+<p>这在交互环境或者源码文件单一很短时还可接受，但开发更长代码或者多文件项目时就使得排错十分困难。<a href="https://zhuanlan.zhihu.com/p/148065426">四个月前</a>添加了一些中文报错信息，本周在对井字棋游戏进行重构时，发现多文件互相引用时未显示层级调用信息，颇为不便，于是进行了修正。现在的报错行为举例如下：</p>
+<h2>1 报错信息</h2>
+<p>交互环境中仅提示出错所在位置简要信息：</p>
+<pre><code>&gt; func a(n) { return n1+1 }
+&gt; func b(n) { print(n) }
+&gt; b(a(2))
+ 😰 请先定义'n1'再使用, 见第1行
+</code></pre>
+<p>运行源码时，可见调用各层的详细信息：</p>
+<pre><code>$ 木兰 测试/错误处理/未定义变量于多层函数.ul
+ 😰 请先定义'数1'再使用
+见第2行：return 数1 + 1
+调用层级如下
+见第7行：输出(加(2))
+</code></pre>
+<p>如果错误发生在其他文件，可见文件名：</p>
+<pre><code>$ 木兰 测试/错误处理/引用模块.ul
+ 😰 取列表内容时，索引超出范围
+“测试/错误处理/下标越界函数.ul”第2行：print([][0])
+调用层级如下
+见第3行：a()
+</code></pre>
+<p>如果某被引用的模块加载出错，现在只能提示问题模块，今后将尝试加上该模块的具体问题和定位信息，另外还有个<a href="https://gitee.com/MulanRevive/mulan-rework/issues/I1Z45D">相关问题</a>：</p>
+<pre><code>$ 木兰 测试/错误处理/引用问题模块.ul
+ 😰 No module named '测试'
+调用层级如下
+见第1行：using * in 测试.错误处理.无此变量
+</code></pre>
+<p>如果错误可以定位到列，则也用醒目符号提示出错位置，木兰源码的层级调用信息将在之后版本<a href="https://gitee.com/MulanRevive/mulan-rework/issues/I1U2H5#note_3442507">清除</a>：</p>
+<pre><code>$ 木兰 测试/错误处理/中文对齐.ul
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.7/bin/木兰", line 10, in &lt;module&gt;
+    sys.exit(中())
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/木兰/中.py", line 54, in 中
+    节点 = 分析器.分析(源码, 源码文件)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/木兰/分析器/语法分析器.py", line 972, in 分析
+    节点 = self.分析器.parse(各词, state=self)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/木兰/分析器/rply_parser.py", line 92, in parse
+    self.error_handler(state, lookahead)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/木兰/分析器/语法分析器.py", line 933, in error_handler
+    源码=self.源码)
+木兰.分析器.错误.语法错误: 文件 "测试/错误处理/中文对齐.ul", 第1行, 第12列, 没认出这个词 "by"
+print("铛铛" ✋by 2)
+</code></pre>
+<p>如果有大括号未匹配，会报 $end 错误于文件末尾，希望今后参考其他编译器进行改进：</p>
+<pre><code>$ 木兰 测试/错误处理/括号不匹配.ul
+【前略】
+木兰.分析器.错误.语法错误: 文件 "测试/错误处理/括号不匹配.ul", 第6行, 第2列, 没认出这个词 "$end"
+*✋/
+</code></pre>
+<h2>2 其他</h2>
+<h3>2.1 问题还是本意：枚举值在不同模块中不相等</h3>
+<p>在重构井字棋的过程中发现，在 e 模块定义的 T 枚举类型有 X、O 两项，在 a 模块中赋值 aa 为 T.X，在 b 模块中判断 aa == T.X，结果返回 false。</p>
+<p>现在规避的方法是在 a 模块中加一个接口用来判断 aa == T.X，来避免 b 模块对 T 的依赖。</p>
+<p>尚需细究根源。详见<a href="https://gitee.com/MulanRevive/mulan-rework/issues/I1Z1J7">此 issue</a></p>
+<h3>2.2 命令添加了取版本信息选项“--版本”：</h3>
+<pre><code>$ 木兰 --版本
+0.0.14.4
+$ 木兰 -版
+0.0.14.4
+</code></pre>
+<h2>下一步</h2>
+<p>继续对自带的<a href="https://gitee.com/MulanRevive/mulan-rework/tree/master/%E7%BC%96%E8%BE%91%E5%99%A8">木兰代码编辑器</a>进行重构和改进，以尽早投入实用。</p>
+<hr/>
+<h3><em><strong>附录：代码量统计</strong></em></h3>
+<p>主要部分的代码行数统计，格式为：上次-&gt;现在。</p>
+<ul>
+<li>木兰代码量 2873<ul>
+<li>编辑器，实现与测试都是木兰代码：381 -&gt; 402</li>
+<li>木兰测试用例，包括部分实用小程序（如井字棋）：2304 -&gt; 2471</li>
+</ul>
+</li>
+<li>Python 代码量（木兰实现与测试框架）：2473 -&gt; 2523<ul>
+<li><code>分析器/语法分析器.py</code>：989 -&gt; 990</li>
+<li><code>测试/运行所有.py</code>，检验所有木兰测试代码片段：187 -&gt; 189</li>
+<li><code>分析器/语法树.py</code>：178 -&gt; 188</li>
+<li><code>环境.py</code>，定义全局方法：157 -&gt; 160</li>
+<li><code>中.py</code>，主程序：45 -&gt; 74</li>
+<li><code>功用/调试辅助.py</code>，：56 -&gt; 57</li>
+<li><code>功用/反馈信息.py</code>：49 -&gt; 55</li>
+<li><code>setup.py</code>, 33 -&gt; 34</li>
+<li>未变<ul>
+<li><code>分析器/词法分析器.py</code>：198</li>
+<li><code>交互.py</code>，交互环境（REPL）：138</li>
+<li><code>分析器/语法成分.py</code>，从语法分析器中提取出来的枚举常量：79</li>
+<li><code>分析器/错误.py</code>：17</li>
+<li><code>测试/unittest/语法树.py</code>，确保生成的语法树与原始版本一致：67</li>
+<li><code>测试/unittest/交互.py</code>，交互环境相关测试：28</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>

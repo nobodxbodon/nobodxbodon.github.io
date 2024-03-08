@@ -1,0 +1,66 @@
+<h2>原文：[重现木兰编程语言（五）——为省点眼睛，改进 Python 语法树格式化输出](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2020-05-01-重现木兰编程语言（五）——为省点眼睛，改进 Python 语法树格式化输出.markdown)</h2>
+<p>接上文<a href="https://zhuanlan.zhihu.com/p/136142507">重现木兰编程语言（四）——行号与多行支持</a>，在说行列号之前，（早）该把生成的 Python 语法树的基本结构说明一下，同时为了今后的调试写点辅助代码。</p>
+<p>比如简单代码：</p>
+<pre><code>print(2) 
+</code></pre>
+<p>原始木兰用--dump-ast选项运行，生成的语法树 dump 出来是这样一长溜（调用了<a href="https://docs.python.org/3.7/library/ast.html#ast.dump">ast.dump</a>）：</p>
+<pre><code>Module(body=[Expr(value=Call(func=Name(id='print', ctx=Load(), lineno=1, col_offset=1), args=[Num(n=2, lineno=1, col_offset=7)], keywords=[], lineno=1, col_offset=1), lineno=1, col_offset=1)])
+</code></pre>
+<p>可以想象，如果稍微复杂一点的代码，如果要查看生成的语法树，以及肉眼比较两颗语法树的话，会有多么辣眼睛。</p>
+<p>于是，为了生成稍微肉眼友好的格式：</p>
+<pre><code>Module(
+  body=[Expr(
+      value=Call(
+        func=Name(
+          id=print
+          ctx=Load()
+          lineno=1
+          col_offset=1
+        )
+        args=[Num(
+            n=2
+            lineno=1
+            col_offset=7
+          )]
+        keywords=[]
+        lineno=1
+        col_offset=1
+      )
+      lineno=1
+      col_offset=1
+    )]
+)
+</code></pre>
+<p>粗写了个递归来遍历语法树并格式化输出：</p>
+<pre><code class="language-python">    def 格式化节点(节点, 层次):
+        缩进 = "  "
+        输出 = ""
+        if isinstance(节点, list):
+            输出 += "["
+            for 子节点 in 节点:
+                输出 += 语法树相关.格式化节点(子节点, 层次 + 1)
+            输出 += "]"
+        elif isinstance(节点, int):
+            输出 += str(节点)
+        elif isinstance(节点, str):
+            输出 += 节点
+        else:
+            输出 += type(节点).__name__ + "("
+            属性个数 = 0
+            for 属性 in ast.iter_fields(节点):
+                属性个数 += 1
+                输出 += "\n" + 缩进 * 层次 + 属性[0] + "="
+                输出 += 语法树相关.格式化节点(属性[1], 层次 + 1)
+            if isinstance(节点, ast.stmt) or isinstance(节点, ast.expr):
+                输出 += "\n" + 缩进 * 层次 + "lineno=" + str(节点.lineno)
+                输出 += "\n" + 缩进 * 层次 + "col_offset=" + str(节点.col_offset)
+            if 属性个数 == 0:
+                return 输出 + ")"
+            return 输出 + "\n" + 缩进 * (层次 - 1) + ")"
+        return 输出
+</code></pre>
+<p>上面代码结合输出，可以更加直观地了解 Python 语法树的结构。</p>
+<p>如果是单个节点，比如根节点——模块（Module），就由else的部分输出它的类型，并遍历它的所有属性；节点的属性值可以是节点，或者节点列表，比如模块节点的body属性的值可以是多个表达式（Expr） 。如果是声明（stmt）或者表达式，有行列号两个属性。所有可能节点参考 <a href="https://docs.python.org/3.7/library/ast.html#abstract-grammar">Python 官方语法描述</a>。</p>
+<p>这样格式化输出之后，将木兰生成的语法树与我的原型生成的进行肉眼对比就稍微方便点，题图是 vsc diff 的效果（右边是木兰的）：</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/gitee.com/MulanRevive/bounty%E6%88%AA%E5%9B%BE/2020-04-30_ast%E5%AF%B9%E6%AF%94.png"/></p>
+<p>可见行列号已经填上了（且听下回分解），但细节仍有些不同。继续调试。。</p>
