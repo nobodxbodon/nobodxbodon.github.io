@@ -1,0 +1,363 @@
+<h2>原文：<a href="https://dianjiaogit.github.io/work/2021/12/30/Django-Model-notes">Django Model 学习笔记</a></h2>
+<hr/>
+<h2>layout: post
+title:  "Django Model 学习笔记"
+date:   2021-12-30 13:43:00 +0800
+categories: [Work]</h2>
+<h2>Models: Define your data, essential fields, and behaviors of your data.</h2>
+<p>Each model maps to a single database table.</p>
+<hr/>
+<h3>Quick example</h3>
+<pre><code>from django.db import models
+
+class Person(models.Model):
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30)
+</code></pre>
+<p>This example model defines a Person. first_name and last_name are fields of the model.</p>
+<pre><code>CREATE TABLE myapp_person (
+    "id" serial NOT NULL PRIMARY KEY,
+    "first_name" varchar(30) NOT NULL,
+    "last_name" varchar(30) NOT NULL
+);
+</code></pre>
+<hr/>
+<h3>Using models</h3>
+<p>Edit your settings file and change the INSTALLED_APPS.</p>
+<pre><code>INSTALLED_APPS = [
+    #...
+    'myapp',
+    #...
+]
+</code></pre>
+<p>When you add new apps to INSTALLED_APPS, be sure to run manage.py migrate, optionally making migrations for them first with manage.py makemigrations.</p>
+<hr/>
+<h2>Fields</h2>
+<p>Fields: class attributes == database fields<br/>
+In-built APIs: clean, save, or delete......<br/>
+name conflict</p>
+<pre><code>from django.db import models
+
+class Musician(models.Model):
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    instrument = models.CharField(max_length=100)
+
+class Album(models.Model):
+    artist = models.ForeignKey(Musician, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    release_date = models.DateField()
+    num_stars = models.IntegerField()
+</code></pre>
+<hr/>
+<h3>Field types:</h3>
+<p>AutoField<br/>
+BinaryField - max_length<br/>
+BooleanField<br/>
+CharField - max_length<br/>
+DateField<br/>
+DecimalField - max_length<br/>
+EmailField - max_length = 254<br/>
+IntegerField<br/>
+TextField<br/>
+...<br/>
+And another type of fields.</p>
+<hr/>
+<h3>Field options:</h3>
+<p>null<br/>
+blank<br/>
+default<br/>
+help_text<br/>
+unique<br/>
+choices</p>
+<pre><code>from django.db import models
+
+class Person(models.Model):
+    SHIRT_SIZES = (
+        ('S', 'Small'),
+        ('M', 'Medium'),
+        ('L', 'Large'),
+    )
+    name = models.CharField(max_length=60)
+    shirt_size = models.CharField(max_length=1, choices=SHIRT_SIZES)
+</code></pre>
+<pre><code>from django.db import models
+
+class Runner(models.Model):
+    MedalType = models.TextChoices('MedalType', 'GOLD SILVER BRONZE')
+    name = models.CharField(max_length=60)
+    medal = models.CharField(blank=True, choices=MedalType.choices, max_length=10)
+</code></pre>
+<p>primary_key</p>
+<pre><code>from django.db import models
+
+class Fruit(models.Model):
+    name = models.CharField(max_length=100, primary_key=True)
+</code></pre>
+<pre><code>&gt;&gt;&gt; fruit = Fruit.objects.create(name='Apple')
+&gt;&gt;&gt; fruit.name = 'Pear'
+&gt;&gt;&gt; fruit.save()
+&gt;&gt;&gt; Fruit.objects.values_list('name', flat=True)
+&lt;QuerySet ['Apple', 'Pear']&gt;
+</code></pre>
+<hr/>
+<h3>Verbose field names</h3>
+<pre><code>first_name = models.CharField("person's first name", max_length=30)
+</code></pre>
+<p>Except for ForeignKey, ManyToManyField and OneToOneField.</p>
+<pre><code>verbose_name=
+</code></pre>
+<hr/>
+<h2>Many-to-one relationships: ForeignKey</h2>
+<pre><code>from django.db import models
+
+class Manufacturer(models.Model):
+    # ...
+    pass
+
+class Car(models.Model):
+    manufacturer = models.ForeignKey(Manufacturer, on_delete=models.CASCADE)
+    # ...
+</code></pre>
+<h3>on_delete:</h3>
+<pre><code>class Artist(models.Model):
+    name = models.CharField(max_length=10)
+
+class Album(models.Model):
+    artist = models.ForeignKey(Artist, on_delete=models.CASCADE)
+
+class Song(models.Model):
+    artist = models.ForeignKey(Artist, on_delete=models.CASCADE)
+    album = models.ForeignKey(Album, on_delete=models.RESTRICT)
+</code></pre>
+<pre><code>&gt;&gt;&gt; artist_one = Artist.objects.create(name='artist one')
+&gt;&gt;&gt; artist_two = Artist.objects.create(name='artist two')
+&gt;&gt;&gt; album_one = Album.objects.create(artist=artist_one)
+&gt;&gt;&gt; album_two = Album.objects.create(artist=artist_two)
+&gt;&gt;&gt; song_one = Song.objects.create(artist=artist_one, album=album_one)
+&gt;&gt;&gt; song_two = Song.objects.create(artist=artist_one, album=album_two)
+&gt;&gt;&gt; album_one.delete()
+# Raises RestrictedError.
+&gt;&gt;&gt; artist_two.delete()
+# Raises RestrictedError.
+&gt;&gt;&gt; artist_one.delete()
+(4, {'Song': 2, 'Album': 1, 'Artist': 1})
+</code></pre>
+<hr/>
+<h2>Many-to-many relationships: ManyToManyField</h2>
+<pre><code>from django.db import models
+
+class Topping(models.Model):
+    # ...
+    pass
+
+class Pizza(models.Model):
+    # ...
+    toppings = models.ManyToManyField(Topping)
+</code></pre>
+<h3>through</h3>
+<pre><code>from django.db import models
+
+class Person(models.Model):
+    name = models.CharField(max_length=128)
+
+    def __str__(self):
+        return self.name
+
+class Group(models.Model):
+    name = models.CharField(max_length=128)
+    members = models.ManyToManyField(Person, through='Membership')
+
+    def __str__(self):
+        return self.name
+
+class Membership(models.Model):
+    person = models.ForeignKey(Person, on_delete=models.CASCADE)
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    date_joined = models.DateField()
+    invite_reason = models.CharField(max_length=64)
+</code></pre>
+<h3>through_fields</h3>
+<pre><code>from django.db import models
+
+class Person(models.Model):
+    name = models.CharField(max_length=50)
+
+class Group(models.Model):
+    name = models.CharField(max_length=128)
+    members = models.ManyToManyField(
+        Person,
+        through='Membership',
+        through_fields=('group', 'person'),
+    )
+
+class Membership(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    person = models.ForeignKey(Person, on_delete=models.CASCADE)
+    inviter = models.ForeignKey(
+        Person,
+        on_delete=models.CASCADE,
+        related_name="membership_invites",
+    )
+    invite_reason = models.CharField(max_length=64)
+</code></pre>
+<hr/>
+<h2>One-to-one relationships: OneToOneField</h2>
+<pre><code>from django.db import models
+
+class Place(models.Model):
+    name = models.CharField(max_length=50)
+    address = models.CharField(max_length=80)
+
+    def __str__(self):
+        return "%s the place" % self.name
+
+class Restaurant(models.Model):
+    place = models.OneToOneField(
+        Place,
+        on_delete=models.CASCADE,
+        primary_key=True,
+    )
+    serves_hot_dogs = models.BooleanField(default=False)
+    serves_pizza = models.BooleanField(default=False)
+
+    def __str__(self):
+        return "%s the restaurant" % self.place.name
+
+class Waiter(models.Model):
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50)
+
+    def __str__(self):
+        return "%s the waiter at %s" % (self.name, self.restaurant)
+</code></pre>
+<pre><code>&gt;&gt;&gt; p1 = Place(name='Demon Dogs', address='944 W. Fullerton')
+&gt;&gt;&gt; p1.save()
+&gt;&gt;&gt; p2 = Place(name='Ace Hardware', address='1013 N. Ashland')
+&gt;&gt;&gt; p2.save()
+&gt;&gt;&gt; r = Restaurant(place=p1, serves_hot_dogs=True, serves_pizza=False)
+&gt;&gt;&gt; r.save()
+&gt;&gt;&gt; r.place
+&lt;Place: Demon Dogs the place&gt;
+&gt;&gt;&gt; p1.restaurant
+&lt;Restaurant: Demon Dogs the restaurant&gt;
+&gt;&gt;&gt; from django.core.exceptions import ObjectDoesNotExist
+&gt;&gt;&gt; try:
+&gt;&gt;&gt;     p2.restaurant
+&gt;&gt;&gt; except ObjectDoesNotExist:
+&gt;&gt;&gt;     print("There is no restaurant here.")
+There is no restaurant here.
+&gt;&gt;&gt; hasattr(p2, 'restaurant')
+False
+</code></pre>
+<hr/>
+<h3>Import models from another app</h3>
+<pre><code>from django.db import models
+from geography.models import ZipCode
+
+class Restaurant(models.Model):
+    # ...
+    zip_code = models.ForeignKey(
+        ZipCode,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
+</code></pre>
+<hr/>
+<h3>Field name restrictions:</h3>
+<ol>
+<li>Cannot be a Python reserved word</li>
+<li>Cannot contain more than one underscore in a row</li>
+<li>Cannot end with an underscore</li>
+</ol>
+<p>SQL reserved words, such as join, where or select, are allowed as model field names</p>
+<hr/>
+<h2>Meta options</h2>
+<p>Model metadata is “anything that’s not a field</p>
+<pre><code>from django.db import models
+
+class Ox(models.Model):
+    horn_length = models.IntegerField()
+
+    class Meta:
+        ordering = ["horn_length"]
+        verbose_name_plural = "oxen"
+</code></pre>
+<p>db_table: name of the database table<br/>
+app_label: declare which app it belongs to</p>
+<hr/>
+<h2>Model inheritance</h2>
+<ul>
+<li>abstract base model inheritance</li>
+<li>multi-table inheritance</li>
+<li>proxy inheritance</li>
+</ul>
+<hr/>
+<h3>abstract base model inheritance</h3>
+<p>It does not generate a database table or have a manager, and cannot be instantiated or saved directly.<br/>
+Fields inherited from abstract base classes can be overridden with another field or value, or be removed with None.<br/>
+Base class Table is not created in This inheritance.</p>
+<pre><code>from django.db import models
+
+# Create your models here.
+
+class ContactInfo(models.Model):
+	name=models.CharField(max_length=20)
+	email=models.EmailField(max_length=20)
+	address=models.TextField(max_length=20)
+
+    class Meta:
+        abstract=True
+
+class Customer(ContactInfo):
+	phone=models.IntegerField(max_length=15)
+
+class Staff(ContactInfo):
+	position=models.CharField(max_length=10)
+</code></pre>
+<hr/>
+<h3>multi-table inheritance</h3>
+<pre><code>from django.db import models
+
+# Create your models here.
+
+class Place(models.Model):
+	name=models.CharField(max_length=20)
+	address=models.TextField(max_length=20)
+
+	def __str__(self):
+		return self.name
+
+
+class Restaurants(Place):
+	serves_pizza=models.BooleanField(default=False)
+	serves_pasta=models.BooleanField(default=False)
+
+	def __str__(self):
+		return self.serves_pasta
+</code></pre>
+<p>Base class table is also created in this inheritance.<br/>
+it will create a one to one field model relationship for Restaurant table from Place table.</p>
+<hr/>
+<h3>proxy inheritance</h3>
+<pre><code>from django.db import models
+
+class Person(models.Model):
+    first_name = models.CharField(max_length=30)
+    last_name = models.CharField(max_length=30)
+
+class MyPerson(Person):
+    class Meta:
+        proxy = True
+
+    def do_something(self):
+        # ...
+        pass
+</code></pre>
+<p>This style is used, if you only want to modify the Python level behaviour of the model, without changing the model’s fields.<br/>
+You Inherit from base class and you can add your own properties except fields.<br/>
+base class should not be abstract class.<br/>
+we can not use multiple inheritance in proxy models.<br/>
+The main use of this is to overwrite the main functionalities of existing model.<br/>
+it always query on original model with overridden methods.</p>

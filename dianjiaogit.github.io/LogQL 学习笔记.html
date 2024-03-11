@@ -1,0 +1,151 @@
+<h2>原文：<a href="https://dianjiaogit.github.io/work/2021/11/22/LogQL-notes">LogQL 学习笔记</a></h2>
+<hr/>
+<h2>layout: post
+title:  "LogQL 学习笔记"
+date:   2021-11-22 00:37:39 +0800
+categories: [Work]</h2>
+<h3>Arithmetic operators</h3>
+<ul>
+<li>+ (addition)</li>
+<li>- (subtraction)</li>
+<li>* (multiplication)</li>
+<li>/ (division)</li>
+<li>% (modulo)</li>
+<li>^ (power/exponentiation)</li>
+</ul>
+<h3>Logical and set operators</h3>
+<ul>
+<li>and (intersection)</li>
+<li>or (union)</li>
+<li>unless (complement)</li>
+</ul>
+<h3>Comparison operators</h3>
+<ul>
+<li>== (equality)</li>
+<li>!= (inequality)</li>
+<li>&gt; (greater than)</li>
+<li>&gt;= (greater than or equal to)</li>
+<li>&lt; (less than)</li>
+<li>&lt;= (less than or equal to)</li>
+</ul>
+<h1>Log queries</h1>
+<p>All LogQL queries contain a log stream selector. Optionally, the log stream selector can be followed by a log pipeline.</p>
+<p>example:</p>
+<pre><code>{container="query-frontend",namespace="loki-dev"} |= "metrics.go" | logfmt | duration &gt; 10s and throughput_mb &lt; 500
+</code></pre>
+<h2>Log Stream Selector</h2>
+<p>label matching operator:</p>
+<ul>
+<li>=: exactly equal</li>
+<li>!=: not equal</li>
+<li>=~: regex matches</li>
+<li>!~: regex does not match</li>
+</ul>
+<pre><code>{app="mysql",name="mysql-backup"}
+</code></pre>
+<h2>Log pipeline</h2>
+<p>Log pipeline expressions fall into one of three categories:</p>
+<ul>
+<li>Filtering expressions: line filter expressions and label filter expressions</li>
+<li>Parsing expressions</li>
+<li>Formatting expressions: line format expressions and label format expressions</li>
+</ul>
+<h3>Line filter expression</h3>
+<ul>
+<li>|=: Log line contains string</li>
+<li>!=: Log line does not contain string</li>
+<li>|~: Log line contains a match to the regular expression</li>
+<li>!~: Log line does not contain a match to the regular expression</li>
+</ul>
+<pre><code>{job="mysql"} |= "error" != "timeout"
+</code></pre>
+<h3>Parser expression</h3>
+<h3>JSON</h3>
+<p>For instance, the pipeline | json will produce the following mapping:</p>
+<pre><code>{ "a.b": {c: "d"}, e: "f" }
+</code></pre>
+<p>-&gt;</p>
+<pre><code>{a_b_c="d", e="f"}
+</code></pre>
+<ol>
+<li>without parameters | json:<br/>
+Note: Arrays are skipped.</li>
+<li>with parameters | json label="expression", another="expression"<br/>
+https://grafana.svc.monitoring.gke.mintelcloud.io/goto/wOXzVl57z</li>
+</ol>
+<h3>logfmt</h3>
+<p>For example the following log line:</p>
+<pre><code>at=info method=GET path=/ host=grafana.net fwd="124.133.124.161" service=8ms status=200
+</code></pre>
+<p>will get those labels extracted:</p>
+<pre><code>"at" =&gt; "info"
+"method" =&gt; "GET"
+"path" =&gt; "/"
+"host" =&gt; "grafana.net"
+"fwd" =&gt; "124.133.124.161"
+"service" =&gt; "8ms"
+"status" =&gt; "200"
+</code></pre>
+<h3>Pattern</h3>
+<p>Consider this NGINX log line.</p>
+<pre><code>0.191.12.2 - - [10/Jun/2021:09:14:29 +0000] "GET /api/plugins/versioncheck HTTP/1.1" 200 2 "-" "Go-http-client/2.0" "13.76.247.102, 34.120.177.193" "TLSv1.2" "US" ""
+</code></pre>
+<p>This log line can be parsed with the expression<br/>
+&lt;ip&gt; - - &lt;<em>&gt; "&lt;method&gt; &lt;uri&gt; &lt;</em>&gt;" &lt;status&gt; &lt;size&gt; &lt;<em>&gt; "&lt;agent&gt;" &lt;</em>&gt;<br/>
+to extract these fields:</p>
+<pre><code>"ip" =&gt; "0.191.12.2"
+"method" =&gt; "GET"
+"uri" =&gt; "/api/plugins/versioncheck"
+"status" =&gt; "200"
+"size" =&gt; "2"
+"agent" =&gt; "Go-http-client/2.0"
+</code></pre>
+<h3>Regular expression</h3>
+<p>For example the parser <code>| regexp "(?P&lt;method&gt;\\w+) (?P&lt;path&gt;[\\w|/]+) \\((?P&lt;status&gt;\\d+?)\\) (?P&lt;duration&gt;.*)"</code>will extract from the following line:</p>
+<pre><code>POST /api/prom/api/v1/query_range (200) 1.5s
+</code></pre>
+<p>those labels:</p>
+<pre><code>"method" =&gt; "POST"
+"path" =&gt; "/api/prom/api/v1/query_range"
+"status" =&gt; "200"
+"duration" =&gt; "1.5s"
+</code></pre>
+<h3>Label filter expression</h3>
+<p>A predicate contains a label identifier, an operation and a value to compare the label with.</p>
+<pre><code>cluster="namespace"
+</code></pre>
+<p>Support multiple value types which are automatically inferred from the query input.</p>
+<ul>
+<li>String is double quoted or backticked such as "200" or <code>us-central1</code>.</li>
+<li>Duration is a sequence of decimal numbers, each with optional fraction and a unit suffix, such as “300ms”, “1.5h” or “2h45m”. Valid time units are “ns”, “us” (or “µs”), “ms”, “s”, “m”, “h”.</li>
+<li>Number are floating-point number (64bits), such as250, 89.923.</li>
+<li>Bytes is a sequence of decimal numbers, each with optional fraction and a unit suffix, such as “42MB”, “1.5Kib” or “20b”. Valid bytes units are “b”, “kib”, “kb”, “mib”, “mb”, “gib”, “gb”, “tib”, “tb”, “pib”, “pb”, “eib”, “eb”.</li>
+</ul>
+<p>Using Duration, Number and Bytes will convert the label value prior to comparision and support the following comparators:</p>
+<ul>
+<li>== or = for equality.</li>
+<li>!= for inequality.</li>
+<li>&gt; and &gt;= for greater than and greater than or equal.</li>
+<li>&lt; and &lt;= for lesser than and lesser than or equal.</li>
+</ul>
+<pre><code>logfmt | duration &gt; 1m and bytes_consumed &gt; 20MB
+</code></pre>
+<h3>Line format expression</h3>
+<p>The line format expression can rewrite the log line content by using the text/template format. It takes a single string parameter <code>| line_format "{ {.label_name} }"</code>, which is the template format. All labels are injected variables into the template and are available to use with the {{.label_name}} notation.</p>
+<p>example:
+If we have the following labels <code>ip=1.1.1.1</code>, <code>status=200</code> and <code>duration=3000(ms)</code>, we can divide the duration by 1000 to get the value in seconds.</p>
+<pre><code>{container="frontend"} | logfmt | line_format "{ {.ip} } { {.status} } { {div .duration 1000} }"
+</code></pre>
+<h3>Labels format expression</h3>
+<p>The <code>| label_format</code> expression can rename, modify or add labels. It takes as parameter a comma separated list of equality operations, enabling multiple operations at once.
+Note:
+The renaming form dst=src will drop the src label after remapping it to the dst label. However, the template form will preserve the referenced labels, such that dst="{{.src}}" results in both dst and src having the same value.</p>
+<h1>Examples:</h1>
+<h2>Multiple filtering</h2>
+<pre><code>{cluster="ops-tools1", namespace="loki-dev", job="loki-dev/query-frontend"} |= "metrics.go" !="out of order" | logfmt | duration &gt; 30s or status_code!="200"
+</code></pre>
+<h2>Multiple parsers</h2>
+<pre><code>level=debug ts=2020-10-02T10:10:42.092268913Z caller=logging.go:66 traceID=a9d4d8a928d8db1 msg="POST /api/prom/api/v1/query_range (200) 1.5s"
+</code></pre>
+<pre><code>{job="cortex-ops/query-frontend"} | logfmt | line_format "{ {.msg} }" | regexp "(?P&lt;method&gt;\\w+) (?P&lt;path&gt;[\\w|/]+) \\((?P&lt;status&gt;\\d+?)\\) (?P&lt;duration&gt;.*)"
+</code></pre>
