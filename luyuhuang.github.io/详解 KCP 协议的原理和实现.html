@@ -46,7 +46,7 @@ void ikcp_flush(ikcpcb *kcp);
 <li>以一定的频率调用 <code>ikcp_update</code> 以驱动 KCP 的时钟. <code>current</code> 表示当前时间, 单位为毫秒.</li>
 </ul>
 <p>设置好下层协议和时钟后, 就可以调用 <code>ikcp_recv</code> 和 <code>ikcp_send</code> 收发 KCP 数据了.</p>
-<p><img alt="kcp_io" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_1.svg"/></p>
+<p><img alt="kcp_io" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_1.svg"/></p>
 <p>在深入细节之前, 先简单浏览下这几个函数, 我们就能知道它们大概会做什么:</p>
 <ul>
 <li><code>ikcp_send</code> 将数据放在发送队列中等待发送;</li>
@@ -196,7 +196,7 @@ void ikcp_flush(ikcpcb *kcp);
 <p>我们先来看 <code>snd_queue</code>, <code>rcv_queue</code>, <code>snd_buf</code> 和 <code>rcv_buf</code> 这四个字段. 它们分别是发送队列, 接收队列, 发送缓冲区和接收缓冲区. 队列和缓冲区其实都是循环双链表, 链表节点的类型都是 <code>struct IKCPSEG</code>.</p>
 <p>调用 <code>ikcp_send</code> 发送数据时会先将数据加入 <code>snd_queue</code> 中, 然后再伺机加入 <code>snd_buf</code>. 每次调用 <code>ikcp_flush</code> 时都将 <code>snd_buf</code> 中满足条件的报文段都发送出去. 之所以不将报文直接加入 <code>snd_buf</code> 是为了防止一次发送过多的报文导致拥塞, 需要再拥塞算法的控制下伺机加入 <code>snd_buf</code> 中.</p>
 <p>调用 <code>ikcp_input</code> 收到的数据解包后会先放入 <code>rcv_buf</code> 中, 再在合适的情况下转移到 <code>rcv_queue</code> 中. 调用 <code>ikcp_recv</code> 接收数据时会从 <code>rcv_queue</code> 取出数据返回给调用者. 这样做是因为报文传输的过程中会出现丢包, 失序等情况. 为了保证顺序, 需要将收到的报文先放入 <code>rcv_buf</code> 中, 只有当 <code>rcv_buf</code> 中的报文段顺序正确才能将其移动到 <code>rcv_queue</code> 中供调用者接收. 如下图所示, <code>rcv_buf</code> 中节点为灰色表示可以移动到 <code>rcv_queue</code> 中. 只有当 2 号报文重传成功后, 才能将 2, 3, 4 号报文移动到 <code>rcv_queue</code> 中.</p>
-<p><img alt="receive buffer" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_2.svg"/></p>
+<p><img alt="receive buffer" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_2.svg"/></p>
 <h4>3.3.1 链表的实现</h4>
 <p>队列和缓冲区都是循环双链表, 它是由一组宏实现的:</p>
 <pre><code class="language-c">struct IQUEUEHEAD {
@@ -280,20 +280,20 @@ void ikcp_flush(ikcpcb *kcp);
 <p>发送缓冲区 <code>snd_buf</code> 和接收缓冲区 <code>rcv_buf</code> 中活动的报文都是在滑动窗口之中的. 滑动窗口实际是一个抽象的概念, 不能简单地认为它是缓冲区的一部分, 稍后我们能看到, 接收窗口的一部分是接收队列.</p>
 <h4>4.2.1 发送</h4>
 <p>发送窗口的结构如下图所示. 灰色节点表示已送达的报文, 白色节点表示已发送但尚未确认到达的报文. 其中白色节点表示的报文存在于 <code>snd_buf</code> 中, 而灰色节点表示的已确认送达的报文已经从 <code>snd_buf</code> 中删除. 这里还有两个指针: <code>snd_una</code> 指向第一个尚未确认到达的报文, 也就是说在它之前的报文都已确认到达; <code>snd_nxt</code> 指向下一个插入缓冲区的位置. 滑动窗口的起始位置是 <code>snd_una</code>, 大小为 cwnd.</p>
-<p><img alt="snd_buf" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_3.svg"/></p>
+<p><img alt="snd_buf" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_3.svg"/></p>
 <p>每次 flush 时都会从 <code>snd_queue</code> 中取出报文插入 <code>snd_buf</code> 中 <code>snd_nxt</code> 指向的位置, 然后 <code>snd_nxt</code> 向右移动. KCP 会动态计算窗口大小 cwnd, 当 <code>snd_nxt - snd_una &gt;= cwnd</code> 时, 便不允许新的报文加入 <code>snd_buf</code>. 这时须等报文确认到达, <code>snd_una</code> 向右移动, 方可继续发送. 每次 flush 其实是将发送窗口中的报文尽可能地发送出去. 因此, cwnd 的大小决定了发送速率.</p>
 <p>在 KCP 的实现中, <code>snd_buf</code> 是一个报文段链表, 链表中的报文段编号始终递增. 报文段插入 <code>snd_buf</code> 时会追加到链表的尾部, 确认到达的报文段则会从链表中删除.</p>
 <p>发送窗口中未确认到达的报文何时重传, 取决于这个报文的 RTO. 报文在一个 RTO 时间内仍未确认到达, 就会重传. 报文的 RTO 初始值会被赋为 <code>rx_rto</code>, 之后每次超时重传, RTO 都会以某种方式增长. KCP 的 RTO 增长速率可配置, 或翻倍, 或翻 0.5 倍. 此外还有快速重传机制, 我们会在 4.3 节中讨论.</p>
 <h4>4.2.2 接收</h4>
 <p>接收窗口结构如下图所示. 这里灰色节点表示顺序正确, 已经移动到 <code>rcv_queue</code> 中的报文. 注意下图表示的是 <code>snd_queue</code> 和 <code>snd_buf</code> 的结合体, 灰色节点都在 <code>rcv_queue</code> 中, 其余 <code>rcv_nxt</code> 及其右边的部分为 <code>rcv_buf</code>. 滑动窗口的起始位置为 <code>rcv_queue</code> 的队首, 大小为 <code>rcv_wnd</code>.</p>
-<p><img alt="rcv_buf" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_4.svg"/></p>
+<p><img alt="rcv_buf" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_4.svg"/></p>
 <p>每收到一个数据报文, 都会根据它的编号将它插入到 <code>rcv_buf</code> 对应的位置中. 接着检查 <code>rcv_nxt</code> 能否向右移动, 只有当报文的顺序正确且连续才能移动. 在上图的例子中由于 4 号报文的缺失, <code>rcv_nxt</code> 只能处于 4 号位置等待, 5, 6 号报文也不能移动到 <code>rcv_queue</code> 中. 需等到 4 号报文到达后, 才能将 4, 5, 6 号报文一并移动到 <code>rcv_queue</code> 中; 同时 <code>rcv_nxt</code> 会右移到 7 号位置.</p>
 <p><code>nrcv_que</code> 为接收队列的长度. KCP 会通知发送方剩余接收窗口的大小为 <code>rcv_wnd - nrcv_que</code>, 发送方应根据这个值调整 cwnd, 确保发送速率不超过对方的接收速率; 接收方也应该及时读取 <code>rcv_queue</code> 中的数据, 让窗口向右滑动, 以保证有充足的接收窗口. 如果接收到数据报文的编号大于 <code>rcv_nxt + rcv_wnd</code>, 远超窗口之外, 这个报文就会被丢弃.</p>
 <p>在 KCP 的实现中, <code>rcv_buf</code> 同样是一个报文段链表, 链表中报文段编号始终递增. 当收到新的报文时, 会根据编号插入到链表中相应的位置中; 顺序正确的报文会从链表头部弹出, 移动到 <code>rcv_queue</code> 中.</p>
 <p>回想起 3.1 节中所说的, 每个报文都会带上 una 字段, 表示该报文发送者的接收缓冲区中最小还未收到的报文编号. 不难发现, 这其实就是 <code>rcv_nxt</code>. 因此 KCP 发送的每个报文都会将 una 字段赋值为 <code>rcv_nxt</code>. 这样就有了 ACK + UNA 双重确认机制, 即使 ACK 丢包, 也可以通过稍后的 una 确认报文已送达.</p>
 <h4>4.2.3 例子</h4>
 <p>我们举个简单的例子演示整个 ARQ 的流程. 下图中实线箭头表示数据报文, 虚线箭头表示 ACK.</p>
-<p><img alt="flow" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_5.svg"/></p>
+<p><img alt="flow" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_5.svg"/></p>
 <ul>
 <li>t1 时刻发送方发送 1 号报文, 1 号报文放入发送缓冲区中, <code>snd_una</code> 指向 1, <code>snd_nxt</code> 指向 2.</li>
 <li>t2 至 t3 时刻发送方依次发送 2 至 3 号报文, <code>snd_nxt</code> 依次后移.</li>
@@ -307,7 +307,7 @@ void ikcp_flush(ikcpcb *kcp);
 </ul>
 <h3>4.3 快速重传</h3>
 <p>除了超时重传, KCP 还有快速重传机制. 假设发送方依次发送了 1, 2, 3, 4 号报文, 随后收到 1, 3, 4 号 ACK. 收到 3 号 ACK 时, 我们知道 2 号 ACK 失序了一次, 收到 4 号 ACK 时, 我们知道 2 号失序了两次. ACK 失序次数越多说明它丢包的概率越大, KCP 会直接重传失序次数过多的报文, 而不用等待其超时.</p>
-<p><img alt="fast-resend" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_6.svg"/></p>
+<p><img alt="fast-resend" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_6.svg"/></p>
 <p>每个报文的 <code>fastack</code> 字段记录了它检测到 ACK 失序的次数. 每当 KCP 收到一个编号为 sn 的 ACK 时, 就会检查 <code>snd_buf</code> 中编号小于 sn 且未确认送达的报文, 将其 <code>fastack</code> 加一. 我们可以通过配置 <code>fastresend</code> 指定失序多少次就执行快速重传. 每次调用 <code>ikcp_flush</code> 时都会重传 <code>snd_buf</code> 中 <code>fastack</code> 不小于 <code>fastresend</code> 的报文.</p>
 <p>报文也不会无限制地执行快速重传. 每个报文的 <code>xmit</code> 字段记录它被传输的次数, KCP 的 <code>fastlimit</code> 字段规定了传输次数小于 <code>fastlimit</code> 的报文才能执行快速重传.</p>
 <h3>4.4 计算 RTO</h3>
@@ -758,16 +758,16 @@ $$</p>
 <p>在慢启动中 cwnd 会指数增长, 这个过程显然不能一直持续下去. 当 cwnd 超过一个阈值之后, 便会进入拥塞避免阶段. 这个阈值我们称为<strong>慢启动阈值(Slow Start Threshold)</strong>, 通常记作 ssthresh. 在拥塞避免阶段, cwnd 会近似于线性增长.</p>
 <p>无论是慢启动还是拥塞避免, 随着 cwnd 的增长, 网路容量会被逐步填满. 网络容量填满之后, 就会不可避免地出现丢包. 这就意味着我们的发送速率过大, cwnd 应该减小了. KCP 称之为<strong>丢包退让</strong>. 此时有两种策略: 一种是将 ssthresh 置为当前 cwnd 的一半, 然后 cwnd 置为 1, 重新执行慢启动; 另一种也会将 ssthresh 置为当前 cwnd 的一半, 但 cwnd 置为比 ssthresh 稍高的值, 然后进入快速恢复阶段. 快速恢复阶段中, cwnd 会以与拥塞避免相同的方式线性增长. KCP 采用的策略是, 如果发生超时重传, 就进入慢启动; 如果发生快速重传, 就进入快速恢复.</p>
 <p>下图展示了拥塞控制中 cwnd 和 ssthresh 的变化情况.</p>
-<p><img alt="congestion control" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_7.svg"/></p>
+<p><img alt="congestion control" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_7.svg"/></p>
 <p>此外无论如何发送速率都不应该超过对端的接收速率, 否则数据一定会超出对端接收缓冲区的容量. 因此 接收方会不断地向对端汇报接收窗口的剩余大小, 发送方会限制 cwnd 不超过 <code>rmt_wnd</code>.</p>
 <p>KCP 为流速设计, 在传递一些及时性要求很高的小数据时, 可以选择不执行慢启动和拥塞避免. 此时 cwnd 的大小仅取决于 <code>snd_wnd</code> 和 <code>rmt_wnd</code> 二者的最小值, 其中 <code>snd_wnd</code> 为配置值.</p>
 <h3>5.2 慢启动</h3>
 <p>慢启动时, 平均每经过一个 RTT 时间 cwnd 都翻一倍. 实际的做法是, 每收到一个 ACK cwnd 都加一. 初始 cwnd 为 1, 发送 1 个报文段, 随后收到 1 个 ACK, cwnd 加一等于 2; 现在 cwnd 为 2, 发送 2 个报文段, 随后收到 2 个 ACK, cwnd 自增两次等于 4. 以此类推, cwnd 就会指数增长.</p>
 <p>慢启动中 cwnd 的变化情况如下图所示.</p>
-<p><img alt="slow start" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_8.svg"/></p>
+<p><img alt="slow start" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_8.svg"/></p>
 <h3>5.3 拥塞避免和快速恢复</h3>
 <p>在拥塞避免阶段, 差不多要等当前发送窗口发的报文都确认到达之后, cwnd 才增加 1. 这时的 cwnd 近似于线性增长, 这种增长方式与慢启动的指数增长相比缓慢许多. 拥塞避免阶段的 cwnd 变化情况如下图所示.</p>
-<p><img alt="congestion avoidance" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/kcp_9.svg"/></p>
+<p><img alt="congestion avoidance" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/kcp_9.svg"/></p>
 <p>在 KCP 的实现中, 拥塞避免阶段的 cwnd 仍然会在每收到一个 ACK 的时候增长, 只不过不是增加 1, 而是增加零点几. KCP 的做法是维护一个中间变量 incr, 其含义可以认为是 cwnd 的 mss 倍. 在拥塞避免阶段, 每收到一个 ACK, incr 都会以如下方式增长:</p>
 <p>$$
 incr \leftarrow incr + \frac{mss^2}{incr} + \frac{mss}{16} \tag{1}

@@ -15,7 +15,7 @@ share: true</h2>
 <p>如果你不得不使用<code>setTimeout</code>或者<code>setInterval</code>来实现动画，那么原因只能是你需要精确的控制动画。但我认为至少在现在这个时间点，高级浏览器、甚至手机浏览器的普及程度足够让你有理由有条件在实现动画时使用更高效的方式。</p>
 <h3>什么是高效</h3>
 <p>页面是每一帧变化都是系统绘制出来的(GPU或者CPU)。但这种绘制又和PC游戏的绘制不同，它的最高绘制频率受限于显示器的刷新频率(而非显卡)，所以大多数情况下最高的绘制频率只能是每秒60帧(frame per second，以下用fps简称)，对应于显示器的60Hz。60fps是一个最理想的状态，在日常对页面性能的测试中，60fps也是一个重要的指标，the closer the better。在Chrome的调试工具中，有不少工具都是用于衡量当前帧数：</p>
-<p><img alt="frames" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/fps.jpg"/></p>
+<p><img alt="frames" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/fps.jpg"/></p>
 <p>接下来的工作中，我们将会用到这些工具，来实时查看我们页面的性能。</p>
 <p>60fps是动力也是压力，因为它意味着我们只有16.7毫秒(1000 / 60)来绘制每一帧。如果使用setTimeout或者setInterval(以下统称为timer)来控制绘制，问题就来了。</p>
 <p>首先，Timer计算延时的精确度不够。延时的计算依靠的是浏览器的内置时钟，而时钟的精确度又取决于时钟更新的频率(Timer resolution)。IE8及其之前的IE版本更新间隔为15.6毫秒。假设你设定的setTimeout延迟为16.7ms，那么它要更新两个15.6毫秒才会该触发延时。这也意味着无故延迟了 15.6 x 2 - 16.7 = 14.5毫秒。</p>
@@ -53,13 +53,13 @@ console.log("Done!");
 <p>这里请再允许我引入另一个常量60——屏幕的刷新率60Hz。</p>
 <p>60Hz和60fps有什么关系？没有任何关系。fps代表GPU渲染画面的频率，Hz代表显示器刷新屏幕的频率。一幅静态图片，你可以说这副图片的fps是0帧/秒，但绝对不能说此时屏幕的刷新率是0Hz，也就是说刷新率不随图像内容的变化而变化。游戏也好浏览器也好，我们谈到掉帧，是指GPU渲染画面频率降低。比如跌落到30fps甚至20fps，但因为视觉暂留原理，我们看到的画面仍然是运动和连贯的。</p>
 <p>接上一节，我们假设每一次timer都不会有延时，也不会被同步函数干扰，甚至能把时间缩短至16ms，那么会发生什么呢：</p>
-<p><img alt="16ms" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/16ms.png"/></p>
+<p><img alt="16ms" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/16ms.png"/></p>
 <p>在22秒处发生了丢帧</p>
 <p>如果把延迟时间缩的更短，丢失的帧数也就更多：</p>
-<p><img alt="14ms" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/14ms.png"/></p>
+<p><img alt="14ms" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/14ms.png"/></p>
 <p>实际情况会比以上想象的复杂的多。即使你能给出一个固定的延时，解决60Hz屏幕下丢帧问题，那么其他刷新频率的显示器应该怎么办，要知道不同设备、甚至相同设备在不同电池状态下的屏幕刷新率都不尽相同。</p>
 <p>以上同时还忽略了屏幕刷新画面的时间成本。问题产生于GPU渲染画面的频率和屏幕刷新频率的不一致：如果GPU渲染出一帧画面的时间比显示器刷新一张画面的时间要短(更快)，那么当显示器还没有刷新完一张图片时，GPU渲染出的另一张图片已经送达并覆盖了前一张，导致屏幕上画面的撕裂，也就是是上半部分是前一张图片，下半部分是后一张图片：</p>
-<p><img alt="teardown" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/teardown.png"/></p>
+<p><img alt="teardown" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/teardown.png"/></p>
 <p>PC游戏中解决这个问题的方法是开启垂直同步(v-sync)，也就是让GPU妥协，GPU渲染图片必须在屏幕两次刷新之间，且必须等待屏幕发出的垂直同步信号。但这样同样也是要付出代价的：降低了GPU的输出频率，也就降低了画面的帧数。以至于你在玩需要高帧数运行的游戏时(比如竞速、第一人称射击)感觉到“顿卡”，因为掉帧。</p>
 <h2>requestAnimationFrame</h2>
 <p>在这里不谈requestAnimationFrame(以下简称rAF)用法，具体请参考<a href="https://developer.mozilla.org/en-US/docs/Web/API/window.requestAnimationFrame">MDN:Window.requestAnimationFrame()</a>。我们来具体谈谈rAF所解决的问题。</p>
@@ -91,9 +91,9 @@ rAF(update);
 {% endhighlight %}</p>
 <p>DEMO版本之所以慢的原因是，在修改每一个物体的left值时，会请求这个物体的offsetTop值。这是一个非常耗时的reflow操作(具体还有哪些耗时的reflow操作可以参考这篇: <a href="http://gent.ilcore.com/2011/03/how-not-to-trigger-layout-in-webkit.html">How (not) to trigger a layout in WebKit</a>)。这一点从Chrome调试工具中可以看出来(截图中的某些功能需要在Chrome canary版本中才可启用)</p>
 <p>未矫正的版本</p>
-<p><img alt="no-fixed" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/no-fixed.png"/>;</p>
+<p><img alt="no-fixed" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/no-fixed.png"/>;</p>
 <p>可见大部分时间都花在了rendering上，而矫正之后的版本：</p>
-<p><img alt="fixed" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/fixed.png"/></p>
+<p><img alt="fixed" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/fixed.png"/></p>
 <p>rendering时间大大减少了</p>
 <p>但如果你的回调函数耗时真的很严重，rAF还是可以为你做一些什么的。比如当它发现无法维持60fps的频率时，它会把频率降低到30fps，至少能够保持帧数的稳定，保持动画的连贯。</p>
 <h3>使用rAF推迟代码</h3>
@@ -118,7 +118,7 @@ div.style.backgroundColor = "blue";</p>
 <p>// do some "long running" task, like sorting data
 {% endhighlight %}</p>
 <p>这个时候我们不仅仅需要更新背景颜色，还需要获取容器的宽度。可以想象它的执行顺序如下：</p>
-<p><img alt="d1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/d1.png"/></p>
+<p><img alt="d1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/d1.png"/></p>
 <p>当我们请求innerWidth一类的属性时，浏览器会以为我们马上需要，于是它会立即更新容器的样式(通常浏览器会攒着一批，等待时机一次性的repaint，以便节省性能)，并把计算的结果告诉我们。这通常是性能消耗量大的工作。</p>
 <p>但如果我们并非立即需要得到结果呢？</p>
 <p>上面的代码有两处不足，</p>
@@ -140,10 +140,10 @@ el.style.backgroundColor = "blue";
 <p>// do some "long running" task, like sorting data
 {% endhighlight %}
 可见即使我们在这里没有使用到动画，但仍然可以使用rAF优化我们的代码。执行的顺序会变成：</p>
-<p><img alt="d1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/d2.png"/></p>
+<p><img alt="d1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/d2.png"/></p>
 <p>在这里rAF的用法变成了：把代码推迟到下一帧执行。</p>
 <p>有时候我们需要把代码推迟的更远，比如这个样子：</p>
-<p><img alt="d3" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/d3.png"/></p>
+<p><img alt="d3" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/d3.png"/></p>
 <p>再比如我们想要一个效果分两步执行：1.div的display变为block；2. div的top值缩短移动到某处。如果这两项操作都放入同一帧中的话，浏览器会同时把这两项更改应用于容器，在同一帧内。于是我们需要两帧把这两项操作区分开来：</p>
 <p>{% highlight javascript %}
 requestAnimationFrame(function(){
@@ -325,7 +325,7 @@ ticking = false;</p>
 <p>如以上所说，即使使用rAF，还是会有诸多的不便。我们还有一个选择是使用css动画：虽然浏览器中UI线程与js线程是互斥，但这一点对css动画不成立。</p>
 <p>在这里不聊css动画的用法。css动画运用的是什么原理来提升浏览器性能的。</p>
 <p>首先我们看看淘宝首页的焦点图：</p>
-<p><img alt="taobao" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/taobao_3d.png"/></p>
+<p><img alt="taobao" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/taobao_3d.png"/></p>
 <p>我想提出一个问题，为什么明明可以使用translate 2d去实现的动画，它要用3d去实现呢？</p>
 <p>我不是淘宝的员工，但我的第一猜测这么做的原因是为了使用translate3d hack。简单来说如果你给一个元素添加上了<code>-webkit-transform: translateZ(0);</code>或者<code> -webkit-transform: translate3d(0,0,0);</code>属性，那么你就等于告诉了浏览器用GPU来渲染该层，与一般的CPU渲染相比，提升了速度和性能。(我很确定这么做会在Chrome中启用了硬件加速，但在其他平台不做保证。就我得到的资料而言，在大多数浏览器比如Firefox、Safari也是适用的)。</p>
 <p>但这样的说法其实并不准确，至少在现在的Chrome版本中这算不上一个hack。因为默认渲染所有的网页时都会经过GPU。那么这么做还有必要吗？有。在理解原理之前，你必须先了解一个层(Layer)的概念。</p>
@@ -338,10 +338,10 @@ ticking = false;</p>
 </ol>
 <p>这和游戏中的3D渲染类似，虽然我们看到的是一个立体的人物，但这个人物的皮肤是由不同的图片“贴”和“拼”上去的。网页比此还多了一个步骤，虽然最终的网页是由多个位图层合成的，但我们看到的只是一个复印版，最终只有一个层。当然有的层是无法拼合的，比如flash。以爱奇艺的一个播放页(http://www.iqiyi.com/v_19rrgyhg0s.html)为例，我们可以利用Chrome的Layer面板(默认不启用，需要手动开启)查看页面上所有的层：</p>
 <p>我们可以看到页面上由如下层组成：</p>
-<p><img alt="../images/javascript-high-performance-animation-and-page-rendering/layer.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/layer.png"/></p>
+<p><img alt="../images/javascript-high-performance-animation-and-page-rendering/layer.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/layer.png"/></p>
 <p>OK，那么问题来了。</p>
 <p>假设我现在想改变一个容器的样式(可以看做动画的一个步骤)，并且是一种最糟糕的情况，改变它的长和宽——为什么说改变长和宽是最糟糕的情况呢。通常改变一个物体的样式需要以下四个步骤：</p>
-<p><img alt="steps" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/devtools-waterfall.jpg"/></p>
+<p><img alt="steps" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/devtools-waterfall.jpg"/></p>
 <p>任何属性的改变都导致浏览器重新计算容器的样式，比如你改变的是容器的尺寸或者位置(reflow)，那么首先影响的就是容器的尺寸和位置(也影响了与它相关的父节点自己点相邻节点的位置等)，接下来浏览器还需要对容器重新绘制(repaint)；但如果你改变的只是容器的背景颜色等无关容器尺寸的属性，那么便省去了第一步计算位置的时间。也就是说如果改变属性在瀑布图中开始的越早(越往上)，那么影响就越大，效率就越低。reflow和repaint会导致所有受影响节点所在layer的位图重绘，反复执行上面的过程，导致效率降低。</p>
 <p>为了把代价降到最低，当然最好只留下compositing layer这一个步骤即可。假设当我们改变一个容器的样式时，影响的只是它自己，并且还无需重绘，直接通过在GPU中改变纹理的属性来改变样式，岂不是更好？这当然是可以实现的，前提是你有自己的layer</p>
 <p>这也是上面硬件加速hack的原理，也是css动画的原理——给元素创建自己layer，而非与页面上大部分的元素共用layer。</p>
@@ -388,10 +388,10 @@ ticking = false;</p>
 &lt;/html&gt;
 {% endhighlight %}
 运行时的timeline截图如下：</p>
-<p><img alt="no_repaint" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/no_repaint.png"/></p>
+<p><img alt="no_repaint" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/no_repaint.png"/></p>
 <p>可见元素有自己的layer，并且在动画的过程中没有触发reflow和repaint。</p>
 <p>最后再看看淘宝首页，不仅仅只有焦点图才拥有了独立的layer：</p>
-<p><img alt="taobao" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/javascript-high-performance-animation-and-page-rendering/taobao_layer_2.png"/></p>
+<p><img alt="taobao" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/javascript-high-performance-animation-and-page-rendering/taobao_layer_2.png"/></p>
 <p>但太多的layer也未必是一件好事情，有兴趣的同学可以看一看这篇文章：<a href="http://wesleyhales.com/blog/2013/10/26/Jank-Busting-Apples-Home-Page/">Jank Busting Apple's Home Page</a>。看一看在苹果首页太多layer时出现的问题。</p>
 <p>参考文章：</p>
 <ul>

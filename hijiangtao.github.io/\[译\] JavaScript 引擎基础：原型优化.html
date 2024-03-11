@@ -20,14 +20,14 @@ caption: "Edited from Twitter@PrimitivePic"</h2>
 </blockquote>
 <h2>一、优化层级与执行效率的取舍</h2>
 <p><a href="https://hijiangtao.github.io/2018/06/17/Shapes-ICs/">前一篇文章</a>介绍了现代 JavaScript 引擎通用的工作流程：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-1.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-1.svg"/></p>
 <p>我们也指出，尽管从高级抽象层面来看，引擎之间的处理流程都很相似，但他们在优化流程上通常都存在差异。为什么呢？<strong>为什么有些引擎的优化层级会比其他引擎多一些？</strong>事实证明，在快速获取可运行的代码与花费更多时间获得最优运行性能的代码之间存在一些取舍与平衡点。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-2.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-2.svg"/></p>
 <p>解释器可以快速生成字节码，但字节码通常效率不高。 相比之下，优化编译器虽然需要更长的时间进行处理，但最终会产生更高效的机器码。</p>
 <p>这正是 V8 在使用的模型。它的解释器叫 Ignition，（就原始字节码执行速度而言）是所有引擎中最快的解释器。V8 的优化编译器名为 TurboFan，最终由它生成高度优化的机器码。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-3.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-3.svg"/></p>
 <p>我们往往需要在启动延迟与执行速度之间做出一些取舍，而这便是一些 JavaScript 引擎决定是否在流程中加入优化层的原因所在。例如，SpiderMonkey 在解释器和完整的 IonMonkey 优化编译器之间添加了一个 Baseline 层：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-4.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-4.svg"/></p>
 <p>解释器可以快速生成字节码，但字节码执行起来相对较慢。Baseline 生成代码需要花费更长的时间，但能提供更好的运行时性能。最后，IonMonkey 优化编译器花费最长时间来生成机器码，但该代码运行起来非常高效。</p>
 <p>让我们通过一个具体的例子，看看不同引擎中的优化流程都有哪些差异。这是一些在循环中会经常出现的代码。</p>
 <pre><code class="language-javascript">let result = 0;
@@ -37,16 +37,16 @@ for (let i = 0; i &lt; 4242424242; ++i) {
 console.log(result);
 </code></pre>
 <p>V8开始在 Ignition 解释器中运行字节码。从某些方面来看，代码是否足够 <em>hot</em> 由引擎决定，引擎还负责调度 TurboFan 前端，它是 TurboFan 中负责处理集成分析数据和构建代码在机器层面表示的一部分。这部分结果之后会被发送到另一个线程上的 TurboFan 优化器被进一步优化。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-5.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-5.svg"/></p>
 <p>当优化器运行时，V8 会继续在 Ignition 中执行字节码。 当优化器处理完成后，我们获得可执行的机器码，执行流程便会继续下去。</p>
 <p>SpiderMonkey 引擎也开始在解释器中运行字节码。但它有一个额外的 Baseline 层，这意味着比较 hot 的代码会首先被发送到 Baseline。 Baseline 编译器在主线程上生成 Baseline 代码，并在完成后继续后面的执行。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-6.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-6.svg"/></p>
 <p>如果 Baseline 代码运行了一段时间，SpiderMonkey 最终会激活 IonMonkey 前端，并启动优化器 - 这与 V8 非常相似。当 IonMonkey 进行优化时，代码在 Baseline 中会一直运行。当优化器处理完成后，被执行的是优化后的代码而不是 Baseline 代码。</p>
 <p>Chakra 的架构与 SpiderMonkey 非常相似，但 Chakra 尝试通过并行处理更多内容来避免阻塞主线程。Chakra 不在主线程上运行编译器，而是将不同编译器可能需要的字节码和分析数据复制出来，将其发送到一个专用的编译器进程。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-7.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-7.svg"/></p>
 <p>当代码准备就绪，引擎便开始运行 SimpleJIT 代码而不是字节码。 对于 FullJIT 来说流程同样如此。这种方法的好处是，与运行完整的编译器（前端）相比，复制所产生的中断时间通常要短得多。但其缺点在于这种<strong>启发式复制</strong>可能会遗漏某些优化所需的某些信息，因此它在一定程度上是用代码质量来换时间的消耗。</p>
 <p>在 JavaScriptCore 中，所有优化编译器都与主 JavaScript 执行<strong>完全并发运行</strong>；根本没有复制阶段！相反，主线程仅仅是触发了另一个线程上的编译作业。然后，编译器使用复杂的加锁方式从主线程中获取到要访问的分析数据。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-8.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-8.svg"/></p>
 <p>这种方法的优点在于它减少了主线程上由 JavaScript 优化引起的抖动。 缺点是它需要处理复杂的多线程问题并为各种操作付出一些加锁的成本。</p>
 <p>我们已经讨论过在使用解释器快速生成代码或使用优化编译器生成可高效执行代码之间的一些权衡。但还有另一个权衡：<strong>内存使用</strong>！为了说明这一点，来看一个简单的两数相加 JvaScript 函数。</p>
 <pre><code class="language-javascript">function add(x, y) {
@@ -93,15 +93,15 @@ ret 0x18
 </code></pre>
 <p>这么<em>一大堆</em>代码，这比四行要远远超出更多！通常来说，字节码比机器码更紧凑，特别是对比优化过的机器码。但另一方面，字节码需要解释器才能执行，而优化过机器码可以由处理器直接执行。</p>
 <p>这就是为什么 JavaScript 引擎不简单粗暴"优化一切"的主要原因之一。正如我们之前所见，生成优化的机器码也需要很长时间，而最重要的是，我们刚刚了解到优化的机器码也需要更多的内存。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-9.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-9.svg"/></p>
 <blockquote>
 <p>小结：JavaScript 引擎之所以具有不同优化层，就在于使用解释器快速生成代码或使用优化编译器生成高效代码之间存在一个基本权衡。通过添加更多优化层可以让你做出更细粒度的决策，但是以额外的复杂性和开销为代价。此外，在优化级别和生成代码所占用的内存之间也存在折衷。这就是为什么 JavaScript 引擎仅尝试优化比较 hot 功能的原因所在。</p>
 </blockquote>
 <h2>二、原型属性访问优化</h2>
 <p><a href="https://hijiangtao.github.io/2018/06/17/Shapes-ICs/">之前的文章</a>解释了 JavaScript 引擎如何使用 Shapes 和 Inline Caches 优化对象属性加载。回顾一下，引擎将对象的 <code>Shape</code> 与对象值分开存储。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-10.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-10.svg"/></p>
 <p>Shapes 可以实现称为 Inline Caches 或简称 ICs 的优化。通过组合，Shapes 和 ICs 可以加快代码中相同位置的重复属性访问速度。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-11.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-11.svg"/></p>
 <h3>2.1 Class 和基于原型的编程</h3>
 <p>既然我们知道如何在 JavaScript 对象上快速进行属性访问，那么让我们看一下最近添加到 JavaScript 中的特性：class（类）。JavaScript 中的类语法如下所示：</p>
 <pre><code class="language-javascript">class Bar {
@@ -127,9 +127,9 @@ Bar.prototype.getX = function getX() {
 <pre><code class="language-javascript">const foo = new Bar(true);
 </code></pre>
 <p>通过运行此代码创建的实例具有一个带有属性 <code>“x”</code> 的 shape。<code>foo</code> 的原型是属于 class <code>Bar</code> 的 <code>Bar.prototype</code>。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-12.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-12.svg"/></p>
 <p><code>Bar.prototype</code> 有自己的 shape，其中包含一个属性 <code>'getX'</code>，取值则是函数 <code>getX</code>，它在调用时只返回 <code>this.x</code>。<code>Bar.prototype</code> 的原型是 <code>Object.prototype</code>，它是 JavaScript 语言的一部分。由于 <code>Object.prototype</code> 是原型树的根节点，因此它的原型是 <code>null</code>。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-13.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-13.svg"/></p>
 <p>如果你在这个类上创建另一个实例，那么两个实例将共享对象 shape。两个实例都指向相同的 <code>Bar.prototype</code> 对象。</p>
 <h3>2.2 原型属性访问</h3>
 <p>好的，现在我们知道当我们定义一个类并创建一个新实例时会发生什么。但是如果我们在一个实例上调用一个方法会发生什么，比如我们在这里做了什么？</p>
@@ -151,7 +151,7 @@ const $getX = foo.getX;
 const x = $getX.call(foo);
 </code></pre>
 <p>第1步是加载这个方法，它只是原型上的一个属性（其值恰好是一个函数）。第2步是使用实例作为 <code>this</code> 值来调用该函数。让我们来看看第一步，即从实例 <code>foo</code> 中加载方法 <code>getX</code>。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-14.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-14.svg"/></p>
 <p>引擎从 <code>foo</code> 实例开始，并且意识到 <code>foo</code> 的 shape 上没有 <code>'getX'</code> 属性，所以它必须向原型链追溯。我们到了 <code>Bar.prototype</code>，查看它的原型 shape，发现它在偏移0处有 <code>'getX'</code> 属性。我们在 <code>Bar.prototype</code> 的这个偏移处查找该值，并找到我们想要的<code>JSFunction getX</code>。就是这样！</p>
 <p>但 JavaScript 的灵活性使得我们可以改变原型链链接，例如：</p>
 <pre><code class="language-javascript">const foo = new Bar(true);
@@ -174,7 +174,7 @@ const x = foo.getX();
 //        ^^^^^^^^^^
 </code></pre>
 <p>之前，我们讨论了引擎如何通过使用 Shapes 和 Inline Caches 来优化访问常规属性的。 我们如何在具有相似 shape 的对象上优化原型属性的重复访问呢？ 我们在上面已经看过是如何访问属性的。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-15.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-15.svg"/></p>
 <p>为了在这种特殊情况下实现快速重复访问，我们需要知道这三件事：</p>
 <ol>
 <li><code>foo</code>的 shape 不包含 <code>'getX'</code> 并且没有改变过。这意味着没有人通过添加或删除属性或通过更改其中一个属性来更改对象 <code>foo</code>。</li>
@@ -188,7 +188,7 @@ const x = foo.getX();
 const title = anchor.getAttribute('title');
 </code></pre>
 <p>我们有一个 <code>HTMLAnchorElement</code>，在其上调用 <code>getAttribute()</code> 方法。这个简单的锚元素原型链就已经涉及6个原型！大多数有趣的 DOM 方法并不是直接存在于 <code>HTMLAnchorElement</code> 原型中，而是在原型链的更高层。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-16.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-16.svg"/></p>
 <p>我们可以在 <code>Element.prototype</code> 上找到 <code>getAttribute()</code> 方法。这意味着我们每次调用 <code>anchor.getAttribute()</code> 时，JavaScript引擎都需要......</p>
 <ol>
 <li>检测到 <code>'getAttribute'</code> 不在锚对象本身上，</li>
@@ -210,21 +210,21 @@ const foo = new Bar(true);
 const $getX = foo.getX;
 </code></pre>
 <p>在直到我们找到携带目标属性的原型之前，我们需要对原型链上的每个对象进行 shape 的缺失检查。如果我们可以通过将原型检查折叠到缺失检查来减少检查次数，那就太好了。而这基本上就是引擎所做的：<strong>引擎将原型链在 <code>Shape</code> 上，而不是直接链在实例上。</strong></p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-17.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-17.svg"/></p>
 <p>每个 shape 都指向原型。这也意味着每次 <code>foo</code> 原型发生变化时，引擎都会转换到一个新 shape。 现在我们只需要检查一个对象的 shape，这样既可以断言某些属性的缺失，也可以保护原型链链接。</p>
 <p>通过这种方法，我们可以将检查次数从 <code>1 + 2N</code> 降到 <code>1 + N</code>，以便在原型上更快地访问属性。但这仍相当昂贵，因为它在原型链的长度上仍然是线性的。 为了进一步将检查次数减少到一个常量级别，引擎采用了不同的技巧，特别是对于相同属性访问的后续执行。</p>
 <h3>2.3 Validity cells</h3>
 <p>V8专门为此目的处理原型的 shape。每个原型都具有一个不与其他对象（特别是不与其他原型共享）共享且独特的 shape，且每个原型的 shape 都具有与之关联的一个特殊 <code>ValidityCell</code>。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-18.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-18.svg"/></p>
 <p>只要有人更改相关原型或其祖先的任何原型，此 <code>ValidityCell</code> 就会失效。让我们来看看它是如何工作的。</p>
 <p>为了加速原型的后续访问，V8 建立了一个 Inline Cache，其中包含四个字段：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-19.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-19.svg"/></p>
 <p>在第一次运行此代码预热 inline cache 时，V8 会记住目标属性在原型中的偏移量，找到属性的原型（本例中为 <code>Bar.prototype</code>），实例的 shape（在这种情况下为 <code>foo</code> 的 shape），以及与实例 shape 链接的<em>直接原型</em>中 <code>ValidityCell</code> 的链接（在本例中也恰好是 <code>Bar.prototype</code>）。</p>
 <p>下次 inline cache 命中时，引擎必须检查实例的 shape 和 <code>ValidityCell</code>。如果它仍然有效，则引擎可以直接到达 <code>Prototype</code> 上的 <code>Offset</code> 位置，跳过其他查找。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-20.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-20.svg"/></p>
 <p>当原型改变时，shape 将重新分配，且先前的 <code>ValidityCell</code> 失效。因此，Inline Cache 在下次执行时会失效，从而导致性能下降。</p>
 <p>回到之前的 DOM 示例，这意味着对 <code>Object.prototype</code> 的任何更改不仅会使 <code>Object.prototype</code>本身的 inline cache 失效，而且还会使其下游的所有原型失效，包括<code>EventTarget.prototype</code>，<code>Node.prototype</code>，<code>Element.prototype</code> 等，直到 <code>HTMLAnchorElement.prototype</code> 为止。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2018-08-21-Prototypes-21.svg"/></p>
+<p><img alt="" src="/assets/in-post/2018-08-21-Prototypes-21.svg"/></p>
 <p>实际上，在运行代码时修改 <code>Object.prototype</code> 意味着完全抛弃性能上的考虑。不要这样做！</p>
 <p>让我们用一个具体的例子来探讨这个问题。 假设我们有一个类叫做 <code>Bar</code>，并且我们有一个函数 <code>loadX</code>，它调用 <code>Bar</code> 对象上的方法。 我们用同一个类的实例多调用这个 <code>loadX</code> 函数几次。</p>
 <pre><code class="language-javascript">class Bar { /* … */ }

@@ -35,9 +35,9 @@ caption: "©️hijiangtao"</h2>
 <p>于是，第一步便是定位到主要的几个组件，避免其在隐藏时执行 DOM 卸载（保留节点），通过这一步改变，我们直接消除了卡死现象。</p>
 <h2>部分优化尝试</h2>
 <p>为了更好的模拟卡顿现象，我们可以通过 chrome devtools 中 performance tab 中的 CPU throttling 配置来模拟卡顿：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-0.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-0.png"/></p>
 <p>在 Windows 高配版机器上，我们先将 CPU 降低配置 4x 情况，然后录制一段操作，从下图中可以看出有明显的任务执行耗时过长 &amp; CPU 占用过高的现象：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-1.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-1.png"/></p>
 <p>以耗时最长的任务中占用时间最长的活动为例，我们搜索一下该关键词可以查到一个讨论 <a href="https://stackoverflow.com/questions/39916356/reacterrorutils-invokeguardedcallback-in-react-fires-event-repeatedly-in-ie-brow">https://stackoverflow.com/questions/39916356/reacterrorutils-invokeguardedcallback-in-react-fires-event-repeatedly-in-ie-brow</a>，简单来说，我们可以尝试优化点击事件不进行冒泡来减少事件的触发，例如：</p>
 <pre><code>event.stopPropagation();
 </code></pre>
@@ -57,9 +57,9 @@ export const stopPropagationWrapper = (handleClick: Func) =&gt; (event: Event | 
 
 </code></pre>
 <p>我们继续针对卡顿问题的调用情况进行梳理。从录制的执行队列中选取较长的一个 long task 进行分析，可以看到在模拟卡顿时排名靠前四的调用任务分别如下：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-2.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-2.png"/></p>
 <p>其中 fsync 函数调用时间占第一，而拆分 fsync 的活动调用可以看到主要调用了 fsyncSync：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-3.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-3.png"/></p>
 <p>此处未对 fsync 进一步分析以确定优化策略，但对于 fsync 的作用可以参考如下一段描述：</p>
 <blockquote>
 <p>fsync 函数只对由文件描述符 filedes 指定的单一文件起作用，并且等待写磁盘操作结束，然后返回。fsync 可用于数据库这样的应用程序，这种应用程序需要确保将修改过的块立即写到磁盘上。</p>
@@ -84,13 +84,13 @@ export default memo(Detail);
 <h2>后续可能的优化空间</h2>
 <p>在一些 long task 任务的分析中，我们还可以具体定位到代码来进行优化，这里再举一个例子。</p>
 <p>通过录制卡死情况下的堆栈调用情况，可以发现有一个 2.7s 任务中包含很多活动，如 Minor GC、react event、fsync、ReactElement 等等，其中 mergeProps 函数调用耗时250+ms。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-4.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-4.png"/></p>
 <p>针对这些函数调用，有些可能是 React 内部实现 API，有些可能是 UI 库 API，所以要想一一优化，也需要逐个分析，看是优化代码的调用与响应方式，还是合并组件 props 的传递与调用。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-5.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-5.png"/></p>
 <p>此外，通过监控 layers 变化情况，也会发现一些 slow scroll rects，这在 chrome 中都会通过红色区域以标注出来，通过定位这些在滚动中可能会造成缓慢的区域并检查代码，也有提升应用性能的可能性，因此，也是优化方向之一。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-6.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-6.png"/></p>
 <p>比如针对我们的场景，通过调整 layer 布局，可以看到虽然 layer 层级很多，但是主要的 slow scroll rects 区域还是集中在主内容区，即分页列表本身。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-7.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-7.png"/></p>
 <h2>Electron 注意事项</h2>
 <p>本来，为了可以针对这些数据进行持续的分析，想从 performance 中将数据下载下来，以便之后有空时继续调试，但由于 Electron 的某些限制或者说是错误，我们目前无法保存 performance tab 下的性能数据到本地以便进行更深入的分析和查看。如果有涉及到 electron 开发的场景，需要注意下这个问题。问题现象详见 issue <a href="https://github.com/electron/electron/issues/39818">https://github.com/electron/electron/issues/39818</a></p>
 <h2>优化效果</h2>
@@ -102,7 +102,7 @@ export default memo(Detail);
 <li>渲染效率上，从数据上看，频繁出现的 500ms-700ms long task 已减为当前观察范围内没有超过 300ms 的 long task，代码执行效率上有较大提升；</li>
 </ol>
 <p>以下为优化后效果采样图：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-8.png"/></p>
+<p><img alt="" src="/assets/in-post/2024-01-03-Debug-Notes-of-Electron-App-8.png"/></p>
 <h2>简要总结</h2>
 <p>通过分析与优化尝试，我们解决了客户端卡死问题，并改善了卡顿现象，但其中暴露出一些编程规范与用法不够优雅的问题还需要在日常中持续完善，这也是这次优化未尽事宜，需要在未来不断排期以彻底解决。</p>
 <p>当然，此中涉及到的一些调试与问题定位方法，也不仅局限于客户端的问题排查，而是通用 Web 应用性能评估时调试可以用到的手段，而更深入的研究则要开始涉猎到框架代码等内部函数调用的地方了，这也是本文未涉及部分，有待后续继续研究与定位。</p>

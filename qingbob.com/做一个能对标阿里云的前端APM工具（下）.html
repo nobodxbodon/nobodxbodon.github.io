@@ -24,7 +24,7 @@ browser.close();
 </code></pre>
 <p>注意程序会等到 <code>.single-folder-container</code> 元素出现之后才进入关闭流程，在关闭前会等待30秒钟来保证有足够的时间将指标数据上传到 Application Insights。</p>
 <p>为了达到重复访问的效果，我给机器人制定的执行策略非常简单，每五分钟执行一次。这种轻量级的定时任务应用非常适用于部署在 Azure Serverless 上，同时 Azure Serverless 也支持在部署时指定区域，这样就能达到模拟全球不同地区访问的效果</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/005_function_apps.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/005_function_apps.png"/></p>
 <p>虽然每一个 Serverless Function 都能配置独立的执行间隔，但考虑到可维护性，比如将来希望将5分钟执行间隔提高到2分钟时不去修改27里的每一个 function，我决定将所有 function 交给 <a href="https://azure.microsoft.com/en-us/services/logic-apps/#overview">Azure Logic App</a> 进行管理</p>
 <p>Azure Logic App 在我看来是一款可视化低代码工具。它能够允许非编程人员以点击拖拽的形式创建工作流。初始化变量、分支判断、循环、响应或者发送网络请求，都可以仅用鼠标办到。</p>
 <p>我们的场景总结下来就两句话：</p>
@@ -37,9 +37,9 @@ browser.close();
 <li>工作流的触发器为一个定时任务，每十分钟执行一次</li>
 <li>定时任务执行时连带执行所有的 Azure Function</li>
 </ul>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/006_logic_app_design.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/006_logic_app_design.png"/></p>
 <p>Azure Logic App 还会将每次的执行情况记录下来，甚至每个函数的输入和输出，某种意义上这也起到了监控执行的作用</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/007_logic_app_history.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/007_logic_app_history.png"/></p>
 <h2>审视数据，发现问题</h2>
 <p>工具开发完成之后不间断的运行了七天，这七天时间内共产生了 219613 条数据。看看我们能从这二十万数据钟能发现什么</p>
 <p>首先我们要看一个最重要的指标：关键元素的出现时机</p>
@@ -52,7 +52,7 @@ browser.close();
 | order by avg_duration asc 
 </code></pre>
 <p>指标数据我按照国家地区排序，在我看来地区会是影响速度的关键因素，最终结果如下。抱歉我使用的名称是 avg_duration 这个有误导的名称，实际上这个指标应该是一个 startTime，即从浏览器开始加载页面的开始为起点，到看到元素的时间。下面的 first-contentful-paint 同理</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/008_key_element_data.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/008_key_element_data.png"/></p>
 <p>从肉眼上我们可以感知到，大部分用户会在3秒左右才会看到实质性内容。接下来我们要做的就是探索3秒钟的时间去哪了。</p>
 <p>顺便也可以查询一下浏览器提供的 first-contentful-paint 数据如何。上面的查询语句在之后会频繁被用到，所以我们可以提取一个函数出来</p>
 <pre><code class="language-kusto">let queryMetricByName = (inputName: string) {
@@ -68,21 +68,21 @@ browser.close();
 <p>接着用这个函数查询 first-contentful-paint 指标</p>
 <pre><code class="language-javascript">queryMetricByName('browser:first-contentful-paint')
 </code></pre>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/009_fcp_data.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/009_fcp_data.png"/></p>
 <p>浏览器认为用户在 1.5 秒左右就看到了一些有用的内容了，但是从我们刚刚查询到的关键元素出现时机看来并非如此</p>
 <p>我们先看看脚本的资源加载情况，以 runtime 脚本为例，我们看看它的平均加载时间</p>
 <pre><code class="language-javascript">queryMetricByName('resource:script:https://www.site2share.com/runtime-es2015.ffba78f539fb511f7b4b.js')
 </code></pre>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/010_runtime_js.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/010_runtime_js.png"/></p>
 <p>平均时间不过 100ms</p>
 <p>而 http 请求指标数据呢</p>
 <pre><code class="language-javascript">queryMetricByName('resource:xmlhttprequest')
 </code></pre>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/011_ajax.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/011_ajax.png"/></p>
 <p>相比资源加载而言，平均1s的请求时长已经是资源加载时长的好几倍了，它有很大的嫌疑。接着我们继续看后端 SQL 查询数据性能</p>
 <pre><code class="language-javascript">queryMetricByName('APM:GET_SINGLE_FOLDER:FIND_BY_ID')
 </code></pre>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/012_sql_query.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/012_sql_query.png"/></p>
 <p>首先要理解一下为什么这里只有一类地理位置的数据，因为之前所有的前端数据都又不同地区的机器人感知产生。因为我的后端服务器只有一台。虽然机器人从世界各地访问，但是查询总发生在这一台服务器上</p>
 <p>这里就很有意思了。也就是说平均请求时间我们需要花上一秒钟，但是实际的 SQL 查询时间只需要100毫秒</p>
 <p>为了还原犯罪事实，我们不妨从选取一次具体的请求，看看从后端到前端的时间线是怎么样的。这个时候 Application Insights 的 Telementry Correlation 的功能就体现出来了，我们只需要指定一个 operation_id 即可</p>
@@ -94,9 +94,9 @@ browser.close();
 | order by timestamp asc
 </code></pre>
 <p>我们于是得到了所有的结果</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/013_single_round.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/013_single_round.png"/></p>
 <p>我们只需要 fetchStart 和 valueSum (也就是 duration) 就可以把整个流程图画出来</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/014_perf_timeline.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/014_perf_timeline.png"/></p>
 <p>脚本资源在1s钟之内就加载完毕了。很明显，瓶颈在于接口的 RTT（Round-Trip Time）太长。抱歉没钱在世界各地部署后端节点。</p>
 <h2>总结</h2>
 <p>我自己写到这里觉得这篇文章有炫技或者是多此一举的嫌疑。因为即使没有这套工具。凭借工程师的经验，你也应该大致能猜到问题出在哪。</p>
@@ -106,7 +106,7 @@ browser.close();
 <p>但我不认为这个方案无价值可言，对于我个人来说一个切实可行且能够落地的代码会比所谓摘抄自教科书上所谓的业界方案更重要；另一方面我在这个方案上看到了很多种可能性，比如它可以支持更多种类的指标采集，又比如<a href="https://addyosmani.com/blog/puppeteer-recipes/">利用 Headless Chrome 自带的开发者工具</a>我们可以洞见更多网站潜在的性能问题，也许者几十万条数据还能够帮助我们预测某时某刻的性能状况。</p>
 <h2>对比阿里</h2>
 <p>阿里云有两个工具我们可以拿来对比，一个是阿里云的前端前端性能监控工具</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/015_aliyun_01.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/015_aliyun_01.png"/></p>
 <p>我没法将整个页面截图给你，但是总体看来，统计的信息有
 • JS错误信息
 • API请求信息
@@ -115,9 +115,9 @@ browser.close();
 • 访问的各个维度（地理位置、网络、终端分布）</p>
 <p>从上图的左侧子菜单可以看出，对每一类信息它都已经给出了预订制的报告详情。你可以把它理解为对于 Application Insights 数据进行加工后显得对人类更友好的产品。因为 Application Insights 是非常底层存储于表中的数据，你需要自己编写查询语句然后生成报表</p>
 <p>另一个和我们功能很像的工具是云拨测，在这个工具内你可以选择测试发起的城市，来看看不同人群对于你网站的性能体验如何。比如我选择了美国和北京</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/016_aliyun_02.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/016_aliyun_02.png"/></p>
 <p>甚至对于每一次访问，我们都能看到它的详细数据，甚至包括我们之前说的 DNS 的情况</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/001_apm_tool/017_aliyun_03.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/001_apm_tool/017_aliyun_03.png"/></p>
 <p>如此强大的功能不是我个人开发出的工具能够匹敌的。</p>
 <p>但是面对这些无所不能的工具，假设它们能把成千上百个指标准确的呈现在你面前，我想问的是，你真的需要它们吗？或者说，你关心的究竟是什么？</p>
 <p>你可能会喜欢：</p>

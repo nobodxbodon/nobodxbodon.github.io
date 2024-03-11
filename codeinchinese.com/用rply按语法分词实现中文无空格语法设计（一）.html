@@ -1,7 +1,7 @@
 <h2>原文：<a href="http://codeinchinese.com/2021/09/20/%E7%94%A8rply%E6%8C%89%E8%AF%AD%E6%B3%95%E5%88%86%E8%AF%8D%E5%AE%9E%E7%8E%B0%E4%B8%AD%E6%96%87%E6%97%A0%E7%A9%BA%E6%A0%BC%E8%AF%AD%E6%B3%95%E8%AE%BE%E8%AE%A1%EF%BC%88%E4%B8%80%EF%BC%89">用rply按语法分词实现中文无空格语法设计（一）</a></h2>
 <p>续 <a href="https://zhuanlan.zhihu.com/p/411991539">之前的小结</a>，将回退点用栈结构管理、将分词失败的回退修正之后，成功通过了更多测试。</p>
 <p>更新后的按语法分词流程如下：
-<img alt="rply" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-21-%E6%8C%89%E8%AF%AD%E6%B3%95%E5%88%86%E8%AF%8D%E6%B5%81%E7%A8%8B%E5%9B%BE.png"/></p>
+<img alt="rply" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-21-%E6%8C%89%E8%AF%AD%E6%B3%95%E5%88%86%E8%AF%8D%E6%B5%81%E7%A8%8B%E5%9B%BE.png"/></p>
 <p>当前最复杂的一个测试用例中有六条语法规则（隔天已上升到十一条），编写时发现一个语法规则错误。本文将调试过程整理一下，顺便演示当前分词算法、以及调试手段。</p>
 <p>例程为：<em><strong>创建读者表,编号为整数,出生年为文本</strong></em></p>
 <p>一开始时为此设计的语法规则如下（摘自测试用例源码）：</p>
@@ -19,19 +19,19 @@
 <p>运行测试用例时报错——回退栈pop时发现为空，就是没能根据语法进行分词（在下当前实现的调试信息之原始可见一斑）。</p>
 <p>当时第一反应是实现算法而不是语法规则有误，无论如何，看调试输出。为易于理解，用类似于搜索算法的图示表示分词过程：</p>
 <p>首先从位置 0 开始，匹配了“创建”关键词，到了位置 2：
-<img alt="1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-20-%E8%B0%83%E8%AF%951.png"/></p>
+<img alt="1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-20-%E8%B0%83%E8%AF%951.png"/></p>
 <p>接着最长匹配了“读者表”为标识符，到了位置 5：
-<img alt="2" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-20-%E8%B0%83%E8%AF%952.png"/></p>
+<img alt="2" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-20-%E8%B0%83%E8%AF%952.png"/></p>
 <p>匹配了逗号，到了位置 6。发现语法错误，因为根据“表声明”语法，标识符后应该为“表”，于是回退到位置 5：
-<img alt="3" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-20-%E8%B0%83%E8%AF%953.png"/></p>
+<img alt="3" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-20-%E8%B0%83%E8%AF%953.png"/></p>
 <p>在位置 5 无法根据任何其他词法规则进行匹配，于是继续回退到位置 2，下面从 2 开始开始新的一个搜索分支：
-<img alt="4" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-20-%E8%B0%83%E8%AF%954.png"/></p>
+<img alt="4" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-20-%E8%B0%83%E8%AF%954.png"/></p>
 <p>匹配了短一位的“读者”为标识符，位置到 4：
-<img alt="5" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-20-%E8%B0%83%E8%AF%955.png"/></p>
+<img alt="5" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-20-%E8%B0%83%E8%AF%955.png"/></p>
 <p>匹配了“表”关键词，位置到 5：
-<img alt="6" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-20-%E8%B0%83%E8%AF%956.png"/></p>
+<img alt="6" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-20-%E8%B0%83%E8%AF%956.png"/></p>
 <p>匹配了逗号，到了位置 6。结果仍然语法错误。
-<img alt="7" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com../assets/2021-09-20-%E8%B0%83%E8%AF%957.png"/></p>
+<img alt="7" src="/media/wwww/share/study/聚聚/源数据/博客聚合/codeinchinese.com/_posts/../assets/2021-09-20-%E8%B0%83%E8%AF%957.png"/></p>
 <p>不对哦，这里应该是语法正确，继续分词才对。细看相关语法规则：</p>
 <pre><code>建表 : 表声明 各列声明
 各列声明 : 列声明

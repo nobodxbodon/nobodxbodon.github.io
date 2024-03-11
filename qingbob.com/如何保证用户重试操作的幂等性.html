@@ -17,7 +17,7 @@ share: true</h2>
 <p><strong>用例2</strong>：在用户第一次访问网站前，他需要签署一系列协议。但我们发现有些协议被连续签署了多次，导致后续的功能出现了异常。在重现问题的过程中我们得知，确实可以通过复制浏览器标签的方式来重复签署同一份协议</p>
 <p>这两个问题的修复方式是显而易见的：给后端有关接口添加校验。但问题是，它们是否可以算作开发功能的失误？用“九转大肠”问句就是：是故意的还是不小心的？</p>
 <p>经典的风险应对模型告诉我们，根据风险的危害和发生概率，我们可以使用四种策略来处理问题：avoid、reduce、retain、transfer</p>
-<p><img alt="风险管理矩阵" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/risk_handle_matrix.png"/></p>
+<p><img alt="风险管理矩阵" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/risk_handle_matrix.png"/></p>
 <p>在我看来模型传达给我们的不止于此；</p>
 <ul>
 <li>对于 retain，我认为它更想表达的不仅仅接纳（什么都不做），而是尽可能用低成本的方式去做；</li>
@@ -33,23 +33,23 @@ share: true</h2>
 <h2>更复杂的问题</h2>
 <p>如果说前两个用例的症结和方案都清晰可见的话，下面这个用例也许可以带来一些思考。</p>
 <p>假设我们需要在页面上展示申请处理进展，进展由步骤（step）构成。步骤的类型分为主步骤（step）和子步骤（sub step），可以混合使用进行串联，如下图所示</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/01.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/01.png"/></p>
 <p>顾名思义，进展允许前进也就允许回滚。两类步骤分别有属于自己的回滚接口：</p>
 <ul>
 <li>step 回滚：使用 PUT method 调用 /{progressID}/back</li>
 <li>sub step 回滚：使用 PUT method 调用 /{progressID}/back，但是需要在 payload 里加上需要回滚的 sub step 所属的 step ID</li>
 </ul>
 <p>假设目前存在一个如下图所示的步骤序列，当前的步骤位置处于尾声</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/02.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/02.png"/></p>
 <p>如果想要把这一系列步骤正确回滚，接口的调用顺序如下：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/03.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/03.png"/></p>
 <p>但在排查一个问题时，我们发现用户侧的实际调用顺序是这样的：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/04.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/04.png"/></p>
 <p>这便导致当中的某个 sub step 被略过，数据没有被正常清除</p>
 <p>而为什么会出现这种情况？通过 Application Insights 我们发现，用户在从点击选择发送回滚请求到服务器接收到请求，存在12秒的网络延迟，实际代码只花费了 276ms 来处理这个请求</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/05.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/05.png"/></p>
 <p>而恰好 UI 又允许用户在等待请求的返回过程中选择重新取消等待界面，重新点击发送</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/06.png"/></p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/06.png"/></p>
 <p>于是用户在等待的过程中选择不断的重试</p>
 <h2>问题在哪</h2>
 <h3>允许重试？</h3>
@@ -68,7 +68,7 @@ share: true</h2>
 </ul>
 <p>除此之外幂等性也是需要代价的，在我看来一个幂等接口的完美实现可以参考这篇同样是来自 AWS 的文章<a href="https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/">《Making retries safe with idempotent APIs》</a>，他们在请求中加入了 unique client request identifier 作为
 标识符，用于后续服务判断是否已经处理过相同的请求。</p>
-<p><img alt="aws idempotent api design" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com../images/022_keep-user-interaction-idempotent/aws_idempotent_api_design.png"/></p>
+<p><img alt="aws idempotent api design" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/022_keep-user-interaction-idempotent/aws_idempotent_api_design.png"/></p>
 <p>上面覆盖的只是其中一类场景，实际的业务场景可能更复杂，例如要应对资源竞争的情况，如果想要了解更多接口的幂等实现，可以参考这篇文章<a href="https://levelup.gitconnected.com/how-to-ensure-idempotence-f436a42bf67d">《How to ensure idempotence》</a></p>
 <h2>用户行为的幂等性</h2>
 <p>如何解决此类问题，尤其是在我们解决做解决方案的时候，需要注意保证用户行为（或者说业务操作）的幂等性，而不是仅仅关注接口本身，因为一个操作通常是由多个请求，甚至前后端的配合同时完成的，例如一个 step 可不可以被回滚多次？假如一个回滚操作需要调用多个接口，部分成功会不会有任何的风险？</p>

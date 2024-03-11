@@ -40,10 +40,10 @@ T queue::pop() {
 <p>下面我们介绍几种简单的无锁队列的实现.</p>
 <h2>单写单读的队列</h2>
 <p>单写单读的队列比较简单, 这里我们使用循环队列实现. 如下图所示, 队列维护两个指针 <code>head</code> 和 <code>tail</code>, 分别指向队首和队尾. <code>tail</code> 始终指向 dummy 节点, 这样 <code>tail == head</code> 表示队列为空, <code>(tail + 1) % Cap == head</code> 表示队列已满, 不用维护 <code>size</code> 成员.</p>
-<p><img alt="ring-buffer" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/lock-free-queue_1.svg"/></p>
+<p><img alt="ring-buffer" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_1.svg"/></p>
 <p>入队的时候移动 <code>tail</code> 指针, 而出队的时候移动 <code>head</code> 指针, 两个操作并无冲突. 不过, 出队前需要读取 <code>tail</code> 指针, 判断 <code>tail != head</code> 确认队列不为空; 同理入队时也要判断 <code>(tail + 1) % Cap != head</code> 以确认队列不满. 由于存在多个线程读写这两个指针, 因此它们都应该是原子变量.</p>
 <p>此外, 由于两个操作在不同线程中执行, 我们还需考虑内存顺序. 如果初始队列为空, 线程 a 先执行入队操作, 线程 b 后执行出队操作, 则线程 a 入队操作的内容要对线程 b 可见.</p>
-<p><img alt="push-pop" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/lock-free-queue_2.svg"/></p>
+<p><img alt="push-pop" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_2.svg"/></p>
 <p>为了做到这一点, 需要有 a(2) "happens-before" b(3). 而 a(3) 和 b(2) 分别修改了读取了 <code>tail</code>, 所以应该利用原子变量同步, 使得 a(3) "synchronizes-with" b(2). 可以在 a(3) 写入 <code>tail</code> 的操作中使用 release, b(2) 读取 <code>tail</code> 的操作中使用 acquire 实现同步. 不熟悉内存顺序的同学可以参考<a href="/2022/06/25/cpp-memory-order.html">上一篇文章</a>.</p>
 <p>同理, 如果初始队列满, 线程 a 先执行出队操作, 线程 b 后执行入队操作, 则线程 a 出队操作的结果要对线程 b 可见. 出队的时候需要调用出队元素的析构函数, 要保证出队元素正常销毁后才能在那个位置写入新元素, 否则会导致内存损坏. 可以在出队写入 <code>head</code> 的操作中使用 release, 入队读取 <code>head</code> 的操作中使用 acquire 实现出队 "synchronizes-with" 入队.</p>
 <pre><code class="language-c++">template &lt;typename T, size_t Cap&gt;
@@ -195,7 +195,7 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 <li>线程 b 调用 <code>pop</code> , 执行 b(4). 因为 <code>tail</code> 被更新, 因此判断队列不为空</li>
 <li>执行到 b(5), 会读取到无效的值</li>
 </ul>
-<p><img alt="empty-push" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/lock-free-queue_3.svg"/></p>
+<p><img alt="empty-push" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_3.svg"/></p>
 <p>为了实现 <code>push</code> 与 <code>pop</code> 的并发, <code>push</code> 对 <code>data[t]</code> 的写入必须 "happens-before" <code>pop</code> 对 <code>data[h]</code> 的读取. 因此这就要求 <code>push</code> 操作先对 <code>data[t]</code> 赋值, 再移动 <code>tail</code> 指针. 可是前面为了实现 <code>push</code> 与 <code>push</code> 的并发我们又让 <code>push</code> 操作先移动 <code>tail</code> 再对 <code>data[t]</code> 赋值. 如何解决这一矛盾呢?</p>
 <p>解决办法是引入一个新的指针 <code>write</code> , 用于 <code>push</code> 与 <code>pop</code> 同步. 它表示 <code>push</code> 操作<strong>写到了哪个位置</strong>.</p>
 <pre><code class="language-c++">template &lt;typename T, size_t Cap&gt;
@@ -299,7 +299,7 @@ bool ring_buffer&lt;T, Cap&gt;::pop(T &amp;val) {
 </ul>
 <h2>性能测试</h2>
 <p>设置不同的生产者和消费者线程数量, 每个生产者向依次队列里插入 10000 个元素. 下面是测试结果, "<strong>X</strong>p<strong>Y</strong>c" 表示 X 个生产者 Y 个消费者. 纵坐标为耗时.</p>
-<p><img alt="performance" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/assets/images/lock-free-queue_4.png"/></p>
+<p><img alt="performance" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_4.png"/></p>
 <p>可以看到无锁队列并不总是最快, 当生产者数量增多时, 性能开始下降, 因为入队的时候需要抢占 <code>tail</code> 和 <code>write</code>. 实际应用中需要具体情况具体分析.</p>
 <hr/>
 <p><strong>参考资料:</strong></p>
