@@ -1,0 +1,594 @@
+<h2>原文：<a href="https://xieguanglei.github.io/blog/post/threejs-guide-translation.html">threejs-guide-translation</a></h2>
+<h1>「译」ThreeJS 入门教程</h1>
+<hr/>
+<p>注意：由于原网站 <a href="http://www.aerotwist.com">aerotwist.com</a> 改版，本教程中示例源代码下载链接已经失效，但仍可以通过「看看效果」观看在线示例并查看源代码。</p>
+<hr/>
+<h2>0. 译序</h2>
+<p>ThreeJS 是一个「伟大」的开源 WebGL 库，它还处在发展阶段，学习资料比较匮乏，有时候不得不通过 Demo 源码和 ThreeJS 本身的源码来学习。国外网站 <a href="http://www.aerotwist.com">aerotwist.com</a> 有6篇较为简单的入门教程，我尝试着将其翻译过来，与读者分享。</p>
+<h2>1. 开始使用ThreeJS</h2>
+<p>我在一些实验性项目中使用了 ThreeJS。我发现利用它快速上手进行 Web 3D 开发，确实很方便。通过 ThreeJS，你不仅可以创建相机、物体、光线、材质等等，还可以选择着色器，甚至可以决定使用何种技术（WebGL、Canvas 或 SVG）在网页上渲染三维图形。ThreeJS 是开源的，你甚至可以参与到这个项目中来。现在，我将着重向你介绍 ThreeJS 的基础，希望能够教会你如何使用它。</p>
+<p>尽管 ThreeJS 如此奇妙，但有时候它也会令人抓狂。比如，你将花费大量时间阅读示例，做一些逆向工程（在我的情形下）来确定某个函数的作用，有时还要去 GitHub 上提问。如果你需要提问，<a href="http://mrdoob.com/">Mr. doob</a> 和 <a href="http://alteredqualia.com/">AlteredQualia</a> 是极好的选择。</p>
+<h3>1.1. 基础</h3>
+<p>我假定你的三维图形学知识过关，而且也在一定程度上掌握了 JavaScript。如果不是这样，那先去学一点吧。</p>
+<p>在三维世界里，有以下这些东西。我会带你一步一步创建它们。</p>
+<ol>
+<li>场景</li>
+<li>渲染器（Renderer）</li>
+<li>相机</li>
+<li>物体（带有材质的）</li>
+</ol>
+<p>当然，你也可以创造些其他的什么东西，我也希望你如此做。</p>
+<h3>1.2. 浏览器支持</h3>
+<p>简单地看一下浏览器支持的情况。Google 家的 Chrome 浏览器支持 ThreeJS，在我的实验里，无论是对渲染器的支持程度还是 JavaScript 解释器的运行速度，Chrome 都是做得最好的：它支持 Canvas、WebGL 和 SVG，而且运行得非常快。FireFox 浏览器排在第二位，它的 JavaScript 引擎的速度比Chrome慢了半拍，但是对渲染器的支持也很棒，而且 FireFox 的速度，随着版本更新也越来越快。Opera 浏览器正在逐渐增加对WebGL 的支持，Mac 上的 Safari 浏览器有一个开启 WebGL 的选项。总体上，这两个浏览器仅仅支持Canvas渲染。微软家的 IE9 现在只支持Canvas渲染，而且微软似乎并不乐意支持 WebGL 这个新特性，所以我们现在肯定不会用 IE9 来做实验。</p>
+<h3>1.3. 设置场景</h3>
+<p>假定你已经选择了一个支持所有渲染技术的浏览器，而且你准备通过 Canvas 或 WebGL 来渲染场景（这是更标准化的选择）。Canvas 比 WebGL 有着更广泛地支持，但是 WebGL 可以直接在 GPU 上操作，这意味着你的 CPU 可以专注地处理非渲染类的工作，比如物理引擎或与用户交互等。</p>
+<p>无论你选择何种渲染器，你都必须牢记在心的是：JavaScript 代码需要优化。三维显示对浏览器来说不是一项轻松的工作（现在能够这样做就很伟大了），所以如果你的渲染太慢了，你需要知道你代码的瓶颈在何处，如果可能，改善它。</p>
+<p>说了这么多，我想你已经<a href="https://github.com/mrdoob/ThreeJS/archives/master">下载</a>好 ThreeJS 的源代码，而且将它引入了你的 html 文档了。那么如何开始创建一个场景呢？就像这样：</p>
+<pre><code>// 设置场景大小
+var WIDTH = 400,
+  HEIGHT = 300;
+// 设置一些相机参数
+var VIEW_ANGLE = 45,
+  ASPECT = WIDTH / HEIGHT,
+  NEAR = 0.1,
+  FAR = 10000;
+// 获取DOM结构中的元素
+// - 假设我们使用了JQuery
+var $container = $('#container');
+// 创建渲染器、相机和场景
+var renderer = new THREE.WebGLRenderer();
+var camera =
+  new THREE.PerspectiveCamera(
+    VIEW_ANGLE,
+    ASPECT,
+    NEAR,
+    FAR);
+var scene = new THREE.Scene();
+// 将相机加入场景
+scene.add(camera);
+// 相机的初始位置为原点
+// 将相机拉回来一些（译者注：这样才能看到原点）
+camera.position.z = 300;
+// 启动渲染器
+renderer.setSize(WIDTH, HEIGHT);
+// 将渲染器加到DOM结构中
+$container.append(renderer.domElement);</code></pre>
+<p>你看，简单吧！</p>
+<h3>1.4. 构建网格表面</h3>
+<p>现在我们有了一个场景，一个相机和一个渲染器（在我的例子里，当然是一个 WebGL 渲染器），但我们什么还没画呢。事实上，ThreeJS 提供了载入某几种标准格式 3D 文件的支持，如果你在 Blender，Maya，Cinema4D 或是什么其他工具中建模，这简直太棒了。为了简单（毕竟这才刚开始呢！）我们先来考虑基元。基元就是基本的几何表面，比如最基本的球体、平面、立方体、圆柱体。利用 ThreeJS 可以很方便地创建这些基元：</p>
+<pre><code>// 设置球体参数（译者注：球体被划分为16×16的网格，如果后两个参数取4、2，则生成一个八面体，请想象）
+var radius = 50,
+    segments = 16,
+    rings = 16;
+// material覆盖在geometry上，生成mesh
+var sphere = new THREE.Mesh(
+  new THREE.SphereGeometry(
+    radius,
+    segments,
+    rings),
+  sphereMaterial);
+// 将mesh加入到场景中
+scene.add(sphere);</code></pre>
+<p>好了，但是球体上的材质呢？在代码中我们使用了一个 <code>sphereMaterial</code> 变量，我们还没定义它呢。那我们就先来看看怎么创建材质吧。</p>
+<h3>1.5. 材质</h3>
+<p>毫无疑问，这是 ThreeJS 最有用的部分了。这部分提供了几个非常易用的通用材质模型：</p>
+<ul>
+<li>Basic 材质：表示一种不考虑光照的材质，现在只能这么说了。</li>
+<li>Lambert 材质：（译者注：朗伯面，各向同性反射）。</li>
+<li>Phong 材质：（译者注：冯氏面，有光泽的表面，介于镜面反射和朗伯反射之间的反射，描述真实世界的反射）。</li>
+</ul>
+<p>除此之外，还有一些其他类型材质，简单起见，就留给你自己探索。事实上，在使用 WebGL 类型的渲染器时，材质实在太好用了。为什么呢？因为在原生 WebGL 中你必须亲自为每个渲染编写着色器，而着色器本身就是个巨大的工程：简单地说着色器是使用 GLSL 语言（OpenGL 的着色器语言）写的，用来操作GPU的程序，这意味着你要在数学上模拟光照，反射等等，这很快就变成一项极为复杂的工作。多亏有了 ThreeJS 你才可以不必去自己编写着色器，当然，如果你想亲自编写的话，你可以使用 MeshShaderMaterial，可见这是很灵活的设定。</p>
+<p>现在，让我们用朗伯面材质覆盖球体：</p>
+<pre><code>// 创建球体表面的材质
+var sphereMaterial =
+  new THREE.MeshLambertMaterial(
+    {
+      color: 0xCC0000
+    }
+);</code></pre>
+<p>值得指出的是，创建材质的时候，除了颜色还有很多其他参数可以指定，比如光滑度和环境贴图。你可以检索<a href="https://github.com/mrdoob/ThreeJS/wiki/API-Reference">这个Wiki页面</a>来确认哪些是哪些属性可以设置在材质上，或 ThreeJS 引擎提供的任何对象上。</p>
+<h3>1.6. 光！</h3>
+<p>如果你现在就想渲染场景，你会看到一个红色的圆。虽然我们在球体上覆盖了朗伯面材质，但场景里没有光。所以按照默认设定，ThreeJS 会恢复到满环境光，物体的看上去的颜色就是物体表面的颜色。让我们添加一个简单的点光源：</p>
+<pre><code>// 创建一个点光源
+var pointLight =
+  new THREE.PointLight(0xFFFFFF);
+// 设置点光源的位置
+pointLight.position.x = 10;
+pointLight.position.y = 50;
+pointLight.position.z = 130;
+// 将点光源加入场景
+scene.add(pointLight);</code></pre>
+<h3>1.7. 渲染循环</h3>
+<p>显然，关于渲染器的一切都设置好了。万事俱备，我们现在只需要：</p>
+<pre><code>// 画!
+renderer.render(scene, camera); </code></pre>
+<p>你很可能像多次渲染，而不是只渲染一次，所以如果你要去做一个循环，你应该使用 ·requestAnimationFrame·。这是目前最好的，在浏览器中处理动画的方法，虽然还没有得到最全面的支持，但我强烈建议你去看一看 <a href="http://paulirish.com/2011/requestanimationframe-for-smart-animating/">Paul Irish</a> 的博客。</p>
+<h3>1.8. 通用的对象属性</h3>
+<p>花点时间去浏览一下 ThreeJS 的源代码，你会发现很多对象都继承自 <code>Object3D</code>。这个基类包含了很多有用的属性，比如位置、旋转和缩放的信息。特别的，我们的球体是一个 <code>Mesh</code> 对象，它也是继承自 <code>Object3D</code> 对象的，但是又增加了自己的属性：<code>geometry</code> 和 <code>material</code>。为什么要说这些？因为你一定不会只满足于屏幕中一个什么都不做的圆球，而这些基类中的属性允许你操作 <code>Mesh</code> 对象更底层的细节和各种各样的材质。</p>
+<pre><code>// sphere是一个mesh对象
+sphere.geometry
+// sphere包含了一些点和面的信息
+sphere.geometry.vertices // 一个数组
+sphere.geometry.faces // 另一个数组
+// mesh对象继承自object3d对象
+sphere.position // 包含x,y,z
+sphere.rotation // 同上
+sphere.scale // ... 同上 </code></pre>
+<h3>1.9. 讨厌的秘密</h3>
+<p>我希望这样说你能很快弄明白：就是如果你修改了，比如说，一个 <code>mesh</code> 对象的顶点属性 <code>vertices</code>，你会发现在渲染循环中，什么都没变。为什么？因为ThreeJS将mesh对象的信息缓存为某种优化结构了。你真正要做的是给 <code>ThreeJS</code> 一个标识，告诉它如果什么东西改变了，需要重新计算缓存中的结构：</p>
+<pre><code>// 设置geometry为动态的，这样才允许改变其中的顶点
+sphere.geometry.dynamic = true;
+// 告诉ThreeJS，需要重新计算顶点
+sphere.geometry.__dirtyVertices = true;
+// 告诉ThreeJS，需要重新计算顶点法向量
+sphere.geometry.__dirtyNormals = true;</code></pre>
+<p>还有更多的标识，但我发现这两个是最有用的。你应该仅仅标识那些确实需要实时计算的属性来避免无谓的运算开销。</p>
+<h3>1.10. 小结</h3>
+<p>我希望这篇简单的介绍对你有所帮助。没什么能比得上卷起袖子亲手实践了，我强烈建议你这样做。在浏览器里面运行 3D 程序很有意思，而且 ThreeJS 帮你免去了很多麻烦，让你一开始就能专注于那些真正 cool 的事情。</p>
+<p>我将这篇教程的源码打包了，你可以<a href="http://www.aerotwist.com/tutorials/getting-started-with-three-js/sample.zip">下载</a>下来作为一份参考。</p>
+<p>如果你喜欢ThreeJS，可以通过<a href="http://www.aerotwist.com/contact/">联系板</a>（译者注：原文博客网站的联系板）或者<a href="http://twitter.com/aerotwist">Twitter</a>联系我，有朋自远方来，不亦乐乎！</p>
+<h2>2. 着色器（上）</h2>
+<h3>2.1. 简介</h3>
+<p>之前我已经给出了一篇「开始使用 ThreeJS」。如果你还没有读过，你可能需要去读一下，本文的基础是在那一篇教程的基础上完成的。</p>
+<p>我想讨论一下着色器。在 ThreeJS 帮助你免去了很多麻烦之前，原生 WebGL 就很优秀了。有的时候，你也许会想要完成一些特定的效果，或者想对呈现在你的屏幕上的东西钻研得更深入一些，那么着色器一定会进入你的视野。如果你像我一样，你也同样希望实现一些比上一篇教程中的基础更加有意思的东西。这篇教程中，我会讲解 ThreeJS 的基础，这些基础实际上为我们做了很多枯燥的工作。</p>
+<p>在开始之前我还要说，这篇教程会有相当多的篇幅在解释着色器的代码，之后会有一篇教程会在着色器代码的基础上前进一点，利用着色器去做点什么。这是因为着色器并不是一眼就能看懂的。</p>
+<h3>2.2. 两种着色器</h3>
+<p>WebGL 没有固定的渲染管线，你无法直接使用一个黑盒子式的着色器（译者注：上个世纪的显卡基本都只支持固定渲染管线）；WebGL 提供的是可编程的管线，这种方式更强大但也更难理解和使用。长话短说，可编程渲染管线意味着编写程序的人要自己负责获取顶点并将它绘制在屏幕上了。着色器是渲染管线的一部分，有两种着色器：</p>
+<ul>
+<li>顶点着色器</li>
+<li>片元着色器</li>
+</ul>
+<p>你应当知道的是，这两种着色器都完全运行在显卡的 GPU 上，我们需要把数据从 CPU 上卸下，装到 GPU 上，减轻了 CPU 的负担。现代的 GPU 对着色器需要的调用的运算类型都做了大幅优化，这样做很值得。</p>
+<h3>2.3. 顶点着色器</h3>
+<p>基元形状，比如一个球体，是由顶点构成的，是吧？顶点着色器被依次传入这些顶点中的一个顶点，然后处理它。如何处理每个顶点是可以自由定制的，但顶点着色器有一个必做的事，就是为一个名为 <code>gl_Position</code> 的变量赋值，该变量是一个4维数组，表示该顶点最终在屏幕上的位置。这本身是个有意思的过程，因为我们实际上在谈论如何将一个三维坐标（一个具有x、y、z值得顶点）转化为，或者说投影到二维的屏幕上。谢天谢地，要是我们使用 ThreeJS 之类的工具，我们能够如此方便地访问到 <code>gl_Position</code>。</p>
+<h3>2.4. 片元着色器</h3>
+<p>现在我们有包含顶点的三维物体了，现在要将物体投影到二维屏幕上了，但颜色哪里去了？纹理和光照呢？这正是片元着色器要处理的。</p>
+<p>和顶点着色器类似，片元着色器有一项必须完成的任务：设置或消除变量 <code>gl_FragColor</code>，也就是片元点最终的颜色。什么是片元？想象一个具有三个顶点的三角形，片元就是经过这三个顶点计算后的，所有在三角形内部的像素。因此，片元值由顶点的值内插生成。如果一个顶点的颜色是红色，相邻顶点的颜色是蓝色，那么我们可以观测到颜色从红色顶点附近渐变，由红色变成紫色，最终在蓝色顶点附近变成蓝色。</p>
+<h3>2.5. 着色器变量</h3>
+<p>说到着色器变量，有三种：Uniform，Attribute 和 Varying。当我第一次听到这三个词语时，我很困惑，因为它们和我之前用到的东西完全不匹配。但现在，你可以这样理解它们：</p>
+<ul>
+<li>Uniform 变量既可以传入顶点着色器，也可以传入片元着色器，它们包含了哪些在整个渲染过程中保持不变的变量，比如，一个点光源的位置。</li>
+<li>Attribute 变量对应于每个顶点，它们只可以传入顶点着色器中，比如每个顶点都具有一个颜色。Attributes变量和顶点的关系是一一对应的。</li>
+<li>Varying 变量是在顶点着色器中定义，并且准备传入给片元着色器的变量。为了确保这点，我们需要确保在两个着色器中变量的类型和命名完全一致。一个经典的应用是法线向量，因为在计算光照的时候需要用到法线。
+在后面一篇教程中，我会使用这三种变量，你也会学习到这三种变量如何真正应用起来得。</li>
+</ul>
+<p>现在，我们已经谈过了顶点着色器、片元着色器和三种着色器变量。是时候来看一个我们可以创建的最简单的着色器了。</p>
+<h3>2.6. Hello World（译者吐槽：能不能不要秀法语啊）</h3>
+<p>这儿有一个最简单的顶点着色器：</p>
+<pre><code>/**
+ * 每个顶点坐标乘以模型视图矩阵在乘以投影矩阵
+ * 获得在二维屏幕上的坐标
+ */
+void main() {
+  gl_Position = projectionMatrix *
+                modelViewMatrix *
+                vec4(position,1.0);
+}</code></pre>
+<p>一个最简单的片元着色器：</p>
+<pre><code>/**
+ * 将任意一个像元色设置为粉红
+ */
+void main() {
+  gl_FragColor = vec4(1.0,  // R
+                      0.0,  // G
+                      1.0,  // B
+                      1.0); // A
+}</code></pre>
+<p>这就是全部了。如果现在直接运行的话，你就可以在屏幕上看到一个“无光”的粉红色形体。不是很复杂，是吗？</p>
+<p>在顶点着色器中，我们通过 ThreeJS 传入了一些 uniform 变量。有两个4×4的矩阵 uniform 变量：模型视图矩阵和投影矩阵。你并不需要太了解这两个矩阵是怎么工作的。简单地说，这两个矩阵描述了三维点坐标如何投影成为二维屏幕上的坐标。</p>
+<p>事实上，我只介绍了这两段简短的代码段。ThreeJS 在你自己的着色器代码前已经将它们加进来了，所以你不必担心。实话说，ThreeJS 还加了很多东西在你的代码前面，比如光照数据、节点颜色和节点法向量等等。如果没有 ThreeJS，你就需要亲自创建并设置这些对象，真的。</p>
+<h3>2.7. 使用着色器材质</h3>
+<pre><code>/**
+ * 假设我们可以使用JQuery
+ * 将着色器的代码文本从DOM中抽取出来
+ */
+var vShader = $('vertexshader');
+var fShader = $('fragmentshader');
+var shaderMaterial =
+  new THREE.ShaderMaterial({
+    vertexShader:   vShader.text(),
+    fragmentShader: fShader.text()
+  }); </code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/an-introduction-to-shaders-part-1/demo/">看看效果</a>。</p>
+<p>从这儿开始，ThreeJS 将会编译并运行你的着色器，将其连接在你创建的材质上，材质又依附于你创建的 mesh 上。它并没有变得比真的更容易。也许是这样吧，但我们在考虑浏览器 3D 编程，我想你应该预期，这个话题是有一定复杂性的。</p>
+<p>我们还可以像着色器材质添加另外两种属性：uniforms 和 attributes。他们可以是向量、整数或者浮点数，但是如我之前所说，uniform 变量在计算所有点的过程中保持不变，所以它们更加可能是单一的值，而attribute 变量是对每个顶点而言的，所以他们应当是数组。在一个 mesh 中，attribute 变量和顶点应当是一一对应的。</p>
+<h3>2.8. 小结</h3>
+<p>这篇教程就到这里了，实际上我已经讲得很多了，但是在许多方面我都只是一掠而过。在下一篇教程中我会提供一个复杂的着色器，通过它我将传入一些 attribute 变量和 uniform 变量来做一些模拟光照效果。</p>
+<p>我将这篇教程的<a href="http://www.aerotwist.com/tutorials/an-introduction-to-shaders-part-1/sample.zip">源码</a>打包了，你可以下载下来作为参考。如果你喜欢，可以通过<a href="http://www.aerotwist.com/contact/">email</a>或<a href="http://twitter.com/aerotwist">Twitter</a>联系我。</p>
+<h2>3. 着色器（下）</h2>
+<h3>3.1. 简介</h3>
+<p>这是WebGL着色器教程的后半部分，如果你没看过前一篇，阅读这一篇教程可能会使你感到困惑，建议你翻阅前面的教程。</p>
+<p>上一篇结束的时候，我们在屏幕中央画了一个好看的粉红色的球体。现在我要开始创建一些更加有意思的东西了。</p>
+<p>在这一篇教程中，我们会先花点时间来加入一个动画循环，然后是顶点 attribute 变量和一个 uniform 变量。我们还要加一些 varying 变量，这样顶点着色器就可以向片元着色器传递信息了。最终的结果是哪个粉红色的球体会从顶部开始向两侧「点燃」，然后作有规律的运动。这有一点迷幻，但是会帮助你对着色器中的三种变量有更好的了解：他们互相联系，实现了整个集合体。当然我们会在 ThreeJS 的框架中做这些。</p>
+<h3>3.2. 模拟光照</h3>
+<p>让我们更新颜色吧，这样球体看起来就不会是个扁平晦暗的圆了。如果我们想看看 ThreeJS 是怎样处理光照的，我敢肯定你会发现这比我们需要的要复杂得多，所以我们先模拟光照吧。你应该浏览一下 ThreeJS 中那些奇妙的着色器，<a href="http://ro.me/tech">还有一些</a>来自最近的一个 Chris Milk 和 Google, <a href="http://ro.me/">Rome</a> 的WebGL项目。</p>
+<p>回到着色器，我们要更新顶点着色器来向片元着色器传递顶点的法向量。利用一个varying变量：</p>
+<pre><code>// 创建一个varying变量vNormal，顶点着色器和片元着色器都包含了该变量
+varying vec3 vNormal;
+void main() {
+  // 将vNormal设置为normal，后者是ThreeJS创建并传递给着色器的attribute变量
+  vNormal = normal;
+  gl_Position = projectionMatrix *
+                modelViewMatrix *
+                vec4(position, 1.0);
+}</code></pre>
+<p>在片元着色器中，我们将会创建一个相同变量名的变量，然后将法线向量和另一个表示来自右上方光线的向量点乘，并将结果作用于颜色。最后结果的效果有点像平行光。</p>
+<pre><code>// 和顶点着色器中一样的变量vNormal
+varying vec3 vNormal;
+void main() {
+  // 定义光线向量
+  vec3 light = vec3(0.5,0.2,1.0);
+  // 确保其归一化
+  light = normalize(light);
+  // 计算光线向量和法线向量的点积，如果点积小于0（即光线无法照到），就设为0
+  float dProd = max(0.0, dot(vNormal, light));
+  // 填充片元颜色
+  gl_FragColor = vec4(dProd, // R
+                      dProd, // G
+                      dProd, // B
+                      1.0);  // A
+} </code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/an-introduction-to-shaders-part-2/demo/demo-2.html">看看效果</a>。</p>
+<p>使用点积的原因是：两个向量的点积表明他们有多么「相似」。如果两个向量都是归一化的，而且他们的方向一模一样，点积的值就是1；如果两个向量的方向恰巧完全相反，点积的值就是-1。我们所做的就是把点积的值拿来作用到光纤上，所以如果这个点在球体的右上方，点积的值就是1，也就是完全照亮了；而在另一边的点，获得的点积值接近0，甚至到了-1。我们将获得的任何负值都设置为0。当你将数据传入之后，你就会看到最基本的光照效果了。</p>
+<p>下面是什么？我们会将顶点的坐标掺和进来。</p>
+<h3>3.3. Attribut变量</h3>
+<p>接下来我要通过 attribute 变量为每一个顶点传递一个随机数，这个随机数被用来将顶点沿着法线向量推出去一段距离。新的结果有点像一个怪异的不规则物体，每次刷新页面物体都会随机变化。现在，他还不会动（后面我会让他动起来），但是几次刷新就可以很好地观察到，他的形状是随机的。</p>
+<p>让我们开始为顶点着色器加入 attribute 变量吧：</p>
+<pre><code>attribute float displacement;
+varying vec3 vNormal;
+void main() {
+  vNormal = normal;
+  // 将随机数displacement转化为三维向量，这样就可以和法线相乘了
+  vec3 newPosition = position +
+    normal * vec3(displacement);
+  gl_Position = projectionMatrix *
+                modelViewMatrix *
+                vec4(newPosition, 1.0);
+}</code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/an-introduction-to-shaders-part-2/demo/demo-3.html">看看效果</a>。</p>
+<p>你看到什么都没变，因为 attribute 变量 <code>displacement</code> 还没有被设定呢，所以着色器就使用了0作为默认值。这时 <code>displacement</code> 还没起作用，但我们马上就要在着色器材质中加上 <code>attribute</code> 变量了，然后 ThreeJS 就会自动地把它们绑在一起运行了。</p>
+<p>同时也要注意这样一个事实，我将更新后的位置指定给了一个新的三维向量变量，因为原来的位置变量 <code>position</code>，就像所有的 attribute 变量一样，都是只读的。</p>
+<h3>3.4. 更新着色器材质</h3>
+<p>现在我们来更新着色器材质，传入一些东西给 attribute 对象 <code>displacement</code>。记住，attribute 对象是和顶点一一对应的，所以我们对球体的每一个顶点都有一个值，就像这样：</p>
+<pre><code>var attributes = {
+  displacement: {
+    type: 'f', // 浮点数
+    value: [] // 空数组
+  }
+};
+var vShader = $('#vertexshader');
+var fShader = $('#fragmentshader');
+// 创建一个包含attribute属性的着色器材质
+var shaderMaterial =
+  new THREE.MeshShaderMaterial({
+    attributes:     attributes,
+    vertexShader:   vShader.text(),
+    fragmentShader: fShader.text()
+  });
+// 向displacement中填充随机数
+var verts = sphere.geometry.vertices;
+var values = attributes.displacement.value;
+for(var v = 0; v &lt; verts.length; v++) {
+  values.push(Math.random() * 30);
+}</code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/an-introduction-to-shaders-part-2/demo/demo-4.html">看看效果</a>。</p>
+<p>这样，就可以看到一个变形的球体了。最 Cool 的是：所有这些变形都是在 GPU 中完成的。</p>
+<h3>3.5. 动起来</h3>
+<p>要使这东西动起来，应该怎么做？好吧，应该做这两件事情。</p>
+<ul>
+<li>一个 uniform 变量 <code>amplitude</code>，在每一帧控制 <code>displacement</code> 实际造成了多少位移。我们可以使用正弦或余弦函数来在每一帧中生成它，因为这两个函数的取值范围从-1到1。</li>
+<li>一个帧循环。</li>
+</ul>
+<p>我们需要将这个 uniform 变量加入到着色器材质中，同时也需要加入到顶点着色器中。先来看顶点着色器：</p>
+<pre><code>uniform float amplitude;
+attribute float displacement;
+varying vec3 vNormal;
+void main() {
+  vNormal = normal;
+  // 将displacement乘以amplitude，当我们在每一帧中平滑改变amplitude时，画面就动起来了
+  vec3 newPosition =
+    position +
+    normal *
+    vec3(displacement *
+    amplitude);
+  gl_Position = projectionMatrix *
+                modelViewMatrix *
+                vec4(newPosition, 1.0);
+}</code></pre>
+<p>然后更新着色器材质：</p>
+<pre><code>var uniforms = {
+  amplitude: {
+    type: 'f', // a float
+    value: 0
+  }
+};
+var vShader = $('#vertexshader');
+var fShader = $('#fragmentshader');
+// 创建最终的着色器材质
+var shaderMaterial =
+    new THREE.MeshShaderMaterial({
+      uniforms:       uniforms,
+      attributes:     attributes,
+      vertexShader:   vShader.text(),
+      fragmentShader: fShader.text()
+    });</code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/an-introduction-to-shaders-part-2/demo/demo-5.html">看看效果</a>。</p>
+<p>我们的着色器也已经就绪了。但我们好像又倒退了一步，屏幕中又只剩下光滑的球了。别担心，这是因为  <code>amplitude</code> 值设置为0，因为我们将 <code>amplitude</code> 乘上了 <code>displacement</code>，所以现在看不到任何变化。我们还没设置循环呢，所以 <code>amplitude</code> 只可能是0.</p>
+<p>在 JavaScript 中，我们需要将渲染过程打包成一个函数，然后用 <code>requestAnimationFrame</code> 去调用该函数。在这个函数里，我们更新 <code>amplitude</code> 的值。</p>
+<pre><code>var frame = 0;
+function update() {
+  // amplitude来自于frame的正弦值
+  uniforms.amplitude.value =
+    Math.sin(frame);
+  // 更新全局变量frame
+  frame += 0.1;
+  renderer.render(scene, camera);
+  // 指定下一次屏幕刷新时，调用update
+  requestAnimFrame(update);
+}
+requestAnimFrame(update);</code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/an-introduction-to-shaders-part-2/demo/demo-6.html">看看效果</a>。</p>
+<h3>3.6. 小结</h3>
+<p>就是它了！你看到球体正在奇怪地脉动着。关于着色器，还有太多的内容没有讲到呢，但是我希望这篇教程能够对你有一些帮助。现在，当你看到一些其他的着色器时，我希望你能够理解它们，而且你应该有信心去创建自己的着色器了！</p>
+<p>和往常一样，我将这一课的<a href="http://www.aerotwist.com/tutorials/an-introduction-to-shaders-part-2/sample.zip">源码</a>打包了，别忘了<a href="http://twitter.com/aerotwist">联系我</a>。</p>
+<h2>4. 创建粒子系统</h2>
+<h3>4.1. 简介</h3>
+<p>嗨，又见面了。这么说我们已经开始学习 ThreeJS 了，如果你还没有看过之前三篇教程，建议你先读完。如果你已经读完前面的教程了，你可能会想做一些关于粒子的东西。让我们直面这个话题吧，每个人都爱粒子效果。不管你是否知道，你可以很轻易地创建它们。</p>
+<h3>4.2. 创建一个粒子系统</h3>
+<p>ThreeJS 将粒子系统视为一个基本的几何体，因为它就像基本几何体一样，即有形状，又有位置、缩放因子、旋转属性。粒子系统将 <code>geometry</code> 对象里的每一个点视为一个单独的粒子。为什么这样做？我想基于以下的原因：首先，整个粒子系统地绘制只需要调用一次某个绘制函数，而不是调用上千次；其次，这允许你设定一些全局的参数来影响你的粒子系统内的所有粒子。</p>
+<p>即使是粒子系统被视为一个整体的对象，我们仍然可以为每个粒子单独地着色，因为在绘制粒子系统的过程中，ThreeJS 通过 attribute 变量 <code>color</code> 向着色器传递了每一个顶点的颜色。我在本篇教程里并不准备这样做，如果你想知道这是怎样完成的，你可以去 GitHub 上看 ThreeJS 的例程。</p>
+<p>粒子系统可能还有一种特殊效果需要引起你的注意：ThreeJS 在粒子系统第一次被渲染的时候，会将其数据缓存下来，之后你无法增加或减少系统中的粒子。如果你不希望看到某个粒子，你可以将它的颜色中的 alpha 值设置为0，但你无法删除它。所以你应当在创建粒子系统的时候，就将所有可能需要显示的粒子考虑进来。</p>
+<p>开始创建一个粒子系统，只需要这么多：</p>
+<pre><code>// 创建粒子geometry
+var particleCount = 1800,
+    particles = new THREE.Geometry(),
+    pMaterial =
+      new THREE.ParticleBasicMaterial({
+        color: 0xFFFFFF,
+        size: 20
+      });
+// 依次创建单个粒子
+for(var p = 0; p &lt; particleCount; p++) {
+  // 粒子范围在-250到250之间
+  var pX = Math.random() * 500 - 250,
+      pY = Math.random() * 500 - 250,
+      pZ = Math.random() * 500 - 250,
+      particle = new THREE.Vertex(
+        new THREE.Vector3(pX, pY, pZ)
+      );
+  // 将粒子加入粒子geometry
+  particles.vertices.push(particle);
+}
+// 创建粒子系统
+var particleSystem =
+  new THREE.ParticleSystem(
+    particles,
+    pMaterial);
+// 将粒子系统加入场景
+scene.addChild(particleSystem); </code></pre>
+<p>如果你运行：</p>
+<ul>
+<li>你会发现粒子都是方的。</li>
+<li>粒子都不动。</li>
+</ul>
+<p>我们一个一个来修复。</p>
+<h3>4.3. 风格</h3>
+<p>我们创建一个粒子基本材质时传入了颜色和尺寸。我们可能想做的是传入一张纹理图片用来显示粒子，而这样就可以很好地控制粒子看上去的样式了。</p>
+<p>你也看到，粒子是以方块形状绘制的，所以我们也应当使用一张方形的纹理图片。为了看上去效果更好，我还会使用加法混合，但是这样做必须保证纹理图片的背景是黑色的而不是透明的。我理解的原因是：现在加法混合和透明材质之间不兼容。但是没关系，最后看上去会很棒。</p>
+<p>我们来更新一下粒子基本材质和粒子系统，加入一些加法混合下透明的粒子。如果你喜欢，你也可以用我的粒子图片。</p>
+<pre><code>// 创建粒子基本材质
+var pMaterial =
+  new THREE.ParticleBasicMaterial({
+    color: 0xFFFFFF,
+    size: 20,
+    map: THREE.ImageUtils.loadTexture(
+      "images/particle.png"
+    ),
+    blending: THREE.AdditiveBlending,
+    transparent: true
+  });
+// 允许粒子系统对粒子排序，以达到我们想要的效果
+particleSystem.sortParticles = true;</code></pre>
+<p>这看上去已经好多了。现在来引入一点物理，让粒子们动起来。</p>
+<h3>4.4. 引入物理</h3>
+<p>默认情况下，粒子系统在三维空间中不运动，这很好。但我想让他们动起来，而且我要让粒子系统这样运动：让粒子绕着y轴旋转。而且粒子在每个轴的范围都在-250到250之间，所以绕着y轴旋转以为这它们绕着系统地中心旋转。</p>
+<p>我还假定，你已经在某个地方有了帧循环的代码，和我在上一篇关于着色器中的教程中类似。所以这里我们只需这样：</p>
+<pre><code>// 帧循环
+function update() {
+  // 增加一点旋转量
+  particleSystem.rotation.y += 0.01;
+  // 绘制粒子系统
+  renderer.render(scene, camera);
+  // 设置下一次刷新帧时对update的调用
+  requestAnimFrame(update);
+}</code></pre>
+<p>现在我们开始定义单个粒子的运动（译者注：之前的旋转是整个粒子系统的运动）。我们来做个简单的雨点效果，这包含一下几步：</p>
+<ol>
+<li><p>给每一个粒子赋一个初始为0的速度</p>
+</li>
+<li><p>在每一帧中，为每一个粒子赋一个随机的重力加速度</p>
+</li>
+<li><p>在每一帧中，通过通过加速度更新速度，通过速度更新位置</p>
+</li>
+<li><p>当一个粒子运动出了视线，重新设置初始位置和速度</p>
+</li>
+<li><p>听上去很多，其实代码写起来很少。首先，在创建粒子的过程中，我们为每个粒子增加一个水平速度：</p>
+<p>// 为每个粒子创建一个水平运动速度
+particle.velocity = new THREE.Vector3(
+0, // x
+-Math.random(), // y: 随机数
+0); // z</p>
+</li>
+</ol>
+<p>接下来，在帧缓冲中我们传递每个粒子，并且，当粒子离开屏幕底部需要重置时，重置其位置和速度。</p>
+<pre><code>// 帧循环
+function update() {
+  // 增加旋转量
+  particleSystem.rotation.y += 0.01;
+  var pCount = particleCount;
+  while(pCount--) {
+    // 获取单个粒子
+    var particle = particles.vertices[pCount];
+    // 检查是否需要重置
+    if(particle.position.y &lt; -200) {
+      particle.position.y = 200;
+      particle.velocity.y = 0;
+    }
+    // 用随机数更新水平速度分量，并根据速度更新位置
+    particle.velocity.y -= Math.random() * .1;
+    particle.position.addSelf(
+      particle.velocity);
+  }
+  // 告诉粒子系统我们改变了粒子位置
+  particleSystem.geometry.__dirtyVertices = true;
+  // 画
+  renderer.render(scene, camera);
+  // 设置下一次调用
+  requestAnimFrame(update);
+}</code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/creating-particles-with-three-js/demo/">看看效果</a>。</p>
+<p>虽然不够震撼，但这个粒子至少展示了如何做。你完全应该自己创建一些美妙的粒子效果，然后让我知道。</p>
+<p>这里有个警告你应该知道，在帧循环中，我越雷池了：我在一次循环中遍历了所有粒子，这实际上是种很粗放的方式。如果你的帧循环中做了太多的工作（译者注：注意帧循环的 js 代码是在 cpu 中运行的，它不像 gpu，能一下子并发出成千上万个简单进程），浏览器就会卡顿，事实上如果你用了 <code>requestAnimationFrame</code>，它试图每秒刷新60次。所以还是优化你的代码，在帧循环中做尽量少的事情。</p>
+<h3>4.5. 小结</h3>
+<p>粒子效果太棒了，是个人都爱粒子效果，而现在你知道如何在 ThreeJS 中加入粒子效果了。我希望你能用得顺手，就跟前面一样！</p>
+<p>同样，这里有<a href="http://www.aerotwist.com/tutorials/creating-particles-with-three-js/sample.zip">源码</a>下载，而且，让我知道你喜欢它！</p>
+<h2>5. ThreeJS 你应当知道的10件事</h2>
+<h3>5.1. 简介</h3>
+<p>嗨，这是我的第一篇关于如何写出好的代码的文章。和很多开发者一样，我通过实践学习，但同时我也向其他更有经验的开发者们学习。在过去的几个月中，我在 canvas 标签上花了很多时间，我想如果把这段时间学到的关于 WebGL 和 JavaScript 的小技巧都写下来，一定很有意思。有一些很具体，有一些却很笼统，希望你们喜欢！</p>
+<h3>5.2. 尽快写一个原型</h3>
+<p>让我们从简单的开始。现在你有个绝妙的注意，那么你应该尽快就程序里最复杂的部分写一个原型，看看这项技术是否可以实现你的想法。WebGL 很强大，因为它可以直接操纵显卡里的 GPU，但是也别忘了你需要通过 JavaScript 才能访问显卡，这比显卡内部运算的效率可是低多了。事实上，你的天才想法很可能被这种简单事情击败。</p>
+<h3>5.3. 使用 ThreeJS 处理 3D</h3>
+<p>就像我的朋友 Hakim 一样，我也完全理解我们正使用的技术的底层细节。理解表面之下的东西是很重要的，但是如果你使用 ThreeJS，它为你免去了如此多的烦恼。你可以将它用于 Canvas，WebGL 还有 SVG，你也应该找到哪种方式合适你的需求。</p>
+<h3>5.4. 避免 SetInterval</h3>
+<p>这对所有使用 JavaScript 创建动画的人来说，都是很重要的一点。为什么？假定你设定每20毫秒后执行一次某个函数，而这个函数需要执行超过20毫秒的时间，那么20ms之后，浏览器不会在乎，而是直接开始下一次执行。至少你可以使用 SetTimeout 来设置，在某个函数执行完之后，再次执行它。</p>
+<p>事实上，有一个更加新潮却还是半成品的函数，叫做 <code>requestAnimationFrame</code>，它很棒。它很类似于 <code>setTimeOut</code> 函数，除了在这两个方面：当标签页失去焦点时，它就不再运行了；现在这个函数还是依赖于浏览器的，标准以后还有可能变化。如果你想要更多的信息，可以访问 Paul Irish 的博客。</p>
+<h3>5.5. 使用倒序循环</h3>
+<p>这是个不错的小技巧，可以让你的循环更快。使用倒序，而且使用 <code>while</code> 循环。比如，这个循环：</p>
+<pre><code>for(var a = 0; a &lt; arr.length; a++) {
+  // 做一些什么
+}</code></pre>
+<p>它的执行效率不如下面这个循环：</p>
+<pre><code>// 假设数组arr存在
+var aLength = arr.length;
+while(aLength--) {
+  // 做一些什么
+}</code></pre>
+<p>这可能没帮你省多少开销，因为执行的效率主要还是依赖于你在循环体里面干了什么。但如果你想程序的不必要开销减少到最后一个字节，后一个循环肯定赢。</p>
+<p>实话说，主要影响程序执行效率的还是数组缓存的长度。你可以（也确实应该）去看看 JSPerf 去了解这一点，以及其他影响 JavaScript 性能的因素。</p>
+<h3>5.6. 使用纹理</h3>
+<p>在 WebGL 里面把物体的任意一个细节都画出来看上去很诱人，但是，如果有可能的话，你应当注意一下你是否能够使用纹理，因为它能够极大地提高性能。在某些特定的情况下，比如阴影或者模糊效果，你也许不得不使用纹理，但在其他时候，你也应该时时关注你是否可以使用纹理。</p>
+<h3>5.7. 使用缓存</h3>
+<p>这一点我在自己的试验力试了很多，在帧循环中，你应当避免引用变量、对象或者其他任何东西。基于这点原因，很值得把你的模型、顶点全部缓存起来，这样在渲染动画的时候你就可以快速地访问到它们。</p>
+<h3>5.8. 禁用选中</h3>
+<p>我爱这一小段代码，我把它放到任何包含Canvas或WebGL的页面中。</p>
+<pre><code>// 禁用鼠标选中DOM元素
+document.onselectstart = function() {
+  return false;
+}; </code></pre>
+<p>你也可能只想在 Canvas 控件中禁用选中。这段是我在那些 Canvas 占据了整个屏幕的项目中使用的代码。</p>
+<h3>5.9. 避免在JavaScript中定义CSS</h3>
+<p>现在，在 JavaScript 中定义 CSS 简直太方便了，尤其是你使用JQuery的时候</p>
+<pre><code>// 尽量不要这样做
+$("#someid").css({
+  position: 'relative',
+  height: '30px',
+  width: '300px',
+  backgroundColor: '#A020F0'
+});</code></pre>
+<p>问题是这样做之后，你的 JavaScript 代码中很快就充斥着各种类型的 CSS 定义，而你同时又使用 *.css 文件来定义 CSS，潜在的问题很难被发现。更好的方法是：使用 class 模块化 CSS，而且只在 JavaScript 中定义那些不能预知的 CSS 类。</p>
+<h3>5.10. 在对象中定义回调函数</h3>
+<p>我爱下面这段代码，这绝不是我自己想出来的，但它是如此整洁美观。如果你有一大堆回调函数要用，你也许会这样用的：</p>
+<pre><code>$("#someid").click(function() {
+  // 回调函数
+  // 返回false在JQuery中会阻止消息的传递和默认行为的放生
+  return false;
+});</code></pre>
+<p>或者，你会回调一个在代码其他地方定义的松散的函数，比如这样</p>
+<pre><code>$("#someid").click(mySuperFunction);
+function mySuperFunction(event) {
+  // 在这里做很多事情
+  return false;
+} </code></pre>
+<p>这样做会有一些问题。第一段代码中，你在某个事件上绑定了匿名函数，你很难将该函数再从事件上解除下来。你当然可以解除某个事件上的所有函数，但你可能在它上面绑定了多个函数，而你只想解除一个。在第二种情况下，你的函数名污染了全局变量空间，代码的可维护性降低了。所以，考虑这样做：</p>
+<pre><code>$("#someid").click(callbacks.mySuperFunction);
+// 所有的回调函数都在callbacks对象中
+var callbacks = {
+  mySuperFunction:function(event) {
+    // 更多地工作
+    return false;
+  }
+}
+// 解除某个函数的绑定
+$("#someid").unbind('click', callbacks.mySuperFunction);</code></pre>
+<p>这样做整洁又干净，而且避免了上面提到的两个问题。</p>
+<h3>5.11. 链式三元运算符</h3>
+<p>我完全是从 <a href="http://paulirish.com/2011/requestanimationframe-for-smart-animating/">Paul Irish</a> 的「JQuery，你应该知道的11件事」中学到这个的。这非常好用，你也应该会喜欢。我们经常这样做：</p>
+<pre><code>// 根据a的值为numberBasedOnA赋值
+// 如果a大于5，则赋值200，否则赋值38
+var numberBasedOnA = a &gt; 5 ? 200 : 38;</code></pre>
+<p>但如果你想这样做，比如，当值为多少时如何，当值大于多少时如何，当值更加大的时候如何，明白吗？在这种情况下，链式三元运算符非常好用：</p>
+<pre><code>var numberBasedOnA =
+  a &lt; 5 ? 200 :
+  a &lt; 7 ? 38 :
+  a &lt; 11 ? 15 :
+  a &lt; 15 ? 49 :
+  64;
+// 比这样做更有效率
+// when a &gt;=15</code></pre>
+<h2>6. 创建自己的全景图</h2>
+<h3>6.1. 简介</h3>
+<p>全景图非常酷。使用 ThreeJS 做一个属于自己的全景图并不是那么困难。</p>
+<p>要做一个全景图，你需要一个软件用来做一张全景图片。我使用了 iPhone 上的 Microsoft Photosynth 软件来制作。</p>
+<h3>6.2. 环境纹理</h3>
+<p>首先什么是环境纹理？在 WebGL 或者 OpenGL 中他们实际上是种特殊的立方体纹理。一个立方体纹理是对整个场景（虚拟的或现实的）的观察，场景的样子被「贴」在了立方体的内部表面。想象一下，你站在山顶，向前看，向左看，向右看，向上看，向下看，最后向后看。每一次你都看到了这个“立方体”的内部表面，你就站在这个立方体的中心。如果这个立方体足够大，就很难分辨出立方体的棱和角，而给你一种错觉：你处在一个很大的环境里面。如果你还没弄明白，那么维基百科上的 cube maps 条目会非常有帮助。</p>
+<p>这很酷，但是这怎么用？我们可以像做反射和折射一样，而且事实上这两者的函数都已经内建在 GLSL，WebGL 的着色器语言上了。你只需要传递给着色器6张纹理图片，每张代表立方体的一个内表面，然后告诉 WebGL 这是个立方体纹理，然后就可以使用上面的效果了。</p>
+<p>半轴：这个术语服务于立方体纹理。因为我们通常使用三个轴来描述三维空间：x轴、y轴、z轴，所以用于立方体纹理的图片也用轴的名称来标识了。一共六张图片，每个轴两张图片，正半轴一个，负半轴一个。</p>
+<h3>6.3. 创建全景图片</h3>
+<p>创建全景图片的第一步就是走出户外，使用手机上的应用来照一张。我在伦敦的金融区转了一圈，然后在 Gherkin 照了一张。我获得了下面这张图片：</p>
+<p><img alt="全景图片" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/threejs-guide-translation/TB1txs0LpXXXXcNXpXXXXXXXXXX-700-331.jpg"/></p>
+<p>值得指出的是，这个应用将图片做成了贴到球体上的那种。这看上去不错，但是我们现在需要将它贴到一个立方体的内表面上，所以还要处理一下这张图。</p>
+<h3>6.4. 转化到立方体上</h3>
+<p>这部分我简短介绍一下。我把刚才获得的那张照片载入到一个3D建模软件中，比如 Maya 或者 Blender ，然后将其粘贴到一个球体的内表面上。然后我创建了6个正射投影的相机，每一个都对应于一个半轴。最后我将这6个相机捕捉到的图像保存了下来。具体怎么完成比较复杂，也没必要在这里讲解，所以我写了一个 Blender 脚本文件，所有的一切都设置好了。</p>
+<p>使用这个脚本文件你只需要：</p>
+<ol>
+<li>将你自己的全景图重命名为 environment.jpg；</li>
+<li>将全景图和 Blender 脚本文件放在同一个文件夹下；</li>
+<li>载入脚本文件；</li>
+<li>点击右侧的 Animation 按钮；</li>
+<li>等一会儿，6张图像已经创建好了。</li>
+</ol>
+<p>很 Cool 吧？现在你可以重新命名这些图像，使之与每一个半轴相匹配。比如这样：</p>
+<ul>
+<li>0001.png → pos-z.png</li>
+<li>0002.png → neg-x.png</li>
+<li>0003.png → neg-z.png</li>
+<li>0004.png → pos-x.png</li>
+<li>0005.png → neg-y.png</li>
+<li>0006.png → pos-y.png</li>
+</ul>
+<h3>6.5. 加入场景</h3>
+<p>现在我们已经获得了环境纹理，然后将其载入到场景中。ThreeJS 使这变得非常简单：</p>
+<pre><code>// 纹理图像的url
+var urls = [
+      'path/to/pos-x.png',
+      'path/to/neg-x.png',
+      'path/to/pos-y.png',
+      'path/to/neg-y.png',
+      'path/to/pos-z.png',
+      'path/to/neg-z.png'
+    ],
+    // 打包成我们需要的对象
+    cubemap = THREE.ImageUtils.
+      loadTextureCube(urls);
+// 设置格式为RGB
+cubemap.format = THREE.RGBFormat;</code></pre>
+<p>现在只需要将cubemap指定到一个材质中去就可以了！</p>
+<pre><code>var material = new THREE
+  .MeshLambertMaterial({
+    color: 0xffffff,
+    envMap: cubemap
+  });</code></pre>
+<p><a href="http://www.aerotwist.com/static/tutorials/create-your-own-environment-maps/demo/">看看效果</a>。</p>
+<h3>6.6. 小结</h3>
+<p>就这样了，实现一个全景图很酷，尤其是你可以将你自己的地方制作为WebGL全景图。和往常一样，我打包了这次教程的<a href="http://www.aerotwist.com/tutorials/create-your-own-environment-maps/sample.zip">源码</a>，如果你喜欢它，或者有什么问题，都可以通过<a href="http://www.aerotwist.com/contact/">email</a>和<a href="http://twitter.com/aerotwist">twitter</a>联系我。</p>
+<p>（完）</p>

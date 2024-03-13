@@ -1,0 +1,261 @@
+<h2>原文：<a href="https://xieguanglei.github.io/blog/post/react-tips-children.html">react-tips-children</a></h2>
+<h1>React 实践心得：说说 children 的使用</h1>
+<p>React 的初学者通常会犯一个错误是：不大会使用（甚至完全不使用）组件的 children 属性。其实，对 children 的合理使用，是「组件化」的基础。</p>
+<p>这篇短文就通过一个例子，说说应该怎样合理地使用 children。</p>
+<p>假设我们要做下图所示的一个用户列表组件：具体要求是这样的：</p>
+<ul>
+<li>顶部有「用户列表」的字样。</li>
+<li>用户列表中应显示用户的头像，名称，描述，还有一个关注按钮。</li>
+<li>用户的描述信息默认不显示，鼠标 hover 到用户头像上时，用气泡显示描述信息。</li>
+<li>点击「关注」按钮即可关注用户，随之按钮文案变成「取关」（取消关注）。</li>
+</ul>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/react-tips-children/TB1_AceLXXXXXXHXpXXXXXXXXXX-200-271.png"/></p>
+<p>首先拆解一下上面的原型：</p>
+<ul>
+<li>我们首先需要一个用户列表 UserList，它在最外层。</li>
+<li>UserList 组件中有一组用户信息组件 UserItem。</li>
+<li>用户信息组件包括头像 Avatar，名字 Name，描述 Description，关注按钮 FollowButton。</li>
+</ul>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/react-tips-children/TB1OU.rLXXXXXXBXFXXXXXXXXXX-754-415.png"/></p>
+<p><code>UserList</code> 会被其外层容器组件调用。如果你对 React 和「组件化」思想比较缺乏经验，很有可能会写出这样的代码来。</p>
+<pre><code class="language-js">// 不好的实现
+// UserList 的外层容器组件
+class App extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      users: [{
+        id: '001',
+        name: '关羽',
+        description: '斩颜良诛文丑巴拉巴拉',
+        avatar: 'https://关羽的自画像.jpg',
+        followed: false  // 是否已关注
+      }, ...otherUsers]
+    }
+  }
+
+  doToggleFollow(id) {
+    // 关注、取消关注的请求
+    requestToggleFollow(id, ()=&gt;{
+      const users = _.clone(this.state.users);
+      const user = _.find(users, {id});
+      user.followed = !user.followed;
+      this.setState({users});
+    })
+  }
+
+  render() {
+    return (&lt;div&gt;
+      &lt;UserList users={this.state.users}
+                onToggleFollow={id=&gt;this.doToggleFollow(id)}
+      /&gt;
+    &lt;/div&gt;)
+  }
+}
+</code></pre>
+<p>用户的数据，通常是在较外层的容器维护（这里在 <code>App</code> 组件的 <code>state</code> 下），虽然现在只有 <code>UserList</code> 用到了用户数据，但如果 App 下还有其他组件，它们几乎也一定会使用这份数据。</p>
+<p>总之，现在看上去好像没有什么问题。我们使用了一个「封装良好」的 <code>UserList</code> 组件，这个组件负责搞定用户列表组件内的所有事情。如果你比较敏感的话，你可能会觉得把 <code>onToggleFollow</code> 方法传给 <code>UserList</code> 这件事似乎有些不妥，那又怎样，总之 <code>render</code> 方法看上去很干净，不是吗？</p>
+<p>下面我们来看 <code>UserList</code> 的实现。</p>
+<pre><code class="language-js">// 不好的实现
+const UserList = props =&gt; {
+  const {users, onToggleFollow} = props;
+  return (
+    &lt;div&gt;
+      &lt;h3&gt;用户列表&lt;/h3&gt;
+      {
+        users.map((u, i)=&gt;
+          &lt;div key={i}&gt;
+            &lt;UserItem user={u} onToggleFollow={onToggleFollow}/&gt;
+          &lt;/div&gt;
+        )
+      }
+    &lt;/div&gt;
+  )
+};
+</code></pre>
+<p>我们把从外面传过来的 <code>onToggleFollow</code> 继续向里传递给了 <code>UserItem</code> 组件。虽然有点小不爽，但是我忍了！看 <code>UserItem</code> 的实现：</p>
+<pre><code class="language-js">// 不好的实现
+class UserItem extends Component {
+  constructor(props){
+    super(props);
+    this.state = {
+      hover: false
+    }
+  }
+  
+  render() {
+    const {user, onToggleFollow} = this.props;
+    return (
+      &lt;div&gt;
+        &lt;Avatar src={user.avatar}
+                onMouseEnter={()=&gt;this.setState({hover: true})}
+                onMouseLeave={()=&gt;this.setState({hover: false})}
+        /&gt;
+        &lt;Name value={user.name}/&gt;
+        &lt;FollowButton isFollowing={user.followed} onClick={()=&gt;onToggleFollow(user.id)}/&gt;
+        {this.state.hover ? &lt;Description value={user.description}/&gt; : null}
+      &lt;/div&gt;
+    )
+  }
+}
+</code></pre>
+<p><code>UserItem</code> 有一个状态 <code>hover</code>，表示用户的鼠标是否悬浮在头像上方。这个状态也用来判断是否显示用户的介绍 <code>Description</code> 组件。</p>
+<p><code>onToggleFollow</code> 方法继续向下传递，实在是有点忍不了了！</p>
+<p>最后我们看下最底层，最简单的这几个组件：<code>Avatar</code>，<code>Name</code>，<code>FollowButton</code> 和 <code>Description</code>。</p>
+<pre><code class="language-js">// 不好的实现
+
+// user-item-avatar.js
+class Avatar extends React.Component {
+  componentDidMount(){
+    const img = this.refs.img;
+    img.addEventListener('mouseenter', this.props.onMouseEnter);
+    img.addEventListener('mouseleave', this.props.onMouseLeave);
+  }
+  render() {
+    return &lt;img ref="img" src={this.props.src}/&gt;
+  }
+}
+
+// user-item-name.js
+const Name = props =&gt; &lt;div&gt;{props.value}&lt;/div&gt;;
+
+// user-item-follow-button.js
+const FollowButton = props =&gt; (
+  &lt;button onClick={props.onClick}&gt;{props.isFollowing ? '取消关注' : '关注'}&lt;/button&gt;
+);
+
+// user-item-description.js
+const Description = props =&gt; &lt;div&gt;{props.value}&lt;/div&gt;;
+</code></pre>
+<p>我们可以看到，<code>onToggleFollow</code> 方法从最外层的 <code>App</code> 组件开始向内传递，经过 <code>UserList</code> 和 <code>UserItem</code>，最终落在了 <code>FollowButton</code> 上。其实，这个行为（关注与否）与中间的两层组件 <code>UserList</code> 和 <code>UserItem</code> 并没有什么关系，如果某一天「关注」按钮变成了「发信」按钮，<code>UserList</code> 和 <code>UserItem</code> 不应该为此作任何修改。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/react-tips-children/TB1jPQqLXXXXXXSXFXXXXXXXXXX-714-206.png"/></p>
+<p>也就是说，上面的这个 <code>UserList</code> 看上去把用户列表内的逻辑都封装了起来，但它并不是一个足够「组件化」的组件。一个合格的「组件化」的 <code>UserList</code> 应该能像下面这样被调用。</p>
+<pre><code class="language-js">// UserList 的外层容器组件
+class App extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      users: [{
+        id: '001',
+        name: '关羽',
+        description: '斩颜良诛文丑巴拉巴拉',
+        avatar: 'https://关羽的自画像.jpg',
+        followed: false  // 是否已关注
+      }, ...otherUsers]
+    }
+  }
+
+  doToggleFollow(id) {
+    // 关注、取消关注的请求
+    requestToggleFollow(id, ()=&gt;{
+      const users = _.clone(this.state.users);
+      const user = _.find(users, {id});
+      user.followed = !user.followed;
+      this.setState({users});
+    })
+  }
+
+  render() {
+    return (&lt;div&gt;
+        &lt;UserList&gt;{
+          users.map((user, i) =&gt;
+            &lt;UserItem key={i}&gt;
+              &lt;Avatar src={user.avatar}/&gt;
+              &lt;Name&gt;{user.name}&lt;/Name&gt;
+              &lt;FollowButton isFollowing={user.followed} onClick={()=&gt;this.doToggleFollow(user.id)}/&gt;
+              &lt;Description&gt;{user.description}&lt;/Description&gt;
+            &lt;/UserItem&gt;
+          )
+        }&lt;/UserList&gt;
+    &lt;/div&gt;)
+  }
+}
+</code></pre>
+<p>对比上述两种 <code>UserList</code> 的用法，可见前者的用法虽然简单，但对调用者而言，却像一个令人不安的「黑盒子」，完全不知道 <code>UserList</code> 会在内部干出什么事情来，而且还需要传一个莫名其妙的 <code>onToggleFollow</code> 函数。</p>
+<p>相较之下，后者的用法虽然看上去复杂一些，但是对调用者来说，组件内部的结构更加清晰，也更容易掌控。数据和行为都显而易见地绑定在与之直接关联的组件上，用户根本不需要查看 <code>UserList</code> 的实现代码就能很清楚地知道，这个组件的真正功能。</p>
+<p>而这两种组件的差别，最表面的就是是否使用了 <code>children</code> 属性。</p>
+<pre><code class="language-js">// 第一种用法
+render() {
+  return (&lt;div&gt;
+    &lt;UserList users={this.state.users}
+              onToggleFollow={id=&gt;this.doToggleFollow(id)}
+    /&gt;
+  &lt;/div&gt;)
+}
+
+// 第二种用法
+render() {
+  return (&lt;div&gt;
+    &lt;UserList&gt;{
+      users.map((user, i) =&gt;
+        &lt;UserItem key={i}&gt;
+          &lt;Avatar src={user.avatar}/&gt;
+          &lt;Name&gt;{user.name}&lt;/Name&gt;
+          &lt;FollowButton isFollowing={user.followed} onClick={()=&gt;this.doToggleFollow(user.id)}/&gt;
+          &lt;Description&gt;{user.description}&lt;/Description&gt;
+        &lt;/UserItem&gt;
+      )
+    }&lt;/UserList&gt;
+  &lt;/div&gt;)
+}
+</code></pre>
+<p>实现第二种 <code>UserList</code>，需要在渲染组件的时候，在特定的「坑位」上加上 <code>this.props.children</code>。如下所示：</p>
+<pre><code class="language-js">const UserList = props =&gt; (
+  &lt;div&gt;
+    &lt;h3&gt;用户列表&lt;/h3&gt;
+    {this.props.children}
+  &lt;/div&gt;
+);
+</code></pre>
+<p><code>UserItem</code> 相对会复杂一些：</p>
+<pre><code class="language-js">class UserItem extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      hover: false
+    }
+  }
+
+  render() {
+    const {children: [avatar, name, followButton, description]} = this.props;
+    const onMouseEnter = () =&gt; this.setState({hover: true});
+    const onMouseLeave = () =&gt; this.setState({hover: false});
+    return (
+      &lt;div&gt;
+        {React.cloneElement(avatar, {onMouseEnter, onMouseLeave})}
+        {name}
+        {followButton}
+        {this.state.hover ? description : null}
+      &lt;/div&gt;
+    )
+  }
+}
+</code></pre>
+<p>由于我们在 <code>UserItem</code> 内部放了多个组件，所以在 <code>UserItem</code> 中，<code>children</code> 是一个数组，需要对数组中的每一个元素进行额外处理。</p>
+<p>第1个元素是头像 <code>avatar</code>，它的 hover 状态影响到用户描述的显示与否，所以需要在这一步绑定事件。但是 ReactElemnt 是不可改变（immutable）的，我们使用 <code>React.cloneElement</code> 创建了一个新的 ReactElement。</p>
+<p>第4个元素的显示与否，取决于 <code>state.hover</code>，十分合理。</p>
+<p>最后，我们可以总结一下，<code>UserList</code> 组件对于用户的直观感受：</p>
+<p>第一种实现：</p>
+<ul>
+<li>用户列表 UserList：<ul>
+<li>需要传入用户数据（用户数据里的结构不大清楚）。</li>
+<li>还需要传入一个不知干什么的函数（研究了一下，应该是点击关注按钮后调用）。</li>
+</ul>
+</li>
+</ul>
+<p>第二种实现：</p>
+<ul>
+<li>用户列表 UserList：<ul>
+<li>其中包括 UserItem 的列表。</li>
+</ul>
+</li>
+<li>用户信息 UserItem：<ul>
+<li>包括用户头像 Avatar，数据来源于 user.avatar。</li>
+<li>包括用户名字 Name，数据来源于 user.name。</li>
+<li>包括一个按钮 FollowButton，需要设定 user.isFollowing 状态，用户点击后调用函数进行关注/取关。</li>
+<li>包括用户描述 Description，数据来源于 user.description。</li>
+<li>发现只有鼠标 hover 在头像上时才会显示出来，但是我可以不需要关心这件事。</li>
+</ul>
+</li>
+</ul>
+<p>很显然，上面的第二种实现方案确实比第一种的质量高很多。</p>

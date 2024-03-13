@@ -1,0 +1,262 @@
+<h2>原文：<a href="https://xieguanglei.github.io/blog/post/web-worker.html">web-worker</a></h2>
+<h1>Web Worker 详解</h1>
+<p>Web Worker（以下简称 Worker）是 JavaScript 多线程编程的解决方案。通过创建一个 Worker，Web 页面（或称「主线程」、「宿主页面」）可以在不阻塞主线程的前提下，执行一些比较费时的任务。在这 2019 年春天，Worker 的浏览器兼容性已经相当好了，但此前我还未有机会（或必要性）在生产环境使用 Worker。前段时间，为了调研 <a href="https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas">OffScreen Canvas</a> 的技术方案，我仔细研究了一下 Worker，不妨记录下来备忘；如果能帮助到读者，即是意外之喜了。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/web-worker/TB1XVooUSrqK1RjSZK9XXXyypXa-1257-282.png"/></p>
+<h2>MessageChannel</h2>
+<p>MessageChannel（消息管道）是用来传递消息的基础类。在浏览器内部，Worker （应该是）继承了 MessageChannel 。看看 MessageChannel 怎么用：</p>
+<pre><code class="language-javascript">const c = new MessageChannel();
+
+c.port1.onmessage = e =&gt; console.log(`port_1 receive: ${e.data}`);
+c.port2.onmessage = e =&gt; console.log(`port_2 receive: ${e.data}`);
+
+c.port1.postMessage("hello from port_1");
+// =&gt; port_2 receive: hello from port_1
+
+c.port2.postMessage("hello from port_2");
+// =&gt; port_1 receive: hello from port_2
+</code></pre>
+<p>如上所示，从 <code>port1</code> 发出的消息被 <code>port2</code> 监听到；反之，从 <code>port2</code> 发出的消息也被 <code>port1</code> 监听。在同一个 JavaScript 上下文中，MessageChannel 似乎没有什么存在的必要；而 MessageChannel 的妙处即在于，它可以<strong>跨越不同的 JavaScript 上下文</strong>传输消息。例如，<a href="https://github.com/mdn/dom-examples/tree/master/channel-messaging-basic">这个例子</a>演示了一个 iframe 中的页面是如何与它的宿主页面进行通信的。</p>
+<blockquote>
+<p>注意，如果在发送消息时，另一个端口（port）上没有监听函数，那么 MessageChannel 会<strong>缓存消息</strong>，直到另一个端口上挂载了监听函数（此时依次收到之前缓存的所有消息）。</p>
+</blockquote>
+<p>本文所关心的，是 JavaScript 主线程与 Worker， 以及不同 Worker 之间，如何进行通信。</p>
+<h2>Worker 基本用法</h2>
+<p>通常，需要把主线程代码和 Worker 代码分别写在两个文件中，如下所示：在主线程通过 URL（即 <code>worker-add.js</code>）加载 Worker 代码并创建 Worker。完成创建后，调用 <code>postMessage</code> 方法向 Worker 内发送一个消息，内容（或称消息体）为 JSON 对象 <code>{ a: 1, b: 2 }</code>。然后注册监听函数，将 Worker 返回的消息中的 <code>sum</code> 字段打印出来。</p>
+<pre><code class="language-javascript">// main.js
+const worker = new Worker('worker-add.js');
+worker.postMessage({ a: 1, b: 2 });
+worker.onmessage = e =&gt; {
+    console.log(`message received: ${e.data.sum}`)
+}
+</code></pre>
+<p>Worker 的 JavaScript 上下文中存在全局对象 <code>self</code>，它代表这个 Worker 的上下文，可以通过向 <code>self</code> 注册 <code>onmessage</code> 函数以监听外部传入的消息。这个例子在收到主线程传来的消息后，将消息体（<code>e.data</code>）的字段 <code>a</code> 和字段 <code>b</code> 相加，并把结果作为字段 <code>sum</code> 发送回主线程：</p>
+<pre><code class="language-javascript">// worker-add.js
+self.onmessage = e =&gt; {
+    const { a, b } = e.data;
+    self.postMessage({ sum: a + b });
+};
+</code></pre>
+<p>这样，整个例子就完成了一次加法运算。主线程将加法的两个参数传入 Worker，Worker 负责进行运算并返回结果，主线程打印出 <code>message received: 3</code>。</p>
+<p>如果某个时候，不再需要此 Worker 了，可以调用 <code>worker.terminate()</code> 强制结束 Worker。注意，Worker 中不会有机会进行清理工作。</p>
+<h3>内联 Worker（通过字符串创建）</h3>
+<p>有时，因为某些工程上的原因（或者干脆是为了省事儿），有些人也通过包含 Worker 代码的字符串来创建 Worker：将代码字符串转化为 Blob 和 URL，然后再「加载」它。而且，一个常见的实践是，利用「<code>Function.prototype.toString()</code> 恰好返回函数体代码」这一特性来获取包含 Worker 代码的字符串。</p>
+<pre><code class="language-javascript">// 我认为不太合适的做法
+function createWorker(workerFuncStr) {
+    const src = `(${workerFuncStr})(self);`;
+    const blob = new Blob([src], {type: 'application/javascript'});
+    const url = URL.createObjectURL(blob);
+    return new Worker(url);
+}
+
+const worker = createWorker(self =&gt; {
+    self.onmessage = e =&gt; {
+        const { a, b } = e.data;
+        self.postMessage({ sum: a + b });
+    };
+});
+</code></pre>
+<p>我认为，在比较正式的项目中，应尽量避免使用这种创建 Worker 的方式。例子中的 <code>createWorker</code> 方法令人毫无防备，它容易使我们自然地认为传入的函数会被执行，函数中可访问闭包中的其他变量——可实际上，这个函数只是一段字符串。</p>
+<p>Worker 不可避免地会存在依赖，也许 <a href="https://github.com/webpack-contrib/worker-loader">Webpack worker loader</a> 是更好的选择。甚至，可以利用 <a href="https://webpack.js.org/plugins/split-chunks-plugin">SplitChunks 机制</a>与 <a href="https://developer.mozilla.org/en-US/docs/Web/API/WorkerGlobalScope/importScripts"><code>importScript</code></a> 来允许 Worker 与主线程共享某些依赖。</p>
+<h3>初始化参数</h3>
+<p>创建 Worker 时，除了 Worker 代码的 URL，还可以传入一些<a href="https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker#Parameters">参数</a>：</p>
+<pre><code class="language-javascript">new Worker(url, {name: "classic", credentials: "omit", name: "worker-1"})
+</code></pre>
+<ul>
+<li><code>type</code>：Worker 的格式类型。默认为 <code>classic</code>，标准里说还可以是 <code>module</code>，估计是预留给浏览器原生模块方案用的。但是经过试验，就连 Chrome 也不支持 <code>module</code>。</li>
+<li><code>credentials</code>：来源合法性类型，默认是 <code>omit</code>。目前我还不会有跨域 worker 的需求，所以没有细究。</li>
+<li><code>name</code>：名称，默认为空。如果创建 Worker 时指定了名称，那么 Worker 内的上下文 <code>self</code> 上将存在相同值的 <code>name</code> 字段。此参数多少有点用处（或者便利性）吧。</li>
+</ul>
+<h3>Worker 的上下文</h3>
+<p>Worker 的 JavaScript 上下文与主线程的上下文是隔离的。最直白的体现是：Worker 中无法访问 DOM API，无法直接操作宿主页面。宿主页面也无法通过 <code>postMessage</code> 把 DOM API 传递过去。详细地&lt;sup&gt;<a href="https://www.html5rocks.com/en/tutorials/workers/basics/">1</a>&lt;sup&gt;：</p>
+<ul>
+<li>Worker 中不支持的操作：<ul>
+<li>使用 DOM API。</li>
+</ul>
+</li>
+<li>Worker 中支持的操作：<ul>
+<li><code>navigator</code> 和 <code>location</code> 对象（只读）；</li>
+<li><code>XMLHttpRequest</code> 对象，用来发起请求；</li>
+<li>计时器相关，包括 <code>setTimeout</code> / <code>clearTimeout</code>，<code>setInterval</code> / <code>clearInterval</code> 和 <code>requestAnimationFrame</code> / <code>cancelAnimationFrame</code>；</li>
+<li><code>importScripts</code>，引入 Worker 的依赖；</li>
+<li><code>Worker</code> 本身，用以在 Worker 中继续创建 Worker。</li>
+</ul>
+</li>
+</ul>
+<h2>PostMessage</h2>
+<p>如果不同的线程间不能通信，那么 Worker 的意义将被大大削弱。遵循 <code>MessageChannel</code> 接口，Worker 使用 <code>postMessage</code> 方法与宿主页面或其他 Worker 进行通信。</p>
+<p><code>postMessage</code> 可以发送那些能够被 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#Supported_types"><strong>结构克隆算法</strong></a>（structured clone algorithm）所克隆的对象。具体地说，包括：</p>
+<ul>
+<li>除 <code>Symbol</code> 以外的 5 种原始类型变量：数值、字符串、布尔值、<code>undefined</code>、<code>null</code>；</li>
+<li><code>Map</code> 和 <code>Set</code> 对象；</li>
+<li><code>Date</code> 对象；</li>
+<li><code>RegExp</code> 对象；</li>
+<li><code>Blob</code> 和 <code>File</code> 对象；</li>
+<li><code>ArrayBuffer</code> 和 <code>ArrayBufferView</code> （如 <code>Float32Array</code>，<code>Uint16Array</code> 等）；</li>
+<li><code>ImageData</code> 对象；</li>
+<li>由以上类型对象组成的 <code>Array</code> 或 <code>Object</code>；换言之，<code>Array</code> 中的项或 <code>Object</code> 中的属性，只能是上述类型的值或对象，一种通俗的说法是 "<strong>plain object</strong>" 或 "<strong>plain array</strong>"。</li>
+</ul>
+<p>对于 <code>Object</code> 类型的对象，即使其内部存在环状引用，也不影响被发送。</p>
+<pre><code class="language-javascript">// main.js
+const o1 = {o2: null}, o2 = {o1: o1};
+o1.o2 = o2;
+const worker = new Worker('worker.js');
+worker.postMessage(o1); // OK!
+
+// worker.js 
+self.onmessage = e =&gt; {
+    const o1 = e.data;
+    console.log(o1.o2.o1 === o1); // =&gt; true
+};
+</code></pre>
+<p>最重要的是，Worker 中接收到的数据对象，全部是从主线程发送的消息体中<strong>深度克隆</strong>得来的，两者虽然长得一模一样，事实上却是两个独立的实例，后续即使对其中一个对象进行修改，不会影响到另一个对象。</p>
+<pre><code class="language-javascript">// worker.js
+self.onmessage = e =&gt; {
+    const obj = e.data;
+    obj.val = 2;
+    console.log(`worker : obj.val is changed to ${obj.val}`);
+    self.postMessage(null);
+};
+
+// main.js
+const obj = { val: 1 };
+
+const worker = new Worker('worker.js');
+worker.postMessage(obj);
+worker.onmessage = e =&gt; {
+    console.log(`main thread : obj.val is still ${obj.val}`);
+}
+
+// output
+// &gt; worker : obj.val is changed to 2
+// &gt; main thread : obj.val is still 1
+</code></pre>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/web-worker/TB1xWG2UYvpK1RjSZPiXXbmwXXa-522-350.png"/></p>
+<h2>引用传递</h2>
+<p>深度克隆的好处是保护了线程的安全，付出的代价是空间和时间。一些通信发生极为频繁的场景无法承担这样的代价，此时需要以<strong>引用传递</strong>的方式来通信。浏览器中，实现了 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Transferable">Transferable</a> 接口的对象可以被引用传递。具体地，包括 <code>ArrayBuffer</code>，<code>MessagePort</code>，<code>ImageBitmap</code> 和 <code>OffscreenCanvas</code>。</p>
+<p>引用传递的本质是共享内存，即传递的是一个指针，内存数据无需发生变化。但是，为了线程安全考虑，当一段数据从源上下文传入目标上下文后，就<strong>无法</strong>在源上下文中再次访问这段内存了：</p>
+<pre><code class="language-javascript">// worker.js
+self.onmessage = e =&gt; {
+    const buffer = e.data;
+    const array = new Float32Array(buffer);
+    array[0] = 5, array[2] = 7;
+    self.postMessage(buffer, [buffer]);
+};
+
+// main.js
+const array = new Float32Array([1, 2, 3, 4]);
+
+const worker = new Worker('/basic-worker.js');
+
+console.log(`before post : ${array.length} - ${array}`);
+worker.postMessage(array.buffer, [array.buffer]);
+console.log(`after post : ${array.length}`);
+
+worker.onmessage = e =&gt; {
+    const retrArray = new Float32Array(e.data);
+    console.log(`after retrieval : ${retrArray.length} - ${retrArray}`)
+}
+
+// output : 
+// &gt; before post : 4 - 1,2,3,4
+// &gt; after post : 0
+// &gt; after retrieval : 4 - 5,2,7,4
+</code></pre>
+<p>上面这个例子，主线程创建了类型化的 32 位浮点数组（<code>Float32Array</code>），其值为 <code>[1.0,2.0,3.0,4.0]</code>。本质上，它是一段 16 字节长的内存（<code>ArrayBuffer</code>），每个 32 位浮点数占 4 个字节。发送之前，我们将其打印出来：<code>before post : 4 - 1,2,3,4</code>。</p>
+<p>使用 <code>postMessage</code> 把这段内存数据发送给 Worker：此时，<code>postMessage</code> 接收<strong>两个</strong>参数，形如 <code>worker.postMessage(message, [transfer])</code> 。除了常规的第一个参数 <code>message</code>，还通过第二个参数（为一个数组） <code>[transfer]</code> 来指定「哪些数据需要<strong>传递引用</strong>」这一信息。若不在 <code>[transfer]</code> 中指定，那么这个 <code>buffer</code> 就会像普通的数据那样进行深度克隆。比如，<code>worker.postMessage({b1: buffer1, b2: buffer2}, [buffer2]);</code> 就会对 <code>buffer1</code> 进行深度克隆，而对 <code>buffer2</code> 进行引用传递。</p>
+<p>为了线程安全，当一段内存数据被以引用传递的方式发送出去后，在当前上下文就无法再访问了。对类型化数组如 <code>Float32Array</code> 而言，具体的表现是，它会成为一个去势（neutered）的数组（可以理解为成了一个空壳），其长度为 0，此时打印数组的结果是 <code>after post : 0</code>（尝试访问/打印元素将导致抛出异常）。</p>
+<p>Worker 线程拿到这段内存，并按照 <code>Float32Array</code> 的格式来解析它。接着，改写其中的值，把第 1 个和第 3 个元素改成 5 和 7，最后同样以引用传递的形式把它发回给主线程。</p>
+<p>主线程拿回了这段内存，按照 <code>Float32Array</code> 重新解析这段内存（可以理解给内存套壳，开销很低；注意，之前的壳是不能复用的，需要重新套壳），并将解析得到的数组打印出来，结果是 <code>after retrieval : 4 - 5,2,7,4</code>。可见，数据被 Worker 线程篡改了。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/web-worker/TB18Wi1U4TpK1RjSZR0XXbEwXXa-524-579.png"/></p>
+<h2>多 Worker 间通信</h2>
+<p>不仅主线程和 Worker 线程间可以通信，不同的 Worker 之间也可以通信，这是通过 MessageChannel 实现的。<code>MessageChannel</code> 对象上存在两个 成员属性：<code>port1</code> 和 <code>port2</code>，它们均是 <code>MessagePort</code> 对象。<code>MessagePort</code> 也实现了 <code>Transferable</code> 接口，我们可以像传递 <code>ArrayBuffer</code> 那样把 <code>MessagePort</code> 传入 Worker 中：</p>
+<pre><code class="language-javascript">// worker1.js
+let port;
+const handleInit = (data) =&gt; {
+    port = data.port;
+};
+
+const handleTransfer = (data) =&gt; {
+    port &amp;&amp; port.postMessage({
+        type: 'TRANSFER',
+        message: data.message + ' through worker1;'
+    })
+};
+
+self.onmessage = function (e) {
+
+    const handleMessage = e.data.type === 'INIT' ?
+        handleInit : handleTransfer;
+
+    handleMessage(e.data);
+}
+
+// worker2.js
+self.onmessage = function (e) {
+    const port = e.data.port;
+
+    port.onmessage = function (e) {
+        self.postMessage({
+            type: 'TRANSFER',
+            message: e.data.message + ' through worker2.'
+        });
+    }
+}
+
+// main.js
+const worker1 = new Worker("worker1.js");
+const worker2 = new Worker("worker2.js");
+
+const channel = new MessageChannel();
+worker1.postMessage({ type: 'INIT', port: channel.port1 }, [channel.port1]);
+worker2.postMessage({ type: 'INIT', port: channel.port2 }, [channel.port2]);
+
+worker1.postMessage({ type: 'TRANSFER', message: "Hello from main thread;" });
+worker2.onmessage = function (e) {
+    console.log(e.data.message);
+}
+
+// output
+// &gt; Hello from main thread; through worker1; through worker2.
+</code></pre>
+<p>上面的例子中，主线程创建了两个 Worker：<code>worker1</code> 和 <code>worker2</code>；然后，创建了 <code>MessageChannel</code> 对象，并将它的 <code>port1</code> 和 <code>port2</code> 分别传递给 <code>worker1</code> 和 <code>worker2</code>。</p>
+<p>接着，主线程把将字符串 <code>"Hello from main thread;"</code> 发送给 <code>worker1</code>；<code>worker1</code> 收到此字符串后，加上了 <code>" through worker1;"</code>，并（通过之前传过去的 <code>port1</code>）发送给 <code>worker2</code>；<code>worker2</code> 在收到（从之前传过去的 <code>port2</code> 中监听到）此字符串后，又添加上 <code>" through worker2."</code>，最后发送给主线程。我们在主线程中打印出最后得到的消息字符串，为 <code>"Hello from main thread; through worker1; through worker2."</code>。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/web-worker/TB1xOm9U3DqK1RjSZSyXXaxEVXa-684-477.png"/></p>
+<p>MessagePort 只能被通过传递引用的方式发送到 Worker 中。与 ArrayBuffer 类似，其被传递到另一个 JavaScript 上下文之后，留在原上下文中的对象便成了空壳，试图调用其上的 <code>postMessage</code> 方法将导致抛出异常。</p>
+<h2>在 Worker 线程中绘图</h2>
+<p><a href="https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas">Offscreen Canvas</a> 的出现使得在 Worker 中进行绘图成为可能。由于 <code>OffScreenCanvas</code> 也实现了 <code>Transferable</code> 接口，主线程能够将 OffScreenCanvas 的引用传递至 Worker 线程。同样，当 offscreenCanvas 被传递到 Worker 中后，留在主线程里的对象便成了空壳，试图调用其上的任何方法都将导致抛出异常。</p>
+<pre><code class="language-javascript">// worker.js
+self.onmessage = e =&gt; {
+    const canvas = e.data;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FF0000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// main.js
+const canvas = document.querySelector('canvas');
+const offscreenCanvas = canvas.transferControlToOffscreen();
+
+const worker = new Worker('canvas-worker.js');
+worker.postMessage(offscreenCanvas, [offscreenCanvas]);
+</code></pre>
+<blockquote>
+<p>OffScreen（离屏）Canvas 可以被直接创建，也可从普通 Canvas 中创建而来，它的用法不是本文的重点。</p>
+</blockquote>
+<p>上面这个例子把页面上一个普通的 Canvas 的控制权转交给了离屏 Canvas，然后将离屏 Canvas 以引用传递的方式发送给 Worker。然后，在 Worker 中进行绘制操作，为 Canvas 区域涂满红色。</p>
+<h3>图片加载</h3>
+<p>绘图，自然涉及图片资源的加载。传统方式是通过 <code>Image</code> 对象来加载图片以及绘图。然而，Worker 中不存在 <code>Image</code> 对象（也许是因为 <code>Image</code> 过于上层，与 DOM 的关联之处过多），这就需要一种更新、更接近底层的方法来加载图片：通过 <code>fetch</code> 方法直接获取二进制（即 <code>Blob</code> 对象）的图片数据，并转化为 <code>ImageBitmap</code> 对象用以绘图。</p>
+<pre><code class="language-javascript">// worker.js
+self.onmessage = e =&gt; {
+    const canvas = e.data;
+    const ctx = canvas.getContext('2d');
+    
+    fetch(yourUrl,).then(response =&gt; response.blob())
+        .then(blob =&gt; createImageBitmap(blob))
+        .then(bitmap =&gt; ctx.drawImage(bitmap, 0, 0));
+}
+</code></pre>
+<p><code>ImageBitmap</code> 是 <code>Image</code> 或 <code>HTMLImageElement</code> 背后的某种存在，或者说是去除了 DOM 功能（如 <code>onload</code>、<code>style</code> 等等）后的 <code>Image</code> ，表示存储 <code>Image</code> 中像素数据的那一块内存区域。在 Canvas 相关的操作中，大部分涉及到 <code>Image</code> 的方法，在接收 <code>Image</code> 参数的时候，也接收 <code>ImageBitmap</code> 对象。如 <a href="https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/drawImage#Parameters">CanvasRenderingContext2D#drawImage</a> 或 <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texImage2D#Parameters">WebGLRenderingContext/texImage2D</a>。同样，ImageBitmap 作为一块内存区域，也可以被以引用传递的方式在 Worker 和主线程间传递。如果绘图操作逻辑需要进一步细粒度的拆分，也许可以利用这一特性来交换绘图过程中产生的中间结果。</p>
+<p>注意：OffScreenCanvas 的浏览器兼容性比 Worker 要差很多。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/web-worker/TB1SdvLU4naK1RjSZFtXXbC2VXa-1260-283.png"/></p>
+<h2>小结</h2>
+<p>以上即是我对 Web Worker 相关技术进行调研的梳理和总结，记录下来备忘。</p>
