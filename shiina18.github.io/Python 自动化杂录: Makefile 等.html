@@ -1,0 +1,83 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/10/03/makefile">Python 自动化杂录: Makefile 等</a></h2>
+<hr/>
+<h2>title: "Python 自动化杂录: Makefile 等"
+categories: Tech
+updated: 2022-10-18
+comments: true
+mathjax: false</h2>
+<h2>Makefile</h2>
+<p>直接看原文</p>
+<ul>
+<li>Aniket Bhattacharyea. (2021). <a href="https://earthly.dev/blog/make-tutorial/">Makefile Tutorials and Examples to Build From</a></li>
+<li>Aniket Bhattacharyea. (2021). <a href="https://earthly.dev/blog/python-makefile/">Creating a Python Makefile</a></li>
+</ul>
+<p>&lt;!-- more --&gt;</p>
+<p>一个 Makefile 由若干条 rules 组成. 每条 rule 语法如下. 注意 recipes 前面要用 tab 而不是空格.</p>
+<pre><code class="language-makefile">target1 [target2 ...]: [pre-req1 pre-req2 pre-req3 ...]
+	[recipes
+	...]
+</code></pre>
+<p>注意</p>
+<ul>
+<li>默认用 sh 而不是 bash, 可以通过 <code>SHELL = /bin/bash</code> 设置. 关于 <code>:=</code> 和 <code>=</code> 的区别, 参考 <a href="https://stackoverflow.com/questions/4879592/whats-the-difference-between-and-in-makefile">这个回答</a> 和 <a href="https://nekonenene.hatenablog.com/entry/make-define-variables">这个例子</a>.</li>
+<li>默认 recipes 中每行都会开新的 sub-shell, 见 <a href="https://www.gnu.org/software/make/manual/make.html#Execution">这里</a>. 可以通过 <code>.ONESHELL:</code> 设置, 参考 <a href="https://stackoverflow.com/questions/24736146/how-to-use-virtualenv-in-makefile/55404948#55404948">这里</a> (<a href="https://unix.stackexchange.com/questions/475983/makefile-and-oneshell">为什么默认不是 oneshell</a>).</li>
+<li>recipes 中 command expansion 要加上 <code>shell</code> (待确认其他做法), 比如 <code>$(shell ls)</code>, 见 <a href="https://web.mit.edu/gnu/doc/html/make_6.html">这里</a>.</li>
+<li>shell 中的 <code>$</code> 需要转义, 见 <a href="https://stackoverflow.com/questions/2382764/escaping-in-makefile">这里</a> 和 <a href="https://stackoverflow.com/questions/26564825/what-is-the-meaning-of-a-double-dollar-sign-in-bash-makefile">这里</a>. 记得在 for 循环的时候用 <code>$$</code>.</li>
+</ul>
+<p>其他语法略.</p>
+<p>下面的例子来自 <a href="https://github.com/pandas-dev/pandas/blob/main/Makefile">pandas</a> (.PHONY 和不关心的项略了). 现在 pandas 已删除该文件, 可通过 <a href="https://stackoverflow.com/questions/12214746/find-a-commit-on-github-given-the-commit-hash">查找 git 历史</a>, 发现 <a href="https://github.com/pandas-dev/pandas/pull/48958">这个更新</a> 10 月 5 日删除了 Makefile.</p>
+<pre><code class="language-makefile">all: develop
+
+develop: build
+	python -m pip install --no-build-isolation -e .
+	
+build: clean_pyc
+	python setup.py build_ext
+
+clean_pyc:
+	-find . -name '*.py[co]' -exec rm {} \;
+	
+clean:
+	-python setup.py clean
+	
+lint-diff:
+	git diff upstream/main --name-only -- "*.py" | xargs flake8
+
+black:
+	black .
+
+test-scripts:
+	pytest scripts
+</code></pre>
+<p>其中 recipes 中开头的 <code>-</code> means ignore the exit status of the command that is executed (normally, a non-zero exit status would stop that part of the build). 参考 <a href="https://stackoverflow.com/questions/3477292/what-do-and-do-as-prefixes-to-recipe-lines-in-make">makefile - What do @, - and + do as prefixes to recipe lines in Make? - Stack Overflow</a></p>
+<p>clean_pyc 中</p>
+<pre><code class="language-shell">-exec command {} ;
+</code></pre>
+<p>{} is a symbolic representation of the current pathname, and the semicolon is a required delimiter indicating the end of the command.</p>
+<pre><code class="language-shell">-exec rm '{}' ';'
+</code></pre>
+<p>另外可参考 <a href="https://blog.16bit.in/a?ID=00150-9574ee2a-cc00-4785-8367-550e76ea6587"><code>find . -name -exec rm {} \;</code> - 16bit</a></p>
+<p>此外还有有趣的用法比如 <a href="https://github.com/streamlit/streamlit/blob/develop/Makefile">streamlit</a> 中</p>
+<pre><code class="language-makefile">.PHONY: help
+help:
+	@# Magic line used to create self-documenting makefiles.
+	@# See https://stackoverflow.com/a/35730928
+	@awk '/^#/{c=substr($$0,3);next}c&amp;&amp;/^[[:alpha:]][[:alnum:]_-]+:/{print substr($$1,1,index($$1,":")),c}1{c=0}' Makefile | column -s: -t
+
+.PHONY: all
+# Get dependencies, build frontend, install Streamlit into Python environment.
+all: init frontend install
+</code></pre>
+<p>它的 Makefile 很长, 可以参考一些写法.</p>
+<h2>其他自动化组件</h2>
+<p>TODO</p>
+<ul>
+<li>代码风格检查: <a href="https://flake8.pycqa.org/en/latest/">Flake8</a></li>
+<li>代码格式化: <a href="https://black.readthedocs.io/en/stable/">Black</a><ul>
+<li>Pycharm 插件好像有问题显示不出, 可以参考 <a href="https://blog.csdn.net/qq_46138648/article/details/123645406">这个</a> 作为 external tool 使用, 涉及到的宏参考 <a href="https://intellij-support.jetbrains.com/hc/en-us/community/posts/207072015-Is-there-an-overview-of-all-macro-variables-available-">这里</a>.</li>
+</ul>
+</li>
+<li>测试: <a href="https://docs.pytest.org/en/7.1.x/">pytest</a>, <a href="https://tox.wiki/en/latest/">tox</a></li>
+<li>Continuous Integration: <a href="https://circleci.com/integrations/">circleci</a></li>
+<li><a href="https://github.com/features/actions">Github actions</a></li>
+</ul>

@@ -1,0 +1,123 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/01/08/weak-supervision">弱监督学习两则: Snorkel 和 Skweak</a></h2>
+<hr/>
+<p>title: "弱监督学习两则: Snorkel 和 Skweak"
+categories:</p>
+<ul>
+<li>Machine Learning
+updated: 2022-05-06
+comments: true
+mathjax: true</li>
+</ul>
+<hr/>
+<p>弱监督旨在避免昂贵的大量手动标注, 而采用编程式的方法生成标注数据. 一般分为两步: 先用「多种来源的带噪声标注规则」(称为 labelling functions) 对「无标注数据」进行标注 (得到 label model), 再把 (用 label model) 生成的标注数据喂给下游模型 (end model) 训练. 理想是 label model 可以泛化 (处理冲突, 平滑标签) labelling functions, 然后 end model 进一步泛化. (依然需要一些标注数据作为验证集和测试集以评估效果.)</p>
+<p>&lt;!-- more --&gt;</p>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/389963517239277.png"/></p>
+<p>用编程式的方法生成训练数据的好处</p>
+<ul>
+<li>可以更快地生成标注数据, 向模型注入人工干预.</li>
+<li>如果后续标注规则需要调整, 也能更系统地修改标注.</li>
+</ul>
+<p>于是可能适用的场景</p>
+<ul>
+<li>无标注数据, 需要快速冷启动.</li>
+<li>已经积累了规则模型, 想要泛化.</li>
+</ul>
+<p>下面以 Snorkel 和 Skweak 为例, 介绍方法.</p>
+<ul>
+<li>Ratner, A., Bach, S. H., Ehrenberg, H., Fries, J., Wu, S., &amp; Ré, C. (2017). Snorkel: Rapid training data creation with weak supervision. Proceedings of the VLDB Endowment. <em>International Conference on Very Large Data Bases, 11</em>(3), 269. [<a href="https://github.com/snorkel-team/snorkel">Code</a>]</li>
+<li>Lison, P., Barnes, J., &amp; Hubin, A. (2021). skweak: Weak Supervision Made Easy for NLP. <em>arXiv Preprint arXiv:2104.09683</em>. [<a href="https://github.com/NorskRegnesentral/skweak">Code</a>]</li>
+<li>Lison, P., Hubin, A., Barnes, J., &amp; Touileb, S. (2020). Named entity recognition without labelled data: A weak supervision approach. <em>arXiv Preprint arXiv:2004.14723</em>.</li>
+</ul>
+<h2>Labelling functions</h2>
+<p>首先通过多个打标函数 (labelling functions) 对数据标注, 比如</p>
+<ul>
+<li>手写的规则, 正则表达式</li>
+<li>远程监督, 领域词典, 外部知识库</li>
+<li>弱学习器, 在领域外训练过的模型</li>
+<li>文档级函数: 解决文档内的标注一致性问题 (见 skweak 原文)</li>
+</ul>
+<p>每个函数对样本生成一种标注, 只关注数据的某些方面, 只标注部分数据 (low coverage). 每个样本会得到多个可能会冲突的标注, 将这些标注聚合起来学习一个打标模型 (label model) 以得到最终的标注.</p>
+<h2>Label models</h2>
+<p>打标模型是生成式模型, Snorkel 和 Skweak 的打标模型略有不同.</p>
+<h3>Snorkel</h3>
+<p>We model the true class label for a data point as a latent variable (因为不知道真实标签) in a probabilistic model. In the
+simplest case, we model each labeling function as a noisy "voter" which is <strong>independent</strong>. We can also model statistical dependencies (见原文 3.2 Modeling Structure) between the labeling functions to improve predictive performance.</p>
+<p>为什么需要打标模型, 而不是同一个样本的多个标签直接 majority vote? 理想是打标模型能泛化打标函数. 另一个显而易见的原因是打标函数之间可能有相关关系, 导致投票不公平.</p>
+<blockquote>
+<p>While the generative model is essentially a re-weighted combination of the user-provided labeling functions--which tend to be precise but low-coverage--modern discriminative models can retain this precision while learning to generalize beyond the labeling functions, increasing coverage and robustness on unseen data.</p>
+</blockquote>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/187981217246608.png"/></p>
+<p>图中间的 label model 是一个概率模型 (因子图), 其中真实标签 $Y$ 是隐变量, 图上有 4 个打标函数 (得到 4 个标签), 其中第 1 个和第 2 个打标函数之间有依赖关系, 其他打标函数互相条件独立 (given 真实标签). 最后聚合得到的标签 $\tilde Y$ 是概率标签 (随机变量), 下游模型 (end model), 最小化损失函数的期望</p>
+<p>$$
+\min_\theta \sum_{i=1}^n \operatorname{\mathbb E} l(h_\theta(x_i), \tilde Y_i),
+$$</p>
+<p>其中 $x_1,\dots,x_n$ 是输入数据, $h$ 是模型, $\theta$ 是模型参数, $l$ 是损失函数, 期望是对随机变量 $\tilde Y$ 求的.</p>
+<blockquote>
+<p>A formal analysis shows that as we increase the amount of unlabeled data, the generalization error of discriminative models trained with Snorkel will decrease at the same asymptotic rate as traditional supervised learning models do with additional hand-labeled data</p>
+</blockquote>
+<p>另外原文 3. WEAK SUPERVISION TRADEOFFS 介绍了 (经验上) 什么时候用 label model 会好于 majority vote.</p>
+<h3>Skweak</h3>
+<p>Snorkel 在理念上没有考虑序列标注问题, skweak 则补上个这一点. 打标模型是隐 Markov 模型, 其中真实标签是隐变量, 隐变量序列构成一个 Markov 链 (Snorkel 假设隐变量都是独立的, 没考虑序列关系), 标注函数 given 真实标签后条件独立.</p>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/303365417235832.png"/></p>
+<h2>Performance</h2>
+<p><img alt="Snorkel (Ratner, A., et al., 2017) outperforms distant supervision baselines, and approaches hand supervision." src="https://shiina18.github.io/assets/posts/images/427551118231586.png" title="Snorkel (Ratner, A., et al., 2017) outperforms distant supervision baselines, and approaches hand supervision."/></p>
+<p><img alt="Skweak (Lison, P., et al., 2020) on NER. 可以看出一个问题是, 后接的下游模型反而不如直接用打标模型." src="https://shiina18.github.io/assets/posts/images/99601618249466.png" title="Skweak (Lison, P., et al., 2020) on NER. 可以看出一个问题是, 后接的下游模型反而不如直接用打标模型."/></p>
+<p>有人做了一个综合的评测</p>
+<ul>
+<li>Zhang, J., Yu, Y., Li, Y., Wang, Y., Yang, Y., Yang, M., &amp; Ratner, A. (2021). WRENCH: A Comprehensive Benchmark for Weak Supervision. <em>arXiv Preprint arXiv:2109.11377</em>.</li>
+</ul>
+<p><img alt="其中 MV = majority vote, WMV = weighted majority vote" src="https://shiina18.github.io/assets/posts/images/340381918247070.png" title="其中 MV = majority vote, WMV = weighted majority vote"/></p>
+<p>他们得到的一些结论</p>
+<ul>
+<li>For end models, surprisingly, directly training a neural model with weak labels does not guarantee the performance gain.</li>
+<li>Strong weakly supervised models rely on high-quality supervision sources. Both label model and end model perform well only when the quality of the overall labeling functions is reasonably good. 基本是废话, 毕竟 garbage in, garbage out.</li>
+<li>For sequence tagging tasks, selecting appropriate tagging scheme is important. choosing different tagging schema can cause up to 10% performance in terms of F1 score. This is mainly because when adopting more complex tagging schema (e.g., BIO), the label model could predict incorrect label sequences, which may hurt final performance especially for the case where the number of entity types is small (TODO: 为什么?). Under this circumstance, it is recommended to use IO schema during model training.</li>
+<li>For sequence tagging tasks, CHMM gains an advantage over other baselines in terms of label model.</li>
+</ul>
+<p>CHMM: Conditional hidden Markov model substitutes the constant transition and emission matrices by token-wise counterpart predicted from the BERT embeddings of input tokens. The token-wise probabilities are representative in modeling how the true labels should evolve according to the input tokens.</p>
+<p>出自</p>
+<ul>
+<li>Li, Y., Shetty, P., Liu, L., Zhang, C., &amp; Song, L. (2021). BERTifying the Hidden Markov Model for Multi-Source Weakly Supervised Named Entity Recognition. <em>arXiv preprint arXiv:2105.12848</em>.</li>
+</ul>
+<h2>A few last comments</h2>
+<p>可以把 label model 看成模型集成, 而 labeling functions 则为弱分类器, 希望它们数量多, 互相有差别而且准确率不低. Snorkel 做了这些事情.</p>
+<ul>
+<li>把集成用在标注数据上.</li>
+<li>用因子图聚合标签. 但他文中其实对这一块讲得比较少, 这个生成模型几版论文好像又变了很多方案 (现在的开源版本基于 matrix completion, 更 scalable), 我没仔细读, 无法评价.</li>
+<li>数学证明在一定 setting 下, 弱监督可以接近强监督.</li>
+</ul>
+<p>Google AI 博文 <a href="https://ai.googleblog.com/2019/03/harnessing-organizational-knowledge-for.html">Harnessing Organizational Knowledge for Machine Learning</a> 介绍了他们的弱监督部署经验, 提到可以用不适合放在生产端的资源 (resources that are too slow (e.g. expensive models or aggregate statistics), private (e.g. entity or knowledge graphs), or otherwise unsuitable for deployment) 标注数据, 然后用便宜, 实时的特征训练, 在生产端预测, 达到 "知识迁移" 的效果. 用一套特征标数据, 用另一套特征训练. "This <em>cross-feature</em> transfer boosted our performance by an average 52% on the benchmark datasets we created."</p>
+<p>文本分类特别契合 "用一套特征标数据, 用另一套特征训练" 的过程, 比如用一些规则标数据, 再用语言模型训练.</p>
+<p>Skweak 就是在 snorkel 的基础上套一层 HMM 罢了.</p>
+<p>大量高质量的有标注数据依然是成功的关键. 在有充足数据但标注数据少的时候, Snorkel 是一个比较直观可控的 (通过 labeling functions) 可能带来提升的方式, 可以尝试.</p>
+<h2>Further reading</h2>
+<ul>
+<li>Snorkel 是 Stanford 一个专注于 data-centric 团队 <a href="https://hazyresearch.stanford.edu/blog">Hazy Research</a> 的工作, 有商业化产品 <a href="https://snorkel.ai/">Snorkel AI</a>. 它的前身是 <a href="http://deepdive.stanford.edu/">DeepDive</a> (因此也用了个潜水相关的词). Skweak 目前影响力有限.<ul>
+<li>官方 tutorial 中推荐 <a href="https://github.com/snorkel-team/snorkel-tutorials/blob/master/spam/01_spam_tutorial.ipynb">这个</a>.</li>
+<li>关联资源见 <a href="https://www.snorkel.org/resources/">这里</a>, 它的 <a href="https://www.snorkel.org/blog/">blog</a> 介绍了很多后来添加的新功能, 包括数据增强, slice 等.</li>
+<li>作者 Ratner 2019 年的 <a href="https://ajratner.github.io/assets/papers/thesis.pdf">博士论文</a>, 大合集. Snorkel 后续好像没什么新消息了.</li>
+<li>虽然论文中没提 NER, 但是他家有 <a href="https://snorkel.ai/solutions/named-entity-recognition/">NER 产品</a>.</li>
+<li>Snorkel 团队有 2017 年的文章 SwellShark 做 NER, 代码没有开源. 对嵌套实体用了基于多项分布的 label model, 最后 end model 用的还是 LSTM-CRF, 提升有限, 参考价值有限.<ul>
+<li>Fries, J., Wu, S., Ratner, A., &amp; Ré, C. (2017). Swellshark: A generative model for biomedical named entity recognition without labeled data. <em>arXiv Preprint arXiv:1704.06360</em>.</li>
+</ul>
+</li>
+<li><a href="https://towardsdatascience.com/snorkel-in-the-wild-weak-supervision-at-google-intel-apple-and-ibm-2e0d77637ee0">Case studies for Google, Intel, and IBM</a></li>
+</ul>
+</li>
+<li><a href="https://github.com/recognai/rubrix">rubrix</a>, open-source framework for data-centric NLP. Data annotation and monitoring for enterprise NLP (2021 年中新出的)</li>
+<li>Jay. (2021, Aug 26). <a href="https://mp.weixin.qq.com/s/QFVwePaIx2-0O5ee1J9Z2g">弱监督学习框架 Snorkel 在大规模文本数据集 "自动标注" 任务中的实践</a>. <em>携程技术</em>.</li>
+<li>JayJay. (2021, Jan 23). <a href="https://zhuanlan.zhihu.com/p/152463745">工业界如何解决 NER 问题? 12 个 trick, 与你分享~</a>.<ul>
+<li>"NER 本质是基于 token 的分类任务, 对噪声极其敏感. 如果盲目应用弱监督方法去解决低资源 NER 问题, 可能会导致全局性的性能下降, 甚至还不如直接基于词典的 NER."</li>
+</ul>
+</li>
+<li><a href="https://github.com/snorkel-team/snorkel/issues/1254">Issue #1254: How to create training data for NER task using snorkel?</a> 其实并不自然. 另外目前两个框架都不能覆盖关系抽取任务, 只能用来做关系分类 (把实体对作为输入).</li>
+<li><a href="https://github.com/snorkel-team/snorkel/issues/803">Issue #803: Question: Has anyone used snorkel for tabular numerical data?</a></li>
+<li>为什么主动学习 (active learning) 不温不火: <a href="https://www.zhihu.com/question/439453212/answer/2147806195">温文的回答</a></li>
+<li><a href="http://deepdive.stanford.edu/inference">Probabilistic Inference and Factor Graphs - DeepDive</a></li>
+</ul>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/73292915238575.png"/></p>
+<h2>Image sources</h2>
+<ul>
+<li>Ratner, A. (2018, Aug 28). <a href="https://ajratner.github.io/assets/papers/Snorkel_VLDB_2018_slides.pdf">Snorkel Rapidly Creating Training Sets to Program Software 2.0</a> [Slides].</li>
+<li>Ratner, A., Bach, S., Varma, P., &amp; Ré, C. (2017, Jul 16). <a href="https://www.snorkel.org/blog/weak-supervision">An overview of weak supervision</a> [Blog post]. <em>snorkel</em>.</li>
+</ul>

@@ -1,0 +1,293 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/09/20/shell-script">Shell 脚本简要</a></h2>
+<hr/>
+<h2>title: "Shell 脚本简要"
+categories: Language
+updated: 2022-10-13
+comments: true
+mathjax: false</h2>
+<p>主要参考</p>
+<ul>
+<li>Shotts, W. (2019). <a href="https://linuxcommand.org/tlcl.php">The Linux command line</a></li>
+</ul>
+<p>学习目标: 能写简单脚本, 能看懂长一些的脚本. Shell 脚本不是开发语言, 难以 debug, 不适合写太长.</p>
+<blockquote>
+<p>If you are writing a script that is more than 100 lines long, or that uses non-straightforward control flow logic, you should rewrite it in a more structured language <em>now</em>. Bear in mind that scripts grow. Rewrite your script early to avoid a more time-consuming rewrite at a later date. (Google Shell Style Guide)</p>
+</blockquote>
+<p>&lt;!-- more --&gt;</p>
+<h2>Hello world</h2>
+<h3>1. 编写脚本</h3>
+<p>新建 <code>hello_world</code> 文件.</p>
+<pre><code class="language-shell">#!/bin/bash
+
+echo 'Hello world!'  # this is a comment
+</code></pre>
+<p><strong>注释</strong> 的语法和 Python 单行注释相同, 当前行 <code>#</code> 后面的内容视为注释.</p>
+<p>以 <code>#!</code> 开头的第一行称为 <strong>shebang</strong>, 告诉系统用什么解释器执行该脚本.</p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;shebang 可以不写&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;以 &lt;code&gt;./hello_world&lt;/code&gt; 执行时, usually the parent shell guesses that the script is written for the same shell (minimal Bourne-like shells run the script with &lt;code&gt;/bin/sh&lt;/code&gt;, bash runs it as a bash subprocess). &lt;font color="lightgrey"&gt;(The fact that a program can launch other programs is expressed in the process scheme as a &lt;em&gt;parent process&lt;/em&gt; producing a &lt;em&gt;child process&lt;/em&gt;.)&lt;/font&gt;&lt;/p&gt;
+&lt;p&gt;另外也可以指定解释器执行, 比如 &lt;code&gt;bash hello_world&lt;/code&gt;, &lt;code&gt;python main.py&lt;/code&gt;.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="https://stackoverflow.com/questions/12296308/shell-script-working-fine-without-shebang-line-why"&gt;linux - Shell script working fine without shebang line? Why? - Stack Overflow&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;sh, bash and dash&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;The name "bash" is an acronym for "Bourne Again SHell", a reference to the fact &lt;code&gt;bash&lt;/code&gt; is an enhanced replacement for &lt;code&gt;sh&lt;/code&gt;, the original Unix shell program written by Steve Bourne.&lt;/p&gt;
+&lt;p&gt;注意现在一般 &lt;code&gt;/bin/sh&lt;/code&gt; 软链接到 dash 而不是 bash (以前是). 但默认的 login shell 还是 bash.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="https://askubuntu.com/questions/141928/what-is-the-difference-between-bin-sh-and-bin-bash"&gt;scripts - What is the difference between #!/bin/sh and #!/bin/bash? - Ask Ubuntu&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<h3>2. 使文件可执行</h3>
+<pre><code class="language-shell">$ chmod 755 hello_world
+</code></pre>
+<p>默认自己只有读写权限 (<code>rw-</code>).  注意可读权限是程序可执行的必要条件, 所以让别人可执行要给 5 (<code>r-x</code>).</p>
+<h3>3. 将文件放在 shell 可以找到的路径下</h3>
+<pre><code class="language-shell">$ ./hello_world
+</code></pre>
+<p>如果写成</p>
+<pre><code class="language-shell">$ hello_world
+</code></pre>
+<p>会报错. 因为如果不显式指定路径, shell 只在环境变量 <code>PATH</code> 所包含的路径下搜索可执行文件. PATH 默认包括了 <code>/bin</code>, 和 <code>/home/me/bin</code> (创建 <code>~/bin</code> 目录后重启 shell, 系统一般会自动添加该路径到 PATH) 等.</p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;Good Locations for Scripts&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;The &lt;code&gt;~/bin&lt;/code&gt; directory is a good place to put scripts intended for personal use. If we write  a script that everyone on a system is allowed to use, the traditional location is &lt;code&gt;/usr/local/bin&lt;/code&gt;. Scripts intended for use by the system administrator are often located in &lt;code&gt;/usr/local/sbin&lt;/code&gt;. In most cases, locally supplied software, whether scripts or compiled programs, should be placed in the &lt;code&gt;/usr/local&lt;/code&gt; hierarchy and not in &lt;code&gt;/bin&lt;/code&gt; or &lt;code&gt;/usr/bin&lt;/code&gt;. These directories are specified by the Linux Filesystem Hierarchy Standard to contain only files supplied and maintained by the Linux distributor.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;usr = User System Resources&lt;/li&gt;
+&lt;li&gt;sbin: binaries with superuser (root) privileges required&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://askubuntu.com/questions/308045/differences-between-bin-sbin-usr-bin-usr-sbin-usr-local-bin-usr-local"&gt;command line - Differences between /bin, /sbin, /usr/bin, /usr/sbin, /usr/local/bin, /usr/local/sbin - Ask Ubuntu&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<h2>变量</h2>
+<pre><code class="language-shell">a=233 TITLE="System Information Report For $HOSTNAME"
+b=
+d="$(ls -l foo.txt)"  # results of a command
+# 可以写成 d=`ls -l foo.txt` 但不推荐
+e=$((5 * 7))  # arithmetic expansion
+f="\t\ta string\n"  # escape
+
+echo "&lt;html&gt;
+    &lt;head&gt;&lt;title&gt;${TITLE}&lt;/title&gt;&lt;/head&gt;
+    &lt;body&gt;&lt;h1&gt;${TITLE}&lt;/h1&gt;&lt;/body&gt;
+&lt;/html&gt;"
+</code></pre>
+<ul>
+<li>变量名规则同 Python. 习惯用大写字母表示常量, 小写字表示变量.</li>
+<li>赋值 <code>=</code> 两侧不能有空格. 一行可以多次赋值.</li>
+<li>shell 不区分变量类型, 都视为字符串.</li>
+<li>单引号不做 string interpolation, 双引号做, 参考 <a href="https://stackoverflow.com/questions/6697753/difference-between-single-and-double-quotes-in-bash">这里</a>.</li>
+<li><code>${}</code> 称为 parameter substitution/expansion (双引号内生效), 类似 Python 的 f-string, 把字符串里面的占位符替换成对应值. 其中 <code>{}</code> 可写可不写, 最好写上避免歧义. <code>$()</code> 称为 command substitution, 见 <a href="https://superuser.com/questions/935374/difference-between-and-in-a-shell-script">这里</a>. 单纯的圆括号 <code>()</code> 表示 subshell.</li>
+<li>用 <code>"</code> 可以写多行字符串. 另外同 Python, 在行末尾写 <code>\</code> 为 line continuation.</li>
+<li><a href="https://github.com/koalaman/shellcheck/wiki/SC2086">Double quote to prevent globbing and word splitting.</a></li>
+</ul>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;很少用的 declare&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;声明常量 &lt;code&gt;declare -r TITLE="Page Title"&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;声明整数变量 &lt;code&gt;`declare -i&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<p>如果使用未赋值的变量</p>
+<pre><code class="language-shell">$ foo=foo.txt
+$ echo $foo1  # 什么都不会打印
+$ echo ${foo}1
+</code></pre>
+<p>其中 <code>$foo1</code> 为空 (类似 None/null), 而不是空字符串. 写成 <code>"$foo1"</code> 保证是字符串.</p>
+<h3>Here documents</h3>
+<p>少见?</p>
+<p>A here document is an additional form of I/O redirection in which we embed a body of text into our script and feed it into the standard input of a command.</p>
+<pre><code>command &lt;&lt; token
+    text
+token
+</code></pre>
+<p>where <code>command</code> is the name of command that accepts standard input and <code>token</code> is a string used to indicate the end of the embedded text. Note that the token must appear alone and that there must not be trailing spaces on the line. By default, <strong>single and double quotes within here documents lose their special meaning to the shell.</strong></p>
+<pre><code class="language-shell"># 例子: cat &gt; ~/foo &lt;&lt; _EOF_
+# 写成 cat &lt;&lt;- _EOF_ 则忽略 text 中开头的 tab (不忽略空格)
+cat &lt;&lt; _EOF_
+&lt;html&gt;
+    &lt;head&gt;&lt;title&gt;${TITLE}&lt;/title&gt;&lt;/head&gt;
+    &lt;body&gt;&lt;h1&gt;${TITLE}&lt;/h1&gt;&lt;/body&gt;
+&lt;/html&gt;
+_EOF_
+</code></pre>
+<h2>函数</h2>
+<p>两种写法. Deprecated, 见 <a href="https://stackoverflow.com/questions/4654700/what-are-the-parentheses-used-for-in-a-bash-shell-script-function-definition-lik">这里</a></p>
+<pre><code>function name {
+    commands
+    return
+}
+</code></pre>
+<p>推荐</p>
+<pre><code>name () {
+    commands
+    return
+}
+</code></pre>
+<p>调用方法, 直接写 <code>name</code>, 不要加括号.</p>
+<p><strong>局部变量</strong></p>
+<pre><code class="language-shell">foo=0
+
+func () {
+    local foo
+    foo=1
+    echo ${foo}
+}
+</code></pre>
+<ul>
+<li>不声明局部变量则用的是全局变量.</li>
+<li><code>return</code> 可以不写, 默认结尾 return. 如果 return 没写参数 (正整数), 默认 return 最近执行命令的 exit status (<code>exit</code> 命令也是如此, 它写在脚本末尾). 见 <a href="https://unix.stackexchange.com/questions/446420/implicit-return-in-bash-functions">这里</a>.</li>
+<li>shell 函数只能返回 exit status, 见 <a href="https://stackoverflow.com/questions/8742783/returning-value-from-called-function-in-a-shell-script">这里</a>.</li>
+<li>不能写参数.</li>
+</ul>
+<h2>条件语句</h2>
+<p>两种写法, 见 <a href="https://stackoverflow.com/questions/50117346/why-do-some-people-put-a-semicolon-after-an-if-condition-in-shell-scripts">这里</a>.</p>
+<pre><code class="language-shell">x=5
+y=~/foo.txt
+
+if [ "$x" -eq 5 -a ! \( -e "$y" \) ]; then
+    echo "equal"
+elif [ "$x" -lt 5 ]; then
+    echo "less than"
+else
+    echo "greater than"
+fi
+
+# 或者不写分号, 但是把 then 写在下一行
+# 因为分号只是分隔命令用
+# if [ ... ]
+# then
+</code></pre>
+<p><strong>Using the quotes around the parameter ensures that the operator is always followed by a string, even if the string is empty.</strong></p>
+<h3>Exit status</h3>
+<p>Commands (including the scripts and shell functions we write) issue a value to the system when they terminate, called an <strong>exit status</strong>. This value, which is an integer in the range of 0 to 255 (没有负数, 一般 0 表示成功), indicates the success or failure of the command's execution.</p>
+<p>执行命令后, 执行 <code>$?</code> 可得上一条命令的 exit status. shell 有两个 bulitin 命令 (不是变量), <code>true</code> 的 exit status 为 0, <code>false</code> 为 1.</p>
+<h3><code>test</code></h3>
+<p>The command used most frequently with <code>if</code> is <code>test</code>. 两种写法</p>
+<pre><code>test expression
+</code></pre>
+<p>第二种更流行</p>
+<pre><code>[ expression ]
+</code></pre>
+<p>当 expression 为真时返回 exit status 0, 否则 1. 注意 <code>test</code> 和 <code>[</code> 都是命令 (后者参数以 <code>]</code> 结尾, 也因此 <code>[</code> 后与 <code>]</code> 前需要空格).</p>
+<p>下面详细的要查表, 随便列几个.</p>
+<p><strong>File expressions</strong></p>
+<ul>
+<li><code>-e file</code>: <code>file</code> exists</li>
+<li><code>-d file</code>: <code>file</code> exists and is a directory, <code>-f</code> regular file</li>
+<li><code>-x file</code>: 存在且有执行权限, 类似地, <code>-r</code>, <code>-w</code></li>
+</ul>
+<p><strong>String expressions</strong></p>
+<ul>
+<li><code>string</code>: <code>string</code> is not null.</li>
+<li><code>-n string</code>: the length of <code>string</code> is greater than zero, <code>-z</code> 表示长度为 0</li>
+<li><code>string1 == string2</code>: 相等. 在 <code>bash</code> 推荐双等号, 但是 POSIX 只能用单等号. 不相等用 <code>!=</code></li>
+</ul>
+<p><strong>Integer expressions</strong></p>
+<ul>
+<li><code>int1 -eq int2</code>: 相等, <code>-ne</code> 不相等. 可以直接用双等号?</li>
+<li><code>int1 -le int2</code>: 小于等于, <code>-lt</code> 为小于. 字符串比较用 <code>"&lt;"</code>, 记得双引号, 否则会视为 redirection operators. 注意字符串比较大小与整数比较大小方法不同.</li>
+</ul>
+<h3>Modern <code>test</code></h3>
+<p>现代 bash 提供了下述语法 (推荐使用)</p>
+<pre><code>[[ expression ]]
+</code></pre>
+<p>比单个方括号增加的功能是正则匹配.</p>
+<pre><code>string =~ regex
+</code></pre>
+<p>例如</p>
+<pre><code class="language-shell">if [[ "$INT" =~ ^-?[0-9]+$ ]]
+</code></pre>
+<p>其他可参考 <a href="https://stackoverflow.com/questions/3427872/whats-the-difference-between-and-in-bash/3427931#3427931">这里</a>.</p>
+<p>Since all expressions and operators used by <code>test</code> are treated as command arguments by the shell (unlike <code>[[]]</code> and <code>(( ))</code>), characters that have special meaning to <code>bash</code>, such as <code>&lt;</code>, <code>&gt;</code>, <code>(</code>, and <code>)</code>, must be quoted or escaped.</p>
+<p><strong>逻辑运算符</strong></p>
+<p>|     | test | <code>[[]]</code> and <code>(())</code> |
+| --- | ---- | ----------------- |
+| AND | -a   | <code>&amp;&amp;</code>              |
+| OR  | -o   | <code>||</code>              |
+| NOT | !    | <code>!</code>               |</p>
+<p>此外 shell 本身可以用 <code>&amp;&amp;</code> 或者 <code>||</code> 拼接命令, 短路执行. 可以作为 if 的 one liner.</p>
+<pre><code class="language-shell">$ mkdir temp &amp;&amp; cd temp
+$ [[ -d temp ]] || mkdir temp  # 不存在才创建
+</code></pre>
+<p><strong><code>(())</code> for integers</strong></p>
+<p>bash 的语法, 少见?</p>
+<pre><code class="language-shell">if ((1))  # true
+if ((0))  # false
+if ((INT == 0))
+if ((INT &lt; 0))
+if (( ((INT % 2)) == 0 ))
+</code></pre>
+<h2>读取键盘输入</h2>
+<p>The <code>read</code> builtin command is used to read a single line of standard input. This command  can be used to read keyboard input or, when redirection is employed, a line of data from a file.</p>
+<pre><code>read [-options] [variable...]
+</code></pre>
+<p>If no variable name is supplied, the shell variable <code>REPLY</code> contains the line of data.</p>
+<p>少见? 鸽了, 直接看书.</p>
+<h2>循环</h2>
+<h3>while</h3>
+<pre><code class="language-shell">foo=1
+while [ "$foo" -lt 5 ]; do
+    echo "$foo"
+    foo=$((foo+1))
+done
+</code></pre>
+<p>同 if 可以用双方括号. 此外还有 break 和 continue.</p>
+<h3>for</h3>
+<pre><code class="language-shell">for foo in 1 2 3 4; do
+    echo "$foo"
+done
+</code></pre>
+<p>brace expansion</p>
+<pre><code class="language-shell">for foo in {1..4}
+</code></pre>
+<p>此外还有 C 语言形式的 for 循环, 略.</p>
+<h2>Debug</h2>
+<p>书上列了一些典型错误, 直接看.</p>
+<p>直接 print 大法 (指 echo) 或者 bash 提供了 tracing</p>
+<pre><code class="language-shell">#!/bin/bash -x
+</code></pre>
+<p>或者</p>
+<pre><code class="language-shell">#!/bin/bash
+
+# blahblah
+
+set -x # Turn on tracing
+# blahblah
+set +x # Turn off tracing
+</code></pre>
+<h2>位置参数</h2>
+<p>Executing</p>
+<pre><code class="language-bash">./script.sh Hello World
+</code></pre>
+<p>Will make</p>
+<pre><code class="language-bash">$0 = ./script.sh
+$1 = Hello
+$2 = World
+</code></pre>
+<p>当参数很多时, The <code>shift</code> command causes all the parameters to "move down one" each time it is executed.</p>
+<pre><code class="language-shell">#!/bin/bash
+
+# posit-param2: script to display all arguments
+
+count=1
+# $# 参数数量, 不算 $0
+while [[ $# -gt 0 ]]; do
+    echo "Argument $count = $1"
+    count=$((count + 1))
+    shift
+done
+</code></pre>
+<p>可以在函数里使用这些位置参数.</p>
+<p>可以结合 <code>case</code> 写位置参数, 略.</p>
+<h2>数组</h2>
+<p>只支持一维数组. 使用场景可以参考 <a href="https://github.com/koalaman/shellcheck/wiki/SC2086#exceptions">SC2086#exceptions</a>.</p>
+<pre><code class="language-bash"># index 从 0 开始, 但是赋值时中间可以不赋值
+a[1]=foo
+echo ${a[1]}
+
+days=(Sun Mon Tue Wed Thu Fri Sat)
+days=([0]=Sun [1]=Mon [2]=Tue [3]=Wed [4]=Thu
+[5]=Fri [6]=Sat)
+
+for i in "${days[@]}"; do echo $i; done
+</code></pre>
+<h2>Tips</h2>
+<p><a href="https://github.com/koalaman/shellcheck/wiki/Checks">shellcheck</a> 插件提供了 <a href="https://github.com/koalaman/shellcheck#gallery-of-bad-code">很多建议</a></p>
+<ul>
+<li>Use <code>cd ... || exit</code> in case <code>cd</code> fails. See <a href="https://github.com/koalaman/shellcheck/wiki/SC2164">SC2164</a>. 因为默认情况下 shell 脚本遇到错误会继续执行下一句, 而不是退出.</li>
+<li>Check exit code directly with e.g. <code>if mycmd;</code>, not indirectly with <code>$?</code>. See <a href="https://github.com/koalaman/shellcheck/wiki/SC2181">SC2181</a>.</li>
+</ul>
+<p>Google 也有 <a href="https://google.github.io/styleguide/shellguide.html">style guide</a>.</p>

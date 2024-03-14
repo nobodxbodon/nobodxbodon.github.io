@@ -1,0 +1,161 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/10/02/setuptools">Python setuptools 简要</a></h2>
+<hr/>
+<h2>title: "Python setuptools 简要"
+categories: Tech
+updated:
+comments: true
+mathjax: false</h2>
+<p>用 <a href="https://setuptools.pypa.io/en/latest/userguide/index.html">setuptools</a></p>
+<p>&lt;!-- more --&gt;</p>
+<h2>Quickstart</h2>
+<pre><code class="language-shell">pip install --upgrade setuptools
+pip install --upgrade build
+</code></pre>
+<p>代码结构</p>
+<ul>
+<li>根目录<ul>
+<li><code>setup.cfg</code></li>
+<li><code>setup.py</code></li>
+<li>foo_package<ul>
+<li><code>__init__.py</code> # 如果没有这个, 需要用 namespace packages, 见 <a href="https://setuptools.pypa.io/en/latest/userguide/package_discovery.html#custom-discovery">这里</a></li>
+<li>其他文件</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-toml"># setup.cfg
+[metadata]
+# 项目名不一定和项目的源目录名相同. 比如 name = beautifulsoup4,
+# 但是源目录名为 bs4; 因此 pip install beautifulsoup4, import bs4
+name = foo_package
+version = 0.0.2
+
+[options]
+# 只支持版本 &lt;, &gt;, &lt;=, &gt;=, == or != (常用 &gt;=)
+install_requires =
+    requests
+    pandas &gt;= 1.2
+</code></pre>
+<pre><code class="language-python"># setup.py
+from setuptools import setup
+
+if __name__ == '__main__':
+    setup()
+</code></pre>
+<p><code>setup.py</code> 也可以填写 metadata 参数, 但新规范更建议用 cfg 文件. 此外更新的规范有用 <code>pyproject.toml</code>.</p>
+<h3>代码写法</h3>
+<p>foo_package 下的代码建议写为绝对 import</p>
+<pre><code class="language-python">from foo_package.xxx import yyy
+</code></pre>
+<h3>安装</h3>
+<pre><code class="language-shell">python -m build
+</code></pre>
+<p>之后如果本地项目需要用到, 可以用</p>
+<pre><code class="language-shell">pip install -e path/to/根目录
+</code></pre>
+<p>会读取根目录下的 <code>setup.cfg</code> 或 <code>setup.py</code>, 把 <code>foo_package</code> 路径加入 PYTHONPATH 里.</p>
+<ul>
+<li><a href="https://stackoverflow.com/questions/42609943/what-is-the-use-case-for-pip-install-e">python - What is the use case for <code>pip install -e</code>? - Stack Overflow</a></li>
+</ul>
+<p>更一般地可以用 wheel (.whl) 文件安装; 上传到 pypi 等.</p>
+<p>如何卸载以 user 选项安装的包参考 <a href="https://stackoverflow.com/questions/33412974/how-to-uninstall-a-package-installed-with-pip-install-user">这里</a>.</p>
+<h2>Package discovery</h2>
+<p>上例项目结构比较简单, setuptools 可以自动找到正确的目录. 对于复杂一些的结构</p>
+<ul>
+<li>根目录<ul>
+<li><code>setup.cfg</code>, <code>setup.py</code></li>
+<li>foo_package</li>
+<li>bar_package</li>
+</ul>
+</li>
+</ul>
+<p>可以如下配置</p>
+<pre><code class="language-toml">[options]
+packages = find:
+
+[options.packages.find]
+# where = . by default
+# use `where = src` for src layout
+include = foo_package*  # * by default
+exclude = foo_package.tests*  # empty by default
+</code></pre>
+<p><code>setuptools</code> walks through the directory specified in <code>where</code> (defaults to <code>.</code>) and filters the packages it can find following the <code>include</code> patterns (defaults to <code>*</code>), then it removes those that match the <code>exclude</code> patterns (defaults to empty) and returns a list of Python packages.</p>
+<p>这样就只打包 foo_package. 之前的结构称为 flat-layout (如 pandas, sklearn 等大多数项目), 所谓 src-layout (如 transformers) 指如下结构</p>
+<ul>
+<li>根目录<ul>
+<li><code>setup.cfg</code>, <code>setup.py</code></li>
+<li>src<ul>
+<li>foo_package</li>
+<li>bar_package</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2>Including data files</h2>
+<p>默认只封装 py 文件.</p>
+<pre><code class="language-toml">[options]
+include_package_data = True
+
+[options.exclude_package_data]
+* =
+    *.c
+    *.h
+</code></pre>
+<p>其中 data files 放在 <code>MANIFEST.in</code> 文件中, 比如</p>
+<pre><code>include *.json
+include *.txt
+</code></pre>
+<h2>Entry points</h2>
+<p>可以直接在 console 上使用的命令. An example of how this feature can be used in <code>pip</code>: it allows you to run commands like <code>pip install</code> instead of having to type <code>python -m pip install</code>.</p>
+<pre><code class="language-toml">[options.entry_points]
+console_scripts =
+    cli-name = foo_package.mymodule:some_func
+</code></pre>
+<p>When this project is installed, a <code>cli-name</code> executable will be created. <code>cli-name</code> will invoke the function <code>some_func</code> in the <code>foo_package/mymodule.py</code> file when called by the user.</p>
+<h2>Keywords</h2>
+<p>只提几个, 例子来自 pandas.</p>
+<pre><code class="language-toml">[metadata]
+long_description = file: README.md
+long_description_content_type = text/markdown
+
+license = BSD-3-Clause
+license_files = LICENSE
+
+classifiers =
+    # 开发周期
+    # 3 - Alpha
+    # 4 - Beta
+    # 5 - Production/Stable
+    Development Status :: 5 - Production/Stable
+    Environment :: Console
+    # 目标用户
+    Intended Audience :: Science/Research
+    # 许可证
+    License :: OSI Approved :: BSD License
+    Operating System :: OS Independent
+    Programming Language :: Cython
+    Programming Language :: Python
+    Programming Language :: Python :: 3
+    Programming Language :: Python :: 3 :: Only
+    Programming Language :: Python :: 3.8
+    Programming Language :: Python :: 3.9
+    Programming Language :: Python :: 3.10
+    # 类型
+    Topic :: Scientific/Engineering
+    
+[options]
+python_requires = &gt;=3.8
+zip_safe = False
+</code></pre>
+<ul>
+<li>classifiers 来自 <a href="https://pypi.org/pypi?%3Aaction=list_classifiers">这个列表</a></li>
+<li>zip_safe: A boolean (True or False) flag specifying whether the project can be safely installed and run from a zip file. If this argument is not supplied, the bdist_egg command will have to analyze all of your project's contents for possible problems each time it builds an egg.</li>
+</ul>
+<p>至于怎么写版本号</p>
+<ul>
+<li>Crista Perlton. (2022). <a href="https://blog.inedo.com/python-best-practices-for-versioning-python-packages-in-the-enterprise">5 Best Practices for Versioning Your Python Packages</a></li>
+<li><a href="https://semver.org/lang/zh-CN/">语义化版本 2.0.0</a></li>
+</ul>
+<p>TODO: <a href="https://bernat.tech/posts/">TECH ARTICLES BY BERNÁT GÁBOR</a></p>

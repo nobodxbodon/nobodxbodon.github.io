@@ -1,0 +1,49 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/10/29/sqlalchemy">SQLAlchemy 简要</a></h2>
+<hr/>
+<h2>title: "SQLAlchemy 简要"
+categories: Tech
+updated:
+comments: true
+mathjax: false</h2>
+<pre><code class="language-python">import urllib.parse
+
+import sqlalchemy
+
+password = ...
+# escaping special characters such as @ signs
+password = urllib.parse.quote_plus(password)
+url = f'dialect+driver://username:{password}@host:port/database'
+engine = sqlalchemy.create_engine(url)  # Engine object
+
+with engine.connect() as conn:
+    results = conn.execute('SELECT * FROM students')
+    for row in results:
+        print(row)
+</code></pre>
+<p>&lt;!-- more --&gt;</p>
+<p>根据 <a href="https://docs.sqlalchemy.org/en/14/core/connections.html#basic-usage">官方文档</a>, The Engine is <strong>not</strong> synonymous to the DBAPI connect function, which represents just one connection resource - the Engine is most efficient when created just once at the module level of an application, not per-object or per-function call.</p>
+<blockquote>
+<p>The <code>Engine</code> is a <em>factory</em> for connections as well as a <em>pool</em> of connections, not the connection itself. When you say <code>conn.close()</code>, the connection is <em>returned to the connection pool within the Engine</em>, not actually closed.</p>
+</blockquote>
+<p><code>engine.dispose()</code> 参考 <a href="https://docs.sqlalchemy.org/en/14/core/connections.html#engine-disposal">官方文档</a>.</p>
+<p><code>engine.connect()</code> 返回一个 <code>Connection</code> 对象.</p>
+<pre><code class="language-python"># engine/base.py
+
+class Connection(Connectable):
+    def __exit__(self, type_, value, traceback):
+        self.close()
+</code></pre>
+<p>关于 <code>engine.execute(...)</code>, <code>engine.connect()</code>, <code>Session</code> 的区别, 参考 <a href="https://stackoverflow.com/questions/34322471/sqlalchemy-engine-connection-and-session-difference">这里</a>.</p>
+<ul>
+<li><code>engine.execute(...)</code> 其实内部先创建 <code>engine.connect()</code>, 执行完后再关闭. 不过 pandas 的 <code>read_sql</code> 内部不会关闭, 参考 <a href="https://stackoverflow.com/questions/42034373/does-pandas-need-to-close-connection/42034432">这里</a>.</li>
+<li><code>Session</code> 用来做 Object Relationship Management (ORM).</li>
+</ul>
+<p>ORM 是用面向对象的方式操作数据库, 使得对所有支持的数据库类型都能用相同的代码. 教程参考 <a href="https://docs.sqlalchemy.org/en/14/orm/tutorial.html">官方文档</a> (但总体而言官方文档写得太长了, 见 <a href="https://www.zhihu.com/question/19959765/answer/28233183">为什么很多人都喜欢 Django 的 ORM 而不是 SQLAlchemy</a>), 稳定版是 1.4, 最近已经有 2.0 beta 了, 只保留了核心操作. (我没看过)</p>
+<p>如果写 raw sql 需要模板, 可以用 <a href="https://github.com/sripathikrishnan/jinjasql#when-to-use-jinjasql">jinjasql</a> 防止 SQL 注入.</p>
+<p>查询很大的时候可以参考 <a href="https://pythonspeed.com/articles/pandas-sql-chunking/">Loading SQL data into Pandas without running out of memory</a>.</p>
+<p>参考</p>
+<ul>
+<li><a href="https://chartio.com/resources/tutorials/how-to-execute-raw-sql-in-sqlalchemy/">How to Execute Raw SQL in SQLAlchemy | Tutorial by Chartio</a></li>
+<li><a href="https://stackoverflow.com/questions/8645250/how-to-close-sqlalchemy-connection-in-mysql">How to close sqlalchemy connection in MySQL - Stack Overflow</a></li>
+<li><a href="https://stackoverflow.com/questions/17497614/sqlalchemy-core-connection-context-manager">python - SQLAlchemy Core Connection Context Manager - Stack Overflow</a></li>
+</ul>

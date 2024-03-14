@@ -1,0 +1,358 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/06/05/uie">UIE: Universal Information Extraction</a></h2>
+<hr/>
+<p>title: "UIE: Universal Information Extraction"
+categories:</p>
+<ul>
+<li>Machine Learning
+tags: NLP
+updated: 2022-07-04
+comments: true
+mathjax: false</li>
+</ul>
+<hr/>
+<ul>
+<li>Lu, Y., Liu, Q., Dai, D., Xiao, X., Lin, H., Han, X., ... &amp; Wu, H. (2022). <a href="https://arxiv.org/abs/2203.12277">Unified Structure Generation for Universal Information Extraction</a>. <em>arXiv preprint arXiv:2203.12277</em>.</li>
+</ul>
+<p>百度最近铺天盖地地宣传他家的信息抽取方案. UIE 的想法是把各类信息抽取任务统一为以「prompt + 文本」为输入, 用不同 prompt 代表不同任务, 输出生成答案的形式. 这个想法并不新颖, 早在 2019 年谷歌就发过一篇 T5 模型 (目前 3.5k+ 引用), 以 transformer 的 encoder-decoder 为架构, 用多种任务预训练模型, 把任务视为用不同的 prompt 做 seq2seq 的生成任务. T5 的想法其实也不新颖, 不过做的实验特别多, 影响力比较大.</p>
+<ul>
+<li>Raffel, C., Shazeer, N., Roberts, A., Lee, K., Narang, S., Matena, M., ... &amp; Liu, P. J. (2019). <a href="https://arxiv.org/abs/1910.10683">Exploring the limits of transfer learning with a unified text-to-text transformer</a>. <em>arXiv preprint arXiv:1910.10683</em>. [<a href="https://github.com/google-research/text-to-text-transfer-transformer">Code</a>]</li>
+</ul>
+<p>下面依次简单讲一讲 prompt, T5, 以及 UIE.</p>
+<p>&lt;!-- more --&gt;</p>
+<h2>Prompt</h2>
+<p>Prompt 意思是提示符 (比如 shell 中的 <code>$</code>). 想法来自让下游任务的形式更贴近预训练任务的形式, 提升小样本学习的效果. 目前用于分类和生成任务.</p>
+<p>主要有两类:</p>
+<ul>
+<li>用前缀或者后缀 (prefix prompt), 比较适合自回归 LM 或者生成式. 比如输入 "translate English to German: That is good.", 输出德语翻译.</li>
+<li>完形填空 (cloze prompt), 比较适合 masked language model. 比如 "[CLS]我很累, 感觉很[MASK][SEP]", 输出 [MASK] 对应的字符.</li>
+</ul>
+<p>问题是 prompt 需要自己设计, 有时看似差不多的 prompt 产生的结果可能大相径庭. 也有把离散 prompt 换成连续的做法, 但这更是玄学之上再套一层玄学.</p>
+<ul>
+<li>李rumor. (2021). <a href="https://zhuanlan.zhihu.com/p/396971490">Prompt 范式的缘起｜Pattern-Exploiting Training</a></li>
+<li>李rumor. (2021). <a href="https://zhuanlan.zhihu.com/p/400790006">Prompt 范式第二阶段｜Prefix-tuning、P-tuning、Prompt-tuning</a></li>
+<li>马杀鸡三明治. (2022). <a href="https://zhuanlan.zhihu.com/p/474169723">prompt 到底行不行</a></li>
+<li>JayJay. (2022). <a href="https://zhuanlan.zhihu.com/p/467384224">综述｜信息抽取的"第二范式"</a></li>
+<li>霜清老人. (2022). <a href="https://www.zhihu.com/question/508658141/answer/2300680730">NLP 中 prompt learning 有哪些可能的天生缺陷？目前有什么样的方法来解决这样的缺陷？</a></li>
+</ul>
+<h2>T5</h2>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/47113116247567.png"/></p>
+<p>不多讲.</p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;其中 T5 的文本相似度任务是当成分类任务做的&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;We can even apply T5 to regression tasks by training it to predict the string representation of a number instead of the number itself.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;We were able to straightforwardly cast all of the tasks we considered into a text-to-text format with the exception of STS-B, which is a regression task where the goal is to predict a similarity score between 1 and 5. We found that most of these scores were annotated in increments of 0.2, so we simply rounded any score to the nearest increment of 0.2 and converted the result to a literal string representation of the number (e.g. the floating-point value 2.57 would be mapped to the string “2.6”). At test time, if the model outputs a string corresponding to a number between 1 and 5, we convert it to a floating-point value; otherwise, we treat the model’s prediction as incorrect. This effectively recasts the STS-B regression problem as a 21-class classification problem.&lt;/p&gt;
+&lt;/blockquote&gt;&lt;/details&gt;</p>
+<ul>
+<li>苏剑林. (2020). <a href="https://zhuanlan.zhihu.com/p/302380842">那个屠榜的 T5 模型, 现在可以在中文上玩玩了</a></li>
+</ul>
+<h3>预训练</h3>
+<p>One needs a dataset that is not only high quality and diverse, but also massive. To satisfy these requirements, we developed the Colossal Clean Crawled Corpus (C4), a cleaned version of Common Crawl (多但低质量) that is <em>two orders of magnitude larger than Wikipedia</em> (少但高质量).</p>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/42961423220647.png"/></p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;The full details of the investigation can be found in the paper, including experiments on:&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;model architectures&lt;/em&gt;, where we found that encoder-decoder models generally outperformed "decoder-only" language models;  &lt;/li&gt;
+&lt;li&gt;&lt;em&gt;pre-training objectives&lt;/em&gt;, where we confirmed that fill-in-the-blank-style denoising objectives (where the model is trained to recover missing words in the input) worked best and that the most important factor was the computational cost;  &lt;/li&gt;
+&lt;li&gt;&lt;em&gt;unlabeled datasets&lt;/em&gt;, where we showed that training on in-domain data can be beneficial but that pre-training on smaller datasets can lead to detrimental overfitting;  &lt;/li&gt;
+&lt;li&gt;&lt;em&gt;training strategies&lt;/em&gt;, where we found that multitask learning could be close to competitive with a pre-train-then-fine-tune approach but requires carefully choosing how often the model is trained on each task;  &lt;/li&gt;
+&lt;li&gt;and &lt;em&gt;scale&lt;/em&gt;, where we compare scaling up the model size, the training time, and the number of ensembled models to determine how to make the best use of fixed compute power.&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<p>参考</p>
+<ul>
+<li>Google Research. (2020). <a href="https://ai.googleblog.com/2020/02/exploring-transfer-learning-with-t5.html">Exploring Transfer Learning with T5: the Text-To-Text Transfer Transformer</a></li>
+</ul>
+<h2>UIE</h2>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/294383416245069.png"/></p>
+<p>UIE 做的事情就是新提了一系列 prompt 形式, 预训练模型. 涉及的任务包括命名实体识别, 关系抽取, 事件抽取, 情感倾向分类 (文本分类) 等. 他把抽取任务分为两个要素: spotting, 定位实体; associating, 关联实体. 模型的输入构造如下</p>
+<pre><code>[spot]...[spot]...[asso]...[asso]...[text]原文
+</code></pre>
+<p>文中将这种 prompt 称为 structural schema instructor (SSI), 这个前缀可以表示成树状形式; 把输出称为 structured extraction language (SEL).</p>
+<p>以关系抽取为例, schema 如下</p>
+<pre><code>{
+  '竞赛名称': [
+    '主办方',
+    '承办方'
+  ],
+  '其他字段'
+}
+</code></pre>
+<p>其中 "竞赛名称" 是 spot 相当于主语字段, asso 包括 '主办方', '承办方', 相当于谓语, 而 asso 对应的值则是宾语. 其中 asso 关联到 spot 下形成树状结构 (代码也是这么实现的).</p>
+<p>输出形式如下</p>
+<pre><code>(
+    (
+        竞赛名称: XX大赛 
+            (主办方: A协会)
+            (承办方: B协会)    
+    )
+    (其他字段: blahblah)
+)
+</code></pre>
+<h3>预训练任务</h3>
+<p>有三种.</p>
+<ul>
+<li>Text-to-structure. 对齐 Wikidata 和英文 Wikipedia 构建语料 (SSI, text, SEL). 训练模型整体.</li>
+<li>Masked language model. 用英文 Wikipedia 原文构建语料 (None, corrupted_source_text, corrupted_target_text). 训练语义.</li>
+<li>Structure generation. 从 ConceptNet 和 Wikidata 收集结构化数据构建语料 SEL, 只训练 decoder (自回归生成). 训练生成格式.</li>
+</ul>
+<p>总 loss 为上述三个任务 loss (交叉熵) 相加.</p>
+<h3>使用相关</h3>
+<p><strong>标注技巧</strong> 以中文预训练模型为例. 因为用的字段会放进 prompt 里, 所以字段名需要是中文 (<a href="https://github.com/PaddlePaddle/PaddleNLP/issues/2251">issue#2251</a>), 并且和原文相似 (比如原文出现过的词).</p>
+<h2>读代码</h2>
+<p>官方 PyTorch 实现见 <a href="https://github.com/universal-ie/UIE">这里</a>, 是基于 Google T5 (huggingface 版) 的生成式模型, 提供了中文预训练模型 uie-char-small (chinese), Paddle 版的见 <a href="https://github.com/PaddlePaddle/PaddleNLP/tree/develop/examples/information_extraction/DuUIE">DuUIE</a>. 另外 PaddleNLP 实现了基于 ERINE 3.0 和指针的中文 <a href="https://github.com/PaddlePaddle/PaddleNLP/tree/develop/model_zoo/uie">UIE</a>, 并集成到了 taskflow 接口中, 提供了多种不同大小的预训练模型.</p>
+<p>下面贴的代码只提出必要部分并有少量改写.</p>
+<h3>原版</h3>
+<pre><code class="language-python"># inference.py#L36-L62
+
+class HuggingfacePredictor:
+    def __init__(self, ...):
+        self._model = (
+            transformers.T5ForConditionalGeneration.from_pretrained(model_path)
+        )
+     
+    def predict(self, text):
+        text = [self._ssi + x for x in text]
+        inputs = self._tokenizer(text, ...)
+        result = self._model.generate(...)
+        return self._tokenizer.batch_decode(result, ...)
+</code></pre>
+<h3>PaddleNLP 2.3.0</h3>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/306691022248750.png"/></p>
+<p>和原版不同, 他不是生成式, 而是用指针得出实体的首尾 index. 实际上就是标准的机器阅读理解, question + text -&gt; answer (原版 BERT 给的 question answering 例子). 比原版 BERT 的优势大概是对中文信息抽取任务有优化 (预训练层面). 做法类似香侬的</p>
+<ul>
+<li>Li, X., Feng, J., Meng, Y., Han, Q., Wu, F., &amp; Li, J. (2019). <a href="https://arxiv.org/pdf/1910.11476.pdf">A unified MRC framework for named entity recognition</a>. <em>arXiv preprint arXiv:1910.11476</em>. [<a href="https://github.com/ShannonAI/mrc-for-flat-nested-ner">Code</a>]</li>
+<li>周俊贤. (2022). <a href="https://www.zhihu.com/question/415561908/answer/2356434391">有哪些比 BERT-CRF 更好的 NER 模型？</a></li>
+</ul>
+<p>「对白」在做商品描述属性挖掘时也用到了 BERT-MRC, 见 <a href="https://www.zhihu.com/question/452002433/answer/2327252882">这里</a>.</p>
+<p>UIE 的做法是把 schema 拆成单独的问题, 每次调用模型只输入一个问题 (字段), 输出一个回答, 因此字段多时效率有问题 (原版生成式也有慢的问题).</p>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/567184815220649.png"/></p>
+<pre><code class="language-python"># model_zoo/uie/model.py
+
+class UIE(ErniePretrainedModel):
+    def __init__(self, encoding_model):
+        super(UIE, self).__init__()
+        self.encoder = encoding_model
+        hidden_size = self.encoder.config["hidden_size"]
+        self.linear_start = nn.Linear(hidden_size, 1)
+        self.linear_end = nn.Linear(hidden_size, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, input_ids, token_type_ids, pos_ids, att_mask):
+        sequence_output, pooled_output = self.encoder(
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            position_ids=pos_ids,
+            attention_mask=att_mask
+        )
+        start_logits = self.linear_start(sequence_output)
+        start_logits = paddle.squeeze(start_logits, -1)
+        start_prob = self.sigmoid(start_logits)
+        end_logits = self.linear_end(sequence_output)
+        end_logits = paddle.squeeze(end_logits, -1)
+        end_prob = self.sigmoid(end_logits)
+        return start_prob, end_prob
+</code></pre>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;结构没什么特别的&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;pre&gt;&lt;code&gt;# medium
+UIE(
+  (encoder): ErnieModel(
+    (embeddings): ErnieEmbeddings(
+      (word_embeddings): Embedding(40000, 768, padding_idx=0, sparse=False)
+      (position_embeddings): Embedding(2048, 768, sparse=False)
+      (token_type_embeddings): Embedding(4, 768, sparse=False)
+      (task_type_embeddings): Embedding(16, 768, sparse=False)
+      (layer_norm): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+      (dropout): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+    )
+    (encoder): TransformerEncoder(
+      (layers): LayerList(
+        (0): TransformerEncoderLayer(
+          (self_attn): MultiHeadAttention(
+            (q_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (k_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (v_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (out_proj): Linear(in_features=768, out_features=768, dtype=float32)
+          )
+          (linear1): Linear(in_features=768, out_features=3072, dtype=float32)
+          (dropout): Dropout(p=0, axis=None, mode=upscale_in_train)
+          (linear2): Linear(in_features=3072, out_features=768, dtype=float32)
+          (norm1): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (norm2): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (dropout1): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+          (dropout2): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+        )
+        (1): TransformerEncoderLayer(
+          (self_attn): MultiHeadAttention(
+            (q_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (k_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (v_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (out_proj): Linear(in_features=768, out_features=768, dtype=float32)
+          )
+          (linear1): Linear(in_features=768, out_features=3072, dtype=float32)
+          (dropout): Dropout(p=0, axis=None, mode=upscale_in_train)
+          (linear2): Linear(in_features=3072, out_features=768, dtype=float32)
+          (norm1): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (norm2): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (dropout1): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+          (dropout2): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+        )
+        (2): TransformerEncoderLayer(
+          (self_attn): MultiHeadAttention(
+            (q_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (k_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (v_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (out_proj): Linear(in_features=768, out_features=768, dtype=float32)
+          )
+          (linear1): Linear(in_features=768, out_features=3072, dtype=float32)
+          (dropout): Dropout(p=0, axis=None, mode=upscale_in_train)
+          (linear2): Linear(in_features=3072, out_features=768, dtype=float32)
+          (norm1): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (norm2): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (dropout1): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+          (dropout2): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+        )
+        (3): TransformerEncoderLayer(
+          (self_attn): MultiHeadAttention(
+            (q_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (k_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (v_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (out_proj): Linear(in_features=768, out_features=768, dtype=float32)
+          )
+          (linear1): Linear(in_features=768, out_features=3072, dtype=float32)
+          (dropout): Dropout(p=0, axis=None, mode=upscale_in_train)
+          (linear2): Linear(in_features=3072, out_features=768, dtype=float32)
+          (norm1): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (norm2): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (dropout1): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+          (dropout2): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+        )
+        (4): TransformerEncoderLayer(
+          (self_attn): MultiHeadAttention(
+            (q_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (k_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (v_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (out_proj): Linear(in_features=768, out_features=768, dtype=float32)
+          )
+          (linear1): Linear(in_features=768, out_features=3072, dtype=float32)
+          (dropout): Dropout(p=0, axis=None, mode=upscale_in_train)
+          (linear2): Linear(in_features=3072, out_features=768, dtype=float32)
+          (norm1): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (norm2): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (dropout1): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+          (dropout2): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+        )
+        (5): TransformerEncoderLayer(
+          (self_attn): MultiHeadAttention(
+            (q_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (k_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (v_proj): Linear(in_features=768, out_features=768, dtype=float32)
+            (out_proj): Linear(in_features=768, out_features=768, dtype=float32)
+          )
+          (linear1): Linear(in_features=768, out_features=3072, dtype=float32)
+          (dropout): Dropout(p=0, axis=None, mode=upscale_in_train)
+          (linear2): Linear(in_features=3072, out_features=768, dtype=float32)
+          (norm1): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (norm2): LayerNorm(normalized_shape=[768], epsilon=1e-12)
+          (dropout1): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+          (dropout2): Dropout(p=0.1, axis=None, mode=upscale_in_train)
+        )
+      )
+    )
+    (pooler): ErniePooler(
+      (dense): Linear(in_features=768, out_features=768, dtype=float32)
+      (activation): Tanh()
+    )
+  )
+  (linear_start): Linear(in_features=768, out_features=1, dtype=float32)
+  (linear_end): Linear(in_features=768, out_features=1, dtype=float32)
+  (sigmoid): Sigmoid()
+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/details&gt;</p>
+<p>他在模型外面接了两个全连接层, 分别输出每个 token 是实体开头和实体结尾的概率.</p>
+<p>他实现的解码方式是, 考虑概率超过阈值的 index, 以实体结尾指针开始往前找到最近的实体开头指针, 绑定这两个指针对应的实体. 可见现在的方式无法处理嵌套实体 (指同一个字段实体嵌套).</p>
+<p>从他的源码实现看, 最后模型输出的实体附带的概率是头指针和尾指针概率的乘积.</p>
+<h2>ERNIE</h2>
+<p>因为上面实现的 UIE 本质上和 BERT 阅读理解一样, 所以还是讲讲 ERNIE.</p>
+<h3>1.0</h3>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/384075114220746.png"/></p>
+<p>ERNIE 1.0 除了中文 BERT 的字 mask 外, 还加上了词 (实体和词组短语) mask. (英文本来就是词 mask.)</p>
+<ul>
+<li>Sun, Y., Wang, S., Li, Y., Feng, S., Chen, X., Zhang, H., ... &amp; Wu, H. (2019). <a href="https://arxiv.org/abs/1904.09223">Ernie: Enhanced representation through knowledge integration</a>. <em>arXiv preprint arXiv:1904.09223</em>.</li>
+</ul>
+<h3>2.0</h3>
+<p>ERNIE 2.0 多任务贯序持续学习, 加入了 task embedding. 维持老任务的基础上持续增加任务是为了避免 "遗忘知识" (而传统的 continual learning 会遗忘知识).</p>
+<blockquote>
+<p>Whenever a new task comes, the continual multi-task learning method first uses the previously learned parameters to initialize the model, and then train the newly-introduced task together with the original tasks simultaneously.</p>
+</blockquote>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/296294710220653.png"/></p>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/446444710239079.png"/></p>
+<blockquote>
+<p><strong>One left problem is how to make it trained more efficiently.</strong> We solve this problem by allocating each task N training iterations. Our framework needs to automatically assign these N iterations for each task to different stages of training.</p>
+</blockquote>
+<p>上面这段挺怪的, 没看出怎么更有效了.</p>
+<blockquote>
+<p>Although multi-task learning from scratch could train multiple tasks at the same time, it is necessary that all customized pre-training tasks are prepared before the training could proceed.</p>
+</blockquote>
+<p>这段感觉也有点牵强.</p>
+<ul>
+<li>Sun, Y., Wang, S., Li, Y., Feng, S., Tian, H., Wu, H., &amp; Wang, H. (2020, April). <a href="https://arxiv.org/abs/1907.12412">Ernie 2.0: A continual pre-training framework for language understanding</a>. In <em>Proceedings of the AAAI Conference on Artificial Intelligence</em> (Vol. 34, No. 05, pp. 8968-8975).</li>
+</ul>
+<h3>3.0</h3>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/202084319220745.png"/></p>
+<blockquote>
+<p>Inspired by the classical model architecture of multi-task learning, in which the lower layers are shared across all tasks while the top layers are task-specific, we proposed the ERNIE 3.0 to enable the different task paradigms to <strong>share the underlying abstract features learned in a shared network and utilizing the task-specific top-level concrete features learned in their own task-specific network respectively</strong>.</p>
+</blockquote>
+<p>用的 transformer 都是 multi-layer Transformer-XL (适应长文本). 此外 3.0 比 2.0 新增的是预训练任务 universal knowledge-text prediction, 加入了知识图谱.</p>
+<blockquote>
+<p>Given a pair of triple from knowledge graph and the corresponding sentence from encyclopedia, we <strong>randomly mask relation in triple or words in a sentence</strong>. To predict the relation in the triple, the model needs to detect mentions of head entity and tail entity and determine semantic relationship that holds between them in the corresponding sentence. Meanwhile, to predict words in the corresponding sentence, the model not only considers the dependency information in the sentence, but also logical relationship in the triple.</p>
+</blockquote>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/161725619239171.png"/></p>
+<ul>
+<li>Sun, Y., Wang, S., Feng, S., Ding, S., Pang, C., Shang, J., ... &amp; Wang, H. (2021). <a href="https://arxiv.org/abs/2107.02137">Ernie 3.0: Large-scale knowledge enhanced pre-training for language understanding and generation</a>. <em>arXiv preprint arXiv:2107.02137</em>.</li>
+</ul>
+<p>Bert 和 Ernie 是同一个系列剧的主角, 结果清华也有同名模型 ERNIE, 从略.</p>
+<ul>
+<li><a href="https://github.com/PaddlePaddle/ERNIE/blob/repro/README.zh.md">ERNIE 官方文档</a></li>
+<li>徐土豆. (2021).<a href="https://zhuanlan.zhihu.com/p/351479345">『清华ERNIE』 与 『百度ERNIE』 的爱恨情仇</a></li>
+<li>段易通. (2019). <a href="https://zhuanlan.zhihu.com/p/75466388">BERT 与知识图谱的结合——ERNIE 模型浅析</a></li>
+</ul>
+<h2>杂项</h2>
+<ul>
+<li><a href="https://github.com/universal-ie/UIE/issues/2">issue#2: 原版 UIE 的预训练代码也会放出</a></li>
+<li><a href="https://juejin.cn/post/7069225910427189256">T5 应用的极简例子 text2sql</a></li>
+<li><a href="https://github.com/PaddlePaddle/PaddleNLP/issues/2047">issue#2047: 部署</a></li>
+<li><a href="https://github.com/PaddlePaddle/PaddleNLP/issues/2318">issue#2318: GPU 预测加速</a></li>
+</ul>
+<h3>分句小脚本</h3>
+<p>处理引号内标点等问题.</p>
+<pre><code class="language-python"># taskflow/utils.py#L105-L114
+
+def cut_chinese_sent(para):
+    """
+    Cut the Chinese sentences more precisely.
+    reference https://blog.csdn.net/blmoistawinde/article/details/82379256
+    """
+    para = re.sub(r'([。！？\?])([^”’])', r'\1\n\2', para)
+    para = re.sub(r'(\.{6})([^”’])', r'\1\n\2', para)
+    para = re.sub(r'(\…{2})([^”’])', r'\1\n\2', para)
+    para = re.sub(r'([。！？\?][”’])([^，。！？\?])', r'\1\n\2', para)
+    para = para.rstrip()
+    return para.split("\n")
+</code></pre>
+<p>我改写成了</p>
+<pre><code class="language-python">def split_sents(para: str) -&gt; List[str]:
+    """
+    在需要分句的地方加上换行符 `\n`, 最后据此分句. 考虑了引号.
+    ref https://blog.csdn.net/blmoistawinde/article/details/82379256
+    """
+    delimiters = r';；。！？\?'  # 加上分号
+    commas = '，,'
+    right_quotes = r'”’'
+    para = re.sub(fr'([{delimiters}])([^{right_quotes}])', r'\1\n\2', para)
+    para = re.sub(fr'(\.{{6}})([^{right_quotes}])', r'\1\n\2', para)
+    para = re.sub(fr'(\…{{2}})([^{right_quotes}])', r'\1\n\2', para)
+    para = re.sub(fr'([{delimiters}][{right_quotes}])([^{commas}{delimiters}])', r'\1\n\2', para)
+    para = para.rstrip()
+    return para.split("\n")
+</code></pre>
+<h3>用 Pinferencia 搭建 demo</h3>
+<p>是从 <a href="https://blog.csdn.net/weixin_41778656/article/details/124416058">这里</a> 看到的. 好处是真的很便利, 不过当然没有任何优化.</p>
+<p><a href="https://github.com/underneathall/pinferencia">Pinferencia</a> 是国人开发的尚不成熟的用于快速搭建服务的 python 库. 做 demo 不错. 里面用到的 uvicorn 语法可以参考 <a href="https://www.uvicorn.org/#command-line-options">这里</a>.</p>

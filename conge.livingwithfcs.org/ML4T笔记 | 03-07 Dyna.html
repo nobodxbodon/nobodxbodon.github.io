@@ -1,0 +1,145 @@
+<h2>原文：<a href="https://conge.livingwithfcs.org/2019/03/31/ML4T-03-07-Dyna">ML4T笔记 | 03-07 Dyna</a></h2>
+<hr/>
+<h2>layout: post
+title: "ML4T笔记 | 03-07 Dyna"
+date: "2019-03-31 03:00:00"
+categories: 计算机科学
+auth: conge
+tags: Machine_Learning Trading ML4T OMSCS</h2>
+<ul>
+<li>content
+{:toc}</li>
+</ul>
+<h2>1 - Overview</h2>
+<p><img alt=" " src="/media/wwww/share/study/聚聚/源数据/博客聚合/conge.livingwithfcs.org/assets/images/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6/118382-fcc559200b79b358.png"/></p>
+<p>Q-learning is expensive because it takes many experienced tuples to converge. Creating experienced tuples means taking a real step to execute a trade, in order to gather information.</p>
+<p>To address this problem, Rich Sutton invented Dyna.</p>
+<ul>
+<li>Dyna models T (the transition matrix) and R (the reward matrix).</li>
+<li>after each real interaction with the world, we hallucinate many additional interactions, usually a few hundred that are used then to update the queue table.</li>
+</ul>
+<blockquote>
+<p><em>Time: 00:00:37</em></p>
+</blockquote>
+<h2>2 - Dyna-Q Big Picture</h2>
+<p><img alt="image.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/conge.livingwithfcs.org/assets/images/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6/118382-34bcde42a5f9da40.png"/></p>
+<p>Q learning is model-free meaning that it does not rely on T or R.</p>
+<ul>
+<li>Q learning does not know T or R.</li>
+<li>T = transition matrix and R = reward function,</li>
+</ul>
+<p>Dyna-Q is an algorithm developed by Rich Sutton intended to speed up learning or model convergence for Q learning.</p>
+<p>Dyna is a blend of model-free and model-based methods.</p>
+<ol>
+<li>first consider plain old Q learning, initialize our Q table and then we begin iterating, observe <code>s</code>,  take action  <code>a</code>, and then observe our new state <code>s' and reward </code>r`, and then update Q table with this experience tubal and repeat.</li>
+<li>when we augment Q learning with Dyna-Q, we had three new components, the first is that we add some "logic that enables us to learn models of T and R", then we hallucinate an experience.</li>
+</ol>
+<ul>
+<li>hallucinate these experiences, update our queue table and repeat this many times, maybe hundreds of times.</li>
+<li>This operation is very cheap compared to interacting with the real world.</li>
+<li>After we've iterated enough times down here maybe 100 maybe 200 times then we return and resume our interaction with the real world.</li>
+</ul>
+<h3>Let's look at each of these components in a little more detail now.</h3>
+<p>When updating our model we want to do is find new values for T and R.</p>
+<p>The point where we update our model includes T,  our reward function R.</p>
+<ul>
+<li>T is the probability that if we are in state s and we take action a will end up in s prime.</li>
+<li>r is our expected reward if we are in state s and we take action a.</li>
+</ul>
+<h3>how we hallucinate an experience.</h3>
+<ol>
+<li>randomly select an <code>s</code>,</li>
+<li>randomly select an <code>a</code>, so our state and action are chosen totally at random.</li>
+<li>infer our new state <code>s'</code> by looking at T.</li>
+<li>we infer a reward <code>r</code> by looking at big R or R table.</li>
+</ol>
+<p>Now we have a complete experience tuple to update our Q table using that.</p>
+<p>So, the Q table update is our final step and this is really all there is to die in a queue.</p>
+<blockquote>
+<p><em>Time: 00:04:14</em></p>
+</blockquote>
+<h2>3 - Learning T</h2>
+<p><img alt=" " src="/media/wwww/share/study/聚聚/源数据/博客聚合/conge.livingwithfcs.org/assets/images/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6/118382-fee3f955d1c3ca9c.png"/></p>
+<p>Note the methods are Balch version, might not be Rich Sutton version.</p>
+<p><strong>Learning T</strong>.</p>
+<p>T[s,a,s'] represents the <strong>probability</strong> that if we are in the state <code>s</code>, take action <code>a</code> we will end up in state <code>s'</code>.</p>
+<p>To learn a model of T: just observe how these transitions occur.</p>
+<ul>
+<li>T count (TC): when we have experience with the real world, we'll get back on &lt;s,a,s'&gt; and we'll just count how many times did it happen.</li>
+<li>initialize all of our T count values to be a very, very small number to avoid number divided by zero.</li>
+<li>Each time we interact with the real world in Q-learning, we observe &lt;s,a,r,s'&gt;, then we just increment that location in our T-count matrix.</li>
+</ul>
+<blockquote>
+<p><em>Time: 00:01:34</em></p>
+</blockquote>
+<h2>4 - How to Evaluate T</h2>
+<p>$T[s,a,s'] = \frac{T_c[s,a,s']}{\sum\limits_{i}T_c[s,a,i]} $</p>
+<blockquote>
+<p><em>Time: 00:01:03</em></p>
+</blockquote>
+<h2>6 - Learning R</h2>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/conge.livingwithfcs.org/assets/images/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6/118382-35b5c686e6ab8da7.png"/></p>
+<p>The last step here is how do we learn a model for R?</p>
+<ul>
+<li><p>When we execute an action <code>a</code> in state <code>s</code>, we get an immediate reward, <code>r</code>.</p>
+</li>
+<li><p>R[s, a] are expected reward if we're in state s and we execute action a.</p>
+</li>
+<li><p>R is our model,  <code>r</code>  is what we get in an experience tuple.</p>
+</li>
+<li><p>update R model every time we have a real experience.</p>
+</li>
+<li><p>$ R'[s,a] = (1 - \alpha) R[s,a] + \alpha \times r$.</p>
+</li>
+<li><p><code>r</code> is the new estimate.
+That's a simple way to build a model of R from observations of interactions with the real world.</p>
+</li>
+</ul>
+<blockquote>
+<p><em>Time: 00:01:39</em></p>
+</blockquote>
+<h2>7 - Dyna Q Recap</h2>
+<p><strong>how Dyna-Q works.</strong></p>
+<p><img alt=" " src="/media/wwww/share/study/聚聚/源数据/博客聚合/conge.livingwithfcs.org/assets/images/%E8%AE%A1%E7%AE%97%E6%9C%BA%E7%A7%91%E5%AD%A6/118382-06637bf88676f6e0.png"/></p>
+<p>Dyna-Q adds three new components based on regular Q-Learning</p>
+<ol>
+<li>update models of T and R,</li>
+<li>then we hallucinate an experience.</li>
+<li>update our Q table.</li>
+</ol>
+<p>We can repeat 2-3 many times. ~100 or 200 here, then return back up to the top and continue our interaction with the real world.</p>
+<ul>
+<li><p>The reason Dyna-Q is useful: use cheap hallucinations to replace real-world interaction (which is expensive)</p>
+</li>
+<li><p>And when we iterate doing many of them, we <em>update our Q table much more quickly</em>.</p>
+</li>
+</ul>
+<blockquote>
+<p><em>Time: 00:00:57</em></p>
+</blockquote>
+<blockquote>
+<p>Total Time: 00:10:41</p>
+</blockquote>
+<h2>Summary</h2>
+<p>The Dyna architecture consists of a combination of:</p>
+<ul>
+<li>direct reinforcement learning from real experience tuples gathered by acting in an environment,</li>
+<li>updating an internal model of the environment, and,</li>
+<li>using the model to simulate experiences.</li>
+</ul>
+<p><img alt="Dyna learning architecture" src="https://s3.amazonaws.com/content.udacity-data.com/courses/ud501/images/Dyna-architecture.png"/></p>
+<p>Sutton and Barto. <em>Reinforcement Learning: An Introduction</em>. MIT Press, Cambridge, MA, 1998. [<a href="https://webdocs.cs.ualberta.ca/~sutton/book/the-book.html">web</a>]</p>
+<h2>Resources</h2>
+<ul>
+<li><p>Richard S. Sutton. Integrated architectures for learning, planning, and reacting based on approximating dynamic programming. In <em>Proceedings of the Seventh International Conference on Machine Learning</em>, Austin, TX, 1990. [<a href="https://webdocs.cs.ualberta.ca/~sutton/papers/sutton-90.pdf">pdf</a>]</p>
+</li>
+<li><p>Sutton and Barto. <em>Reinforcement Learning: An Introduction</em>. MIT Press, Cambridge, MA, 1998. [<a href="https://webdocs.cs.ualberta.ca/~sutton/book/the-book.html">web</a>]</p>
+</li>
+<li><p><a href="http://www0.cs.ucl.ac.uk/staff/d.silver/web/Teaching.html">RL course by David Silver</a> (videos, slides)</p>
+<ul>
+<li>Lecture 8: Integrating Learning and Planning [<a href="http://www0.cs.ucl.ac.uk/staff/d.silver/web/Teaching_files/dyna.pdf">pdf</a>]</li>
+</ul>
+</li>
+</ul>
+<pre><code>2019-03-31 初稿
+</code></pre>

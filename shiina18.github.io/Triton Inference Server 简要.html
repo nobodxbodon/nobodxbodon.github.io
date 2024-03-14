@@ -1,0 +1,180 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/08/29/triton">Triton Inference Server 简要</a></h2>
+<hr/>
+<h2>title: "Triton Inference Server 简要"
+categories: Tech
+updated:
+comments: true
+mathjax: false</h2>
+<p>NVIDIA 的 <a href="https://github.com/triton-inference-server/server">Triton Inference Server</a>.</p>
+<p><img alt="总体架构" src="https://shiina18.github.io/assets/posts/images/386600422220952.png" title="总体架构"/></p>
+<p>把模型文件 (支持主流格式) 放在 model repo, 由 inference server 调度, 根据模型配置的推理引擎 (ONNX, TensorRT 等) 输出结果.</p>
+<p>下面以在 CPU 上部署 ONNX 模型为例.</p>
+<p>&lt;!-- more --&gt;</p>
+<h2>Install Triton Docker image</h2>
+<p>最简单的方法是在 <a href="https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tritonserver/tags">NVIDIA GPU Cloud (NGC)</a> 拉取预编译的镜像.</p>
+<pre><code class="language-shell">$ docker pull nvcr.io/nvidia/tritonserver:&lt;xx.yy&gt;-py3
+# docker pull nvcr.io/nvidia/tritonserver:22.08-py3
+</code></pre>
+<p>其中 <code>&lt;xx.yy&gt;</code> 是 Triton 版本号, 每个月末都会发新版本, 比如 2022 年 8 月末最新的版本号就是 <code>22.08</code>.</p>
+<h2>Create a model repository</h2>
+<p>模型仓库存储模型文件和模型配置, 参考 <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_repository.md">model_repository 官方文档</a>.</p>
+<h3>Repository layout</h3>
+<p>用 <code>--model-repository</code> 参数指定要使用的模型仓库路径; 这个参数可以设置多次以导入多个模型仓库.</p>
+<p>(tritonserver 是编译出来的二进制文件, 要在 docker 里)</p>
+<pre><code class="language-shell">$ tritonserver --model-repository=&lt;model-repository-path&gt;
+</code></pre>
+<p>模型仓库必须符合如下结构.</p>
+<pre><code>&lt;model-repository-path&gt;/
+  &lt;model-name&gt;/
+    [config.pbtxt]
+    [&lt;output-labels-file&gt; ...]
+    &lt;version&gt;/
+      &lt;model-definition-file&gt;
+    &lt;version&gt;/
+      &lt;model-definition-file&gt;
+    ...
+  &lt;model-name&gt;/
+    # 模型配置
+    config.pbtxt
+    
+    # 版本以数字命名, 数字大的为新版本
+    # The subdirectories that are not numerically named, 
+    # or have names that start with zero (0) will be ignored
+    1/
+    
+      # 默认模型文件名 model.onnx
+      # 可在 config.pbtxt 中的 default_model_filename 修改
+      model.onnx
+      
+    2/
+      model.onnx
+  ...
+</code></pre>
+<h3>Model configuration</h3>
+<p>模型配置 <code>config.pbtxt</code> 参考 <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md">model_configuration 官方文档</a>. 特别地, Triton 可以读取 ONNX 模型里的配置 <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#auto-generated-model-configuration">自动生成配置</a>, 因而可以不显式提供这个文件.</p>
+<p>A minimal model configuration must specify the <a href="https://github.com/triton-inference-server/backend/blob/main/README.md#backends"><code>platform</code> and/or <code>backend</code> properties</a>, the <code>max_batch_size</code> property, and the <code>input</code> and <code>output</code> tensors of the model. (好像不能写注释, 不然 Triton 报错.)</p>
+<pre><code class="language-protobuf">// platform: "onnxruntime_onnx"  // 等价写法
+backend: "onnxruntime"
+max_batch_size: 20
+// default_model_filename: "model.onnx"
+input [
+  {
+    name: "input_ids"
+    data_type: TYPE_INT64
+    dims: [512]
+  },
+  {
+    name: "attention_mask"
+    data_type: TYPE_INT64
+    dims: [512]
+  }
+]
+output [
+  {
+    name: "logits"
+    data_type: TYPE_FP32
+    dims: [6]
+  }
+]
+instance_group [
+  {
+    count: 3
+    kind: KIND_CPU
+  }
+]
+dynamic_batching {
+  preferred_batch_size: [8, 16]
+  max_queue_delay_microseconds: 100
+}
+</code></pre>
+<h4>Platform and Backend</h4>
+<p>参考 <a href="https://github.com/triton-inference-server/backend/blob/main/README.md#backends">backend 官方文档</a>. A Triton <em>backend</em> is the implementation that executes a model. 这个 backend 也可以自己编译提供.</p>
+<p>For using TensorRT backend, the value of this setting should be <em>tensorrt</em>. Similarly, for using PyTorch, ONNX and TensorFlow Backends, the <code>backend</code> field should be set to <em>pytorch</em>, <em>onnxruntime</em> or <em>tensorflow</em> respectively. For all other backends, 'backend' must be set to the name of the backend.</p>
+<h4>Maximum Batch Size</h4>
+<p>If the model's batch dimension is the first dimension, and all inputs and outputs to the model have this batch dimension, then Triton can use its <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#dynamic-batcher">dynamic batcher</a> or <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#sequence-batcher">sequence batcher</a> to automatically use batching with the model. In this case <code>max_batch_size</code> should be set to a value greater-or-equal-to 1.</p>
+<p>不支持 batching, 或者不支持上述 batching 方式时, <code>max_batch_size</code> 设置为 0.</p>
+<h4>Inputs and Outputs</h4>
+<p>Datatypes 参考 <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#datatypes">这里</a>.</p>
+<p>For models with <code>max_batch_size</code> greater-than 0, the full shape is formed as [-1] + <code>dims</code>. For models with <code>max_batch_size</code> equal to 0, the full shape is formed as <code>dims</code>. (-1 表示可变长维度.)</p>
+<p>输入输出和配置文件不同时可以添加 <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#reshape">reshape</a> 参数.</p>
+<h4>Version Policy</h4>
+<p>每个模型可以有多个版本共存. Triton 提供三种版本策略, 默认 latest 1.</p>
+<pre><code class="language-protobuf">// 所有版本同时服务
+version_policy: { all: {}}
+
+// 只使用最近 n 个版本
+version_policy: { latest: { num_versions: 2}}
+
+// 只使用指定的版本
+version_policy: { specific: { versions: [1, 3]}}
+</code></pre>
+<h4>Instance Groups</h4>
+<p>Triton can provide multiple <a href="https://github.com/triton-inference-server/server/blob/main/docs/architecture.md#concurrent-model-execution">instances of a model</a> so that multiple inference requests for that model can be handled simultaneously. By default, a single execution instance of the model is created for each GPU available in the system.</p>
+<p>For example, the following configuration will place one execution instance on GPU 0, two execution instances on GPUs 1 and 2, and two execution instances on the CPU.</p>
+<pre><code class="language-protobuf">instance_group [
+  {
+    count: 1
+    kind: KIND_GPU
+    gpus: [ 0 ]
+  },
+  {
+    count: 2
+    kind: KIND_GPU
+    gpus: [ 1, 2 ]
+  },
+  {
+    count: 2
+    kind: KIND_CPU
+  }
+]
+</code></pre>
+<p>If no <code>count</code> is specified for a <code>KIND_CPU</code> instance group, then the default instance count will be 2 for selected backends (Tensorflow and Onnxruntime). All other backends will default to 1.</p>
+<h4>Batching</h4>
+<p>对于有状态的模型, 可以用 sequence batcher, 以及 ensemble batcher, 此处从略.</p>
+<p>Dynamic batching is a feature of Triton that allows inference requests to be combined by the server, so that a batch is created dynamically. Creating a batch of requests typically results in increased throughput. The dynamic batcher should be used for <a href="https://github.com/triton-inference-server/server/blob/main/docs/architecture.md#stateless-models">stateless models</a>. The dynamically created batches are distributed to all <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#instance-groups">model instances</a> configured for the model.</p>
+<pre><code class="language-protobuf">dynamic_batching {
+  preferred_batch_size: [4, 8]  // 4 and 8
+  max_queue_delay_microseconds: 100
+}
+</code></pre>
+<p>请求进来后形成队列, 拼成 <code>preferred_batch_size</code> 传给模型推理. 如果不能拼成 <code>preferred_batch_size</code>, 就等待至多 <code>max_queue_delay_microseconds</code> 毫秒. 因此这两个参数需要 trade-off, 调优方法见 <a href="https://github.com/triton-inference-server/server/blob/main/docs/model_configuration.md#recommended-configuration-process">原文档</a>.</p>
+<h2>Run Triton</h2>
+<p>Triton is optimized to provide the best inferencing performance by using GPUs, but it can also work on CPU-only systems. In both cases you can use the same Triton Docker image.</p>
+<pre><code class="language-shell">$ docker run --rm -p8000:8000 -p8001:8001 -p8002:8002 \
+  -v/full/path/to/docs/examples/model_repository:/models \
+  nvcr.io/nvidia/tritonserver:&lt;xx.yy&gt;-py3 \
+  tritonserver --model-repository=/models
+</code></pre>
+<h2>Client</h2>
+<pre><code>$ pip install tritonclient[all]
+</code></pre>
+<p>参考 <a href="https://github.com/triton-inference-server/client#getting-the-client-libraries-and-examples">官方 readme</a>, 和 Python 示例 <a href="https://github.com/triton-inference-server/client/tree/main/src/python/examples">simple_grpc_shm_client.py</a>. 仿照这个样例写了一个 <a href="https://gist.github.com/Shiina18/17192a21709b0faf290ed6e855d74bd3">更通用的脚本</a>.</p>
+<p>关于共享内存可以参考 <a href="https://www.geeksforgeeks.org/ipc-shared-memory/">这个</a> 和 <a href="https://zhuanlan.zhihu.com/p/37808566">这个</a>.</p>
+<h2>TODO</h2>
+<p>性能监控</p>
+<h2>Miscs</h2>
+<ul>
+<li><a href="https://github.com/triton-inference-server/server/issues/3373">Ensemble of models are executed over different devices #3373</a></li>
+</ul>
+<h2>References</h2>
+<ul>
+<li><a href="https://github.com/triton-inference-server/server/blob/main/docs/quickstart.md">Triton inference server quickstart</a></li>
+<li><a href="https://www.bilibili.com/video/BV1KS4y1v7zd">NVIDIA 官方视频入门教程</a></li>
+</ul>
+<p><strong>Further reading</strong></p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;网友 "楷哥" 写的一系列博文&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;2021-10-09 &lt;a href="https://www.cnblogs.com/zzk0/p/15384034.html"&gt;Serving System 调研&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-10-30 &lt;a href="https://www.cnblogs.com/zzk0/p/15487465.html"&gt;我不会用 Triton 系列：Triton Inference Server 简介&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-01 &lt;a href="https://www.cnblogs.com/zzk0/p/15496171.html"&gt;我不会用 Triton 系列：如何实现一个 backend&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-04 &lt;a href="https://www.cnblogs.com/zzk0/p/15510825.html"&gt;我不会用 Triton 系列：Stateful Model 学习笔记&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-06 &lt;a href="https://www.cnblogs.com/zzk0/p/15517120.html"&gt;我不会用 Triton 系列：Triton 搭建 ensemble 过程记录&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-10 &lt;a href="https://www.cnblogs.com/zzk0/p/15535828.html"&gt;我不会用 Triton 系列：Python Backend 的使用&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-11 &lt;a href="https://www.cnblogs.com/zzk0/p/15540333.html"&gt;我不会用 Triton 系列：构建 Triton Server 过程记录&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-11 &lt;a href="https://www.cnblogs.com/zzk0/p/15542015.html"&gt;我不会用 Triton 系列：Rate Limiter 的使用&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-11 &lt;a href="https://www.cnblogs.com/zzk0/p/15538894.html"&gt;我不会用 Triton 系列：Model Warmup 的使用&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-14 &lt;a href="https://www.cnblogs.com/zzk0/p/15553394.html"&gt;我不会用 Triton 系列：Agent 的使用&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2021-11-18 &lt;a href="https://www.cnblogs.com/zzk0/p/15543824.html"&gt;我不会用 Triton 系列：上手指北&lt;/a&gt; (推荐)&lt;/li&gt;
+&lt;li&gt;2022-02-24 &lt;a href="https://www.cnblogs.com/zzk0/p/15932542.html"&gt;我不会用 Triton 系列：命令行参数简要介绍&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;2022-04-11 &lt;a href="https://www.cnblogs.com/zzk0/p/16125239.html"&gt;kserve predict api v2&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>

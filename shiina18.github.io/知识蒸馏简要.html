@@ -1,0 +1,43 @@
+<h2>原文：<a href="https://shiina18.github.io/2021/08/05/knowledge-distill">知识蒸馏简要</a></h2>
+<hr/>
+<p>title: "知识蒸馏简要"
+categories:</p>
+<ul>
+<li>Machine Learning
+updated:
+comments: true
+mathjax: true</li>
+</ul>
+<hr/>
+<p>模型压缩, 用小模型向大模型学习. 神经网络最后一层通常将 logits $z_i$ 经过 softmax 函数转化为类别概率预测 $q_i$ 输出,</p>
+<p>$$
+q_i = \frac{\exp(z_i/T)}{\sum_j \exp(z_j/T)},
+$$</p>
+<p>其中 $T=1$. 这种概率预测称为 soft target/label (相对于 hard target, 即直接预测一个类别, 而不给与概率).</p>
+<p>&lt;!-- more --&gt;</p>
+<p>以 MNIST 手写数字识别为例.</p>
+<blockquote>
+<p>For example, one version of a 2 may be given a probability of $10^{−6}$ of being a 3 and $10^{−9}$ of being a 7 whereas for another version it may be the other way around. This is <strong>valuable information that defines a rich similarity structure</strong> over the data (i. e. it says which 2's look like 3's and which look like 7's) <strong>but it has very little influence on the cross-entropy cost function</strong> during the transfer stage because the probabilities are so close to zero.</p>
+</blockquote>
+<p>在知识蒸馏中, 小模型 student model 要模仿大模型 teacher model 的概率预测. 然而在很多时候, 正确类别的预测概率非常大, 于是引入了上面式子中的 $T$ (称为温度参数). 参数 $T$ 越大, 则预测分布越接近均匀分布, 从而拔高了那些原先很小的概率预测, 使得整个分布更加平滑, 让模型学到这些 dark knowledge.</p>
+<p>Hinton 发现用数据的 true labels 和教师模型的 soft-labels 同时训练学生模型会更好. 把两种 loss 加权如下.</p>
+<p>$$
+L = \alpha H(y, \sigma(z_s; T=1)) + \beta H(\sigma(z_t; T=\tau), \sigma(z_s; T=\tau)),
+$$</p>
+<p>其中 $H$ 是交叉熵函数, $y$ 是真实标签, $\sigma$ 是带温度参数 $T$ 的 softmax 函数, $z_s$, $z_t$ 分别是学生模型和教师模型的 logits, $\alpha$ 和 $\beta$ 是权重.</p>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/20210805233046017_2994.png"/></p>
+<p>训练完成后在预测阶段取 $T=1$.</p>
+<h2>References</h2>
+<ul>
+<li>Hinton, G., Vinyals, O., &amp; Dean, J. (2015). <a href="https://arxiv.org/abs/1503.02531">Distilling the knowledge in a neural network</a>. <em>arXiv preprint arXiv:1503.02531.</em></li>
+<li><a href="https://intellabs.github.io/distiller/knowledge_distillation.html">Knowledge Distillation</a>. <em>Neural network distiller</em>. 挺好的文档, 模型压缩 (剪枝, 量子化等) 都可以看.</li>
+</ul>
+<h2>Further reading</h2>
+<ul>
+<li>基于 PyTorch 的 NLP 知识蒸馏工具 <a href="https://github.com/airaria/TextBrewer">TextBrewer</a></li>
+<li><a href="https://www.zhihu.com/question/303922732">为什么要压缩模型, 而不是直接训练一个小的 CNN?</a></li>
+<li>Gordon, M. A. (2020, Jan 13). <a href="http://mitchgordon.me/machine/learning/2020/01/13/do-we-really-need-model-compression.html">Do We Really Need Model Compression?</a>.</li>
+<li>Sanh, V. (2019). <a href="https://medium.com/huggingface/distilbert-8cf3380435b5">Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT</a>. 提出者</li>
+<li><a href="https://www.zhihu.com/question/349948366">吐槽神经网络模型压缩</a></li>
+<li><a href="https://www.zhihu.com/question/309808462/answer/2649118476">知识蒸馏早就是接近死亡的研究方向了</a></li>
+</ul>

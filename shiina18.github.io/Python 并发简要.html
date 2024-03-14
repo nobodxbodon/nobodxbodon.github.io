@@ -1,0 +1,70 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/10/23/concurrency">Python 并发简要</a></h2>
+<hr/>
+<h2>title: "Python 并发简要"
+categories: Tech
+updated:
+comments: true
+mathjax: false</h2>
+<p>并发 (concurrency) 和并行 (parallelism) 是两个概念. 这两个术语的使用还有争议, 下面依照书上 (Fluent Python, 2nd Edition) 的说法, 并行是并发的子集.</p>
+<blockquote>
+<p>A modern laptop with 4 CPU cores is routinely running more than 200 processes at any given time under normal, casual use. To execute 200 tasks in parallel, you'd need 200 cores. So, in practice, most computing is concurrent and not parallel.</p>
+</blockquote>
+<p>&lt;!-- more --&gt;</p>
+<h2>一些基础</h2>
+<p><strong>协程 (coroutine)</strong>: A function that can suspend itself and resume later. <em>Native coroutines</em> are defined with <code>async def</code>. Python coroutines usually run within a <strong>single thread</strong> under the supervision of an <strong>event loop</strong>, also in the same thread. Coroutines support <strong>cooperative multitasking</strong>: each coroutine must explicitly cede control with the <code>yield</code> or <code>await</code> keyword, so that another may proceed concurrently (but not in parallel). This means that any blocking code in a coroutine blocks the execution of the event loop and all other coroutines—in contrast with the <strong>preemptive multitasking</strong> supported by processes and threads. On the other hand, each coroutine consumes less resources than a thread or process doing the same job.</p>
+<p>Processes allow <strong>preemptive multitasking</strong>: the OS scheduler preempts—i.e., suspends—each running process periodically to allow other processes to run. This means that a frozen process can't freeze the whole system—in theory.</p>
+<p><strong>GIL</strong></p>
+<ul>
+<li>Each instance of the Python interpreter is a process. The Python interpreter uses a single thread to run the user's program and the memory garbage collector.</li>
+<li>Access to object reference counts and other internal interpreter state is controlled by a lock, the Global Interpreter Lock (GIL). <strong>Only one Python thread can hold the GIL at any time.</strong> This means that only one thread can execute Python code at any time, regardless of the number of CPU cores.</li>
+<li>To prevent a Python thread from holding the GIL indefinitely, Python's bytecode interpreter pauses the current Python thread every 5ms by default, releasing the GIL.</li>
+<li>Every Python standard library function that makes a syscall 5 releases the GIL. This includes all functions that perform disk I/O, network I/O, and  <code>time.sleep()</code>. Particularly because sleep always releases the GIL, so Python may switch to another thread even if you sleep for 0s.</li>
+</ul>
+<h2>基本用法</h2>
+<pre><code class="language-python">from concurrent import futures
+
+
+def func(n: int) -&gt; int:
+    ...
+
+
+with futures.ThreadPoolExecutor() as executor:
+    res = executor.map(func, [0, 1, 2, 3])
+</code></pre>
+<p>其中 <code>map</code> 方法和通常的 <code>map(func, [0, 1, 2, 3])</code> 类似, 返回的都是生成器. <strong>Although the tasks are executed asynchronously, the results are iterated in the order of the iterable</strong> provided to the <code>map()</code> function, the same as the built-in <code>map()</code> function.</p>
+<p>退出上下文管理器时会调用 <code>.shutdown(wait=True)</code>: Clean-up the resources associated with the Executor. If wait is True then shutdown will not return until all running futures have finished executing and the resources used by the executor have been reclaimed. 如果不 shutdown, 则退出 Python 时才会释放资源, 参考 <a href="https://stackoverflow.com/questions/28417525/what-is-the-difference-between-using-the-method-threadpoolexecutor-shutdownwait">这个</a>.</p>
+<p>要多进程可以直接把 <code>futures.ThreadPoolExecutor()</code> 换为 <code>futures.ProcessPoolExecutor()</code>, 他们都实现了 <code>Executor</code> 接口. <code>Executor</code> 会自己调度资源, 无需用户操心.</p>
+<h2>Futures</h2>
+<p>Executor 有个 <code>submit</code> method: Submits and schedules a callable to be executed with the given arguments. Returns a <code>Future</code> instance representing the execution of the callable.</p>
+<p>上述过程的底层用到的对象叫 <code>Future</code>, 它能提供更灵活的用法.</p>
+<blockquote>
+<p>An important thing to know about futures is that you and I should not create them: they are meant to be instantiated exclusively by the concurrency framework, be it <code>concurrent.futures</code> or <code>asyncio</code>. Here is why: a <code>Future</code> represents something that will eventually run, therefore it must be scheduled to run, and that's the job of the framework.</p>
+<p>Application code is not supposed to change the state of a future: the concurrency framework changes the state of a future when the computation it represents is done, and we can't control when that happens.</p>
+</blockquote>
+<h3>Methods</h3>
+<p>部分方法</p>
+<ul>
+<li><code>done</code>: Nonblocking. Return True if the future was cancelled or finished executing.</li>
+<li><code>add_done_callback</code>: Attaches a callable that will be called when the future finishes (completes or is cancelled). Instead of repeatedly asking whether a future is done, client code usually asks to be notified.</li>
+<li><code>cancel</code>: Cancel the future if possible. Returns True if the future was cancelled, False otherwise. A future cannot be cancelled if it is running or has already completed.</li>
+<li><code>result</code>: Return the result of the call that the future represents. In a <code>concurrency.futures.Future</code> instance, invoking <code>f.result()</code> will block the caller's thread until the result is ready.</li>
+<li><code>as_completed</code>: 入参是 Future 的序列, 返回 an iterator that yields the given Futures as they complete (finished or cancelled).</li>
+</ul>
+<pre><code class="language-python">with futures.ThreadPoolExecutor() as executor:
+    future2n = {executor.submit(func, n): n for n in [0, 1, 2, 3]}
+    for future in futures.as_completed(future2n):
+        n = future2n[future]
+        res = future.result()
+        ...
+</code></pre>
+<p>比 <code>map</code> 方法更灵活之处是, 可以 submit 不同的函数, 最后 as_completed 中可以传来源不同的 Futures (比如同时有 ThreadPoolExecutor 和 ProcessPoolExecutor 的). 常见写法是建一个字典, key 是 Future, value 是相关的便于后续处理的值, 比如官方文档的 <a href="https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor-example">例子</a>.</p>
+<h2>TODO</h2>
+<ul>
+<li><a href="https://superfastpython.com/">SuperFastPython</a> 写得好像还可以.</li>
+<li>异步编程: 协程. 多进程多线程重构起来都相当简单, 外面套一层就行; 但协程写起来比较麻烦, 得把涉及到的函数都调整一遍 (所以 gevent 是神).</li>
+<li>Fossen. <a href="https://www.zhihu.com/question/451397804/answer/2193074474">python asyncio的设计晦涩难懂，一点也不python，是做毁了吗？</a></li>
+<li>一般的多线程, 多进程<ul>
+<li><a href="https://stackoverflow.com/questions/5127401/setdaemon-method-of-threading-thread">daemon thread</a></li>
+</ul>
+</li>
+</ul>

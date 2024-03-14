@@ -1,0 +1,283 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/08/19/docker">Docker 简要: 部署 Python 应用简例</a></h2>
+<hr/>
+<h2>title: "Docker 简要: 部署 Python 应用简例"
+categories: Tech
+updated: 2022-10-19
+comments: true
+mathjax: false</h2>
+<h2>Introduction</h2>
+<blockquote>
+<p>Why did Docker decide to go with a whale for their logo? Apparently to express its product's values of expedition, automation, encapsulation and simplification. As they explain "the whale is carrying a stack of containers on its way to deliver those to you".</p>
+<ul>
+<li><a href="https://www.mend.io/resources/blog/the-hidden-stories-behind-the-open-source-logos-we-all-love/">The Hidden Stories Behind the Open Source Logos We All Love | Mend</a></li>
+</ul>
+</blockquote>
+<p><img alt="来自官网首页" src="https://shiina18.github.io/assets/posts/images/488832000220861.png" title="来自官网首页"/></p>
+<p>下面改编自 <a href="https://docs.docker.com/language/python/build-images/">官方教程</a>. 总得来说, Dockerfile 类似脚本, 记录了构建镜像 (文件) 的指令. 运行着的镜像称为容器 (类似进程). 而 docker-compose.yml 记录了运行镜像的参数配置 (类似用 shell 脚本记录命令行).</p>
+<p>&lt;!-- more --&gt;</p>
+<h2>Build images</h2>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;Enable BuildKit&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;BuildKit allows you to build Docker images efficiently. See &lt;a href="https://docs.docker.com/language/python/build-images/#enable-buildkit"&gt;here&lt;/a&gt;.&lt;/p&gt;&lt;/details&gt;</p>
+<h3>Sample application</h3>
+<p><a href="https://docs.docker.com/language/python/build-images/#sample-application">示例</a> 是 python 的 Flask 应用.</p>
+<pre><code>python-docker
+|____ app.py
+|____ requirements.txt
+|____ Dockerfile
+</code></pre>
+<h3>Create a Dockerfile</h3>
+<p>Dockerfile 是文本文件, 存储了用 <code>docker build</code> 命令构建 Docker 镜像时的指令. 推荐用默认名 <code>Dockerfile</code> 命名这个文件.</p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;The optional first line: parser directive&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;The first line to add to a Dockerfile is a &lt;a href="https://docs.docker.com/engine/reference/builder/#syntax"&gt;&lt;code&gt;# syntax&lt;/code&gt; parser directive&lt;/a&gt;. While &lt;em&gt;optional&lt;/em&gt;, this directive instructs the Docker builder what syntax to use when parsing the Dockerfile, and allows older Docker versions with BuildKit enabled to upgrade the parser before starting the build. &lt;a href="https://docs.docker.com/engine/reference/builder/#parser-directives"&gt;Parser directives&lt;/a&gt; must appear before any other comment, whitespace, or Dockerfile instruction in your Dockerfile, and should be the first line in Dockerfiles.&lt;/p&gt;
+&lt;pre&gt;&lt;code class="language-docker"&gt;# syntax=docker/dockerfile:1
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;We recommend using &lt;code&gt;docker/dockerfile:1&lt;/code&gt;, which always points to the latest release of the version 1 syntax.&lt;/p&gt;&lt;/details&gt;</p>
+<p>基础镜像.</p>
+<pre><code class="language-docker">FROM python:3.8-slim-buster
+</code></pre>
+<p>名字为 <code>-slim</code> 的镜像只装了 minimal packages, 所以用之前记得测试一下.</p>
+<ul>
+<li>Julie Perilla Garcia. (2020). <a href="https://medium.com/swlh/alpine-slim-stretch-buster-jessie-bullseye-bookworm-what-are-the-differences-in-docker-62171ed4531d">Alpine, Slim, Stretch, Buster, Jessie, Bullseye — What are the Differences in Docker Images?</a></li>
+</ul>
+<p>然后可以写</p>
+<pre><code class="language-docker">ENV PYTHONUNBUFFERED 1
+</code></pre>
+<blockquote>
+<p>Setting <code>PYTHONUNBUFFERED</code> to a non-empty value different from 0 ensures that the python output i.e. the <code>stdout</code> and <code>stderr</code> streams are sent straight to terminal (e.g. your container log) without being first buffered and that you can see the output of your application (e.g. django logs) in real time.</p>
+<ul>
+<li><a href="https://stackoverflow.com/questions/59812009/what-is-the-use-of-pythonunbuffered-in-docker-file">What is the use of PYTHONUNBUFFERED in docker file?</a></li>
+<li><a href="https://github.com/aws/amazon-sagemaker-examples/issues/319">Is PYTHONUNBUFFERED=TRUE a good idea?</a></li>
+</ul>
+</blockquote>
+<p>设置 working directory. Docker 后续操作都以 <a href="https://docs.docker.com/engine/reference/builder/#workdir">WORKDIR</a> 为默认路径, 使用相对路径即可. <strong>如果 WORKDIR 不存在会自动创建.</strong></p>
+<pre><code class="language-docker">WORKDIR /app
+</code></pre>
+<p>复制文件. 第一个参数是本地文件系统中的路径, 第二个参数是 Docker 容器文件系统中的路径 (相对于 WORKDIR).</p>
+<pre><code class="language-docker">COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt  # 运行命令
+COPY . .  # 全部复制过去
+</code></pre>
+<p>镜像在容器中运行时, 执行的指令. 只能有一个 CMD. <strong>The main purpose of a <code>CMD</code> is to provide defaults for an executing container.</strong></p>
+<pre><code class="language-docker"># CMD ["executable","param1","param2"]
+CMD ["python3", "-m" , "flask", "run", "--host=0.0.0.0"]
+</code></pre>
+<h3>Build an image</h3>
+<pre><code class="language-shell"># 主参数是路径, --tag (-t) 给镜像命名 `name:tag`
+docker build --tag python-docker . 
+docker images  # 查看所有镜像
+
+# Name components may contain lowercase letters, digits and separators. 
+# A separator is defined as a period, one or two underscores, or one or more dashes. 
+# A name component may not start or end with a separator.
+docker tag python-docker:latest python-docker:v1.0.0
+</code></pre>
+<p>上述操作导致同一镜像 (相同 image id) 有两个名字, 去掉 (untagged) 一个.</p>
+<pre><code class="language-shell">docker rmi python-docker:v1.0.0
+</code></pre>
+<h2>Run your image as a container</h2>
+<p>A container is a normal operating system process except that this process is isolated in that it has its own file system, its own networking (不能直接通过 localhost 对应端口访问), and its own isolated process tree separate from the host.</p>
+<p>在 <code>docker run</code> 命令中加上 <code>--publish</code> (<code>-p</code>).</p>
+<pre><code class="language-shell"># [host port]:[container port]
+docker run --publish 8000:5000 python-docker
+</code></pre>
+<p>如上容器内暴露的端口是 5000 (Flask 默认), 对应主机 (localhost) 暴露的端口是 8000, 此时才能通过 localhost:8000 访问到.</p>
+<h3>Run in detached mode</h3>
+<pre><code class="language-shell"># 查看容器, 加上 --all (-a) 显示停止的容器
+# 返回一张表格, 其中 command 是之前写的 CMD
+# ports 列出端口
+# names 如果没有给定会随机生成, 比如 funny_brahmagupta
+docker ps
+
+# --detach (-d) 后台运行
+docker run -d -p 8000:5000 python-docker
+
+# pass the name of the container or the container ID
+docker stop funny_brahmagupta
+</code></pre>
+<p>When you restart a container, it starts with the same flags or commands that it was originally started with.</p>
+<pre><code>docker restart funny_brahmagupta
+docker stop funny_brahmagupta
+</code></pre>
+<p>When you remove a container, it is no longer running, <em>nor it is in the stopped status</em>, but the process inside the container has been stopped and the metadata for the container has been removed.</p>
+<pre><code class="language-shell"># 可以传入多个容器
+docker rm funny_brahmagupta blahblah
+</code></pre>
+<p>给容器命名.</p>
+<pre><code class="language-shell">docker run -d -p 8000:5000 --name rest-server python-docker
+</code></pre>
+<h2>Use containers for development</h2>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;Using volumes&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;&lt;a href="https://docs.docker.com/storage/volumes/"&gt;Document&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Volumes are the preferred mechanism for persisting data generated by and used by Docker containers. While &lt;a href="https://docs.docker.com/storage/bind-mounts/"&gt;bind mounts&lt;/a&gt; are dependent on the directory structure and OS of the host machine, volumes are completely managed by Docker.&lt;/p&gt;
+&lt;p&gt;In addition, volumes are often a better choice than persisting data in a container's writable layer, because a volume does not increase the size of the containers using it, and the volume's contents exist outside the lifecycle of a given container.&lt;/p&gt;&lt;/details&gt;</p>
+<h3>Run a database in a container</h3>
+<p>创建两个 volumes.</p>
+<pre><code class="language-shell">docker volume create mysql
+docker volume create mysql_config
+
+docker volume ls
+# docker volume rm mysql
+</code></pre>
+<p>Now we'll create a network that our application and database will use to talk to each other. The network is called a user-defined bridge network and gives us a nice DNS lookup service which we can use when creating our connection string.</p>
+<pre><code class="language-shell">docker network create mysqlnet
+
+docker run --rm -d -v mysql:/var/lib/mysql \
+  -v mysql_config:/etc/mysql -p 3306:3306 \
+  --network mysqlnet \
+  --name mysqldb \
+  -e MYSQL_ROOT_PASSWORD=p@ssw0rd1 \
+  mysql  # 镜像名
+</code></pre>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;参数&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;--rm&lt;/code&gt;:    Automatically remove the container when it exits.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;--volume&lt;/code&gt; (&lt;code&gt;-v&lt;/code&gt;): Consists of three fields, separated by colon characters (&lt;code&gt;:&lt;/code&gt;).&lt;ul&gt;
+&lt;li&gt;In the case of named volumes, the first field is the name of the volume, and is unique on a given host machine. For anonymous volumes, the first field is omitted. volume 名.&lt;/li&gt;
+&lt;li&gt;The second field is the path where the file or directory are mounted in the container. 挂载路径, 用于存储和共享持久化数据.&lt;/li&gt;
+&lt;li&gt;The third field is optional. 看文档.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;--network&lt;/code&gt;: Connect a container to a network.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;--env&lt;/code&gt; (&lt;code&gt;-e&lt;/code&gt;): Set environment variables.&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<p>Now, let's make sure that our MySQL database is running and that we can connect to it.</p>
+<pre><code class="language-shell">docker exec -ti mysqldb mysql -u root -p
+</code></pre>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;参数&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;docker exec: Run a command in a running container.&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt; docker exec [OPTIONS] CONTAINER COMMAND [ARG...]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;COMMAND will run in the default directory (WORKDIR) of the container.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;--tty&lt;/code&gt; (&lt;code&gt;-t&lt;/code&gt;): Allocate a pseudo-TTY. &lt;ul&gt;
+&lt;li&gt;&lt;a href="https://unix.stackexchange.com/questions/21147/what-are-pseudo-terminals-pty-tty"&gt;What are pseudo terminals (pty/tty)?&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://stackoverflow.com/questions/30137135/confused-about-docker-t-option-to-allocate-a-pseudo-tty"&gt;Confused about Docker -t option to allocate a pseudo-TTY&lt;/a&gt;. It basically makes the container start look like a terminal connection session.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;--interactive&lt;/code&gt; (&lt;code&gt;-i&lt;/code&gt;): Keep STDIN open even if not attached. 交互式&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;多个 flags 可以写在一起, 成为 &lt;code&gt;-ti&lt;/code&gt; 或者 &lt;code&gt;-it&lt;/code&gt;. &lt;a href="https://stackoverflow.com/questions/30172605/how-do-i-get-into-a-docker-containers-shell"&gt;How do I get into a Docker container's shell?&lt;/a&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;-user&lt;/code&gt; (&lt;code&gt;-u&lt;/code&gt;): Username or UID (format: &lt;name|uid&gt;[:&lt;group|gid&gt;]).&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;-p&lt;/code&gt; 没查到, &lt;code&gt;--privileged&lt;/code&gt;?&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<p>下面会提示输入密码, 登录 MySQL 数据库. Press CTRL-D to exit the MySQL interactive terminal.</p>
+<h3>Connect the application to the database</h3>
+<p>修改了 Python 程序, 见 <a href="https://docs.docker.com/language/python/develop/#connect-the-application-to-the-database">原文</a>.</p>
+<pre><code>docker build --tag python-docker-dev .
+docker run \
+  --rm -d \
+  --network mysqlnet \
+  --name rest-server \
+  -p 8000:5000 \
+  python-docker-dev
+</code></pre>
+<p>This allows us to access the database by its container name.</p>
+<h3>Use Compose to develop locally</h3>
+<p>用 YAML 文件 <code>docker-compose.dev.yml</code> 存储配置, 不必每次都 docker run 一堆参数.</p>
+<pre><code class="language-yaml">version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+    ports:
+      - 8000:5000
+    volumes:
+      - ./:/app
+
+  mysqldb:
+    image: mysql
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=p@ssw0rd1
+    volumes:
+      - mysql:/var/lib/mysql
+      - mysql_config:/etc/mysql
+
+volumes:
+  mysql:
+  mysql_config:
+</code></pre>
+<p>We expose port 8000 so that we can reach the dev web server inside the container. We also map our local source code into the running container to make changes in our text editor and have those changes picked up in the container.</p>
+<pre><code>docker-compose -f docker-compose.dev.yml up --build
+</code></pre>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;参数&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;docker compose up: Create and start containers&lt;/p&gt;
+&lt;p&gt;新版 Compose V2 把 &lt;code&gt;docker-compose&lt;/code&gt; 替换为 &lt;code&gt;docker compose&lt;/code&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;--file&lt;/code&gt; (&lt;code&gt;-f&lt;/code&gt;): Specify an alternate compose file (default: docker-compose.yml). 新版是 compose.yaml, 但也兼容旧的默认名.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;--build&lt;/code&gt;: Build images before starting containers.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;--detach&lt;/code&gt; (&lt;code&gt;-d&lt;/code&gt;)&lt;/li&gt;
+&lt;/ul&gt;&lt;/details&gt;</p>
+<pre><code># 假设用默认名
+docker-compose stop
+docker-compose up --build
+docker-compose up -d
+</code></pre>
+<h3>Compose file</h3>
+<p>The Compose file is a <a href="http://yaml.org/">YAML</a> file defining <a href="https://docs.docker.com/compose/compose-file/#version-top-level-element">version</a> (DEPRECATED), <a href="https://docs.docker.com/compose/compose-file/#services-top-level-element">services</a> (REQUIRED), <a href="https://docs.docker.com/compose/compose-file/#networks-top-level-element">networks</a>, <a href="https://docs.docker.com/compose/compose-file/#volumes-top-level-element">volumes</a>, <a href="https://docs.docker.com/compose/compose-file/#configs-top-level-element">configs</a> and <a href="https://docs.docker.com/compose/compose-file/#secrets-top-level-element">secrets</a>.</p>
+<p>Computing components of an application are defined as Services. Services communicate with each other through Networks. Services store and share (主机和容器共享) persistent data into Volumes. A Secret is a specific flavor of configuration data for sensitive data that SHOULD NOT be exposed without security considerations. Configs 先不管.</p>
+<pre><code class="language-yaml">services:
+  web:  # 服务的名字, 可以随便起
+    # specifies the build configuration for creating container image from source
+    build:
+      # defines either a path to a directory containing a Dockerfile
+      # When the value supplied is a relative path, it MUST be interpreted as relative to the Compose file’s parent folder.
+      context: .
+      
+    ports:
+      # SHOULD always be specified as a (quoted) string, to avoid conflicts with yaml base-60 float. 下面加上双引号了.
+      # 其他例子: "127.0.0.1:5000-5010:5000-5010" 加上 IP 和端口 range.
+      - "8000:5000"
+      
+    volumes:
+      # VOLUME:CONTAINER_PATH
+      # VOLUME: MAY be either a host path on the platform 
+      # hosting containers (bind mount) or a volume name
+      - ./:/app
+    
+    # 环境变量
+    environment:
+      - MYSQL_ROOT_PASSWORD=p@ssw0rd1
+     
+    # container's network stack is not isolated from the Docker host (the container shares the host's networking namespace), and the container does not get its own IP-address allocated. 如果用 host, 则前面的 ports 端口映射也不再适用.
+    network_mode: host
+</code></pre>
+<p>其中 build 可以写为</p>
+<pre><code class="language-yaml">build: .
+</code></pre>
+<p>To reuse a volume across multiple services, a named volume MUST be declared in the top-level volumes key.</p>
+<pre><code class="language-yaml">...
+    volumes:
+      - mysql:/var/lib/mysql
+      - mysql_config:/etc/mysql
+
+volumes:
+  mysql:
+  mysql_config:
+</code></pre>
+<p>上述例子没指定主机路径则默认挂载到 <code>/var/lib/docker/volumes/...</code></p>
+<ul>
+<li><a href="https://www.zhihu.com/question/482215689/answer/2359076017">Dockerfile 中 volume 如何使用?</a></li>
+<li><a href="https://stackoverflow.com/questions/34809646/what-is-the-purpose-of-volume-in-dockerfile">What is the purpose of VOLUME in Dockerfile</a></li>
+<li><a href="https://stackoverflow.com/questions/40567451/dockerfile-vs-docker-compose-volume">Dockerfile vs. docker-compose VOLUME</a>. 要和主机关联得在 compose 文件写.</li>
+</ul>
+<h2>Further reading</h2>
+<h3>优化 Dockerfile</h3>
+<p><a href="https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#use-multi-stage-builds">Best practices for writing Dockerfiles</a></p>
+<p>Because an image is built during the final stage of the build process, you can minimize image layers by <a href="https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache">leveraging build cache</a>.</p>
+<p>For example, if your build contains several layers, you can <strong>order them from the less frequently changed (to ensure the build cache is reusable) to the more frequently changed</strong>:</p>
+<ul>
+<li>Install tools you need to build your application</li>
+<li>Install or update library dependencies</li>
+<li>Generate your application</li>
+</ul>
+<p>依赖相比其他项目代码更不容易改变, 因此先复制 requirements.txt 安装依赖, 再把其他代码拷贝到容器里.</p>
+<h3>Miscs</h3>
+<ul>
+<li><a href="https://docs.docker.com/config/containers/start-containers-automatically/">自动重启</a></li>
+<li><a href="https://docs.docker.com/config/containers/logging/">查看日志</a></li>
+<li><a href="https://stackoverflow.com/questions/53221412/why-the-none-image-appears-in-docker-and-how-can-we-avoid-it"><code>&lt;none&gt;:&lt;none&gt;</code> images</a></li>
+</ul>

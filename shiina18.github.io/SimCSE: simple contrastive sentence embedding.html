@@ -1,0 +1,50 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/02/25/simcse">SimCSE: simple contrastive sentence embedding</a></h2>
+<hr/>
+<p>title: "SimCSE: simple contrastive sentence embedding"
+categories:</p>
+<ul>
+<li>Machine Learning
+tags: NLP
+updated: 2022-07-12
+comments: true
+mathjax: true</li>
+</ul>
+<hr/>
+<p>参考</p>
+<ul>
+<li>Gao, T., Yao, X., &amp; Chen, D. (2021). Simcse: Simple contrastive learning of sentence embeddings. <em>arXiv preprint arXiv:2104.08821</em>.</li>
+<li>Wang, T., &amp; Isola, P. (2020, November). Understanding contrastive representation learning through alignment and uniformity on the hypersphere. In <em>International Conference on Machine Learning</em> (pp. 9929-9939). PMLR.</li>
+</ul>
+<p>&lt;!-- more --&gt;</p>
+<h2>前置知识</h2>
+<p>对比学习输出 embedding, 目标是自动构造相似和相异的实例 (自监督), 使得相似实例的 embedding 接近, 而相异的远离. (和 w2v 相似)</p>
+<p>BERT 的句向量不好用 (因为 CLS 用于 NSP 任务, 对词向量做操作也不好), SimCSE 利用 BERT 以对比学习的方式训练句向量.</p>
+<p><strong>对比学习的两个指标</strong></p>
+<p>Alignment 让相似实例 embedding 接近,</p>
+<p>$$
+\min_f\mathbb E_{(x, x^+) \sim p_{\text{positive}}} \Vert f(x) - f(x^+) \Vert^2.
+$$</p>
+<p>Uniformity 让 embedding 均匀分布在超球面上, 让它们更 informative (熵最大). 如果只看上一个指标, 那模型把所有东西映射为一个常数即可.</p>
+<p>$$
+\min_f \log \mathbb E_{x, y \overset{\text{i.i.d.}}{\sim} p_{\text{data}}} {\mathrm{e}^{-2\Vert f(x) - f(y) \Vert^2}},
+$$</p>
+<p>可以证明 $f(x)$ 均匀分布是使其最小化的唯一解 (如果可以取到, 具体略, 这是 well known 的结论).</p>
+<h2>核心想法</h2>
+<p>训练集 $\{(x_i, x_i^+)\}$, 其中 $x_i$ 和  $x_i^+$ 是语义相关的正例对, embedding 分别为 $h_i = f(x_i)$ 和 $h_i^+$, 其中 $f$ 是模型. 第 $i$ 个 pair 的损失函数为</p>
+<p>$$
+\ell_i = \log\frac{\mathrm{e}^{\operatorname{sim}(h_i, h_i^+) / \tau}}
+{\sum_{j=1}^N\mathrm{e}^{\operatorname{sim}(h_i, h_j^+) / \tau}},
+$$</p>
+<p>其中 $N$ 是 batch size, $\tau$ 是温度参数, $\operatorname{sim}$ 通常是余弦相似度.</p>
+<p>无监督 SimCSE 构造正例的方法是, 让同一个句子 forward pass 时用不同的 dropout mask, 得到 $h_i$, $h_i^+$, 而负例则是同一个 batch 内的其他句子. 有监督略.</p>
+<p><strong>注意点:</strong> 对比学习 batch size 要足够大, 参考 <a href="https://www.zhihu.com/question/483524293/answer/2327482420">这里</a> 或 <a href="https://spaces.ac.cn/archives/8586">这里</a>.</p>
+<p><strong>实践</strong></p>
+<ul>
+<li>张俊林. (2021). <a href="https://zhuanlan.zhihu.com/p/370782081">利用 Contrastive Learning 对抗数据噪声：对比学习在微博场景的实践</a></li>
+<li>肖洋. (2022). <a href="https://mp.weixin.qq.com/s/w2jSKVf5m2e64cYtZG0IDw">对比学习在有赞的应用</a>. 有赞技术.</li>
+</ul>
+<p><strong>TODO</strong></p>
+<ul>
+<li>更一般的对比学习: <a href="https://mp.weixin.qq.com/s/UlV-6wBZSGIH7y2uWaAAtQ">对比学习 (Contrastive Learning) 在 CV 与 NLP 领域中的研究进展</a></li>
+<li>度量学习</li>
+</ul>

@@ -1,0 +1,89 @@
+<h2>原文：<a href="https://shiina18.github.io/2021/12/15/bert">BERT 复习</a></h2>
+<hr/>
+<p>title: "BERT 复习"
+categories:</p>
+<ul>
+<li>Machine Learning
+tags: NLP
+updated:
+comments: true
+mathjax: true</li>
+</ul>
+<hr/>
+<p>复习</p>
+<ul>
+<li>Devlin, J., Chang, M.-W., Lee, K., &amp; Toutanova, K. (2018). Bert: Pre-training of deep bidirectional transformers for language understanding. <em>arXiv Preprint arXiv:1810.04805</em>.</li>
+</ul>
+<p>&lt;!-- more --&gt;</p>
+<h2>Why masking tokens?</h2>
+<p>Unfortunately, standard conditional language models can only be trained left-to-right or right-to-left, since bidirectional conditioning would allow each word to indirectly "see itself", and the model could trivially predict the target word in a multi-layered context (Devlin, et al., 2018).</p>
+<ul>
+<li><a href="https://stats.stackexchange.com/questions/438072/why-cant-standard-conditional-language-models-be-trained-left-to-right-and-ri">Why can't standard conditional language models be trained left-to-right <em>and</em> right-to-left?</a></li>
+</ul>
+<h3>Static and dynamic masking</h3>
+<p>这是我当时读 RoBERTa 的时候才发现的</p>
+<ul>
+<li>Liu, Y., Ott, M., Goyal, N., Du, J., Joshi, M., Chen, D., Levy, O., Lewis, M., Zettlemoyer, L., &amp; Stoyanov, V. (2019). Roberta: A robustly optimized bert pretraining approach. <em>arXiv Preprint arXiv:1907.11692</em>.</li>
+</ul>
+<p>The original BERT implementation performed masking once during data preprocessing, resulting in a single <em>static</em> mask. To avoid using the same mask for each training instance in every epoch, training data was duplicated 10 times so that each sequence is masked in 10 different ways over the 40 epochs of training. Thus, each training sequence was seen with the same mask four times during training.</p>
+<p>We compare this strategy with <em>dynamic masking</em> where we generate the masking pattern every time we feed a sequence to the model. This becomes crucial when pretraining for more steps or with larger datasets.</p>
+<p>有不少 "解读" 文章说 dynamic masking 指将数据复制 10 份做不同的 masking, 但根据原文和 BERT 源码, 这其实是 BERT 做的事情. RoBERTa 的 dynamic 指在喂给模型之前才 masking (即时生成).</p>
+<p><a href="https://github.com/google-research/bert/blob/eedf5716ce1268e56f0a50264a88cafad334ac61/create_pretraining_data.py#L212">这里</a> 的 <code>create_pretraining_data.py</code> 下面的段落是 3 年前 BERT initial release 就有的.</p>
+<pre><code class="language-python">flags.DEFINE_integer(
+    "dupe_factor", 10,
+    "Number of times to duplicate the input data (with different masks).")
+</code></pre>
+<pre><code class="language-python">for _ in range(dupe_factor):
+  for document_index in range(len(all_documents)):
+    instances.extend(
+      create_instances_from_document(
+        all_documents, document_index, max_seq_length, short_seq_prob,
+        masked_lm_prob, max_predictions_per_seq, vocab_words, rng))
+</code></pre>
+<ul>
+<li>苏剑林. (2021, Sep 10). <a href="https://kexue.fm/archives/8671">曾被嫌弃的预训练任务 NSP, 做出了优秀的 Zero Shot 效果</a>.</li>
+</ul>
+<h2>Finetuning</h2>
+<p>There are two existing strategies for applying pre-trained language representations to downstream tasks (Devlin, et al., 2018):</p>
+<ul>
+<li>feature-based: fixed features are extracted from the pretrained model.</li>
+<li>fine-tuning: trained on the downstream tasks by simply fine-tuning <strong>all</strong> pretrained parameters.</li>
+</ul>
+<h3>Freezing layers?</h3>
+<blockquote>
+<p>Note that if you are used to freezing the body of your pretrained model (like in computer vision) the above may seem a bit strange, as we are directly fine-tuning the whole model without taking any precaution. It actually works better this way for Transformers model (so this is not an oversight on our side). If you’re not familiar with what “freezing the body” of the model means, forget you read this paragraph. From Hugging Face <a href="https://huggingface.co/docs/transformers/training">Fine-tuning a pretrained model</a></p>
+</blockquote>
+<pre><code class="language-python"># quick example: freezing first 4 encoder layers
+for module in [bert.embeddings, bert.encoder.layer[:4]]:
+    for param in module.parameters():
+        param.requires_grad = False
+optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, rel_extractor.parameters()))
+</code></pre>
+<ul>
+<li><a href="https://www.reddit.com/r/deeplearning/comments/ndmqm6/why_do_we_train_whole_bert_model_for_fine_tuning/">Why do we train whole BERT model for fine tuning and not freeze it?</a></li>
+<li><a href="https://www.zhihu.com/question/311095447">Pytorch 如何精确的冻结预训练模型的某一层</a></li>
+<li>A simple experiment: <a href="https://raphaelb.org/posts/freezing-bert/">How many layers of my BERT model should I freeze?</a></li>
+</ul>
+<h2>Sentence embedding</h2>
+<ul>
+<li><a href="https://www.zhihu.com/question/505359496">为什么 Bert 中的 CLS 在未 fine tune 时作为 sentence embedding 性能非常糟糕?</a></li>
+<li>苏剑林. (2021, Jan 11). <a href="https://kexue.fm/archives/8069">你可能不需要 BERT-flow：一个线性变换媲美 BERT-flow</a>.</li>
+<li>苏剑林. (2021, Oct 19). <a href="https://kexue.fm/archives/8715">关于 WhiteningBERT 原创性的疑问和沟通</a>.</li>
+</ul>
+<h2>Albert</h2>
+<ul>
+<li>Lan, Z., Chen, M., Goodman, S., Gimpel, K., Sharma, P., &amp; Soricut, R. (2019). Albert: A lite bert for self-supervised learning of language representations. <em>arXiv Preprint arXiv:1909.11942</em>.</li>
+<li>Chaudhary, A. (2020, Feb). <a href="https://amitness.com/2020/02/albert-visual-summary">Visual Paper Summary: ALBERT (A Lite BERT)</a>.</li>
+<li>苏剑林. (2020, Oct 29). <a href="https://kexue.fm/archives/7846">用 ALBERT 和 ELECTRA 之前, 请确认你真的了解它们</a>.</li>
+</ul>
+<h2>Miscs</h2>
+<ul>
+<li>Nozhihu. (2021, Feb 18). <a href="https://zhuanlan.zhihu.com/p/242253766">BERT 你关注不到的点</a>.</li>
+<li>Sun, C., Qiu, X., Xu, Y., &amp; Huang, X. (2019). How to fine-tune bert for text classification?. <em>China National Conference on Chinese Computational Linguistics</em>, 194–206.</li>
+<li>Alan Lee. (2020). <a href="https://zhuanlan.zhihu.com/p/132361501">BERT 是如何分词的</a></li>
+</ul>
+<p>Todo</p>
+<ul>
+<li>xlnet</li>
+<li>prompt</li>
+</ul>

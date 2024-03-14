@@ -1,0 +1,120 @@
+<h2>原文：<a href="https://shiina18.github.io/2022/12/19/redis">[Walkthrough] Install and set up Redis</a></h2>
+<hr/>
+<h2>title: "[Walkthrough] Install and set up Redis"
+categories: Tech
+updated: 2023-01-04
+comments: true
+mathjax: false</h2>
+<p>Check system info.</p>
+<pre><code class="language-shell">cat /etc/os-release
+</code></pre>
+<p>Follow a walkthrough listed <a href="https://www.digitalocean.com/community/tutorial_collections/how-to-install-and-secure-redis">here</a>. The below works on CentOS 7.</p>
+<p>&lt;!-- more --&gt;</p>
+<h2>Installing</h2>
+<p>Install EPEL (Extra Packages for Enterprise Linux).</p>
+<pre><code class="language-shell">sudo yum install epel-release
+</code></pre>
+<p>Install Redis. Use the <code>-y</code> option to automatically answer yes to installing additional software dependencies.</p>
+<pre><code class="language-shell">sudo yum install redis -y
+</code></pre>
+<p>Start Redis and check the status.</p>
+<pre><code class="language-shell">sudo systemctl start redis.service
+sudo systemctl status redis.service
+</code></pre>
+<h2>Configuring</h2>
+<p>The configuration file is located at <a href="https://raw.githubusercontent.com/redis/redis/3.2/redis.conf"><code>/etc/redis.conf</code></a>, and it is self-documented.</p>
+<ul>
+<li>Comment the line <code>bind 127.0.0.1</code> to allow connections from anywhere.</li>
+<li><code>protected-mode yes</code> -&gt; <code>protected-mode no</code></li>
+<li>Uncomment the line <code># requirepass foobared</code>, and replace <code>foobared</code> with a password. You may generate a simple password like this:</li>
+</ul>
+<pre><code class="language-shell">echo "digital-ocean" | sha256sum
+</code></pre>
+<ul>
+<li><code>daemonize no</code> -&gt; <code>daemonize yes</code></li>
+<li><code># maxmemory &lt;bytes&gt;</code> -&gt; <code>maxmemory 3GB</code> for example</li>
+<li><code># maxmemory-policy noeviction</code> -&gt; <code>maxmemory-policy volatile-lru</code> for example</li>
+</ul>
+<p>After configuring, save and close the file then restart Redis:</p>
+<pre><code class="language-shell">sudo systemctl restart redis.service
+</code></pre>
+<p>Alternatively, start with</p>
+<pre><code class="language-shell">sudo redis-server /etc/redis.conf
+</code></pre>
+<p>Remember to check <a href="https://redis.io/docs/management/admin/">advice for configuring and managing Redis in production</a> (refer to <a href="https://gist.github.com/kapkaev/4619127">this gist</a>).</p>
+<blockquote>
+<p>Set the Linux kernel overcommit memory setting to 1. Add <code>vm.overcommit_memory = 1</code> to <code>/etc/sysctl.conf</code>. Then, reboot or run the command <code>sysctl vm.overcommit_memory=1</code> to activate the setting.</p>
+</blockquote>
+<h2>Managing</h2>
+<p><a href="https://www.zhihu.com/question/293357668/answer/2485282875">Redis 主从, 哨兵, 和集群这三个有什么区别?</a></p>
+<h3>Replication (master-slave)</h3>
+<p><a href="https://redis.io/docs/management/replication/">Redis replication</a>: How Redis supports high availability and failover with replication</p>
+<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;p&gt;The replica will automatically reconnect to the master every time the link breaks, and will attempt to be an exact copy of it &lt;em&gt;regardless&lt;/em&gt; of what happens to the master.&lt;/p&gt;
+&lt;p&gt;Redis uses by default asynchronous replication with low latency and high performance.&lt;/p&gt;
+&lt;p&gt;Since Redis 2.6 by default slaves are read-only.&lt;/p&gt;&lt;/details&gt;</p>
+<p><code>REPLICATION</code> section in conf file.</p>
+<p>In setups where Redis replication is used, it is strongly advised to have persistence turned on in the master and in the replicas.</p>
+<p><strong>Configuring master</strong></p>
+<ul>
+<li><code>appendonly no</code> -&gt; <code>appendonly yes</code> for additional persistence</li>
+</ul>
+<p><strong>Configuring slave</strong></p>
+<p>Uncomment and configure the following lines</p>
+<ul>
+<li><code># slaveof &lt;masterip&gt; &lt;masterport&gt;</code></li>
+<li><code># masterauth &lt;master-password&gt;</code></li>
+</ul>
+<p>By default, a replica will ignore <code>maxmemory</code>. It means that the eviction of keys will be handled by the master, sending the DEL commands to the replica as keys evict in the master side.</p>
+<h3>High availability with Sentinel</h3>
+<p><a href="https://redis.io/docs/management/sentinel/">High availability with Redis Sentinel</a>: High availability for non-clustered Redis</p>
+<p>Start Sentinel.</p>
+<pre><code class="language-shell">redis-server /etc/sentinel.conf --sentinel
+</code></pre>
+<p><strong>It is mandatory</strong> to use a configuration file when running Sentinel, as this file will be used by the system in order to save the current state that will be reloaded in case of restarts.</p>
+<p>Sentinels by default run <strong>listening for connections to TCP port 26379</strong>.</p>
+<p>The sample configuration file is located at <code>/etc/redis-sentinel.conf</code>.</p>
+<ul>
+<li>Add <code>daemonize yes</code>. Note that it is not documented in early version.</li>
+<li>Uncomment <code># protected-mode no</code>.</li>
+<li>Set <code>sentinel monitor &lt;master-name&gt; &lt;ip&gt; &lt;redis-port&gt; &lt;quorum&gt;</code> instead of the default <code>sentinel monitor mymaster 127.0.0.1 6379 2</code> if needed. It tells Sentinel to monitor this master, and to consider it in O_DOWN (Objectively Down) state only if at least &lt;quorum&gt; sentinels agree.<ul>
+<li>Slaves are auto-discovered, so you don't need to specify slaves in any way.</li>
+<li><strong>The quorum is only used to detect the failure.</strong> In order to actually perform a failover, one of the Sentinels need to be elected leader for the failover and be authorized to proceed. This only happens with the vote of the majority of the Sentinel processes.</li>
+</ul>
+</li>
+<li>Set <code>sentinel auth-pass &lt;master-name&gt; &lt;password&gt;</code>. Note that the master password is also used for slaves, so it is <strong>not possible to set a different password in masters and slaves</strong> instances if you want to be able to monitor these instances with Sentinel.</li>
+</ul>
+<p>One of the capabilities of Sentinel is automatic failover. You need at least three Sentinel instances for a robust deployment. See <a href="https://redis.io/docs/management/sentinel/#example-sentinel-deployments">Example Sentinel deployments</a> for further explanation.</p>
+<h3>Scaling (cluster)</h3>
+<p><a href="https://redis.io/docs/management/scaling/">Scaling with Redis Cluster</a>: Horizontal scaling with Redis Cluster</p>
+<blockquote>
+<p>Note that the <strong>minimal cluster</strong> that works as expected must contain at least three master nodes. For deployment, we strongly recommend a six-node cluster, with three masters and three replicas. <a href="https://redis.io/docs/management/scaling/#redis-cluster-configuration-parameters:~:text=Note%20that%20the%20minimal%20cluster%20that%20works%20as%20expected%20must%20contain%20at%20least%20three%20master%20nodes.%20For%20deployment%2C%20we%20strongly%20recommend%20a%20six-node%20cluster%2C%20with%20three%20masters%20and%20three%20replicas.">Source</a></p>
+</blockquote>
+<p>Not covered in this post.</p>
+<h2>Sample Makefile</h2>
+<pre><code class="language-makefile">SHELL := /bin/bash
+
+SOURCE_HOST := USER@HOST
+MASTER_CONF_PATH := /etc/redis.conf
+SLAVE_CONF_PATH := /etc/redis-slave.conf
+SENTINEL_CONF_PATH := /etc/redis-sentinel.conf
+
+.PHONY: install, pull
+install:
+	sudo yum install epel-release
+	sudo yum install redis -y
+pull:
+	for path in "${MASTER_CONF_PATH}" "${SLAVE_CONF_PATH}" "${SENTINEL_CONF_PATH}"; do \
+	  sudo rsync --verbose "${SOURCE_HOST}":"$${path}" "$${path}"; \
+	done
+
+.PHONY: master, slave, stop
+master: stop
+	sudo redis-server "${MASTER_CONF_PATH}"
+	sudo redis-server "${SENTINEL_CONF_PATH}" --sentinel
+slave: stop
+	sudo redis-server "${SLAVE_CONF_PATH}"
+	sudo redis-server "${SENTINEL_CONF_PATH}" --sentinel
+stop:
+	-pgrep -f "redis-server" | xargs sudo kill -9
+</code></pre>

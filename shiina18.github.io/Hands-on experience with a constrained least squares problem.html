@@ -1,0 +1,209 @@
+<h2>原文：<a href="https://shiina18.github.io/2021/07/27/constrained-least-squares">Hands-on experience with a constrained least squares problem</a></h2>
+<hr/>
+<h2>title: "Hands-on experience with a constrained least squares problem"
+categories: Tech
+updated: 2021-08-05
+comments: true
+mathjax: true</h2>
+<p>讲调包. 主问题是个凸二次规划, 找包调的时候顺便调研了 SciPy 处理一般带约束优化问题的不同算法的适用场景 (官方文档里并没有写得很明白).</p>
+<p>An optimization problem with a quadratic objective function and linear constraints is called a quadratic program (QP). Consider the following (convex) QP,</p>
+<p>$$
+\begin{align<em>}
+\min_\beta  &amp; \quad \Vert Y - X\beta \Vert_2^2, \
+\text{subject to} &amp; \quad \boldsymbol{1}_p'\beta = 1, \
+&amp; \quad \beta \succeq 0,
+\end{align</em>}
+$$</p>
+<p>with</p>
+<ul>
+<li>an $n \times 1$ vector $Y$,</li>
+<li>an $n \times p$ matrix $X$, and</li>
+<li>a $p \times 1$ vector  $\beta$.</li>
+</ul>
+<p>&lt;!-- more --&gt;</p>
+<p>The notation $\boldsymbol{1}_p$ stands for the $p\times 1$ vector $(1, \dots, 1)'$. The objection is equivalent to minimizing $\beta' X'X \beta - 2Y'X\beta$.</p>
+<p>Here are two candidate solutions for Python currently, a SciPy solution and a CVXOPT solution. On top of these, there are packages like <a href="https://www.cvxpy.org/">CVXPY</a> for Python and <strong><a href="https://www.ojalgo.org/">oj! Algorithms</a> for Java</strong> (<a href="http://ojalgo.org/generated/org/ojalgo/optimisation/quadratic/QuadraticSolver.html">QuadraticSolver</a>).</p>
+<blockquote>
+<p>oj! Algorithms – ojAlgo – is Open Source Java code to do mathematics, linear algebra and optimisation. It's what you need for data science, machine learning and scientific computing.</p>
+<p>Optimisation (mathematical programming) tools including LP, QP and MIP solvers – again this is pure Java with zero dependencies.</p>
+</blockquote>
+<p>Side note: The vector $\beta$ can be viewed as a probability distribution over $p$ column vectors of $X$, and thus $X\beta$ is simply the expectation of the underlying random vector. This fact is not leveraged in the following post.</p>
+<h2>The SciPy solution</h2>
+<p>SciPy implements three methods to solve <strong>general constrained minimization problems</strong>: trust-region constrained algorithm (trust-constr), sequential least squares programming (SLSQP) algorithm and constrained optimization by linear approximation (COBYLA) algorithm; see <a href="https://docs.scipy.org/doc/scipy/reference/tutorial/optimize.html#constrained-minimization-of-multivariate-scalar-functions-minimize">here</a> for the problem formulation, and <a href="https://docs.scipy.org/doc/scipy/reference/reference/generated/scipy.optimize.minimize.html#scipy.optimize.minimize">here</a> for the documentation of the <code>minimize</code> function.</p>
+<h3>Which to use?</h3>
+<p><strong>Use COBYLA if there are non-smooth functions</strong></p>
+<p>COBYLA is an non-gradient based method based on linear approximations to the objective function and each constraint. The algorithm operates by evaluating the objective function and the constrains at the vertices of a trust region. See <a href="https://cossan.co.uk/wiki/index.php/COBYLA">here</a> for a brief introduction for COBYLA and <a href="https://optimization.mccormick.northwestern.edu/index.php/Trust-region_methods">here</a> for trust region methods..</p>
+<blockquote>
+<p>In general, the convergence of COBYLA is slower than that of gradient-based algorithms, i.e. more function evaluations are required to find the optimum. However, one of the salient features of COBYLA is its stability and the low number of parameters to be tuned for performing optimization.</p>
+</blockquote>
+<p><strong>Use SLSQP for moderately large problems</strong></p>
+<p>Kraft (1988) claims that sequential quadratic programming (SQP) is known as to be <em>the most efficient</em> computation method to solve the general nonlinear programming problem with <strong>continuously differentiable</strong> objective function and constraints.</p>
+<p>The size of the problem should only be <strong>moderately large</strong> with $m \le p \le 200$, where $m$ (=1 in our case) is the number of equality and inequality constraints (with bounds excluded), and $p$ is the dimension of the variable to be optimized. Wendorff et al. (2016) reported in their case study that SLSQP is not able to be run in parallel making a problem with large number of design variables intractable.</p>
+<p>The idea of SQP is somewhat like Newton's method. SQP methods solve a sequence of optimization subproblems, each of which optimizes a quadratic model of the objective subject to a linearization of the constraints. According to Chapter 18 of Nocedal's numerical optimization book, SQP is also appropriate for large problems. Maybe the statement above only applies to Kraft's implementation (I don't know).</p>
+<p><strong>Use trust-constr method for large-scale problems</strong></p>
+<blockquote>
+<p>It is the most versatile constrained minimization algorithm implemented in SciPy and the most appropriate for large-scale problems.</p>
+</blockquote>
+<p>For equality constrained problems it is an implementation of Byrd-Omojokun Trust-Region SQP method. When inequality constraints are imposed as well, it swiches to the trust-region interior point method described in <em>An interior point algorithm for large-scale nonlinear programming</em> (Byrd et al., 1999).</p>
+<p>Byrd et al. (1999) assume in the paper that first and second derivatives of the objective function and constraints are available, but their strategy can be extended to make use of quasi-Newton approximations. Their algorithm incorporates within the interior point method two powerful tools for solving nonlinear problems: sequential quadratic programming (SQP) and trust region techniques.</p>
+<p><strong>References</strong></p>
+<ul>
+<li>Kraft, D. (1988). <a href="http://degenerateconic.com/wp-content/uploads/2018/03/DFVLR_FB_88_28.pdf">A software package for sequential quadratic programming</a>. <em>Tech. Rep. DFVLR-FB</em> 88-28, DLR German Aerospace Center – Institute for Flight Mechanics, Koln, Germany.</li>
+<li>Wendorff, A., Botero, E., &amp; Alonso, J. J. (2016). <a href="http://adl.stanford.edu/papers/botero_wendorff.pdf">Comparing Different Off-the-Shelf Optimizers' Performance in Conceptual Aircraft Design</a>. In <em>17th AIAA/ISSMO Multidisciplinary Analysis and Optimization Conference</em> (p. 3362).</li>
+<li>Byrd, R. H., Hribar, M. E., &amp; Nocedal, J. (1999). An interior point algorithm for large-scale nonlinear programming. <em>SIAM Journal on Optimization</em>, <em>9</em>(4), 877-900.</li>
+</ul>
+<h2>The CVXOPT solution</h2>
+<p>Though lesser-known, it is a dedicated package for convex optimization, and <strong>can solve a more tailored problem suitable for our case</strong>.</p>
+<h3>Usage</h3>
+<p>See <a href="https://cvxopt.org/userguide/coneprog.html#quadratic-programming">here</a> for the description of the function to solve QPs. Below is the notation mapping table, where $I_p$ is the $p \times p$ identity matrix.</p>
+<p>| cvxopt |            original |
+| -----: | ------------------: |
+|    $x$ |             $\beta$ |
+|    $P$ |              $2X'X$ |
+|    $q$ |             $-2X'Y$ |
+|    $G$ |              $-I_p$ |
+|    $h$ |  $\boldsymbol{0}_p$ |
+|    $A$ | $\boldsymbol{1}_p'$ |
+|    $b$ |                   1 |</p>
+<p><strong>Outputs</strong></p>
+<p>The function <code>cvxopt.solvers.qp</code> returns a dictionary with keys for some properties about the solution among which the 'status', 'x', and 'primal objective' are probably the most important. Read the docstring for more detail.</p>
+<p>The 'status' field has values 'optimal' or 'unknown'.</p>
+<ul>
+<li>If the status is 'optimal', 'x' is an approximate solution of the primal optimal solutions, and 'primal objective' is the value of the primal objective.</li>
+<li>If the status is 'unknown', 'x' is the last iterate before termination.</li>
+</ul>
+<h3>Technical notes</h3>
+<p>There is a report <a href="http://www.ee.ucla.edu/~vandenbe/publications/coneprog.pdf">The CVXOPT linear and quadratic cone program solvers</a> (pdf) listed in its <a href="https://cvxopt.org/documentation/index.html#technical-documentation">technical documentation</a>. According to p. 11 of the report, QPs are solved using a path-following algorithm which is a kind of interior-point algorithms.</p>
+<h2>Test</h2>
+<p>Based on the discussion above, SLSQP is used for SciPy.</p>
+<pre><code class="language-python">import time
+
+import cvxopt
+import numpy as np
+import tqdm
+from scipy import optimize
+
+
+def random_matrix(size):
+    return cvxopt.matrix(np.random.random_sample(size))
+
+
+# used in scipy
+def objection(beta, X, Y):
+    """
+    Parameters
+    ----------
+    beta : array (p,)
+    X : array (n, p)
+    Y : array (n,)
+
+    Returns
+    -------
+    scalar
+    """
+    bias = Y - X.dot(beta)
+    return bias.dot(bias)
+
+
+def jac(beta, X, Y):
+    """
+    Parameters
+    ----------
+    beta : array (p,)
+    X : array (n, p)
+    Y : array (n,)
+
+    Returns
+    -------
+    array (p,)
+    """
+    return 2 * (X.T.dot(X).dot(beta) - X.T.dot(Y))
+</code></pre>
+<p>Run the test</p>
+<pre><code class="language-python">np.random.seed(0xC7)
+cvxopt.solvers.options['show_progress'] = False
+count = 0
+time_cvx = 0
+time_sci = 0
+count_cvx_fail = 0
+count_sci_fail = 0
+loss_relative_diff = 0
+
+times = 100
+for _ in tqdm.tqdm(range(times)):
+    # cvxopt
+    X = random_matrix((1000, 100))
+    n, p = X.size  # should be X.shape if X is an numpy array
+    Y = random_matrix((n, 1))
+
+    # cvxopt notation
+    P = 2 * X.T * X  # * means matrix multiplication in CVXOPT
+    q = -2 * X.T * Y
+    G = - cvxopt.matrix(np.eye(p))
+    h = cvxopt.matrix(0.0, size=(p, 1))
+    A = cvxopt.matrix(1.0, size=(1, p))
+    b = cvxopt.matrix(1.0)
+
+    start_time = time.time()
+    res_cvx = cvxopt.solvers.qp(P, q, G, h, A, b)
+    time_cvx += time.time() - start_time
+
+    if res_cvx['status'] != 'optimal':
+        count_cvx_fail += 1
+        print('CVXOPT failed')
+    loss_cvx = res_cvx['primal objective'] + (Y.T * Y)[0]
+
+    # scipy
+    X = np.array(X)
+    Y = np.array(Y).ravel()  # shape (n,)
+
+    eq_cons = {'type': 'eq',
+               'fun': lambda beta: np.ones(beta.shape[0]).dot(beta) - 1,
+               'jac': lambda beta: np.ones(beta.shape[0])}
+
+    start_time = time.time()
+    res_sci = optimize.minimize(objection,
+                                x0=(1 / p) * np.ones(p),
+                                args=(X, Y),
+                                method='SLSQP',
+                                jac=jac,
+                                bounds=optimize.Bounds(lb=0, ub=np.inf),
+                                constraints=eq_cons)
+    time_sci += time.time() - start_time
+
+    if not res_sci['success']:
+        count_sci_fail += 1
+        print('SciPy failed')
+    loss_sci = res_sci['fun']
+
+    # print(loss_cvx, loss_sci)
+
+print(f'In a test that randomly generates {n} x {p} matrix X and other vectors for {times} times')
+print(f'cvxopt.solvers.qp cost {time_cvx:.2f}s, failed {count_cvx_fail} times')
+print(f'scipy.optimize.minimize cost {time_sci:.2f}s, failed {count_sci_fail} times')
+</code></pre>
+<h3>Results</h3>
+<p><strong>Note that we only used SLSQP method in SciPy</strong>, while <code>trust-constr</code> is said to be the most appropriate for large-scale problems.</p>
+<p>It seems that</p>
+<ul>
+<li>CVXOPT tends to achieve negligibly higher loss. This should be due to different default parameters for convergence tolerance (duality gap). It doesn't imply that CVXOPT is worse by any means.</li>
+<li>CVXOPT runs significantly faster even when dealing with large matrices.</li>
+<li>SLSQP does fail to converge with default parameters when dealing with large matrices.</li>
+</ul>
+<pre><code>In a test that randomly generates 1000 x 100 matrices Xs and other vectors for 100 times
+cvxopt.solvers.qp cost 1.06s, failed 0 times
+scipy.optimize.minimize cost 25.03s, failed 0 times
+</code></pre>
+<pre><code> 60%|██████    | 18/30 [01:29&lt;00:57,  4.76s/it]SciPy failed
+In a test that randomly generates 1000 x 300 matrices Xs and other vectors for 30 times
+cvxopt.solvers.qp cost 1.02s, failed 0 times
+scipy.optimize.minimize cost 145.52s, failed 1 times
+</code></pre>
+<pre><code>In a test that randomly generates 22 x 5 matrices Xs and other vectors for 5000 times
+cvxopt.solvers.qp cost 9.48s, failed 0 times
+scipy.optimize.minimize cost 5.80s, failed 0 times
+</code></pre>
+<pre><code>In a test that randomly generates 10000 x 1000 matrix X and other vectors for 5 times
+cvxopt.solvers.qp cost 3.13s, failed 0 times
+scipy.optimize.minimize cost 1316.03s, failed 5 times
+</code></pre>
