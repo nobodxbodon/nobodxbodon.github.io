@@ -1,0 +1,373 @@
+<h2>原文：<a href="https://jasonkayzk.github.io/2024/03/22/%E3%80%90%E8%AF%91%E3%80%91%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E7%AE%80%E5%8D%95%E7%9A%84%E5%86%85%E5%AD%98%E5%88%86%E9%85%8D%E5%99%A8">【译】实现一个简单的内存分配器</a></h2>
+<hr/>
+<h2>title: 【译】实现一个简单的内存分配器
+toc: true
+cover: 'https://img.paulzzh.com/touhou/random?25'
+date: 2024-03-22 10:08:01
+categories: C++
+tags: [C++]
+description: 在C++中内存管理是一个老生常谈的话题，我们都知道在C语言中使用malloc和free管理动态内存，C++中也有相应的Allocator；但究竟内存分配器底层是干什么的，本文通过实现一个简单的内存分配器来管中窥豹；</h2>
+<p>在C++中内存管理是一个老生常谈的话题，我们都知道在C语言中使用malloc和free管理动态内存，C++中也有相应的Allocator；</p>
+<p>但究竟内存分配器底层是干什么的，本文通过实现一个简单的内存分配器来管中窥豹；</p>
+<p>本文翻译自：</p>
+<ul>
+<li><a href="https://arjunsreedharan.org/post/148675821737/memory-allocators-101-write-a-simple-memory">Memory Allocators 101 - Write a simple memory allocator</a></li>
+</ul>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/proj/memalloc</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<p>&lt;!--more--&gt;</p>
+<h1><strong>【译】实现一个简单的内存分配器</strong></h1>
+<h2><strong>前言</strong></h2>
+<p>本文将会实现 <a href="http://man7.org/linux/man-pages/man3/free.3.html">malloc()</a>, <a href="http://man7.org/linux/man-pages/man3/free.3.html">calloc()</a>, <a href="http://man7.org/linux/man-pages/man3/free.3.html">realloc()</a> 和 <a href="http://man7.org/linux/man-pages/man3/free.3.html">free()</a> 函数；</p>
+<p>作为一个简单实现，本文实现的内存分配器不会很快很高效，并且不会对分配的内存进行内存页对齐；</p>
+<p>在我们开始之前，需要先补充一些关于程序内存布局的内容：</p>
+<p>众所周知，在操作系统中进程都是运行在各自的虚拟内存空间中的，这些内存空间通常分为5个部分：</p>
+<ul>
+<li><strong>Text section：</strong>存放编译好的二进制代码指令；</li>
+<li><strong>Data section：</strong>存放程序中声明的非零静态数据；</li>
+<li><strong>BSS</strong> (Block Started by Symbol) ：存放程序中声明的零静态数据；</li>
+<li><strong>Heap：</strong>存放动态数据；</li>
+<li><strong>Stack：</strong>存放自动变量（局部变量），函数栈、入参等；</li>
+</ul>
+<p><img alt="Memory layout" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/memlayout.jpg"/></p>
+<p>从上图中可以看到，栈和堆从相对的两个方向上生长；</p>
+<p>同时，<strong>末尾定义了一个指针 <code>brk</code> 来作为整个数据段的结尾（<code>brk</code> 指针指向 Heap 的末尾！）：</strong></p>
+<ul>
+<li>当我们需要在堆中分配更多内存时，我们需要向操作系统提出申请来增加 <code>brk</code> 指针；</li>
+<li>同样的，当我们想要释放内存时，需要减小 <code>brk</code> 指针；</li>
+</ul>
+<p>假设我们在 类 Unix 操作系统中，可以通过 <code>sbrk()</code> 系统调用来操作；</p>
+<ul>
+<li><code>sbrk(0)</code>：返回当前 brk 指针位置；</li>
+<li><code>sbrk(x)</code>：增加 brk x个字节，分配内存；</li>
+<li><code>sbrk(-x)</code>：减小 brk x个字节，释放内存；</li>
+<li>发生错误时，<code>sbrk()</code> 返回 <code>(void*) -1</code>；</li>
+</ul>
+<blockquote>
+<p>&lt;font color="#f00"&gt;<strong>实际上，目前 <code>sbrk()</code> 函数已经被废弃！更好的选择应当使用 <code>mmap()</code>；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;<strong><code>sbrk()</code> 函数并非线程安全，并且它分配的内存只能通过 LIFO 的方式增减！</strong>&lt;/font&gt;</p>
+<p>如果使用 <code>man 2 sbrk</code>，实际上可以看到：</p>
+<pre><code>DESCRIPTION
+     The brk and sbrk functions are historical curiosities left over from
+     earlier days before the advent of virtual memory management.  The brk()
+     function sets the break or lowest address of a process's data segment
+     (uninitialized data) to addr (immediately above bss).  Data addressing is
+     restricted between addr and the lowest stack pointer to the stack segment.
+     Memory is allocated by brk in page size pieces; if addr is not evenly
+     divisible by the system page size, it is increased to the next page
+     boundary.
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>但是在 glic 实现中，malloc 函数依旧使用 <code>sbrk()</code> 函数来分配一些比较小的内存！</strong>&lt;/font&gt;</p>
+</blockquote>
+<p>下面我们使用 <code>sbrk()</code> 函数来实现一个简单的内存分配器！</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>具体实现</strong></h2>
+<h3><strong>malloc()</strong></h3>
+<h4><strong>结构体定义</strong></h4>
+<p><em>malloc(size)</em> 函数分配 <em>size</em> 个字节的内存，并且返回指向这个内存的指针；</p>
+<p>简单的实现如下：</p>
+<pre><code class="language-c">void *malloc(size_t size) {
+	void *block;
+	block = sbrk(size);
+	if (block == (void*) -1)
+		return NULL;
+	return block;
+}
+</code></pre>
+<p>在上面的代码中，我们通过调用 <code>sbrk()</code> 函数来分配内存；</p>
+<p>虽然实现非常简单，但是上面的代码无法实现我们的 free 函数；</p>
+<p>因为 <em>free(ptr)</em> 函数要求释放传入指针指向的内存区域，但是我们在分配内存时，并未保存指针所对应的内存大小；</p>
+<p>因此我们还<strong>需要一个结构来同时存放分配的指针以及分配的大小；</strong></p>
+<p>同时注意到，操作系统分配的堆内存都是连续的，因此我们只能释放掉堆顶部分的内存，而不能直接释放掉位于堆中间的内存区域；</p>
+<p>为了解决这个问题，我们将释放的内存分为了两种情况：</p>
+<ul>
+<li><strong>freeing memory：</strong>可用内存，位于堆中间，内容被释放但未被返还给操作系统；</li>
+<li><strong>releasing memory：</strong>可以返还给操作系统的内存；</li>
+</ul>
+<p>因此，释放某块内存并非将内存返还给 OS，而是将内存标记为可用，并且会在后面的 malloc 调用时再次被分配；</p>
+<p>所有，到目前为止，我们的内存头应该定义为：</p>
+<pre><code class="language-c">struct header_t {
+	size_t size;
+	unsigned is_free;
+};
+</code></pre>
+<p>当我们申请内存时，我们计算：<code>total_size = header_size + size</code> 并且调用 <code>sbrk(total_size)</code> 来移动 brk；</p>
+<p>但是我们不能够保证我们申请的内存是连续的（可能有其他地方在调用 <code>mmap</code>等），因此我们不能简单的通过加减法来确定内存，而是要放在链表中：</p>
+<pre><code class="language-c">struct header_t {
+	size_t size;
+	unsigned is_free;
+	struct header_t *next;
+};
+</code></pre>
+<p>此时，我们的内存类似于：</p>
+<p><img alt="linked list of memory blocks" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/nodes.png"/></p>
+<p>最后，让我们把整个内存块包裹在一个 union 中，来确保我们的内存块以 16字节的格式对齐：</p>
+<pre><code class="language-c">typedef char ALIGN[16];
+
+union header {
+	struct {
+		size_t size;
+		unsigned is_free;
+		union header *next;
+	} s;
+	ALIGN stub;
+};
+typedef union header header_t;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h4><strong>函数实现</strong></h4>
+<p>定义 head、tail 指针来指向整个堆区内存的首尾：</p>
+<pre><code class="language-c">header_t *head, *tail;
+</code></pre>
+<p>为了防止多个线程并发的访问内存，使用锁机制：</p>
+<pre><code class="language-c">pthread_mutex_t global_malloc_lock;
+</code></pre>
+<p>最后是 malloc 实现：</p>
+<pre><code class="language-c">void *malloc(size_t size) {
+	size_t total_size;
+	void *block;
+	header_t *header;
+	if (!size)
+		return NULL;
+	pthread_mutex_lock(&amp;global_malloc_lock);
+	header = get_free_block(size);
+	if (header) {
+		header-&gt;s.is_free = 0;
+		pthread_mutex_unlock(&amp;global_malloc_lock);
+		return (void*)(header + 1);
+	}
+	total_size = sizeof(header_t) + size;
+	block = sbrk(total_size);
+	if (block == (void*) -1) {
+		pthread_mutex_unlock(&amp;global_malloc_lock);
+		return NULL;
+	}
+	header = block;
+	header-&gt;s.size = size;
+	header-&gt;s.is_free = 0;
+	header-&gt;s.next = NULL;
+	if (!head)
+		head = header;
+	if (tail)
+		tail-&gt;s.next = header;
+	tail = header;
+	pthread_mutex_unlock(&amp;global_malloc_lock);
+	return (void*)(header + 1);
+}
+
+header_t *get_free_block(size_t size) {
+	header_t *curr = head;
+	while(curr) {
+		if (curr-&gt;s.is_free &amp;&amp; curr-&gt;s.size &gt;= size)
+			return curr;
+		curr = curr-&gt;s.next;
+	}
+	return NULL;
+}
+</code></pre>
+<p>代码解释：</p>
+<p>首先，校验请求的内存大小为0，则返回 <code>NULL</code>；</p>
+<p>如果请求内存大小合法，则调用 <code>get_free_block()</code>（遍历链表，寻找是否存在可用的内存空间）：</p>
+<ul>
+<li>如果已经存在了足够大小的内存空间，则标记为不可用，并返回这个空间；</li>
+<li>如果不存在对应大小的可用空间，则调用 <code>sbrk()</code> 函数，向操作系统申请内存空间并返回；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>free()</strong></h3>
+<p>free 函数应当判断：</p>
+<ul>
+<li>如果需要被释放内存的块位于堆的顶部，则我们向OS返还空间；</li>
+<li>否则，我们只是标记这个部分空间；</li>
+</ul>
+<p>实现如下：</p>
+<pre><code class="language-c">void free(void *block) {
+	header_t *header, *tmp;
+	void *programbreak;
+
+	if (!block)
+		return;
+	pthread_mutex_lock(&amp;global_malloc_lock);
+	header = (header_t*)block - 1;
+
+	programbreak = sbrk(0);
+	if ((char*)block + header-&gt;s.size == programbreak) {
+		if (head == tail) {
+			head = tail = NULL;
+		} else {
+			tmp = head;
+			while (tmp) {
+				if(tmp-&gt;s.next == tail) {
+					tmp-&gt;s.next = NULL;
+					tail = tmp;
+				}
+				tmp = tmp-&gt;s.next;
+			}
+		}
+		sbrk(0 - sizeof(header_t) - header-&gt;s.size);
+		pthread_mutex_unlock(&amp;global_malloc_lock);
+		return;
+	}
+	header-&gt;s.is_free = 1;
+	pthread_mutex_unlock(&amp;global_malloc_lock);
+}
+</code></pre>
+<p>首先，我们获取到需要释放的内存头（<code>header = (header_t*)block - 1</code>）；同时，<code>sbrk(0)</code> 获取当前程序的堆位置；</p>
+<p>为了判断当前被释放的空间是否为堆顶，我们判断：</p>
+<p><strong><code>(char*)block + header-&gt;s.size</code> 和 <code>sbrk(0)</code> 的大小即可；</strong></p>
+<p>此时，如果：</p>
+<ul>
+<li>内存块为堆尾，则返还内存到操作系统；</li>
+<li>否则，仅仅将内存块标识为 <code>is_free</code> 即可；</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h3><strong>calloc()</strong></h3>
+<p><code>calloc(num, nsize)</code> 函数用来申请 num 个大小为 nsize 的内存区域，并且将空间初始化为 0:</p>
+<pre><code class="language-c">void *calloc(size_t num, size_t nsize) {
+	size_t size;
+	void *block;
+	if (!num || !nsize)
+		return NULL;
+	size = num * nsize;
+	/* check mul overflow */
+	if (nsize != size / num)
+		return NULL;
+	block = malloc(size);
+	if (!block)
+		return NULL;
+	memset(block, 0, size);
+	return block;
+}
+</code></pre>
+<p>&lt;font color="#f00"&gt;<strong>这里，我们使用 <code>nsize != size / num</code> 来快速判断是否溢出！</strong>&lt;/font&gt;</p>
+<p>随后使用 malloc 分配内存，最后使用 memset 清空内存；</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>realloc()</strong></h3>
+<p><code>realloc()</code> 函数用来修改所提供的内存大小；</p>
+<pre><code class="language-c">void *realloc(void *block, size_t size) {
+	header_t *header;
+	void *ret;
+	if (!block || !size)
+		return malloc(size);
+	header = (header_t*)block - 1;
+	if (header-&gt;s.size &gt;= size)
+		return block;
+	ret = malloc(size);
+	if (ret) {
+		
+		memcpy(ret, block, header-&gt;s.size);
+		free(block);
+	}
+	return ret;
+}
+</code></pre>
+<p>首先我们获取到这个内存块的大小，如果内存块大小已经满足要求，则直接返回；</p>
+<p>否则，我们先调用 malloc 申请一个更大的内存，然后通过 memcpy 复制内容到新的内存中，并释放原内存空间；</p>
+<p>&lt;br/&gt;</p>
+<h2><strong>实现测试</strong></h2>
+<h3><strong>静态链接测试</strong></h3>
+<p>编写 <code>main.cc</code>：</p>
+<pre><code class="language-c++">#include &lt;iostream&gt;
+
+extern "C" {
+void *malloc(size_t size);
+
+void free(void *block);
+
+void print_mem_list();
+}
+
+int main() {
+  int *p_int = static_cast&lt;int *&gt;(malloc(sizeof(int *)));
+  *p_int = 1;
+  std::cout &lt;&lt; "Int pointer Address: " &lt;&lt; p_int &lt;&lt; ", val: " &lt;&lt; *p_int &lt;&lt; std::endl;
+  print_mem_list();
+
+  double *p_double = static_cast&lt;double *&gt;(malloc(sizeof(double *)));
+  *p_double = 1.5;
+  std::cout &lt;&lt; "Double pointer Address: " &lt;&lt; p_double &lt;&lt; ", val: " &lt;&lt; *p_double &lt;&lt; std::endl;
+  print_mem_list();
+
+  int char_size = 16;
+  char *p_string = static_cast&lt;char *&gt;(malloc(char_size * sizeof(char)));
+  for (int i = 0; i &lt; char_size; ++i) {
+    p_string[i] = 'A' + i;
+  }
+  std::cout &lt;&lt; "String pointer Address: " &lt;&lt; p_string &lt;&lt; ", val: " &lt;&lt; *p_string &lt;&lt; std::endl;
+  print_mem_list();
+
+  free(p_int);
+  std::cout &lt;&lt; "After free int pointer, address: " &lt;&lt; p_int &lt;&lt; std::endl;
+  print_mem_list();
+
+  free(p_string);
+  std::cout &lt;&lt; "After free string pointer, address: " &lt;&lt; p_string &lt;&lt; std::endl;
+  print_mem_list();
+
+  free(p_double);
+  std::cout &lt;&lt; "After free double pointer, address: " &lt;&lt; p_double &lt;&lt; std::endl;
+  print_mem_list();
+
+  return 0;
+}
+</code></pre>
+<p>运行后输出如下：</p>
+<pre><code>Int pointer Address: 0x104dac018, val: 1
+head = 0x104dac000, tail = 0x104dac000 
+addr = 0x104dac000, size = 8, is_free=0, next=0x0
+
+Double pointer Address: 0x104dac038, val: 1.5
+head = 0x104dac000, tail = 0x104dac020 
+addr = 0x104dac000, size = 8, is_free=0, next=0x104dac020
+addr = 0x104dac020, size = 8, is_free=0, next=0x0
+
+String pointer Address: ABCDEFGHIJKLMNOP, val: A
+head = 0x104dac000, tail = 0x104dac040 
+addr = 0x104dac000, size = 8, is_free=0, next=0x104dac020
+addr = 0x104dac020, size = 8, is_free=0, next=0x104dac040
+addr = 0x104dac040, size = 16, is_free=0, next=0x0
+
+After free int pointer, address: 0x104dac018
+head = 0x104dac000, tail = 0x104dac040 
+addr = 0x104dac000, size = 8, is_free=1, next=0x104dac020
+addr = 0x104dac020, size = 8, is_free=0, next=0x104dac040
+addr = 0x104dac040, size = 16, is_free=0, next=0x0
+
+After free string pointer, address: ABCDEFGHIJKLMNOP
+head = 0x104dac000, tail = 0x104dac020 
+addr = 0x104dac000, size = 8, is_free=1, next=0x104dac020
+addr = 0x104dac020, size = 8, is_free=0, next=0x0
+
+After free double pointer, address: 0x104dac038
+head = 0x104dac000, tail = 0x104dac020 
+addr = 0x104dac000, size = 8, is_free=1, next=0x104dac020
+addr = 0x104dac020, size = 8, is_free=1, next=0x0
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>动态链接测试</strong></h3>
+<p>编译为动态库：</p>
+<pre><code class="language-bash">$ gcc -o memalloc.so -fPIC -shared memalloc.c
+</code></pre>
+<p><code>-fPIC</code> 和 <code>-shared</code> 选项确保编译后的输出具有位置相关代码，并告诉链接器生成适合动态链接的共享对象；</p>
+<p>&lt;font color="#f00"&gt;<strong>在Linux上，如果将环境变量 <code>LD_PRELOAD</code> 设置为共享对象的路径，则该文件将在任何其他库之前加载；</strong>&lt;/font&gt;</p>
+<p>我们可以使用此技巧来加载我们的动态链接文件，以便在 Shell 中运行的命令将使用我们的内存分配函数：</p>
+<pre><code class="language-bash">export LD_PRELOAD=$PWD/memalloc.so
+</code></pre>
+<p>此时再执行命令，将会使用我们的内存分配函数：</p>
+<pre><code class="language-bash">ls
+memalloc.c     memalloc.so       README.md
+</code></pre>
+<p>一旦完成了实验，<strong>可以执行 <code>unset LD_PRELOAD</code> 来停止使用我们的分配器；</strong></p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>源代码：</p>
+<ul>
+<li>https://github.com/JasonkayZK/cpp-learn/tree/proj/memalloc</li>
+</ul>
+<p>参考文章：</p>
+<ul>
+<li><a href="https://arjunsreedharan.org/post/148675821737/memory-allocators-101-write-a-simple-memory">Memory Allocators 101 - Write a simple memory allocator</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
