@@ -1,0 +1,70 @@
+<h2>原文：<a href="https://blog.mauve.icu/2022/05/29/develop-note/sql-left-join-fail">记一次 SQL LEFT JOIN 没有得到预期结果的错误</a></h2>
+<hr/>
+<p>title: 记一次 SQL LEFT JOIN 没有得到预期结果的错误
+date: 2022-05-29 21:26:47
+categories: 杂项
+tag:</p>
+<ul>
+<li>SQL</li>
+</ul>
+<hr/>
+<p>最近在业务中做数据开发的时候，写了一个 SQL 但是没有得到预期的结果，大致如下</p>
+<pre><code>表 a
++----+------+-----+
+| id | name | tid |
++----+------+-----+
+|  1 |  aaa | 101 |
++----+------+-----+
+|  2 |  bbb | 102 |
++----+------+-----+
+|  3 |  ccc | 103 |
++----+------+-----+
+</code></pre>
+<pre><code>表 b
++------+------+-------+
+|   id | nick |  type |
++------+------+-------+
+| 1001 |  abc | false |
++------+------+-------+
+| 1002 |  edf |  true |
++------+------+-------+
+| 1003 |  xyz |  true |
++------+------+-------+
+</code></pre>
+<p>然后圈选的 SQL 的为</p>
+<pre><code class="language-sql">SELECT
+    a.name
+    b.nick
+FROM
+    a
+LEFT JOIN
+    b
+ON
+    a.tid = b.id
+WHERE
+    b.type = "true"
+;
+</code></pre>
+<p>本意上，通过 <code>LEFT JOIN</code> ，即使没有找到，也应该正常返回数据，但是实际上没有返回任何数据</p>
+<p>因为 WHERE 条件是在 <code>JOIN</code> 之后发生的，所以实际上，因为 <code>LEFT JOIN</code> 拿不到数据，所以所有列的 <code>b.type</code> 都是 <code>NULL</code>，当然就不是 <code>true</code></p>
+<p>此时可以拆分这两个条件，例如</p>
+<pre><code class="language-sql">@true_b :=
+SELECT
+    id,
+    nick
+FROM
+    b
+WHERE
+    type = "true"
+;
+
+SELCT
+    a.name
+    c.nick
+FROM
+    a
+LEFT JOIN
+    @true_b c
+ON
+    a.tid = c.id
+</code></pre>

@@ -1,0 +1,82 @@
+<h2>原文：<a href="https://blog.mauve.icu/2024/01/01/cpp/user-defined-literals">C++自定义的字面量</a></h2>
+<hr/>
+<p>title: C++自定义的字面量
+date: 2024-01-01 13:42:42
+updated: 2024-01-01 13:42:42
+categories:</p>
+<ul>
+<li>学习&amp;开发&amp;实现
+tag:</li>
+<li>C++
+description: C++自定义的字面量表达方式
+math: false
+mermaid: false</li>
+</ul>
+<hr/>
+<p>最近在看 CPP 的一些东西的时候，发现了一个非常有意思的特性。不得不说，CPP 的特性总是朝着一些奇奇怪怪的方向发展，整出了一堆奇奇怪怪的语法糖</p>
+<p>这个特性叫 <strong><a href="https://en.cppreference.com/w/cpp/language/user_literal">User-defined literals</a></strong></p>
+<p>非常简单的一种特性，例如很多时候我们会用一些结构体来表示内存/磁盘等大小，比如这种</p>
+<pre><code class="language-cpp">static size_t B = 1;
+static size_t KB = 1000 * B;
+static size_t MB = 1000 * KB;
+static size_t GB = 1000 * MB;
+static size_t KiB = 1024 * B;
+static size_t MiB = 1024 * KiB;
+static size_t GiB = 1024 * MiB;
+
+struct Size {
+    size_t value;
+};
+
+inline std::ostream&amp; operator&lt;&lt;(std::ostream&amp; o, const Size&amp; size) {
+    if (size.value &lt; KiB) o &lt;&lt; size.value &lt;&lt; 'B';
+        // NOLINTNEXTLINE(*-narrowing-conversions)
+    else if (size.value &lt; MiB)o &lt;&lt; std::fixed &lt;&lt; std::setprecision(2) &lt;&lt; 1.0 * size.value / KiB &lt;&lt; "KiB";
+        // NOLINTNEXTLINE(*-narrowing-conversions)
+    else if (size.value &lt; GiB)o &lt;&lt; std::fixed &lt;&lt; std::setprecision(2) &lt;&lt; 1.0 * size.value / MiB &lt;&lt; "MiB";
+        // NOLINTNEXTLINE(*-narrowing-conversions)
+    else o &lt;&lt; std::fixed &lt;&lt; std::setprecision(2) &lt;&lt; 1.0 * size.value / GiB &lt;&lt; "GiB";
+    return o;
+}
+</code></pre>
+<p>这样就可以有一个表示占用大小的类型了，但是这样并不方便，因为初始化的时候还需要明确表示这个类型。但是用上这个特性之后就可以非常简单，只需要再定义几个方法</p>
+<pre><code class="language-cpp">inline Size operator ""_B(unsigned long long v) {
+    return {v * B};
+}
+
+#pragma region 1000
+
+inline Size operator ""_KB(const unsigned long long v) {
+    return {v * KB};
+}
+
+inline Size operator ""_MB(const unsigned long long v) {
+    return {v * MB};
+}
+
+inline Size operator ""_GB(const unsigned long long v) {
+    return {v * GB};
+}
+
+#pragma endregion
+
+#pragma region 1024
+
+inline Size operator ""_KiB(const unsigned long long v) {
+    return {v * KiB};
+}
+
+inline Size operator ""_MiB(const unsigned long long v) {
+    return {v * MiB};
+}
+
+inline Size operator ""_GiB(const unsigned long long v) {
+    return {v * GiB};
+}
+
+#pragma endregion
+</code></pre>
+<p>这样之后就可以直接用字面量初始化</p>
+<pre><code class="language-cpp">const auto v = 123435245_KiB;
+std::cout &lt;&lt; v &lt;&lt; std::endl;
+</code></pre>

@@ -1,0 +1,216 @@
+<h2>原文：<a href="https://blog.mauve.icu/2019/07/23/acm/2019-multi-school/HDU6578-1-1005-Path">【2019多校第一场补题 / HDU6582】2019多校第一场E题1005Path——最短路径+网络流</a></h2>
+<hr/>
+<p>title: 【2019多校第一场补题 / HDU6582】2019多校第一场E题1005Path——最短路径+网络流
+date: 2019-07-23 19:06:00
+categories: ACM&amp;算法
+tag:</p>
+<ul>
+<li>ACM</li>
+<li>HDU
+math: true</li>
+</ul>
+<hr/>
+<p><a href="http://acm.hdu.edu.cn/showproblem.php?pid=6582">HDU6582链接</a></p>
+<h1>题意</h1>
+<p>在一张有向图中，有一个起点和一个终点，你需要删去部分路径，使得起点到终点的最短距离增加（并不要求需要使得距离变成最大值），且删除的路径长度最短。求删去的路径总长为多少</p>
+<h1>分析</h1>
+<p>一开始理解错题意了，以为是在保证路径变成最长的路径之后，求删去的路径和最小是多少。然后就自闭了很久，还WA了好几发。后来看到题目中是 longer 而不是 longest 。突然醒悟。直接最短路径 +网络流就行，中间重新建图。
+大致的过程是先跑最短路径（我用了SPFA算法，因为当数据量较大时，图为稀疏图，所以用邻接表形式），然后求出起点到每一个点的距离（保存在数组 dist 中）。然后删掉所有的边，对满足下面等式的边进行重建（网络流的边，即同时需要搭建反向的边，只不过流量为0），然后跑网络流（我用了ISAP算法，仍然是邻接表）</p>
+<blockquote>
+<p>$dist[a] - dist[b] = edge[a to b]$
+$a to b$ 指代这条边起点为 $a$ 终点为 $b$，且满足 $edge[b to a] = - edge[a to b]$</p>
+</blockquote>
+<h1>AC代码</h1>
+<pre><code class="language-c">#include &lt;bits/stdc++.h&gt;
+
+using namespace std;
+
+#define MAXN 20100
+#define MAXM 20100
+
+bool visited[MAXN];          //标记数组
+long long dist[MAXN];        //源点到顶点i的最短距离
+long long path[MAXN];        //记录最短路的路径
+long long enqueue_num[MAXN]; //记录入队次数
+long long vertex_num;        //顶点数
+long long edge_num;          //边数
+long long source;            //源点
+
+struct Edge {
+    long long to, next, cap, flow;
+} edge[MAXM];
+long long head[MAXN];
+long long tot;
+long long gap[MAXN], dep[MAXN], cur[MAXN];
+
+void init() {
+    tot = 0;
+    memset(head, -1, sizeof(head));
+}
+
+void addedge(long long u, long long v, long long w) {
+    edge[tot].to = v;
+    edge[tot].cap = w;
+    edge[tot].next = head[u];
+    edge[tot].flow = 0;
+    head[u] = tot++;
+}
+
+bool SPFA() {
+    memset(visited, 0, sizeof(visited));
+    memset(enqueue_num, 0, sizeof(enqueue_num));
+    for (long long i = 0; i &lt; vertex_num; i++) {
+        dist[i] = __LONG_LONG_MAX__;
+        path[i] = source;
+    }
+
+    queue&lt;long long&gt; Q;
+    Q.push(source);
+    dist[source] = 0;
+    visited[source] = true;
+    enqueue_num[source]++;
+    while (!Q.empty()) {
+        long long u = Q.front();
+        Q.pop();
+        visited[u] = 0;
+        for (long long curnode = head[u]; curnode != -1; curnode = edge[curnode].next) {
+            if (dist[u] + edge[curnode].cap &lt; dist[edge[curnode].to]) {
+                dist[edge[curnode].to] = dist[u] + edge[curnode].cap;
+                path[edge[curnode].to] = u;
+                if (!visited[edge[curnode].to]) {
+                    Q.push(edge[curnode].to);
+                    enqueue_num[edge[curnode].to]++;
+                    if (enqueue_num[edge[curnode].to] &gt;= vertex_num)
+                        return false;
+                    visited[edge[curnode].to] = 1;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+long long Q[MAXN];
+
+void BFS(long long start, long long end) {
+    memset(dep, -1, sizeof(dep));
+    memset(gap, 0, sizeof(gap));
+    gap[0] = 1;
+    long long front = 0, rear = 0;
+    dep[end] = 0;
+    Q[rear++] = end;
+    while (front != rear) {
+        long long u = Q[front++];
+        for (long long i = head[u]; i != -1; i = edge[i].next) {
+            long long v = edge[i].to;
+            if (dep[v] != -1)
+                continue;
+            Q[rear++] = v;
+            dep[v] = dep[u] + 1;
+            gap[dep[v]]++;
+        }
+    }
+}
+
+long long S[MAXN];
+
+long long sap(long long start, long long end, long long N) {
+    BFS(start, end);
+    memcpy(cur, head, sizeof(head));
+    long long top = 0;
+    long long u = start;
+    long long ans = 0;
+    while (dep[start] &lt; N) {
+        if (u == end) {
+            long long Min = __LONG_LONG_MAX__;
+            long long inser;
+            for (long long i = 0; i &lt; top; i++) {
+                if (Min &gt; edge[S[i]].cap - edge[S[i]].flow) {
+                    Min = edge[S[i]].cap - edge[S[i]].flow;
+                    inser = i;
+                }
+            }
+            for (long long i = 0; i &lt; top; i++) {
+                edge[S[i]].flow += Min;
+                edge[S[i] ^ 1].flow -= Min;
+            }
+            ans += Min;
+            top = inser;
+            u = edge[S[top] ^ 1].to;
+            continue;
+        }
+        bool flag = false;
+        long long v;
+        for (long long i = cur[u]; i != -1; i = edge[i].next) {
+            v = edge[i].to;
+            if (edge[i].cap - edge[i].flow &amp;&amp; dep[v] + 1 == dep[u]) {
+                flag = true;
+                cur[u] = i;
+                break;
+            }
+        }
+        if (flag) {
+            S[top++] = cur[u];
+            u = v;
+            continue;
+        }
+        long long Min = N;
+        for (long long i = head[u]; i != -1; i = edge[i].next)
+            if (edge[i].cap - edge[i].flow &amp;&amp; dep[edge[i].to] &lt; Min) {
+                Min = dep[edge[i].to];
+                cur[u] = i;
+            }
+        gap[dep[u]]--;
+        if (!gap[dep[u]])
+            return ans;
+        dep[u] = Min + 1;
+        gap[dep[u]]++;
+        if (u != start)
+            u = edge[S[--top] ^ 1].to;
+    }
+    return ans;
+}
+
+long long n, m;
+int a[MAXN], b[MAXN], c[MAXN];
+
+void reISAP() {
+    init();
+    for (int i = 0; i &lt; m; i++) {
+        if (c[i] == dist[b[i]] - dist[a[i]]) {
+            addedge(a[i], b[i], c[i]);
+            addedge(b[i], a[i], 0);
+        }
+    }
+}
+
+int main() {
+#ifdef ACM_LOCAL
+    freopen("./in.txt", "r", stdin);
+    freopen("./out.txt", "w", stdout);
+#endif
+    ios::sync_with_stdio(false);
+    long long t;
+    cin &gt;&gt; t;
+    while (t--) {
+        cin &gt;&gt; n &gt;&gt; m;
+        source = 1;
+        vertex_num = n + 1;
+        init();
+        for (long long i = 0; i &lt; m; i++) {
+            cin &gt;&gt; a[i] &gt;&gt; b[i] &gt;&gt; c[i];
+            addedge(a[i], b[i], c[i]);
+        }
+        if (!SPFA()) {
+            cout &lt;&lt; '0' &lt;&lt; endl;
+            continue;
+        }
+        reISAP();
+        cout &lt;&lt; sap(1, n, n) &lt;&lt; endl;
+    }
+    return 0;
+}
+</code></pre>
+<h1>总结</h1>
+<p>理解了题意之后感觉就是一道板子题……
+~~人尽皆知**题~~</p>

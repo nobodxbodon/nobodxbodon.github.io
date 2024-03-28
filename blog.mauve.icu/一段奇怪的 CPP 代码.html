@@ -1,0 +1,113 @@
+<h2>原文：<a href="https://blog.mauve.icu/2023/12/03/cpp/cpp-list-insert">一段奇怪的 CPP 代码</a></h2>
+<hr/>
+<p>title: 一段奇怪的 CPP 代码
+date: 2023-12-03 13:56:55
+updated: 2023-12-03 13:56:55
+categories: 杂项
+index_img: /image/cpp/cpp-list-insert/docs.png
+tag:</p>
+<ul>
+<li>C++
+description: 踩了一个 list 的一个坑，当然是我自己笨蛋了</li>
+</ul>
+<hr/>
+<p>最近发现了一个奇怪的代码，在 C++17 下。使用的 cmake 命令是</p>
+<pre><code class="language-shell">"~/Applications/CLion Nova.app/Contents/bin/cmake/mac/aarch64/bin/cmake" -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_MAKE_PROGRAM=~/Applications/CLion Nova.app/Contents/bin/ninja/mac/aarch64/ninja" -G Ninja -S ~/Code/ClionProject -B ~/Code/ClionProject/cmake-build-debug
+</code></pre>
+<p>而这段代码则是</p>
+<pre><code class="language-cpp">list&lt;int&gt; l;
+for (int i = 0; i &lt; 10; ++i) l.push_back(i);
+auto iter = l.begin();
+for (int i = -1; i &gt;= -10; --i) l.insert(iter--, i);
+for (int&amp;v: l) cout &lt;&lt; v &lt;&lt; ' ';
+</code></pre>
+<p>这段代码的结果却是</p>
+<pre><code>-1 0 1 -10 2 -9 3 -8 4 -7 5 -6 6 -5 7 -4 8 -3 9 -2 
+</code></pre>
+<p>如果稍微调整一下，比如这样的代码</p>
+<pre><code class="language-cpp">list&lt;int&gt; l;
+for (int i = 0; i &lt; 10; ++i) l.push_back(i);
+auto iter = l.begin();
+for (int i = -1; i &gt;= -10; --i) {
+    l.insert(iter, i);
+    --iter;
+}
+for (int&amp;v: l) cout &lt;&lt; v &lt;&lt; ' ';
+</code></pre>
+<p>得到的结果却是</p>
+<pre><code>-10 -9 -8 -7 -6 -5 -4 -3 -2 -1 0 1 2 3 4 5 6 7 8 9 
+</code></pre>
+<p>如果调整成这样</p>
+<pre><code class="language-cpp">list&lt;int&gt; l;
+for (int i = 0; i &lt; 10; ++i) l.push_back(i);
+auto iter = l.begin();
+++iter;
+for (int i = -1; i &gt;= -10; --i) {
+    l.insert(--iter, i);
+}
+for (int&amp;v: l) cout &lt;&lt; v &lt;&lt; ' ';
+</code></pre>
+<p>得到的结果也是</p>
+<pre><code>-10 -9 -8 -7 -6 -5 -4 -3 -2 -1 0 1 2 3 4 5 6 7 8 9 
+</code></pre>
+<p>这似乎有点不太符合预期。至少后两个是符合预期的，而第一个就有点奇怪了。第一反应是不是踩到 UB 了，但是很快在文档里找到了不符合预期的描述</p>
+<p><img alt="docs" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/cpp/cpp-list-insert/docs.png"/></p>
+<p>既然如此，那么就写一段测试代码看看</p>
+<pre><code class="language-cpp">list&lt;int&gt; l;
+
+void f(list&lt;int&gt;::iterator iter, int v) {
+    cout &lt;&lt; *iter &lt;&lt; ' ';
+    l.insert(iter, v);
+    cout &lt;&lt; *iter &lt;&lt; endl;
+}
+
+void solve() {
+    for (int i = 0; i &lt; 10; ++i) l.push_back(i);
+    auto iter = l.begin();
+    for (int i = -1; i &gt;= -10; --i) {
+        f(iter--, i);
+        cout &lt;&lt; (iter == l.begin()) &lt;&lt; endl;
+        for (int&amp;v: l) cout &lt;&lt; v &lt;&lt; ' ';
+        cout &lt;&lt; endl;
+    }
+}
+</code></pre>
+<p>此处进行了一下代理，将每次试图写入钱，通过 <code>f</code> 函数进行代理后，再执行插入操作。结果发现</p>
+<pre><code>0 0
+0
+-1 0 1 2 3 4 5 6 7 8 9 
+11 12
+0
+-1 0 1 2 3 4 5 6 7 8 9 -2 
+9 9
+0
+-1 0 1 2 3 4 5 6 7 8 -3 9 -2 
+8 8
+0
+-1 0 1 2 3 4 5 6 7 -4 8 -3 9 -2 
+7 7
+0
+-1 0 1 2 3 4 5 6 -5 7 -4 8 -3 9 -2 
+6 6
+0
+-1 0 1 2 3 4 5 -6 6 -5 7 -4 8 -3 9 -2 
+5 5
+0
+-1 0 1 2 3 4 -7 5 -6 6 -5 7 -4 8 -3 9 -2 
+4 4
+0
+-1 0 1 2 3 -8 4 -7 5 -6 6 -5 7 -4 8 -3 9 -2 
+3 3
+0
+-1 0 1 2 -9 3 -8 4 -7 5 -6 6 -5 7 -4 8 -3 9 -2 
+2 2
+0
+-1 0 1 -10 2 -9 3 -8 4 -7 5 -6 6 -5 7 -4 8 -3 9 -2 
+</code></pre>
+<p>仍然有这个奇奇怪怪的问题。</p>
+<p>正当我想要搜索一些文档来看看是不是什么奇奇怪怪的 bug 的时候，突然意识到一个问题：<code>i++;</code> 等价于下面这三行代码</p>
+<pre><code class="language-cpp">auto tmp = i;
+++i;
+return tmp;
+</code></pre>
+<p>这似乎就能解释为什么了！因为在试图进行 <code>iter--</code> 操作的时候，又进行了插入操作，实际上导致了 <code>iter</code> 本身先移动到了前一个指针的位置，而在 STL 标准库实现的 <code>list</code> 中，这个链表是一个双向带头循环链表，故实际上此时 <code>iter</code> 是先被移动到了 <code>end()</code> 的位置，然后再返回了 <code>begin()</code> 的位置，并在 <code>begin()</code> 前插入了一个值，使得实际上的 <code>begin()</code> 发生了更新。而实际上我们的 <code>iter</code> 早就被移动到 <code>end()</code> 的位置。</p>

@@ -1,0 +1,286 @@
+<h2>原文：<a href="https://blog.mauve.icu/2022/02/17/technical-solutions/portable-2">Portable OJ 二期工程技术方案</a></h2>
+<hr/>
+<h2>title: Portable OJ 二期工程技术方案
+date: 2022-02-17 20:38:29
+math: true
+mermaid: true
+hide: true</h2>
+<h1>新增权限</h1>
+<p>| 权限 | 名称 | 功能 |
+|:-:|:-:|:-:|
+| VIEW_ALL_CONTEST | 查看所有比赛 | 能够无视约束查看所有比赛，但是不可以提交 |
+| CREATE_AND_EDIT_CONTEST | 创建和更新比赛内容权利 | 能够创建和编辑自己的比赛，此权限不影响合作者编辑题目 |
+| EDIT_NOT_OWNER_CONTEST | 更新其他人拥有的比赛内容权利 | 能够创建和编辑别人的比赛，此权限不影响合作者编辑题目 |</p>
+<h1>新增模块</h1>
+<h2>比赛模块</h2>
+<h3>比赛属性</h3>
+<ul>
+<li>id。唯一不变的主键</li>
+<li>owner。拥有者</li>
+<li>title。标题</li>
+<li>startTime。开始时间</li>
+<li>duration。持续时间</li>
+<li>accessType。访问权限</li>
+</ul>
+<p>| 访问权限 | 名称 | 描述 |
+| :-: | :-: | :-: |
+| PUBLIC | 公开的 | 允许任何人进入查看此比赛并进行 |
+| PASSWORD | 需要密码的 | 在输入密码后授权允许在当前浏览器上进入 |
+| PRIVATE | 邀请制的 | 仅允许指定的部分用户参加 |</p>
+<ul>
+<li>problemList。题目列表</li>
+<li>coAuthor。共同的出题人</li>
+<li>accessTypeValue。访问权限配置值</li>
+<li>freezeTime。封榜时长</li>
+<li>announcement。公告</li>
+</ul>
+<p>| 访问权限 | 普通用户 | 有密码或者在邀请列表内的 | 出题人/合作者 | VAC 的 | ENOC 的 |
+| :-: | :-: | :-: | :-: | :-: | :-: |
+| PUBLIC | 可以查看/提交 | 可以查看/提交 | 可以查看/提交/编辑 | 可以查看/提交 | 可以查看/提交/编辑 |
+| PASSWORD | 无 | 可以查看/提交 | 可以查看/提交/编辑 | 可以查看/提交 | 可以查看/提交/编辑 |
+| PRIVATE | 无 | 可以查看/提交 | 可以查看/编辑 | 可以查看 | 可以查看/编辑 |</p>
+<h3>比赛功能</h3>
+<ul>
+<li>查看比赛列表<ul>
+<li>前端提供<ul>
+<li>页码</li>
+<li>每一页的数量</li>
+</ul>
+</li>
+<li>后端逻辑<ul>
+<li>检查每一页的数量是否在要求范围内</li>
+<li>获取所有比赛总量</li>
+<li>检查页码是否在范围内</li>
+<li>获取指定页码的内容并返回</li>
+<li>在会话中中添加此用户的认证信息</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>查看比赛详情<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+</ul>
+</li>
+<li>公开的比赛<ul>
+<li>验证是否已经开始比赛</li>
+<li>在会话中中添加此用户的认证信息</li>
+<li>返回比赛信息</li>
+</ul>
+</li>
+<li>需要密码的<ul>
+<li>验证是否已经开始比赛</li>
+<li>检查用户是否已经认证过此比赛</li>
+<li>检查用户是否是比赛的拥有者或者合作者</li>
+<li>检查用户是否拥有 VIEW_ALL_CONTEST 权限</li>
+<li>检查用户的密码是否正确</li>
+<li>在会话中中添加此用户的认证信息</li>
+<li>返回比赛信息</li>
+</ul>
+</li>
+<li>邀请制的<ul>
+<li>验证是否已经开始比赛</li>
+<li>检查用户是否已经认证过此比赛</li>
+<li>检查用户是否是比赛的拥有者或者合作者</li>
+<li>检查用户是否拥有 VIEW_ALL_CONTEST 权限</li>
+<li>检查用户是否在邀请列表中</li>
+<li>在会话中中添加此用户的认证信息</li>
+<li>返回比赛信息</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>查看比赛的题目<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+<li>题目的序号</li>
+</ul>
+</li>
+<li>后端逻辑<ul>
+<li>验证是否已经开始比赛</li>
+<li>认证用户信息，参考查看比赛详情</li>
+<li>验证是否已经开始比赛</li>
+<li>返回题目信息</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>查看比赛提交列表/测试提交列表<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+<li>提交的页码</li>
+<li>提交每页数量</li>
+</ul>
+</li>
+<li>后端逻辑<ul>
+<li>认证用户信息，参考查看比赛详情</li>
+<li>返回比赛提交列表</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>查看比赛提交详情/测试提交详情<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+<li>提交的 id</li>
+</ul>
+</li>
+<li>后端逻辑<ul>
+<li>认证用户信息，参考查看比赛详情</li>
+<li>若为题目的拥有者、合作者，则返回提交的详情和运行信息</li>
+<li>若为提交本人，则仅返回提交的详情</li>
+<li>若为其他人，则拒绝</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>查看比赛榜单<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+</ul>
+</li>
+<li>后端逻辑<ul>
+<li>认证用户信息，参考查看比赛详情</li>
+<li>返回榜单，注意封榜</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>在比赛中提交<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+<li>题目的序号</li>
+<li>提交的代码</li>
+<li>提交的语言</li>
+</ul>
+</li>
+<li>后端逻辑<ul>
+<li>认证用户信息，参考查看比赛详情</li>
+<li>比赛拥有者和出题合作人提交至测试提交列表</li>
+<li>验证是否已经开始比赛</li>
+<li>“公开的”和“需要密码的”仅允许比赛参与者进行提交，“邀请制的”，则仅邀请制内的可以提交</li>
+<li>完成提交，并加入判题系统</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>创建/更新比赛（需要 CREATE_AND_EDIT_CONTEST）<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+<li>比赛的标题</li>
+<li>题目列表</li>
+<li>比赛开始时间</li>
+<li>比赛持续时间</li>
+<li>比赛的访问权限</li>
+<li>比赛访问权限的参数</li>
+<li>共同出题人</li>
+<li>封榜单时长</li>
+<li>公告</li>
+</ul>
+</li>
+<li>比赛未开始<ul>
+<li>检查是否是 owner 或者拥有 EDIT_NOT_OWNER_CONTEST 权限</li>
+<li>均可更新</li>
+</ul>
+</li>
+<li>比赛开始后<ul>
+<li>检查是否是 owner 或者拥有 EDIT_NOT_OWNER_CONTEST 权限</li>
+<li>不可以删除题目，但是可以增加</li>
+<li>不可以修改开始时间</li>
+<li>不可以修改结束时间至当前时间之前</li>
+<li>不可以修改共同出题人</li>
+</ul>
+</li>
+<li>比赛结束之后<ul>
+<li>除了公告，所有内容均不可修改</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>比赛共同出题人修改比赛题目<ul>
+<li>前端提供<ul>
+<li>比赛的 id</li>
+<li>变更操作与题目 id</li>
+</ul>
+</li>
+<li>后端逻辑<ul>
+<li>检查是否有权编辑此比赛</li>
+<li>检查是否有权限变更请求的列表中的题目，共同出题人只能变更 <code>owner</code> 为其本身的题目</li>
+<li>检查当前是否还可以变更题目列表</li>
+<li>变更比赛的题目</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h1>更新模块</h1>
+<h2>问题模块</h2>
+<h3>新增属性</h3>
+<ul>
+<li>contest。第一次绑定的比赛</li>
+</ul>
+<h3>更新逻辑</h3>
+<ul>
+<li>修改题目的访问权限<ul>
+<li>后端需要检查对应的比赛是否已经结束</li>
+</ul>
+</li>
+</ul>
+<h3>新增功能</h3>
+<ul>
+<li>根据标题搜索可访问的题目列表<ul>
+<li>前端提供<ul>
+<li>搜索关键词</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2>提交模块</h2>
+<h3>新增枚举</h3>
+<p>SolutionType 下新增 TEST_CONTEST 属性，表示比赛拥有者/共同出题人在比赛中的提交</p>
+<h1>存储变更</h1>
+<h2>比赛模块</h2>
+<h3>MySQL</h3>
+<pre><code class="language-sql">create table contest
+(
+    id          bigint auto_increment comment '比赛 id',
+    data_id     varchar(32)  null comment '比赛数据 id',
+    owner       bigint       null comment '比赛拥有者',
+    title       varchar(255) null comment '比赛标题',
+    start_time  datetime     null comment '比赛开始时间',
+    duration    int          null comment '比赛持续时间（分钟）',
+    access_type varchar(64)  null comment '比赛的访问权限类型',
+    primary key (`id`),
+    UNIQUE KEY uk_title(`title`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mp4 COLLATION=utf8mb4_general_ci COMMENT '比赛信息';
+</code></pre>
+<h3>Mongo</h3>
+<pre><code class="language-java">public abstract class BasicContestData {
+
+    /**
+     * 题目列表
+     */
+    private List&lt;Long&gt; problemList;
+
+    /**
+     * 允许此类访问权限的题目
+     */
+    private Set&lt;ProblemAccessType&gt; problemAccessTypeList;
+
+    /**
+     * 共同的出题人
+     */
+    private Set&lt;Long&gt; coAuthor;
+
+    /**
+     * 封榜时长
+     */
+    private Long freezeTime;
+
+    /**
+     * 公告
+     */
+    private String announcement;
+}
+</code></pre>

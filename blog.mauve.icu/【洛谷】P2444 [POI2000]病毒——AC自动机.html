@@ -1,0 +1,173 @@
+<h2>原文：<a href="https://blog.mauve.icu/2020/01/05/acm/luogu/P2444">【洛谷】P2444 [POI2000]病毒——AC自动机</a></h2>
+<hr/>
+<p>title: 【洛谷】P2444 [POI2000]病毒——AC自动机
+date: 2020-01-05 13:04:38
+categories:</p>
+<ul>
+<li>ACM&amp;算法
+tag:</li>
+<li>ACM</li>
+<li>Luogu
+math: true</li>
+</ul>
+<hr/>
+<p><a href="https://www.luogu.com.cn/problem/P2444">题目链接</a></p>
+<h2>题目描述</h2>
+<p>二进制病毒审查委员会最近发现了如下的规律：某些确定的二进制串是病毒的代码。如果某段代码中不存在任何一段病毒代码，那么我们就称这段代码是安全的。现在委员会已经找出了所有的病毒代码段，试问，是否存在一个无限长的安全的二进制代码。</p>
+<p>示例：</p>
+<p>例如如果{011, 11, 00000}为病毒代码段，那么一个可能的无限长安全代码就是010101…。如果{01, 11, 000000}为病毒代码段，那么就不存在一个无限长的安全代码。</p>
+<p>任务：</p>
+<p>请写一个程序：</p>
+<p>1.在文本文件WIR.IN中读入病毒代码；</p>
+<p>2.判断是否存在一个无限长的安全代码；</p>
+<p>3.将结果输出到文件WIR.OUT中。</p>
+<h2>输入格式</h2>
+<p>在文本文件WIR.IN的第一行包括一个整数n(n\le 2000)(n≤2000)，表示病毒代码段的数目。以下的n行每一行都包括一个非空的01字符串——就是一个病毒代码段。所有病毒代码段的总长度不超过30000。</p>
+<h2>输出格式</h2>
+<p>在文本文件WIR.OUT的第一行输出一个单词：</p>
+<p>TAK——假如存在这样的代码；</p>
+<p>NIE——如果不存在。</p>
+<h2>输入输出样例</h2>
+<h3>输入</h3>
+<p>3
+01
+11
+00000</p>
+<h3>输出</h3>
+<p>NIE</p>
+<h2>分析</h2>
+<p>想办法让那串无限长的字符串不断的在树上失配，然后不断的走fail指针最后进入一个循环即可</p>
+<p>即在树上dfs，保证不经过任何字符串尾节点使得找到一个树上环</p>
+<h2>AC code</h2>
+<pre><code class="language-cpp">#include &lt;bits/stdc++.h&gt;
+
+using namespace std;
+
+/*
+ * AC 自动机：多个模式串去匹配一个串，求有多少个模式串与主串有匹配内容
+ *
+ * 使用操作：
+ * 1、把每一个模式串插入到树中 insert
+ * 2、build
+ * 3、使用 query 询问有多少个模式串匹配
+ */
+
+const int CHAR_NUM = 2;//仅小写
+const int MAXN = 2100;//模式串个数
+const int MAXM = 30100;//模式串最长长度
+const int NUM = MAXN * MAXM;//空间=个数*长度，稳
+
+struct Trie {
+    int c[NUM][CHAR_NUM], val[NUM], fail[NUM], cnt;
+
+    void insert(char *s) {
+        int len = strlen(s);
+        int now = 0;
+        for (int i = 0; i &lt; len; i++) {
+//            int v = s[i] - 'a';
+            int v = s[i] - '0';
+            if (!c[now][v])c[now][v] = ++cnt;
+            now = c[now][v];
+        }
+        val[now]++;
+    }
+
+    void build() {
+        queue&lt;int&gt; q;
+        for (int i = 0; i &lt; CHAR_NUM; i++)if (c[0][i])fail[c[0][i]] = 0, q.push(c[0][i]);
+        while (!q.empty()) {
+            int u = q.front();
+            q.pop();
+            for (int i = 0; i &lt; CHAR_NUM; i++)
+                if (c[u][i])fail[c[u][i]] = c[fail[u]][i], q.push(c[u][i]);
+                else c[u][i] = c[fail[u]][i];
+        }
+    }
+
+    int query(char *s) {
+        int len = strlen(s);
+        int now = 0, ans = 0;
+        for (int i = 0; i &lt; len; i++) {
+//            now = c[now][s[i] - 'a'];
+            now = c[now][s[i] - '0'];
+            for (int t = now; t &amp;&amp; ~val[t]; t = fail[t])ans += val[t], val[t] = -1;
+        }
+        return ans;
+    }
+} AC;
+
+char s[30100];
+bool vis[NUM];
+
+bool dfs(int cur) {
+    for (int i = 0; i &lt; CHAR_NUM; ++i) {
+        int x = AC.c[cur][i];
+        if (!AC.val[x]) {
+            bool flag = false;
+            int t = x;
+            while (t) {
+                if (AC.val[t]) {
+                    flag = true;
+                    break;
+                }
+                t = AC.fail[t];
+            }
+            if (flag)
+                continue;
+            if (vis[x])
+                return true;
+            vis[x] = true;
+            if (dfs(x)) {
+                return true;
+            }
+            vis[x] = false;
+        }
+    }
+    return false;
+}
+
+void solve() {
+    int n;
+    cin &gt;&gt; n;
+    for (int i = 0; i &lt; n; ++i) {
+        cin &gt;&gt; s;
+        AC.insert(s);
+    }
+    AC.build();
+    vis[0] = true;
+    bool flag = dfs(0);
+    if (flag) {
+        cout &lt;&lt; "TAK" &lt;&lt; endl;
+    } else {
+        cout &lt;&lt; "NIE" &lt;&lt; endl;
+    }
+}
+
+int main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(nullptr);
+    cout.tie(nullptr);
+#ifdef ACM_LOCAL
+    freopen("in.txt", "r", stdin);
+    freopen("out.txt", "w", stdout);
+    long long test_index_for_debug = 1;
+    char acm_local_for_debug;
+    while (cin &gt;&gt; acm_local_for_debug) {
+        cin.putback(acm_local_for_debug);
+        if (test_index_for_debug &gt; 20) {
+            throw runtime_error("Check the stdin!!!");
+        }
+        auto start_clock_for_debug = clock();
+        solve();
+        auto end_clock_for_debug = clock();
+        cout &lt;&lt; "Test " &lt;&lt; test_index_for_debug &lt;&lt; " successful" &lt;&lt; endl;
+        cerr &lt;&lt; "Test " &lt;&lt; test_index_for_debug++ &lt;&lt; " Run Time: "
+             &lt;&lt; double(end_clock_for_debug - start_clock_for_debug) / CLOCKS_PER_SEC &lt;&lt; "s" &lt;&lt; endl;
+        cout &lt;&lt; "--------------------------------------------------" &lt;&lt; endl;
+    }
+#else
+    solve();
+#endif
+    return 0;
+}
+</code></pre>

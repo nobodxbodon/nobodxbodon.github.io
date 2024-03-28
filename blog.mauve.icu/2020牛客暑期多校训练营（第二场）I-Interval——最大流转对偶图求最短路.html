@@ -1,0 +1,149 @@
+<h2>原文：<a href="https://blog.mauve.icu/2020/07/16/acm/2020-multi-school/NowCoder-2-I-Interval">2020牛客暑期多校训练营（第二场）I-Interval——最大流转对偶图求最短路</a></h2>
+<hr/>
+<p>title: 2020牛客暑期多校训练营（第二场）I-Interval——最大流转对偶图求最短路
+date: 2020-07-16 14:38:59
+categories: ACM&amp;算法
+tag:</p>
+<ul>
+<li>ACM</li>
+<li>NowCoder
+math: true
+index_img: /image/acm/2020-multi-school/NowCoder-2-I-Interval/2.png</li>
+</ul>
+<hr/>
+<p><a href="https://ac.nowcoder.com/acm/contest/5667/I">题目链接</a></p>
+<h1>题意</h1>
+<p>给出一个区间 $[l ,r]$ ，允许进行如下操作：</p>
+<ol>
+<li>将 $[l, r]$ 转为 $[l - 1, r]$ 或者 $[l + 1, r]$</li>
+<li>将 $[l, r]$ 转为 $[l, r - 1]$ 或者 $[l, r + 1]$</li>
+</ol>
+<p>且保证 $l \leq r \space and \space l &gt; 0 \space r \leq n$</p>
+<p>但是给出了一系列的限制 $l, r, dir, c$ ，表示当前区间为 $[l, r]$ 时，限制当前的区间不能进行操作 $1$（<code>dir = L</code>）或者操作 $2$ （<code>dir = R</code>），而启用这个限制则需要 $c$ 的费用，你可以选择是否启用这个限制</p>
+<p>询问最少需要花费多少来实现<strong>不能</strong>将区间 $[1, n]$ 转变为 $l = r$ 的区间。</p>
+<h1>分析</h1>
+<p>从 $1, n$ 能否转变为 $l = r$ 可以通过最短路来求算。但是无法求知当最短路无法到达时（即题目要求的<strong>不能</strong>转变）最少需要多少的限制条件，而这些条件又是什么。所以采用最大流来解决</p>
+<h2>最大流</h2>
+<p>画出网格图
+将所有可以转换的两个状态之间用边连接，如果有提供限制的，将流量限制为费用，如果没有限制的，则设置为 $INF$
+对于整个矩阵而言，只需要一半的点用于建图，所以将汇点放在另外一半点中。所有 $l = r$ 的点与汇点连接，而源点为 $[1, n]$
+对于样例可以得到如下图</p>
+<blockquote>
+<p>样例：
+3 4
+1 3 L 10
+1 3 R 3
+1 2 L 1
+1 2 R 1</p>
+</blockquote>
+<p><img alt="图1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/acm/2020-multi-school/NowCoder-2-I-Interval/1.png"/></p>
+<p><strong>补充，图片漏画了$[2, 3] \rightarrow [2, 2]$的连线，其流量为 $INF$</strong></p>
+<p>可以直接通过最大流求出答案</p>
+<p>但是会TLE</p>
+<h2>对偶图</h2>
+<p><a href="https://en.wikipedia.org/wiki/Dual_graph">对偶图Wikipedia（https://en.wikipedia.org/wiki/Dual_graph）</a></p>
+<p>通过对偶图，可以快速的将一张网格网络图求最大流转为求最短路</p>
+<p>关于对偶图的解释请自行查阅资料</p>
+<p>在原图上绘制对偶图得到</p>
+<p><img alt="对偶图" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/acm/2020-multi-school/NowCoder-2-I-Interval/2.png"/></p>
+<p>将对偶图中有用的元素将其分离出来得到</p>
+<p><img alt="对偶图" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/acm/2020-multi-school/NowCoder-2-I-Interval/3.png"/></p>
+<p>（图中未注明边权的边均为 $0$）</p>
+<p>可以通过最短路快速得到解</p>
+<h1>AC code</h1>
+<pre><code class="language-cpp">#include &lt;bits/stdc++.h&gt;
+
+using namespace std;
+
+#define ll long long
+const int maxn = 510;
+
+int n, m;
+ll dis[maxn * maxn];
+char si;
+vector&lt;pair&lt;ll, int&gt;&gt; G[maxn * maxn];
+
+void addedge(int u, int v, int cost) {
+    G[u].push_back({cost, v});
+}
+
+ll dijkstra(int s, int t) {
+    memset(dis, 0x3f, sizeof(dis));
+    dis[s] = 0;
+    priority_queue&lt;pair&lt;ll, int&gt;, vector&lt;pair&lt;ll, int&gt;&gt;, greater&lt;pair&lt;ll, int&gt;&gt;&gt; q;
+    q.push({0ll, s});
+    while (!q.empty()) {
+        ll u = q.top().second, c = q.top().first;
+        q.pop();
+        if (dis[u] &lt; c)continue;
+        for (auto i : G[u]) {
+            ll cc = i.first, v = i.second;
+            if (dis[v] &gt; dis[u] + cc) {
+                dis[v] = dis[u] + cc;
+                q.push({dis[v], v});
+            }
+        }
+    }
+    return dis[t];
+}
+
+inline int id(int x, int y) {
+    return x * (n + 3) + y;
+}
+
+void solve() {
+    cin &gt;&gt; n &gt;&gt; m;
+    for (int i = 0; i &lt; m; ++i) {
+        int u, v, w;
+        char c;
+        cin &gt;&gt; u &gt;&gt; v &gt;&gt; c &gt;&gt; w;
+        if (c == 'L') {
+            addedge(id(u, v), id(u, v + 1), w);
+            addedge(id(u, v + 1), id(u, v), w);
+        } else {
+            addedge(id(u, v), id(u - 1, v), w);
+            addedge(id(u - 1, v), id(u, v), w);
+        }
+    }
+
+    for (int i = 1; i &lt;= n; ++i) {
+        addedge(id(0, 0), id(0, i), 0);
+        addedge(id(i, n + 1), id(n + 1, n + 1), 0);
+    }
+
+    dijkstra(id(0, 0), id(n + 1, n + 1));
+    if (dis[id(n + 1, n + 1)] &gt;= 0x3f3f3f3f3f3f3f3f)
+        cout &lt;&lt; -1 &lt;&lt; endl;
+    else
+        cout &lt;&lt; dis[id(n + 1, n + 1)] &lt;&lt; endl;
+}
+
+signed main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(nullptr);
+    cout.tie(nullptr);
+#ifdef ACM_LOCAL
+    freopen("in.txt", "r", stdin);
+    freopen("out.txt", "w", stdout);
+    int test_index_for_debug = 1;
+    char acm_local_for_debug;
+    while (cin &gt;&gt; acm_local_for_debug) {
+        if (acm_local_for_debug == '$') exit(0);
+        cin.putback(acm_local_for_debug);
+        if (test_index_for_debug &gt; 20) {
+            throw runtime_error("Check the stdin!!!");
+        }
+        auto start_clock_for_debug = clock();
+        solve();
+        auto end_clock_for_debug = clock();
+        cout &lt;&lt; "Test " &lt;&lt; test_index_for_debug &lt;&lt; " successful" &lt;&lt; endl;
+        cerr &lt;&lt; "Test " &lt;&lt; test_index_for_debug++ &lt;&lt; " Run Time: "
+             &lt;&lt; double(end_clock_for_debug - start_clock_for_debug) / CLOCKS_PER_SEC &lt;&lt; "s" &lt;&lt; endl;
+        cout &lt;&lt; "--------------------------------------------------" &lt;&lt; endl;
+    }
+#else
+    solve();
+#endif
+    return 0;
+}
+</code></pre>

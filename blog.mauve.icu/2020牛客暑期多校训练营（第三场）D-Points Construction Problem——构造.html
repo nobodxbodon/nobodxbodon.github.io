@@ -1,0 +1,181 @@
+<h2>原文：[2020牛客暑期多校训练营（第三场）D-Points Construction Problem——构造](https://blog.mauve.icu/2020/07/18/acm/2020-multi-school/NowCoder-3-D-Points Construction Problem)</h2>
+<hr/>
+<p>title: 2020牛客暑期多校训练营（第三场）D-Points Construction Problem——构造
+date: 2020-07-18 17:10:46
+categories: ACM&amp;算法
+tag:</p>
+<ul>
+<li>ACM</li>
+<li>NowCoder
+math: true
+index_img: /image/acm/2020-multi-school/NowCoder-3-D-Points Construction Problem/5.png</li>
+</ul>
+<hr/>
+<h1>D-Points Construction Problem</h1>
+<h1>思路</h1>
+<p><strong>第一点：千万不要考虑矩阵，千万不要考虑矩阵，千万不要考虑矩阵。因为完全可以是两个三个矩阵和几条链组成，这实在过于难考虑</strong></p>
+<p>这道题最难以考虑的地方就是矩阵的构造。这里给出一个思路去解决这个问题。
+当然可能这个方法不是最正确的，但是结果是最优（毕竟AC了）</p>
+<h2>计算缺失边数</h2>
+<p>这个应该相对简单，即公式 <code>(n * 4 - m) / 2</code> 的结果</p>
+<h2>类矩阵结构</h2>
+<p><strong>这里我们仅考虑非单链的结构，即可以出现矩阵的结构，即 $缺失边数 \geq 4$的情况</strong></p>
+<p>我们首先给出一个矩阵的核心部分，暂时称其为“核”
+![核](/image/acm/2020-multi-school/NowCoder-3-D-Points Construction Problem/1.png)
+这个核有一个特性：4个点能够增加4条边，记作： $4 \rightarrow 4$</p>
+<p>这是一个矩阵的基础，而且一个矩阵仅需要一个核。</p>
+<p>接下来最贪心的方法就是放下这样两个蓝色的点
+![23](/image/acm/2020-multi-school/NowCoder-3-D-Points Construction Problem/2.png)
+这个结构能够实现用2个点增加3条边，记作： $2 \rightarrow 3$</p>
+<p>同样，我们也可以在上面放下这样的结构</p>
+<p>![23](/image/acm/2020-multi-school/NowCoder-3-D-Points Construction Problem/3.png)
+同样被记作： $2 \rightarrow 3$</p>
+<p><strong>值得注意的是：核结构 $4 \rightarrow 4$ 是所有类矩阵结构的前提，但是由于其产生的连边数量非常少，所以尽可能的减少其使用，即整个图结构仅使用一次 $4 \rightarrow 4$。而 $2 \rightarrow 3$ 则没有次数限制，可以向上也可以向右</strong></p>
+<p>在上图的基础上，我们还可以提出一个结构：
+![12](/image/acm/2020-multi-school/NowCoder-3-D-Points Construction Problem/4.png)
+这个橙色的点非常的巧妙，其实现了一个点新增了两条边，记作 $1 \rightarrow 2$</p>
+<p>很明显，$1 \rightarrow 2$ 结构是最优的，结构越多则越能用较少的点来实现缺失的边的需求。所以我们需要尽可能的增加 $1 \rightarrow 2$ 的结构</p>
+<p>但是，此结构有数量限制，其数量受到 $2 \rightarrow 3$ 的数量限制。</p>
+<p>再考虑到矩阵的结构能够带来更多的 $1 \rightarrow 2$ 结构，所以我们选择采用如下的贪心策略</p>
+<ol>
+<li>先放一个$2*2$的矩阵</li>
+<li>向上/右扩展</li>
+<li>用 $1 \rightarrow 2$ 结构填充矩阵</li>
+<li>向右/上扩展</li>
+<li>用 $1 \rightarrow 2$ 结构填充矩阵</li>
+<li>重复 $2-6$ 直到缺失边全部被满足</li>
+<li>如果使用的点数超出提供的，则无解，否则将多余的点数放在遥远的天边，然后输出</li>
+</ol>
+<h2>剩余不满足结构</h2>
+<p>由于上述策略可能会出现遗留下 $1至2$ 条缺失边，则我们可以把点放在矩阵的左下角，即图中的×</p>
+<p>![x](/image/acm/2020-multi-school/NowCoder-3-D-Points Construction Problem/5.png)</p>
+<p>则可以满足一条缺失边或者两条缺失边的要求</p>
+<h1>AC code</h1>
+<pre><code class="language-cpp">#include &lt;bits/stdc++.h&gt;
+
+using namespace std;
+
+bool flag[60][60];
+
+void print(int n) {
+    if (n &lt; 0) {
+        cout &lt;&lt; "No" &lt;&lt; endl;
+        return;
+    }
+    cout &lt;&lt; "Yes" &lt;&lt; endl;
+    while (n--)
+        cout &lt;&lt; n * 100 &lt;&lt; " " &lt;&lt; n * 100 &lt;&lt; endl;
+    for (int i = 0; i &lt; 60; ++i)
+        for (int j = 0; j &lt; 60; ++j)
+            if (flag[i][j])
+                cout &lt;&lt; i + 1 &lt;&lt; " " &lt;&lt; j + 1 &lt;&lt; endl;
+}
+
+void solve() {
+    int T;
+    cin &gt;&gt; T;
+    for (int ts = 0; ts &lt; T; ++ts) {
+        int n, m;
+        cin &gt;&gt; n &gt;&gt; m;
+        int target = (n * 4 - m) / 2;
+        if ((n * 4 - m) &amp; 1) {
+            n = -1;
+            print(n);
+            continue;
+        }
+        memset(flag, 0, sizeof(flag));
+
+        if (target &lt; 4) {
+            int x = 2;
+            flag[1][1] = true;
+            n--;
+
+            while (target &amp;&amp; n &gt;= 0) {
+                flag[x][1] = true;
+                x++;
+                target--;
+                n--;
+            }
+            print(n);
+            continue;
+        }
+        flag[1][1] = flag[1][2] = flag[2][1] = flag[2][2] = true;
+        n -= 4;
+        target -= 4;
+
+        int l = 3, r = 3;
+        while (target &gt; 2) {
+            // 右扩展
+            flag[1][l] = true;
+            flag[2][l] = true;
+            l++;
+            target -= 3;
+            n -= 2;
+
+            int len = 3;
+            while (len &lt; r &amp;&amp; target &gt; 1) {
+                flag[len][l - 1] = true;
+                target -= 2;
+                n--;
+                len++;
+            }
+
+            if (target &gt; 2) {
+                // 上扩展
+                flag[r][1] = true;
+                flag[r][2] = true;
+                r++;
+                target -= 3;
+                n -= 2;
+
+                len = 3;
+                while (len &lt; l &amp;&amp; target &gt; 1) {
+                    flag[r - 1][len] = true;
+                    target -= 2;
+                    n--;
+                    len++;
+                }
+            }
+        }
+
+        if (target == 2) {
+            n -= 2;
+            flag[0][1] = true;
+            flag[1][0] = true;
+        } else if (target == 1) {
+            n -= 1;
+            flag[0][1] = true;
+        }
+        print(n);
+    }
+}
+
+signed main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(nullptr);
+    cout.tie(nullptr);
+#ifdef ACM_LOCAL
+    freopen("in.txt", "r", stdin);
+    freopen("out.txt", "w", stdout);
+    int test_index_for_debug = 1;
+    char acm_local_for_debug;
+    while (cin &gt;&gt; acm_local_for_debug) {
+        if (acm_local_for_debug == '$') exit(0);
+        cin.putback(acm_local_for_debug);
+        if (test_index_for_debug &gt; 20) {
+            throw runtime_error("Check the stdin!!!");
+        }
+        auto start_clock_for_debug = clock();
+        solve();
+        auto end_clock_for_debug = clock();
+        cout &lt;&lt; "Test " &lt;&lt; test_index_for_debug &lt;&lt; " successful" &lt;&lt; endl;
+        cerr &lt;&lt; "Test " &lt;&lt; test_index_for_debug++ &lt;&lt; " Run Time: "
+             &lt;&lt; double(end_clock_for_debug - start_clock_for_debug) / CLOCKS_PER_SEC &lt;&lt; "s" &lt;&lt; endl;
+        cout &lt;&lt; "--------------------------------------------------" &lt;&lt; endl;
+    }
+#else
+    solve();
+#endif
+    return 0;
+}
+</code></pre>

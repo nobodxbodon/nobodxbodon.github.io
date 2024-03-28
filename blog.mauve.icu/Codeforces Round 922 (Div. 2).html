@@ -1,0 +1,207 @@
+<h2>原文：<a href="https://blog.mauve.icu/2024/03/24/acm/codeforces/CodeforcesRound922">Codeforces Round 922 (Div. 2)</a></h2>
+<hr/>
+<p>title: Codeforces Round 922 (Div. 2)
+date: 2024-03-24 15:35:50
+updated: 2024-03-24 15:35:50
+categories:</p>
+<ul>
+<li>ACM&amp;算法
+tag:</li>
+<li>ACM</li>
+<li>Codeforces
+math: true
+description: Codeforces Round 922 (Div. 2) 个人写题记录</li>
+</ul>
+<hr/>
+<h1>A. Brick Wall</h1>
+<h2>大致题意</h2>
+<p>有一堵砖墙，由砖块组成，每一个砖块都是 $1 \times k$ （$k$ 可以是任意值，每一块砖块的 $k$ 可以不一样）的方块，可以横放或者纵向放</p>
+<p>问横放和纵放的最大差值是多少</p>
+<h2>思路</h2>
+<p>那全都横放不就行了</p>
+<h2>AC code</h2>
+<pre><code class="language-cpp">void solve() {
+    int _;
+    cin &gt;&gt; _;
+    for (int tc = 0; tc &lt; _; ++tc) {
+        int n, m;
+        cin &gt;&gt; n &gt;&gt; m;
+        cout &lt;&lt; n * (m / 2) &lt;&lt; endl;
+    }
+}
+</code></pre>
+<h1>B. Minimize Inversions</h1>
+<h2>大致题意</h2>
+<p>有两个数组，每次允许操作选择两个下标，在两个数组中分别操作交换这两个下标的值</p>
+<p>问让这两个数组的逆序对数量之和最小，应该如何操作</p>
+<h2>思路</h2>
+<p>大胆猜测，把其中一个数组排序好就行了</p>
+<h2>AC code</h2>
+<pre><code class="language-cpp">void solve() {
+    int _;
+    cin &gt;&gt; _;
+    for (int tc = 0; tc &lt; _; ++tc) {
+        int n;
+        cin &gt;&gt; n;
+        vector&lt;pair&lt;int, int&gt;&gt; data(n);
+        for (auto&amp; [fst, snd]: data) cin &gt;&gt; fst;
+        for (auto&amp; [fst, snd]: data) cin &gt;&gt; snd;
+        sort(data.begin(), data.end());
+        for (int i = 0; i &lt; n; ++i) cout &lt;&lt; data[i].first &lt;&lt; " \n"[i == n - 1];
+        for (int i = 0; i &lt; n; ++i) cout &lt;&lt; data[i].second &lt;&lt; " \n"[i == n - 1];
+    }
+}
+</code></pre>
+<h1>C. XOR-distance</h1>
+<h2>大致题意</h2>
+<p>有两个数，现在希望找到一个 $x$，使得 $\left | (a \oplus x) - (b \oplus x)\right |$ 最小，且 $x \in [0, r]$</p>
+<h2>思路</h2>
+<p>由于是异或运算，且最后取了绝对值，实际上对于每一个比特位而言，$x$ 取什么毫无意义。因为对于这个比特位而言，$x$ 取任意值，不同的则还是不同，相同的则还是相同</p>
+<p>所以考虑的情况是，某个高的比特位发生了 $a \neq b$ 的情况，这个时候需要努力去构造另外一个值的下面的比特位，使得高位的这个差值带来的影响尽可能小</p>
+<h2>AC code</h2>
+<pre><code class="language-cpp">#define int long long
+
+void solve() {
+    int _;
+    cin &gt;&gt; _;
+    for (int tc = 0; tc &lt; _; ++tc) {
+        int a, b, r;
+        cin &gt;&gt; a &gt;&gt; b &gt;&gt; r;
+
+        auto f = [&amp;](const int v, int i) {
+            int rs = r, res = 0;
+            for (; i &gt;= 0; --i) {
+                if ((a &amp; 1LL &lt;&lt; i) == (b &amp; 1LL &lt;&lt; i)) res += 1LL &lt;&lt; i;
+                else if (v &amp; 1LL &lt;&lt; i) {
+                    if (rs &gt;= 1LL &lt;&lt; i) rs -= 1LL &lt;&lt; i;
+                    else res += 2 * (1LL &lt;&lt; i);
+                }
+            }
+            return res;
+        };
+
+        int ans = 0;
+        for (int i = 63; i &gt;= 0; --i) {
+            if ((a &amp; 1LL &lt;&lt; i) == (b &amp; 1LL &lt;&lt; i)) continue;
+            ans = 1 + f(a &amp; 1LL &lt;&lt; i ? a : b, i - 1);
+            break;
+        }
+        cout &lt;&lt; ans &lt;&lt; endl;
+    }
+}
+</code></pre>
+<h1>D. Blocking Elements</h1>
+<h2>大致题意</h2>
+<p>从一个数组中，取出一部分值，将整个数组拆成 $n$ 份，将每一份内进行求和，同时取出的值也作为单独的一份进行求和，这些求和值中最大的就是这个数组的代价</p>
+<p>问代价最小是多少</p>
+<h2>思路</h2>
+<p>显然，可以二分，问题是如何检查二分的答案是否合法，这里设二分得到的答案是 $v$</p>
+<p>可以通过 dp 的方式来计算，令 <code>dp[i]</code> 作为第 $i$ 个值被选中后，$[1, i]$ 中被选中的那些值的总代价</p>
+<p>可以得到 $dp[i] = dp[j] + a[i]$，其中 $j \in [l, i), \sum_{x=l}^{i-1} a_x \leq v$</p>
+<p>故搞个优先队列维护一下即可</p>
+<h2>AC code</h2>
+<pre><code class="language-cpp">#define int long long
+
+void solve() {
+    int _;
+    cin &gt;&gt; _;
+    for (int tc = 0; tc &lt; _; ++tc) {
+        int n;
+        cin &gt;&gt; n;
+        vector&lt;int&gt; data(n), dp(n);
+        for (auto&amp; i: data) cin &gt;&gt; i;
+        auto check = [&amp;](const int v) {
+            priority_queue&lt;pair&lt;int, int&gt;, vector&lt;pair&lt;int, int&gt;&gt;, greater&lt;&gt;&gt; pq;
+            pq.emplace(0, -1);
+            int l = 0, tot = 0;
+            for (int i = 0; i &lt; n; ++i) {
+                if (pq.empty()) dp[i] = data[i];
+                else dp[i] = pq.top().first + data[i];
+                tot += data[i];
+                while (tot &gt; v) {
+                    tot -= data[l];
+                    ++l;
+                }
+                pq.emplace(dp[i], i);
+                while (!pq.empty() &amp;&amp; pq.top().second + 1 &lt; l) pq.pop();
+            }
+            while (!pq.empty()) {
+                if (pq.top().first &lt;= v) return true;
+                pq.pop();
+            }
+            return false;
+        };
+
+        int l = 0, r = 1e18;
+        while (l + 1 &lt; r) {
+            if (const int mid = l + r &gt;&gt; 1; check(mid)) r = mid;
+            else l = mid;
+        }
+        cout &lt;&lt; r &lt;&lt; endl;
+    }
+}
+</code></pre>
+<h1>E. ace5 and Task Order</h1>
+<h2>大致题意</h2>
+<p>有一个未知的数组 $a$ 和一个未知的初始值 $x$</p>
+<p>每次允许你询问一个 $i$，若</p>
+<ul>
+<li>$a_i &lt; x$，则返回 <code>&lt;</code>，且 $x \leftarrow x - 1$</li>
+<li>$a_i &gt; x$，则返回 <code>&gt;</code>，且 $x \leftarrow x + 1$</li>
+<li>$a_i = x$，则返回 <code>=</code></li>
+</ul>
+<p>要求求出原始数组</p>
+<h2>思路</h2>
+<p>因为不断轮询同一个值，必然最后 $x$ 和它相同</p>
+<p>这之后再询问别的值，可以得到它们的关系，同时再询问一次之前的那个值，就可以恢复回来</p>
+<p>可以考虑类似快排的方式进行操作即可。注意可以考虑随机函数避免被数据恶心</p>
+<h2>AC code</h2>
+<pre><code class="language-cpp">void solve() {
+    int _;
+    cin &gt;&gt; _;
+    for (int tc = 0; tc &lt; _; ++tc) {
+        int n;
+        cin &gt;&gt; n;
+        vector&lt;int&gt; pos(n + 1);
+        for (int i = 1; i &lt;= n; ++i) pos[i] = i;
+
+        auto pre = [&amp;](const int i) {
+            while (true) {
+                cout &lt;&lt; "? " &lt;&lt; i &lt;&lt; endl;
+                cout.flush();
+                char tmp;
+                cin &gt;&gt; tmp;
+                if (tmp == '=') return;
+            }
+        };
+
+        auto check = [&amp;](const int i, const int base) {
+            cout &lt;&lt; "? " &lt;&lt; i &lt;&lt; endl;
+            cout.flush();
+            char tmp, temp;
+            cin &gt;&gt; tmp;
+            cout &lt;&lt; "? " &lt;&lt; base &lt;&lt; endl;
+            cout.flush();
+            cin &gt;&gt; temp;
+            return tmp == '&lt;';
+        };
+
+        function&lt;void(int, int)&gt; qs = [&amp;](const int l, const int r) {
+            if (l &gt;= r) return;
+            swap(pos[rand() % (r - l) + l], pos[r]);
+            pre(pos[r]);
+            int c = l;
+            for (int i = l; i &lt; r; ++i) if (check(pos[i], pos[r])) swap(pos[c++], pos[i]);
+            swap(pos[c], pos[r]);
+            qs(l, c - 1);
+            qs(c + 1, r);
+        };
+        qs(1, n);
+        vector&lt;int&gt; ans(n + 1);
+        for (int i = 1; i &lt;= n; ++i) ans[pos[i]] = i;
+        cout &lt;&lt; "! ";
+        for (int i = 1; i &lt;= n; ++i) cout &lt;&lt; ans[i] &lt;&lt; " \n"[i == n];
+        cout.flush();
+    }
+}
+</code></pre>

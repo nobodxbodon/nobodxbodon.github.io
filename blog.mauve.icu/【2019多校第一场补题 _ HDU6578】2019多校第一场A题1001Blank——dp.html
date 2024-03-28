@@ -1,0 +1,194 @@
+<h2>原文：<a href="https://blog.mauve.icu/2019/07/23/acm/2019-multi-school/HDU6578-1-1001-Blank">【2019多校第一场补题 / HDU6578】2019多校第一场A题1001Blank——dp</a></h2>
+<hr/>
+<p>title: 【2019多校第一场补题 / HDU6578】2019多校第一场A题1001Blank——dp
+date: 2019-07-23 14:36:04
+categories: ACM&amp;算法
+tag:</p>
+<ul>
+<li>ACM</li>
+<li>HDU
+math: true</li>
+</ul>
+<hr/>
+<p><a href="http://acm.hdu.edu.cn/showproblem.php?pid=6578">HDU6578链接</a></p>
+<h1>题意</h1>
+<p>有一串字符串，仅由 ${0, 1, 2, 3}$ 组成，长度为 $n$，同时满足 $m$ 个条件。每个条件由三个整数组成：$l、r、x$ 表示在这个字符串的 $[l, r]$ 这个区间内，有且仅有 $x$ 个不同的字符，求问可能的组合有多少种（mod 998244353）</p>
+<h1>分析题意</h1>
+<p>因为前几天刚刚写了牛客暑期多校第二场，其中有一道题：ABBA（<a href="https://blog.csdn.net/m0_43448982/article/details/96778336">我的题解</a>）感觉有点接近，所以第一想法就是dp了。但是这道题的字符多，不能像ABBA一样压缩至一维。所以只能想想看当时牛客官方给的题解的方法了。
+考虑到之后需要判断条件是否满足，所以我第一感觉就是得定义一个超多维度的dp数组：</p>
+<pre><code class="language-c">const int MAXN = 110;
+long long dp[MAXN][MAXN][MAXN][MAXN][MAXN];
+</code></pre>
+<p>各个维度的定义如下：</p>
+<blockquote>
+<p>对于 dp[a][b][c][d][t]
+表示整个字符串长度为 t ，最后一次出现 0 的位置为 a，最后一次出现 1 的位置为 b ，最后一次出现 2 的位置为 c ，最后一次出现 3 的位置为d</p>
+</blockquote>
+<p>然后可以得到状态转移方程</p>
+<pre><code class="language-c">dp[t + 1][b][c][d][t + 1] += dp[a][b][c][d][t];
+dp[a][t + 1][c][d][t + 1] += dp[a][b][c][d][t];
+dp[a][b][t + 1][d][t + 1] += dp[a][b][c][d][t];
+dp[a][b][c][t + 1][t + 1] += dp[a][b][c][d][t];
+</code></pre>
+<p>当然这个数组肯定是没法开的，所以把 t 压缩了，变成滚动dp</p>
+<pre><code class="language-c">const int MAXN = 110;
+long long dp[MAXN][MAXN][MAXN][MAXN][2];
+</code></pre>
+<p>然后通过滚动的方式来实现。
+但是这并不是卡死这种方法的原因。
+根据上面这些，可以写出整个dp过程，大概就是这样：</p>
+<pre><code class="language-c">for (int t = 1; t &lt;= n; t++) {
+    for (int a = 0; a &lt;= t; a++)
+        for (int b = 0; b &lt;= t; b++)
+            for (int c = 0; c &lt;= t; c++)
+                for (int d = 0; d &lt;= t; d++)
+                    dp[a][b][c][d][t &amp; 1] = 0;
+    for (int a = 0; a &lt;= t; a++)
+        for (int b = 0; b &lt;= t; b++)
+            for (int c = 0; c &lt;= t; c++)
+                for (int d = 0; d &lt;= t; d++) {
+                    dp[t + 1][b][c][d][t &amp; 1] += dp[a][b][c][d][t ^ 1];
+                    dp[a][t + 1][c][d][t &amp; 1] += dp[a][b][c][d][t ^ 1];
+                    dp[a][b][t + 1][d][t &amp; 1] += dp[a][b][c][d][t ^ 1];
+                    dp[a][b][c][t + 1][t &amp; 1] += dp[a][b][c][d][t ^ 1];
+                }
+}
+</code></pre>
+<p>这个复杂的……这还没加上判断是否满足条件……
+无论是时间是还是空间上，估计都悬（时间上应该是一定过不了了）
+然后只能继续压缩。
+考虑到最后无论哪种状态下，$a, b, c, d$ 四个变量中，必定有一个且仅有一个变量的值为 t 。而且在这道题中，字符 ${0, 1, 2, 3}$ 完全等价。所以我们再压缩一维</p>
+<pre><code class="language-c">const int MAXN = 110;
+long long dp[MAXN][MAXN][MAXN][2];
+</code></pre>
+<p>此时的意义如下：</p>
+<blockquote>
+<p>对于变量 dp[x][y][z]
+表示字符 ${0, 1, 2, 3}$ 中，其中一个最后出现的位置为当前的字符最后（由于这个条件恒成立，所以并未被记录在数组中），剩下的三个字符分别出现在$x, y, z$处，且保证 $i &lt; x \leq y \leq z (i 为当前字符长度)$ （仅当 $x = y = 0$ 时满足前面一个等于号，后面的等于号同理。而字符串长度至少为1，且此时$x、y、z$均为0，所以不存在 $i = x$ 的情况。）而后面的长度为 2 的维度指代当前状态和 上一个状态（滚动dp）</p>
+</blockquote>
+<p>可以得到状态转移方程：</p>
+<pre><code class="language-c">// i 为当前字符串长度，cur 为当前状态，last 为上一个状态
+dp[x][y][z][cur] += dp[x][y][z][last];					// 加入的字符与上一个加入的字符相同
+dp[i - 1][y][z][cur] += dp[x][y][z][last];
+dp[i - 1][x][z][cur] += dp[x][y][z][last];
+dp[i - 1][x][y][cur] += dp[x][y][z][last];
+</code></pre>
+<p>得到整个 dp 过程：</p>
+<pre><code class="language-c">dp[0][0][0][0] = 1;
+int cur = 1;
+int last = 0;
+for (int i = 1; i &lt;= n; i++)
+    for (int x = 0; x &lt;= i; x++)
+        for (int y = 0; y &lt;= x; y++)
+            for (int z = 0; z &lt;= y; z++)
+                dp[x][y][z][cur] = 0;
+for (int x = 0; x &lt; i; x++)
+    for (int y = 0; y &lt;= x; y++)
+        for (int z = 0; z &lt;= y; z++) {
+            dp[x][y][z][cur] += dp[x][y][z][last];
+            dp[i - 1][y][z][cur] += dp[x][y][z][last];
+            dp[i - 1][x][z][cur] += dp[x][y][z][last];
+            dp[i - 1][x][y][cur] += dp[x][y][z][last];
+
+            dp[x][y][z][cur] %= mod;                        // 别忘了 mod
+            dp[i - 1][y][z][cur] %= mod;
+            dp[i - 1][x][z][cur] %= mod;
+            dp[i - 1][x][y][cur] %= mod;
+        }
+swap(cur, last);
+</code></pre>
+<p>考虑条件
+需要判断一个区间内是否满足有多个不同的字符
+我们可以根据区间右端为基准，当前dp的字符串长度到达一个条件的右端的时候，通过 $x、y、z$ 的值来判断是否到达了要求，如果没有则将此 dp 的赋值为0。如果懒得思考可以直接分类讨论一下就行了。虽然代码会比较长。</p>
+<h1>AC代码</h1>
+<pre><code class="language-c">#include &lt;bits/stdc++.h&gt;
+
+using namespace std;
+
+const int MAXN = 110;
+const int mod = 998244353;
+
+long long dp[MAXN][MAXN][MAXN][2];
+// dp[i][j][k] 表示上一次出现不同数字的位置分别是 i、j、k、当前位置
+
+struct Conditions {
+    int l, x;
+
+    Conditions(int ll, int xx) : l(ll), x(xx) {}
+};
+
+vector &lt;Conditions&gt; conditions[MAXN];    // 用来保存要求
+
+int main() {
+#ifdef ACM_LOCAL
+    freopen("./in.txt", "r", stdin);
+    freopen("./out.txt", "w", stdout);
+#endif
+    ios::sync_with_stdio(false);
+    int t;
+    cin &gt;&gt; t;
+    while (t--) {
+        int n, m;
+        cin &gt;&gt; n &gt;&gt; m;
+        int a, b, c;
+        for (int i = 0; i &lt; MAXN; i++) {
+            conditions[i].clear();
+        }
+        for (int i = 0; i &lt; m; i++) {
+            cin &gt;&gt; a &gt;&gt; b &gt;&gt; c;
+            conditions[b].push_back(Conditions(a, c));        // 要求按照 r 的不同来保存
+        }
+        dp[0][0][0][0] = 1;
+        int cur = 1;
+        int last = 0;
+        for (int i = 1; i &lt;= n; i++) {
+            for (int x = 0; x &lt;= i; x++) {
+                for (int y = 0; y &lt;= x; y++) {
+                    for (int z = 0; z &lt;= y; z++) {
+                        dp[x][y][z][cur] = 0;
+                    }
+                }
+            }
+            for (int x = 0; x &lt; i; x++) {
+                for (int y = 0; y &lt;= x; y++) {
+                    for (int z = 0; z &lt;= y; z++) {
+                        dp[x][y][z][cur] += dp[x][y][z][last];
+                        dp[i - 1][y][z][cur] += dp[x][y][z][last];
+                        dp[i - 1][x][z][cur] += dp[x][y][z][last];
+                        dp[i - 1][x][y][cur] += dp[x][y][z][last];
+
+                        dp[x][y][z][cur] %= mod;
+                        dp[i - 1][y][z][cur] %= mod;
+                        dp[i - 1][x][z][cur] %= mod;
+                        dp[i - 1][x][y][cur] %= mod;
+                    }
+                }
+            }
+            for (int s = 0; s &lt; conditions[i].size(); s++) {
+                for (int x = 0; x &lt; i; x++) {
+                    for (int y = 0; y &lt;= x; y++) {
+                        for (int z = 0; z &lt;= y; z++) {
+                            int cnt = 1 + (x &gt;= conditions[i][s].l ? 1 : 0) + (y &gt;= conditions[i][s].l ? 1 : 0) +
+                                      (z &gt;= conditions[i][s].l ? 1 : 0);    // 判断剩下三个位置是否满足条件
+                            if (cnt != conditions[i][s].x)
+                                dp[x][y][z][cur] = 0;
+                        }
+                    }
+                }
+            }
+            swap(cur, last);
+        }
+        long long ans = 0;                        // 求算最终答案。需要把所有的情况都加起来
+        for (int x = 0; x &lt; n; x++) {
+            for (int y = 0; y &lt;= x; y++) {
+                for (int z = 0; z &lt;= y; z++) {
+                    ans += dp[x][y][z][last];
+                    ans %= mod;
+                }
+            }
+        }
+        cout &lt;&lt; ans &lt;&lt; endl;
+    }
+    return 0;
+}
+</code></pre>

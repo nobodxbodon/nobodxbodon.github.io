@@ -1,0 +1,787 @@
+<h2>原文：<a href="https://blog.mauve.icu/2021/06/10/notebook/Computer-Graphics">计算机图形学</a></h2>
+<hr/>
+<p>title: 计算机图形学
+date: 2021-06-10 10:54:17
+categories: 学习笔记
+tag:</p>
+<ul>
+<li>学习</li>
+<li>课程</li>
+<li>计算机图形学
+math: true
+mermaid: true
+index_img: /image/notebook/Computer-Graphics/Bezier-G1.png</li>
+</ul>
+<hr/>
+<h1>相关概念</h1>
+<h2>分辨率</h2>
+<ul>
+<li>屏幕分辨率：用水平和垂直方向所能显示光点数总和的乘积表示</li>
+<li>显示分辨率：用水平和垂直方向所能显示像素点总和的乘积表示</li>
+<li>存储分辨率：指帧缓存区域的大小</li>
+</ul>
+<h3>帧缓存计算</h3>
+<p>$水平分辨率 * 垂直分辨率 * 每个像素所占用的字节$</p>
+<h1>图的表示和数据结构</h1>
+<ul>
+<li>复杂的图形通常被看作是由一些基本图形元素（图元）构成的。基本二维图元包括点、直线、圆弧、多边形、字体符号和位图等</li>
+<li>图元通常是指不可再分的独立的图形实体。一个图元中的所有像素点、直线、顶点等是作为一个整体存在的，不再细分为独立的图元。</li>
+</ul>
+<h1>基本图形生成算法</h1>
+<h2>直线生成算法</h2>
+<h3>数值微分法</h3>
+<p>定义</p>
+<p>{% raw %}
+$$\epsilon = \frac{1}{max(|\Delta x|, |\Delta y|)}$$
+{% endraw %}</p>
+<p>则递推公式为</p>
+<p>{% raw %}
+$$
+\left{
+\begin{aligned}
+x' = Math.round(x + \epsilon \cdot \Delta x) \
+y' = Math.round(y + \epsilon \cdot \Delta y)
+\end{aligned}
+\right.
+$$
+{% endraw %}</p>
+<h3>逐点比较法</h3>
+<p>略</p>
+<h3>Bresenham 直线算法</h3>
+<p>假定 $\Delta x &gt; \Delta y$</p>
+<ol>
+<li>计算得到 $\Delta x = (x_1 - x_0), \Delta y = (y_1 - y_0)$</li>
+<li>定义 $x = x_0, d = - \Delta x, y = y_0$</li>
+<li>绘制点 $(x_0, y_0)$</li>
+<li>将 $x = x + 1$</li>
+<li>将 $d = d + 2 \cdot \Delta y$</li>
+<li>若 $d &gt; 0$ 则 $d = d - 2 \cdot \Delta x, y = y + 1$</li>
+<li>绘制点 $(x, y)$</li>
+<li>若 $x \neq x_1$ 则跳到第三步</li>
+</ol>
+<h2>二次曲线生成算法</h2>
+<h3>Bresenham 整圆</h3>
+<p>按照八分法画圆，先绘制 $\frac{\pi}{2} 至 \frac{\pi}{4}$ 的圆，即下图的 $1b$ 区域</p>
+<p><img alt="draw-a-circle" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/draw-a-circle.png"/></p>
+<p>定义圆的半径 $R$，则</p>
+<ol>
+<li>定义 $d = 1 - R, x = 0, y = R$</li>
+<li>绘制点 $(x, y), (x, -y), (-x, y), (-x, -y), (y, x), (y, -x), (-y, x), (-y, -x)$</li>
+<li>$x = x + 1$</li>
+<li>若 $d &lt; 0$ 则 $d = d + 2x + 3$ 反之 $d = d + 2(x - y) + 5, y = y - 1$</li>
+<li>若 $x &lt; y$ 则返回步骤 2，否则结束</li>
+</ol>
+<h2>区域填充算法</h2>
+<h3>种子填充算法</h3>
+<p>在区域内部找到一个像素，通过在这个像素的基础上，对邻接的像素进行搜索，并将邻接的像素作为下一个种子</p>
+<h3>扫描线种子填充算法</h3>
+<p>给定的种子点开始，填充当前扫描线上种子点所在的区间，然后确定与这一区间相邻上下两条扫描线上需要填充的区间，在这些区间上取最左侧或最右侧的一个点作为新的种子点。不断重复以上过程，直至所有区间都被处理完</p>
+<ol>
+<li>初始化一个栈用来存放种子点</li>
+<li>将初始的种子放入栈中</li>
+<li>若栈为空，则结束算法</li>
+<li>取出栈上的第一个点，作为当前种子</li>
+<li>从当前种子出发，向左右两边延伸，直到遇到边界</li>
+<li>从左往右扫描这条扫描线相邻的 $y - 1$ 和 $y + 1$ 的像素，若不是边界，则将其中所有相邻线段的最右边的像素放入栈中</li>
+<li>回到第三步</li>
+</ol>
+<h3>射线法</h3>
+<p>从外部点出发，沿任意方向发射射线，若射线与多边形的交点个数为奇数，则为内部，否则为外部</p>
+<h3>弧长法</h3>
+<p>略</p>
+<h3>有效边表算法</h3>
+<p>考虑对于每一条直线 $y = kx + b$，当 $y' = y + 1$ 时， $x' = x + \frac{1}{k}$。所以求交点时，若已知一个交点 $(x, y)$，则可以通过上述公式推导出下一个交点为 $(x + \frac{1}{k}, y + 1)$</p>
+<p>所以依照上述结论，得出如下的操作（以下图为例）
+<img alt="active-edge-list-algorithm-example" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/active-edge-list-algorithm-example.png"/></p>
+<ol>
+<li>构建一个长度等于几何图形的最大高度的表格</li>
+<li>将几何图形的每一条边的最低点的 $x, y_{max}, \frac{1}{k}$ 保存进入对应的 $y_{min}$ 表格中，（这三个值的顺序可以任意交换，例如下面的所有图中的数据顺序为 $y_{max}, x, \frac{1}{k}$ ），对于每一个单元，按照 $x$ 进行从小到大排序，若 $x$ 相同，则按照 $\frac{1}{k}$ 从小到大排序。所以可以得到下面的表格
+<img alt="active-edge-list-algorithm-1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/active-edge-list-algorithm-1.png"/></li>
+<li>从最小的 $y$ 开始，不断增大 $y$，根据上一次的 $y$，计算 $y' = y + 1$ 时，每一个元素对应的 $x' = x + \frac{1}{k}$ ，对于当前的 $y$ 从第一个节点遍历到最后一个节点，若经过的节点数为奇数，则将这块区域内都进行染色，然后移除所有 $y = y_{max}$ 的数据，可以得到下图
+<img alt="active-edge-list-algorithm-2" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/active-edge-list-algorithm-2.png"/></li>
+</ol>
+<h2>字符</h2>
+<p>略</p>
+<h2>反走样技术</h2>
+<h3>形式</h3>
+<ul>
+<li>倾斜的直线和区域的边界呈阶梯状、锯齿状</li>
+<li>图像细节失真，由于离散像素的四舍五入导致了本应均匀的纹理图案变得不均匀显示</li>
+<li>很细小的线和点由于分辨率低而不能被显示出来</li>
+</ul>
+<h3>解决方法</h3>
+<ul>
+<li>超采样：以高于物理设备的分辨率完成光栅化，然后再回归到物理设备的分辨率</li>
+<li>计算线段跨越的面积，确定颜色值</li>
+</ul>
+<h1>二维观察</h1>
+<p>使用齐次坐标表示一个点的坐标</p>
+<p>{% raw %}
+$$
+\left(
+\begin{matrix}
+x &amp; y
+\end{matrix}
+\right)
+\rightarrow
+\left(
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right)
+$$
+{% endraw %}</p>
+<p>为什么使用齐次坐标系：使图形变换转化为表示图形的点集矩阵与某一变换矩阵相乘，可以借助计算机的高速运算</p>
+<h2>几何变换</h2>
+<h3>平移</h3>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+1 &amp; 0 &amp; 0 \
+0 &amp; 1 &amp; 0 \
+T_x &amp; T_y &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+x + T_x &amp; y + T_y &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<h3>比例缩放</h3>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+S_x &amp; 0 &amp; 0 \
+0 &amp; S_y &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+xS_x &amp; yS_y &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<p>或</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+1 &amp; 0 &amp; 0 \
+0 &amp; 1 &amp; 0 \
+0 &amp; 0 &amp; S
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+\frac{x}{S} &amp; \frac{y}{S} &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<h3>旋转</h3>
+<p>关于原点进行&lt;font color=red&gt;逆&lt;/font&gt;时针旋转</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+cos(\theta) &amp; sin(\theta) &amp; 0 \
+-sin(\theta) &amp; cos(\theta) &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+xcos(\theta) - ysin(\theta) &amp; xsin(\theta) + ycos(\theta) &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<p>关于原点进行&lt;font color=red&gt;顺&lt;/font&gt;时针旋转</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+cos(\theta) &amp; -sin(\theta) &amp; 0 \
+sin(\theta) &amp; cos(\theta) &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+xcos(\theta) + ysin(\theta) &amp; -xsin(\theta) + ycos(\theta) &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<h3>对称变换</h3>
+<p>关于&lt;font color=red&gt; x &lt;/font&gt;轴对称</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+1 &amp; 0 &amp; 0 \
+0 &amp; -1 &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+x &amp; -y &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<p>关于&lt;font color=red&gt; y &lt;/font&gt;轴对称</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+-1 &amp; 0 &amp; 0 \
+0 &amp; 1 &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+-x &amp; y &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<p>关于&lt;font color=red&gt; 原点 &lt;/font&gt;轴对称</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+-1 &amp; 0 &amp; 0 \
+0 &amp; -1 &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+-x &amp; -y &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<p>关于&lt;font color=red&gt; $y = x$ &lt;/font&gt;轴对称</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+0 &amp; 1 &amp; 0 \
+1 &amp; 0 &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+y &amp; x &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<p>关于&lt;font color=red&gt; $y = -x$ &lt;/font&gt;轴对称</p>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+0 &amp; -1 &amp; 0 \
+-1 &amp; 0 &amp; 0 \
+0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+-y &amp; -x &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<h3>错切变换</h3>
+<p>略</p>
+<h3>二维图形几何变换</h3>
+<p>定义</p>
+<p>{% raw %}
+$$\mathbf P  =
+\left[
+\begin{matrix}
+x_1 &amp; y_1 &amp; 1 \
+x_2 &amp; y_2 &amp; 1 \
+x_3 &amp; y_3 &amp; 1 \
+\dots \
+x_n &amp; y_n &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<p>为这个二维多边形的所有顶点的坐标矩阵，此时再乘上变换矩阵，得到最终结果</p>
+<h2>复合变换</h2>
+<h3>相对任意参考点的二维变换</h3>
+<p>先通过<a href="#%E5%B9%B3%E7%A7%BB">平移变换</a>将参考点移动至原点，然后进行变换，然后再重做<a href="#%E5%B9%B3%E7%A7%BB">平移变换</a>进行撤销一开始的变换</p>
+<h3>相对任意方向的二维变换</h3>
+<p>先通过<a href="#%E6%97%8B%E8%BD%AC">旋转变换</a>将参考点移动至原点，然后进行变换，然后再重做<a href="#%E6%97%8B%E8%BD%AC">旋转变换</a>进行撤销一开始的变换</p>
+<h2>二维观察</h2>
+<p>略</p>
+<h2>裁剪</h2>
+<h3>点的裁剪</h3>
+<p>对于点 $P(x, y)$，若满足 $x_{wl} \leq x \leq x_{wr}$ 且 $y_{wb} \leq y \leq y_{wt}$ 则在窗口内，否则在窗口外</p>
+<h3>直线的裁剪</h3>
+<h4>Cohen-Sutherland 算法</h4>
+<p>对一条直线的两个顶点进行编码</p>
+<p><img alt="Cohen-Sutherland-1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/Cohen-Sutherland-1.png"/></p>
+<p>如图，若 $x &lt; x_l$ 则 $D_0 = 1$。若 $x &gt; x_r$ 则 $D_1 = 1$。若 $y &lt; y_b$ 则 $D_2 = 1$。若 $y &gt; y_t$ 则 $D_3 = 1$
+若两个点 $p_1, p_2$ 的编码 $code_1, code_2$ 满足 $code_1 | code_2 = 0$ 则这条直线就在窗口内，若 $code_1 &amp; code_2 \neq 0$ 则这条直线可以直接抛弃掉。其他情况只需要求出这条直线和四条边的交点即可
+所以可以得到如下的流程</p>
+<ol>
+<li>输入点 $p_1, p_2$</li>
+<li>对这两个点进行编码，结果为 $code_1, code_2$</li>
+<li>若 $code_1 = 0$ 且 $code_2 = 0$ 则绘制直线 $p_1, p_2$，然后退出</li>
+<li>若 $code_1 &amp; code_2 \neq 0$ 则直接退出</li>
+<li>若 $code_1 = 0$ 则交换 $p_1, p_2$，同时交换 $code_1, code_2$</li>
+<li>若 $code_1 的 D_0 \neq 0$ 则计算直线和 $x = x_l$ 的交点，并将其赋值给 $p_1$，返回第二步</li>
+<li>若 $code_1 的 D_1 \neq 0$ 则计算直线和 $x = x_r$ 的交点，并将其赋值给 $p_1$，返回第二步</li>
+<li>若 $code_1 的 D_2 \neq 0$ 则计算直线和 $y = y_b$ 的交点，并将其赋值给 $p_1$，返回第二步</li>
+<li>若 $code_1 的 D_3 \neq 0$ 则计算直线和 $y = y_t$ 的交点，并将其赋值给 $p_1$，返回第二步</li>
+</ol>
+<p>计算交点时，可以借用比例的方式计算，例如计算与 $x = x_l$ 的交点时，可以得到</p>
+<p>{% raw %}
+$$
+\left{
+\begin{aligned}
+x' &amp; = &amp; x_l \
+y' &amp; = &amp; y_1 + (y_2 - y_1) \times (x_l - x_1) / (x_2 - x_1)
+\end{aligned}
+\right.
+$$
+{% endraw %}</p>
+<h4>中点分割算法</h4>
+<p>使用了和 <a href="#Cohen-Sutherland-%E7%AE%97%E6%B3%95">Cohen-Sutherland</a> 完全相同的编码方式，但在求解交点时略有不同。此方法包含一个“求出距离一个点最远的，且在窗口内的点”。所以分别对 $p_1, p_2$ 进行一次求解，并代替掉对方（即对于 $p_1$ 求解的答案，代替掉 $p_2$）即可，以下方法的是对 $p_1$ 进行求解的操作，对 $p_2$ 求解时，交换两个值即可</p>
+<ol>
+<li>若 $code_2 = 0$ 则返回 $p_2$</li>
+<li>求出 $p_1$ 和 $p_2$ 的中点 $p_3$</li>
+<li>若 $code_3 = 0$ 则用 $p_3$ 代替 $p_1$（仅算法内代替）</li>
+<li>若 $code_3 \neq 0$ 则若 $code_1 &amp; code_3$ 则用 $p_3$ 代替 $p_1$，反之，则用 $p_3$ 代替 $p_2$，回到第二步</li>
+</ol>
+<h4>Liang-Barsky 算法</h4>
+<ol>
+<li>计算
+{% raw %}
+$$
+\left{
+\begin{aligned}
+p_1 &amp; = &amp; -(x_2 - x_1) \
+p_2 &amp; = &amp; x_2 - x_1 \
+p_3 &amp; = &amp; -(y_2 - y_1) \
+p_4 &amp; = &amp; y_2 - y_1 \
+q_1 &amp; = &amp; x_1 - x_l \
+q_2 &amp; = &amp; x_r - x_1 \
+q_3 &amp; = &amp; y_1 - y_b \
+q_4 &amp; = &amp; y_t - y_1
+\end{aligned}
+\right.
+$$
+{% endraw %}</li>
+<li>若满足 $p1 = 0 \ AND \  (q1 &lt; 0 \ OR \ q2 &lt; 0)$ 则直线不在窗口内</li>
+<li>若满足 $p3 = 0 \ AND \  (q3 &lt; 0 \ OR \ q4 &lt; 0)$ 则直线不在窗口内</li>
+<li>准备两个数组 $pos, neg$，将 $1$ 加入到数组 $pos$ 中，将 $0$ 加入到数组 $neg$ 中</li>
+<li>若 $p1 = 0$ 则跳到第七步</li>
+<li>若 $p1 &lt; 0$ 则将 $r1$ 放入 $neg$，把 $r2$ 放入 $pos$。反之，则将 $r1$ 放入 $pos$，把 $r2$ 放入 $neg$（$r1 = q1 / p1$，$r2 = q2 / p2$，下同）</li>
+<li>若 $p3 = 0$ 则跳到第九步</li>
+<li>若 $p3 &lt; 0$ 则将 $r3$ 放入 $neg$，把 $r4$ 放入 $pos$。反之，则将 $r3$ 放入 $pos$，把 $r4$ 放入 $neg$</li>
+<li>定义 $rn1$ 为 $neg$ 中的最大值，$rn2$ 为 $pos$ 中的最小值</li>
+<li>若 $rn1 &gt; rn2$ 则直线不在窗口内</li>
+<li>得到交点为 $(x1 + p2 \times rn1, y1 + p4 \times rn1), (x1 + p2 \times rn2, y1 + p4 \times rn2)$</li>
+</ol>
+<h3>多边形的裁剪</h3>
+<h4>Sutherland-Hodgeman 算法</h4>
+<p>适合凸多边形，对于凹多边形则需要先分解为多个凸多边形</p>
+<p>对于窗口的所有边界，进行一轮裁剪，裁剪对象是多边形的所有的边。</p>
+<p>对于一个多边形，可以认为是一系列的顶点集合，顶点之间的连线即为一个多边形。沿着顶点的连线，进行如下的裁剪操作</p>
+<ul>
+<li>若从窗口内到窗口外，则输出交点 $I$</li>
+<li>若从窗口外到窗口内，则输出交点 $I$ 和到达点 $P$</li>
+<li>若从窗口内到窗口内，则输出到达点 $P$</li>
+<li>若从窗口外到窗口外，则不输出</li>
+</ul>
+<p><img alt="Sutherland-Hodgeman-1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/Sutherland-Hodgeman-1.png"/></p>
+<p>将所有输出的点连接，得到新的多边形</p>
+<p>对于窗口的所有边界都进行一次如上的操作，即可得到最终的图像，例如下图，为左边界对此多边形进行裁剪的结果</p>
+<p><img alt="Sutherland-Hodgeman-2" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/Sutherland-Hodgeman-2.png"/></p>
+<h4>Weiler-Atherton 算法</h4>
+<p>从多边形 $P_s$ 的任意一点出发，顺时针遍历所有点</p>
+<ul>
+<li>若出现从窗口外进入窗口内，则输出在窗口内的直线</li>
+<li>若一直在窗口内，则输出直线</li>
+<li>若出现从窗口内进入窗口外，则输出在窗口内的直线，并从此交点 $p_1$ 出发，顺时针的遍历窗口边界的所有点，直到找到第一个与窗口边界相交的多边形的点 $p_2$，则输出 $p_1, p_2$ 的这条路线</li>
+</ul>
+<h1>三维观察</h1>
+<h2>三维变换</h2>
+<h3>平移</h3>
+<h1>{% raw %}
+$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; z' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; z &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+1 &amp; 0 &amp; 0 &amp; 0 \
+0 &amp; 1 &amp; 0 &amp; 0 \
+0 &amp; 0 &amp; 1 &amp; 0 \
+T_x &amp; T_y &amp; T_z &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+x + T_x &amp; y + T_y &amp; z + T_z &amp; 1
+\end{matrix}
+\right]
+$$
+{% endraw %}</p>
+<h3>缩放</h3>
+<h1>$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; z' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; z &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+a &amp; 0 &amp; 0 &amp; 0 \
+0 &amp; e &amp; 0 &amp; 0 \
+0 &amp; 0 &amp; i &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+ax &amp; ey &amp; iz &amp; 1
+\end{matrix}
+\right]
+$$</p>
+<h3>旋转</h3>
+<p>将右手大拇指指向旋转轴的正方向，然后四个手指的弯曲方向即为正旋转方向</p>
+<p>绕&lt;font color=red&gt;z&lt;/font&gt;轴旋转</p>
+<h1>$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; z' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; z &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+cos \theta &amp; sin \theta &amp; 0 &amp; 0 \
+-sin \theta &amp; cos \theta &amp; 0 &amp; 0 \
+0 &amp; 0 &amp; 1 &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+xcos \theta - y sin \theta &amp; xsin \theta + ycos \theta &amp; z &amp; 1
+\end{matrix}
+\right]
+$$</p>
+<p>绕&lt;font color=red&gt;x&lt;/font&gt;轴旋转</p>
+<h1>$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; z' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; z &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+1 &amp; 0 &amp; 0 &amp; 0 \
+0 &amp;cos \theta &amp; sin \theta &amp; 0 \
+0 &amp;-sin \theta &amp; cos \theta &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+x &amp; ycos \theta - zsin \theta &amp; zsin \theta + zcos \theta &amp; 1
+\end{matrix}
+\right]
+$$</p>
+<p>绕&lt;font color=red&gt;y&lt;/font&gt;轴旋转</p>
+<h1>$$
+\left[
+\begin{matrix}
+x' &amp; y' &amp; z' &amp; 1
+\end{matrix}
+\right]</h1>
+<h1>\left[
+\begin{matrix}
+x &amp; y &amp; z &amp; 1
+\end{matrix}
+\right]
+\left[
+\begin{matrix}
+cos \theta &amp; 0 &amp; -sin \theta &amp; 0 \
+0 &amp; 1 &amp; 0 &amp; 0 \
+sin \theta &amp; 0 &amp; cos \theta &amp; 0 \
+0 &amp; 0 &amp; 0 &amp; 1
+\end{matrix}
+\right]</h1>
+<p>\left[
+\begin{matrix}
+zsin \theta + xcos \theta &amp; y &amp; zcos \theta - xsin \theta &amp; 1
+\end{matrix}
+\right]
+$$</p>
+<h2>三维投影</h2>
+<h3>投影类型</h3>
+<ul>
+<li>透视投影<ul>
+<li>一点透视</li>
+<li>两点透视</li>
+<li>三点透视</li>
+</ul>
+</li>
+<li>正投影</li>
+<li>斜投影</li>
+</ul>
+<h3>三维投影变换</h3>
+<p>略</p>
+<h1>曲线与曲面</h1>
+<h2>概念</h2>
+<ul>
+<li>拟合：对已经存在的离散点列构造出尽可能光滑的曲线或曲面，用以直观（而忠实）地反映出实验特性、变化规律和趋势等。</li>
+<li>插值：通过所有的特征点</li>
+<li>逼近：不通过或部分通过特征点，并在整体上接近这些特征点</li>
+</ul>
+<h2>连续性条件</h2>
+<h3>参数连续</h3>
+<ul>
+<li>C0 连续：交点处的两条曲线段相交</li>
+<li>C1 连续：交点处的两条曲线段相交，且此点的一阶导函数值相同</li>
+<li>C2 连续：交点处的两条曲线段相交，且此点的一阶和二阶导函数都相同</li>
+</ul>
+<h3>几何连续</h3>
+<ul>
+<li>G0 连续：交点处的两条曲线段相交</li>
+<li>G1 连续：交点处的两条曲线段相交，且此点的一阶导函数值成比例</li>
+<li>G2 连续：交点处的两条曲线段相交，且此点的一阶和二阶导函数都成比例</li>
+</ul>
+<h2>三次样条（二维）</h2>
+<p>对于 $n$ 个点，用 $n - 1$ 条曲线连接，对于每一条直线看，可以用一个三阶函数表示，所以得到
+$$
+\left{
+\begin{aligned}
+f_1(x) &amp; = a_1 + b_1x + c_1x^2 + d_1x^3 &amp; x \in [x_0, x_1] \
+f_2(x) &amp; = a_2 + b_2x + c_2x^2 + d_2x^3 &amp; x \in [x_1, x_2] \
+f_3(x) &amp; = a_3 + b_3x + c_3x^2 + d_3x^3 &amp; x \in [x_2, x_3] \
+\dots \
+f_n(x) &amp; = a_n + b_nx + c_nx^2 + d_nx^3 &amp; x \in [x_{n - 1}, x_n]
+\end{aligned}
+\right.
+$$</p>
+<p>则对于所有的曲线，由于所有曲线必须保证 G0 连续，所以可以得到如下等式</p>
+<p>$$
+\left{
+\begin{aligned}
+f_0(x_0) &amp; = &amp; &amp; &amp; y_0 \
+f_1(x_1) &amp; = &amp; f_0(x_1) &amp; = &amp; y_1 \
+f_2(x_2) &amp; = &amp; f_1(x_2) &amp; = &amp; y_2 \
+\dots \
+f_n(x_n) &amp; = &amp; f_{n - 1}(x_n) &amp; = &amp; y_n \
+\end{aligned}
+\right.
+$$</p>
+<p>又为了保证 G1 连续，则可以得到他们的导数相同</p>
+<p>$$
+\left{
+\begin{aligned}
+f_1'(x_1) &amp; = &amp; f_0'(x_1) \
+f_2'(x_2) &amp; = &amp; f_1'(x_2) \
+f_3'(x_3) &amp; = &amp; f_2'(x_3) \
+\dots \
+f_n'(x_n) &amp; = &amp; f_{n - 1}'(x_n) \
+\end{aligned}
+\right.
+$$</p>
+<p>为了保证 G2 连续，则他们的导数的导数相同，所以还可以得到</p>
+<p>$$
+\left{
+\begin{aligned}
+f_1''(x_1) &amp; = &amp; f_0''(x_1) \
+f_2''(x_2) &amp; = &amp; f_1''(x_2) \
+f_3''(x_3) &amp; = &amp; f_2''(x_3) \
+\dots \
+f_n''(x_n) &amp; = &amp; f_{n - 1}''(x_n) \
+\end{aligned}
+\right.
+$$</p>
+<p>由此，可以计算出所有的参数</p>
+<h2>Bézier 曲线</h2>
+<p>$$P(t) = \sum^n_{k=0}P_kBEN_{k, n}, t \in [0, 1]$$</p>
+<p>$$BEN_{k, n}(t) = \frac{n!}{k!(n - k)!}t^k(1 - t)^{n - k} = C^k_nt^k(1 - t) ^ {n - k}$$</p>
+<h3>一阶导数</h3>
+<p>$$P'(0) = n(P_1 - P_0)$$</p>
+<p>$$P'(1) = n(P_n - P_{n - 1})$$</p>
+<h3>二阶导数</h3>
+<p>$$P''(0) = n(n - 1)((P_2 - P_1) - (P_1 - P_0))$$</p>
+<p>$$P''(1) = n(n - 1)((P_{n - 2} - P_{n - 1}) - (P_{n - 1} - P_n))$$</p>
+<h3>对称性</h3>
+<p>颠倒控制顶点，Bézier 曲线仍然保持，走向相反</p>
+<h3>凸包性</h3>
+<p>略</p>
+<h3>几何不变性</h3>
+<p>Bézier 曲线与坐标轴无关</p>
+<h3>G1 连续</h3>
+<p>由于一阶导数可知，若需要满足 G1 连续，则必须要满足第一条曲线的最后两个控制点和第二条曲线的开始两个控制点在同一条直线上，且保证不在同一侧，即</p>
+<p><img alt="Bezier-G1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/blog.mauve.icu/source/image/notebook/Computer-Graphics/Bezier-G1.png"/></p>
+<p>$$(P_n - P_{n - 1}) = \alpha (Q_1 - Q_0')$$</p>
+<h3>G2 连续</h3>
+<p>$$((P_{n - 2} - P_{n - 1}) - (P_{n - 1} - P_n)) = \beta ((Q_2 - Q_1) - (Q_1 - Q_0))$$</p>
+<h1>消隐</h1>
+<h2>z-buffer</h2>
+<p>向 z 轴的负方向作为观察方向，以其 z 轴的大小作为深度值，保存每一个像素的颜色值和深度值，当此像素被再次覆盖时，若新的深度比之前保存的大，则用新的深度和颜色覆盖之前的值，否则不更换</p>
+<h2>画家算法</h2>
+<p>将物品从远到近排列，先绘制远处的图形，再由近处的图形进行覆盖</p>
+<h2>光线投射算法</h2>
+<p>对于屏幕上的每一个像素点，构造一条模拟视线的射线，由射线的交点来确定深度最大的点</p>
+<h1>光照</h1>
+<h2>光照模型</h2>
+<p>用于物体表面采样点处光强度的计算</p>
+<h2>明暗处理</h2>
+<h3>恒定光强的多边形绘制</h3>
+<p>取一个平面内的任意一个点的光强来表示整个平面的光强</p>
+<p>计算量非常小，粗糙，亮度变化大，出现马赫带效应</p>
+<h3>Gouraud</h3>
+<p>根据多边形在顶点处的光强，线性插值求出平面内其他点的光强</p>
+<p>计算量小，算法简单，出现马赫带效应，对镜面反射效果不佳</p>
+<h3>Phong</h3>
+<p>根据多边形在顶点处的法向量，线性插值求出平面内其他点的法向量</p>
+<p>计算量大，效果好，精度高</p>
+<h2>光线跟踪算法</h2>
+<p>基于几何光学原理，模拟光的传播路径来确定反射、折射和阴影。通过“过采样”的方式，实现反走样</p>

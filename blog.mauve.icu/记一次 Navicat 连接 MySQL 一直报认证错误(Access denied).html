@@ -1,0 +1,64 @@
+<h2>原文：<a href="https://blog.mauve.icu/2021/01/02/develop-note/mysql-reset">记一次 Navicat 连接 MySQL 一直报认证错误(Access denied)</a></h2>
+<hr/>
+<p>title: 记一次 Navicat 连接 MySQL 一直报认证错误(Access denied)
+date: 2021-01-02 00:38:39
+categories: 杂项
+tag:</p>
+<ul>
+<li>MySQL</li>
+<li>短笔记</li>
+</ul>
+<hr/>
+<p><em>今天一时兴起，想在 WSL2 里下个 MySQL。方法也很简单，直接 <code>sudo apt install mysql-server</code></em>
+<em>本来以为顺风顺水，结果却在 Navicat 连接 MySQL 的操作上出事了</em></p>
+<h3>问题</h3>
+<p>Navicat 无法连接上 MySQL</p>
+<h3>配置情况</h3>
+<p>Navicat Premium 15.0.19
+MySQL 8.0.22
+WSL2(Ubuntu 20)</p>
+<h3>现状</h3>
+<p>终端可以通过<code>sudo mysql</code>连上 MySQL
+终端不可以通过<code>mysql -u root -p</code>的方式连接，显示密码错误(<code>Access denied for user 'root'@'localhost'</code>)
+终端可以通过默认用户连接(默认用户为 <code>/etc/mysql/debian.cnf</code> 文件中的 <code>debian-sys-maint</code>，密码为安装MySQL时随机生成得到的)
+Navicat不可以通过直接连接或者通过 ssh 的方式连接，显示密码错误(<code>Access denied for user 'root'@'localhost'</code>)
+Navicat可以通过默认用户连接</p>
+<h3>经过</h3>
+<h4>尝试1</h4>
+<p>首先是尝试了百度的结果，重置 MySQL 的 root 账户的密码
+因为可以通过<code>sudo mysql</code>直接进入数据库，也就不需要那么多百度出来的奇奇怪怪的操作了
+直接进入数据库，然后尝试了下面几行代码</p>
+<pre><code class="language-mysql">use mysql;
+alter user 'root'@'localhost' identified by 'newPassword';
+exit
+</code></pre>
+<p>然后，测试<code>mysql -u root -p</code>连接——<strong>失败</strong></p>
+<h4>尝试2</h4>
+<p>后来在MySQL官网找到了重置root密码的方法，然后赶紧拿来测试
+<a href="https://dev.mysql.com/doc/refman/8.0/en/resetting-permissions.html">官网链接</a>
+其中的一点提到</p>
+<blockquote>
+<p>B.3.3.2.2 Resetting the Root Password: Unix and Unix-Like Systems</p>
+</blockquote>
+<p>大致操作就是先终止 MySQL，然后使用 MySQL 的附加参数来设置一个初始化文件，然后使得 MySQL 去运行此文件。</p>
+<p>然后，测试<code>mysql -u root -p</code>连接——<strong>失败</strong></p>
+<p>其实觉得挺奇怪的，既然都能重启 MySQL 了，说明你已经拿到这个设备的 root 权限了，为什么不直接用 <code>sudo mysql</code> 进入直接run这条命令呢？</p>
+<h4>尝试3</h4>
+<p>最终我在一份不起眼的博客上找到了解决方案
+<a href="https://phoenixnap.com/kb/access-denied-for-user-root-localhost">博客连接</a>
+其中提到了一个很重要的命令</p>
+<pre><code class="language-mysql">ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'insert_password';
+</code></pre>
+<blockquote>
+<p>This command changes the password for the user root and sets the authentication method to mysql_native_password. This is a traditional method for authentication, and it is not as secure as auth_plugin.</p>
+</blockquote>
+<p>其中的<code>mysql_native_password</code>是所谓的传统验证方案，也就是 Navicat 连接 MySQL 的解决方案</p>
+<p>然后将方案1的命令稍作改正得到</p>
+<pre><code class="language-mysql">use mysql;
+alter user 'root'@'localhost' identified with mysql_native_password by 'newPassword';
+exit
+</code></pre>
+<p>然后，测试<code>mysql -u root -p</code>连接——<strong>成功！</strong></p>
+<h3>后续</h3>
+<p>mysql5.8开始将caching_sha2_password作为默认的身份验证插件，该caching_sha2_password和 sha256_password认证插件提供比mysql_native_password插件更安全的密码加密 ，并 caching_sha2_password提供了比更好的性能sha256_password。由于这些优越的安全性和性能特性 caching_sha2_password它是MySQL 8.0首选的身份验证插件，而且也是默认的身份验证插件而不是 mysql_native_password。此更改会影响服务器和libmysqlclient 客户端库；&lt;font color=red&gt;目前来说和经常使用的客户端软件兼容性不好&lt;/font&gt;。</p>
+<p>这也是导致目前 Navicat 无法连接到 MySQL 5.8及以后版本的原因。当然如此操作后的影响便是无法直接使用<code>sudo mysql</code>的方式连接到数据库，只能通过 <code>mysql -u root -p</code>的传统密码验证的方式来登陆</p>

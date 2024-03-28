@@ -1,0 +1,235 @@
+<h2>原文：<a href="https://blog.mauve.icu/2021/10/13/cpp/Strassen">Strassen算法代码</a></h2>
+<hr/>
+<p>title: Strassen算法代码
+date: 2021-10-13 21:52:28
+categories: 学习&amp;开发&amp;实现
+tag:</p>
+<ul>
+<li>C++</li>
+<li>线程池</li>
+</ul>
+<hr/>
+<p><strong>本文仅代码，无理论解释</strong></p>
+<p>实话实说，我觉得这个算法在C系列的语言下，简直垃圾到爆炸……毕竟是一群完全不懂程序数学家对着纸弄出来的，看起来好像非常的有用，实际上耗时是非常爆炸的。</p>
+<p>但是《算法导论》里有啊……然后上课又要求手写一个</p>
+<p>于是我就手写了一个……我尽可能的减少使用的空间同时加快速度了，而且是通过递归实现 Strassen 算法</p>
+<p>其中，in.txt 已经预先准备了 3000000 个范围在 0-100 随机数，避免程序在运算过程中爆 int（虽然完全可以取1000）</p>
+<pre><code class="language-cpp">/**
+ * Created by Mauve on 3/29/2020.
+ * Copyright © 2020 Mauve, All Rights Reserved
+ */
+
+#include &lt;bits/stdc++.h&gt;
+
+using namespace std;
+
+/**
+ * 矩阵相乘
+ * 最终结果耗时结果保存至
+ * https://www.desmos.com/calculator/gl4tm5i1zu
+ */
+
+struct mat {
+    unsigned row, col;
+
+    mat(unsigned r, unsigned c) : row(r), col(c) {}
+
+    virtual int &amp;pos_ref(unsigned i, unsigned j) = 0;
+
+    virtual int pos(unsigned i, unsigned j) const = 0;
+};
+
+struct base_mat;
+struct sub_mat;
+
+stack&lt;sub_mat *&gt; sub_data;
+
+struct base_mat : mat {
+    int *data;
+
+    base_mat(unsigned r, unsigned c) : mat(r, c), data(new int[row * col]) {}
+
+    ~base_mat() {
+        delete[] data;
+    }
+
+    inline int &amp;pos_ref(unsigned i, unsigned j) override {
+        return *(data + i * col + j);
+    }
+
+    inline int pos(unsigned i, unsigned j) const override {
+        return *(data + i * col + j);
+    }
+};
+
+unsigned min_mul;
+
+struct sub_mat : mat {
+    mat *a, *b;
+    bool is_add;
+    unsigned offset_ai, offset_aj, offset_bi, offset_bj;
+
+    explicit sub_mat(mat *data) : mat(data-&gt;row, data-&gt;col), a(data), b(nullptr),
+                                  is_add(false), offset_ai(0), offset_aj(0),
+                                  offset_bi(0), offset_bj(0) { sub_data.push(this); }
+
+    sub_mat(mat *data, bool of_i, bool of_j) : mat(data-&gt;row &gt;&gt; 1u, data-&gt;col &gt;&gt; 1u), a(data), b(nullptr),
+                                               is_add(false), offset_ai(of_i ? data-&gt;row &gt;&gt; 1u : 0),
+                                               offset_aj(of_j ? data-&gt;col &gt;&gt; 1u : 0),
+                                               offset_bi(0), offset_bj(0) { sub_data.push(this); }
+
+    inline int &amp;pos_ref(unsigned i, unsigned j) override {
+        assert(b == nullptr);
+        return a-&gt;pos_ref(i + offset_ai, j + offset_aj);
+    }
+
+    inline int pos(unsigned i, unsigned j) const override {
+        if (b == nullptr)
+            return a-&gt;pos(i + offset_ai, j + offset_aj);
+        return a-&gt;pos(i + offset_ai, j + offset_aj) + (is_add ? 1 : -1) * b-&gt;pos(i + offset_bi, j + offset_bj);
+    }
+
+    inline sub_mat *operator+(sub_mat &amp;other) {
+        auto res = new sub_mat(this);
+        res-&gt;b = &amp;other;
+        res-&gt;is_add = true;
+        return res;
+    }
+
+    inline sub_mat *operator-(sub_mat &amp;other) {
+        auto res = new sub_mat(this);
+        res-&gt;b = &amp;other;
+        res-&gt;is_add = false;
+        return res;
+    }
+
+    mat *operator*(sub_mat &amp;other) {
+        assert(col == other.row);
+        auto res = new base_mat(row, other.col);
+        if (col &amp; 1u || row &amp; 1u || other.col &amp; 1u || col &lt;= min_mul || row &lt;= min_mul || other.col &lt;= min_mul) {
+            memset(res-&gt;data, 0, sizeof(int) * res-&gt;row * res-&gt;col);
+            for (int k = 0; k &lt; col; k++)
+                for (int i = 0; i &lt; row; ++i)
+                    for (int j = 0; j &lt; other.col; ++j)
+                        res-&gt;pos_ref(i, j) += pos(i, k) * other.pos(k, j);
+        } else {
+            size_t sub_data_size = sub_data.size();
+#define a(i, j) (*new sub_mat(this, i == 2 , j == 2))
+#define b(i, j) (*new sub_mat(&amp;other, i == 2 , j == 2))
+            auto m1 = *(a(1, 1) + a(2, 2)) * *(b(1, 1) + b (2, 2));
+            auto m2 = *(a(2, 1) + a(2, 2)) * b(1, 1);
+            auto m3 = a(1, 1) * *(b(1, 2) - b(2, 2));
+            auto m4 = a(2, 2) * *(b(2, 1) - b(1, 1));
+            auto m5 = *(a(1, 1) + a(1, 2)) * b(2, 2);
+            auto m6 = *(a(2, 1) - a(1, 1)) * *(b(1, 1) + b(1, 2));
+            auto m7 = *(a(1, 2) - a(2, 2)) * *(b(2, 1) + b(2, 2));
+#undef a
+#undef b
+            unsigned half_row = row &gt;&gt; 1u, half_col = col &gt;&gt; 1u;
+#define m(t) (m##t-&gt;pos(i, j))
+            // C11
+            for (unsigned i = 0; i &lt; half_row; ++i)
+                for (unsigned j = 0; j &lt; half_col; ++j)
+                    res-&gt;pos_ref(i, j) = m(1) + m(4) - m(5) + m(7);
+            // C12
+            for (unsigned i = 0; i &lt; half_row; ++i)
+                for (unsigned j = 0; j &lt; half_col; ++j)
+                    res-&gt;pos_ref(i, j + half_col) = m(3) + m(5);
+            // C21
+            for (unsigned i = 0; i &lt; half_row; ++i)
+                for (unsigned j = 0; j &lt; half_col; ++j)
+                    res-&gt;pos_ref(i + half_row, j) = m(2) + m(4);
+            // C22
+            for (unsigned i = 0; i &lt; half_row; ++i)
+                for (unsigned j = 0; j &lt; half_col; ++j)
+                    res-&gt;pos_ref(i + half_row, j + half_col) = m(1) - m(2) + m(3) + m(6);
+#undef m
+            delete dynamic_cast&lt;base_mat *&gt;(m1);
+            delete dynamic_cast&lt;base_mat *&gt;(m2);
+            delete dynamic_cast&lt;base_mat *&gt;(m3);
+            delete dynamic_cast&lt;base_mat *&gt;(m4);
+            delete dynamic_cast&lt;base_mat *&gt;(m5);
+            delete dynamic_cast&lt;base_mat *&gt;(m6);
+            delete dynamic_cast&lt;base_mat *&gt;(m7);
+            while (sub_data.size() &gt; sub_data_size) {
+                delete sub_data.top();
+                sub_data.pop();
+            }
+        }
+        return res;
+    }
+};
+
+unsigned N = 2;
+
+void solve() {
+    cerr &lt;&lt; "N = " &lt;&lt; N &lt;&lt; endl;
+    base_mat a(N, N), b(N, N);
+    for (int i = 0; i &lt; N; ++i)
+        for (int j = 0; j &lt; N; ++j)
+            cin &gt;&gt; a.pos_ref(i, j);
+    for (int i = 0; i &lt; N; ++i)
+        for (int j = 0; j &lt; N; ++j)
+            cin &gt;&gt; b.pos_ref(i, j);
+
+    for (int t = 1; t &lt; min(10u, N); t += 3) {
+        auto x = new sub_mat(&amp;a), y = new sub_mat(&amp;b);
+        min_mul = t;
+
+        auto time_1 = clock();
+        auto z = *x * *y;
+        auto time_2 = clock();
+
+        cerr &lt;&lt; "t = " &lt;&lt; t &lt;&lt; " time: " &lt;&lt; double(time_2 - time_1) / CLOCKS_PER_SEC &lt;&lt; endl;
+        delete dynamic_cast&lt;base_mat *&gt;(z);
+        while (!sub_data.empty()) {
+            delete sub_data.top();
+            sub_data.pop();
+        }
+    }
+
+    auto x = new sub_mat(&amp;a), y = new sub_mat(&amp;b);
+    min_mul = 10000;
+
+    auto time_1 = clock();
+    auto z = *x * *y;
+    auto time_2 = clock();
+
+    cerr &lt;&lt; "tradition: " &lt;&lt; double(time_2 - time_1) / CLOCKS_PER_SEC &lt;&lt; endl;
+    delete dynamic_cast&lt;base_mat *&gt;(z);
+    while (!sub_data.empty()) {
+        delete sub_data.top();
+        sub_data.pop();
+    }
+    N *= 2;
+    if (N &gt;= 1000) exit(0);
+}
+
+signed main() {
+    ios_base::sync_with_stdio(false);
+    cin.tie(nullptr);
+    cout.tie(nullptr);
+#ifdef ACM_LOCAL
+    freopen("in.txt", "r", stdin);
+    freopen("out.txt", "w", stdout);
+    long long test_index_for_debug = 1;
+    char acm_local_for_debug;
+    while (cin &gt;&gt; acm_local_for_debug &amp;&amp; acm_local_for_debug != '~') {
+        cin.putback(acm_local_for_debug);
+        if (test_index_for_debug &gt; 20) {
+            throw runtime_error("Check the stdin!!!");
+        }
+        auto start_clock_for_debug = clock();
+        solve();
+        auto end_clock_for_debug = clock();
+        cout &lt;&lt; "Test " &lt;&lt; test_index_for_debug &lt;&lt; " successful" &lt;&lt; endl;
+        cerr &lt;&lt; "Test " &lt;&lt; test_index_for_debug++ &lt;&lt; " Run Time: "
+             &lt;&lt; double(end_clock_for_debug - start_clock_for_debug) / CLOCKS_PER_SEC &lt;&lt; "s" &lt;&lt; endl;
+        cout &lt;&lt; "--------------------------------------------------" &lt;&lt; endl;
+    }
+#else
+    solve();
+#endif
+    return 0;
+}
+</code></pre>
