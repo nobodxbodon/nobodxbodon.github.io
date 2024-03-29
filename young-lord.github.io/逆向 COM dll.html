@@ -1,0 +1,176 @@
+<h2>原文：<a href="https://young-lord.github.io/posts/reverse-com-dll">逆向 COM dll</a></h2>
+<hr/>
+<p>tags: [Windows, 逆向, 网络安全]
+title: 逆向 COM dll
+slug: reverse-com-dll</p>
+<h2>last_modified_at: 2024-1-17</h2>
+<h2>关键词</h2>
+<p>ASP Server.CreateObject, COM reverse engineering</p>
+<h2>本文附件</h2>
+<p><a href="https://github.com/Young-Lord/Young-Lord.github.io/releases/download/assets/PwdInfo.dll">PwdInfo.dll</a></p>
+<p><a href="https://www.softpedia.com/get/System/System-Info/COMView.shtml">COMView</a></p>
+<p><a href="https://www.52pojie.cn/thread-1859777-1-1.html">火绒剑</a> / <a href="https://learn.microsoft.com/zh-cn/sysinternals/downloads/procmon">Procmon</a></p>
+<p>IDA Pro</p>
+<p><a href="https://github.com/x64dbg/x64dbg/releases/latest">x64dbg</a></p>
+<p><a href="https://gnuwin32.sourceforge.net/packages/file.htm">File for Windows</a></p>
+<p>New Bing （有Windows API问题直接问就行）</p>
+<h2>开始之前</h2>
+<p>首先注册一下dll：<code>regsvr32 PwdInfo.dll</code></p>
+<p>准备好Visual Studio 2022，选中“使用C++的桌面开发”，并选择<code>MSVC v143 - VS2022 C++ x64/x86 生成工具</code>、<code>Windows 11 SDK</code>、<code>适用于最新 v143 生成工具的 C++ ATL (x86 和 x64)</code></p>
+<p>开启<code>Developer PowerShell for VS 2022</code>，注意用<code>Hostx86\x86\cl.exe</code>或者<code>Hostx86\x64\cl.exe</code>，这样产生的32位exe才可以调用32位的dll。具体可以用file查看：</p>
+<pre><code class="lang-console">/mnt/e$ file PwdInfo.dll test.exe
+PwdInfo.dll: PE32 executable (DLL) (GUI) Intel 80386, for MS Windows
+test.exe:    PE32 executable (console) Intel 80386, for MS Windows
+</code></pre>
+<h2>正文</h2>
+<h3>COMView</h3>
+<p><code>File</code> -&gt; <code>Load Type Library</code>， 选择<code>PwdInfo.dll</code>，可以找到包含的函数、各个函数参数及返回值。</p>
+<h3>调用</h3>
+<p>注意先<a href="https://stackoverflow.com/questions/3898287/c-include-atlbase-h-is-not-found">安装相关库</a>。具体名称搜索ATL把看着像的装了就行。</p>
+<p>如果无法加载COM dll，可以用火绒剑或Procmon看一下注册表访问，看看是不是没有注册或者参数打错了。</p>
+<pre><code class="lang-cpp">// cl /Zi /Od /DEBUG:FULL -IE:\VisualStudio\2022\BuildTools\VC\Tools\MSVC\14.16.27023\atlmfc\lib\x86 -IE:\VisualStudio\2022\BuildTools\VC\Tools\MSVC\14.38.33130\atlmfc\include /EHsc .\test.cpp /link /libpath:"E:\VisualStudio\2022\BuildTools\VC\Tools\MSVC\14.16.27023\atlmfc\lib\x86" atls.lib /DEBUG:FULL ; .\test.exe
+#pragma comment(lib, "Ole32.lib")
+#include &lt;Windows.h&gt;
+#include &lt;objbase.h&gt;
+#include &lt;combaseapi.h&gt;
+#include &lt;comdef.h&gt;
+#include &lt;iostream&gt;
+#include &lt;atlbase.h&gt;
+
+using std::cin;
+using std::cout;
+using std::endl;
+
+// failfast macro with a function name if hr failed
+#define FAIL_FAST(name)                                             \
+    if (FAILED(hr))                                                 \
+    {                                                               \
+        cout &lt;&lt; "FAIL_FAST: " &lt;&lt; #name &lt;&lt; " failed " &lt;&lt; hr &lt;&lt; endl; \
+        return 0;                                                   \
+    }                                                               \
+    else                                                            \
+    {                                                               \
+        cout &lt;&lt; #name &lt;&lt; " success" &lt;&lt; endl;                        \
+    }
+
+#define FAIL_FAST_IF_NULL(name)                                     \
+    if (name == NULL)                                               \
+    {                                                               \
+        cout &lt;&lt; "FAIL_FAST: " &lt;&lt; #name &lt;&lt; " is NULL" &lt;&lt; endl;       \
+        return 0;                                                   \
+    }                                                               \
+    else                                                            \
+    {                                                               \
+        cout &lt;&lt; #name &lt;&lt; " success" &lt;&lt; endl;                        \
+    }
+
+#define WAIT_FOR_ENTER                        \
+    {                                         \
+        cout &lt;&lt; "press enter to continue..."; \
+        std::getchar();                       \
+    }
+
+struct CoInitHelper
+{
+    CoInitHelper() { CoInitialize(NULL); }
+    ~CoInitHelper() { CoUninitialize(); }
+};
+
+int main()
+{
+    CoInitHelper coInitGuard;
+    {
+        HRESULT hr;
+        CLSID clsid;
+        // hr = CLSIDFromString(L"{410C6850-4C6F-11D4-8654-0000E8E6E355}", &amp;clsid);
+        // FAIL_FAST(CLSIDFromString);
+        hr = CLSIDFromProgID(L"PwdInfo.Password", &amp;clsid);
+        FAIL_FAST(CLSIDFromProgID);
+
+        IDispatch *pOR;
+        hr = CoCreateInstance(clsid, NULL, CLSCTX_INPROC_SERVER, IID_IDispatch, (void **)&amp;pOR);
+        FAIL_FAST(CoCreateInstance);
+
+        DISPID PropertyID[1] = {0};
+        BSTR PropName[1];
+
+        PropName[0] = SysAllocString(L"UnLockPwd");
+        hr = pOR-&gt;GetIDsOfNames(IID_NULL, PropName, 1, LOCALE_USER_DEFAULT, PropertyID);
+        FAIL_FAST(GetIDsOfNames);
+
+        // unlockpwd
+        BSTR account = SysAllocString(L"1234567");
+        BSTR pwd = SysAllocString(L"123456");
+
+        DISPPARAMS dp = {NULL, NULL, 0, 0};
+        VARIANT vResult;
+        EXCEPINFO ei;
+        UINT uArgErr;
+
+        // Allocate memory for the arguments array
+        dp.rgvarg = new VARIANT[2];
+        if (dp.rgvarg == NULL)
+            return E_OUTOFMEMORY;
+
+        // Set the number of arguments
+        dp.cArgs = 2;
+
+        // Initialize the arguments as empty variants
+        VariantInit(&amp;dp.rgvarg[0]);
+        VariantInit(&amp;dp.rgvarg[1]);
+
+        // Set the arguments as BSTRs
+        dp.rgvarg[0].vt = VT_BSTR;
+        dp.rgvarg[0].bstrVal = pwd;
+        dp.rgvarg[1].vt = VT_BSTR;
+        dp.rgvarg[1].bstrVal = account;
+
+        // Initialize the result as an empty variant
+        VariantInit(&amp;vResult);
+
+        // Call the function using Invoke
+        WAIT_FOR_ENTER
+        hr = pOR-&gt;Invoke(PropertyID[0], IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, &amp;dp, &amp;vResult, &amp;ei, &amp;uArgErr);
+        FAIL_FAST(Invoke);
+        WAIT_FOR_ENTER
+
+        // Free the memory for the arguments array
+        delete[] dp.rgvarg;
+
+        // Convert the BSTR to a char*
+        char *strResult;
+
+        // hr = VariantChangeType(&amp;vResult, &amp;vResult, 0, VT_BSTR);
+        // FAIL_FAST(VariantChangeType);
+
+        strResult = _com_util::ConvertBSTRToString(vResult.bstrVal);
+        FAIL_FAST_IF_NULL(strResult)
+
+        // Use the char* result
+        cout &lt;&lt; "result: " &lt;&lt; strResult &lt;&lt; endl;  // 812121
+
+        // Free the memory for the BSTR and the char*
+        delete[] strResult;
+        VariantClear(&amp;vResult);
+    }
+}
+</code></pre>
+<h3>Python调用</h3>
+<blockquote><p>出现了，胶水语言！</p>
+</blockquote>
+<pre><code class="lang-python"># pip install pywin32
+import win32com.client
+# com_error: (-2147221164, '没有注册类', None, None)  说明你的 Python 位数不对，本文提供的是 32 位的，则 Python 也应该是 32 位
+# com_error: (-2147221005, '无效的类字符串', None, None)  则是 32 位也没有注册，需要用 regsvr32 注册一下
+PwdInfo = win32com.client.DispatchEx("PwdInfo.Password")
+# win32com.client.gencache.EnsureDispatch
+# 上面这种写法会报：TypeError: This COM object can not automate the makepy process - please run makepy manually for this object
+# 换成下面这个就好了
+assert PwdInfo.UnLockPwd("1234567", "123456") == PwdInfo.UnLockPwd(1234567, "123456") == "812121"
+# 入参类型貌似会自动转换，没有找到相关文档
+</code></pre>
+<h3>动态调试</h3>
+<p>直接在Invoke前打断点，然后把传入参数所在内存打读写断点，一直跟踪就行。</p>
+<h2>参考资料</h2>
+<p><a href="https://reverseengineering.stackexchange.com/questions/2530/what-are-general-guide-lines-for-reversing-com-objects">windows - What are general guide lines for reversing COM objects - Reverse Engineering Stack Exchange</a></p>
+<p><a href="https://web.archive.org/web/20200214043713/http://www.woodmann.com/collaborative/tools/index.php/Category:COM_Tools">Category:COM Tools - Collaborative RCE Tool Library</a></p>

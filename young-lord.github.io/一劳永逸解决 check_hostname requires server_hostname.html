@@ -1,0 +1,58 @@
+<h2>原文：<a href="https://young-lord.github.io/posts/pip-proxy-issue">一劳永逸解决 check_hostname requires server_hostname</a></h2>
+<hr/>
+<p>tags: [Python, bugfix]
+title: 一劳永逸解决 check_hostname requires server_hostname
+last_modified_at: 2023-8-29
+slug: pip-proxy-issue
+redirect_from:</p>
+<h2>  - /posts/一劳永逸解决check_hostname-requires-server_hostname</h2>
+<h2>注意</h2>
+<p>对于<code>urllib3</code>等包，<code>pip</code>内自己存了一份，所以以下两个文件可能均需更改：</p>
+<pre><code class="lang-plain">C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python310\Lib\site-packages\pip\_vendor\urllib3\poolmanager.py
+C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python310\Lib\site-packages\urllib3\poolmanager.py
+</code></pre>
+<h2>TLDR</h2>
+<p>找到<code>urllib3/poolmanager.py</code>的第<code>477</code>行，如下更改。</p>
+<p><img alt="修改代码的截图" src="https://i.loli.net/2021/11/20/PE39FLv8W6Zszeo.png"/></p>
+<p>也就是，在<code>proxy = parse_url(proxy_url)</code>前添加这段代码：</p>
+<pre><code class="lang-python">proxy_url = proxy_url.replace("https://", "http://")
+</code></pre>
+<h2>缘起</h2>
+<p>想必任何一个开着代理用 pip 的 Windows 用户都见过以下画面：</p>
+<p><img alt="下载包时出现异常" src="https://i.loli.net/2021/11/20/5BMCkKNAuhYvE43.png"/></p>
+<p><img alt="搜索结果，大部分为重复内容" src="https://i.loli.net/2021/11/20/CUHBjOkQPqTdXo6.png"/></p>
+<p>不幸的是，全世界都遇到了这个问题，但（除了降级）唯一的解决方案是：</p>
+<p><strong>关 闭 代 理</strong></p>
+<p>不是，你 TM 不会每次用 pip 就关代理关完再开吧？？？真有人这么傻？</p>
+<p>好在 Python 是解释性语言，改了代码就能跑，所以——</p>
+<h2>开干</h2>
+<p><strong>警告：以下内容涉及到更改 Python 基础库的操作，可能导致包括但不限于设备爆炸在内的问题，如不想继续请自行退出</strong></p>
+<p>上一步里，我们看到<code>raise ValueError</code>，那就定位到<code>C:\Users\%USERNAME%\appdata\local\programs\python\python38\lib\ssl.py</code>的<code>997行</code>：</p>
+<p><img alt="代码截图" src="https://i.loli.net/2021/11/20/hEYJlZM9KFfaAoR.png"/></p>
+<p>很明显，<code>check_hostname</code>导致了这个问题，那么就把这个 if 改成：</p>
+<p>（<strong>注意：各位先不用更改此处，具体原因看后文</strong>）</p>
+<pre><code class="lang-python">        if context.check_hostname and not server_hostname:
+            # raise ValueError("check_hostname requires server_hostname")
+            context.check_hostname = False
+            # Fixed by LY on 2021-11-20
+</code></pre>
+<p>正当觉得完成了时，你又被浇了一盆冷水：</p>
+<p><img alt="报错" src="https://i.loli.net/2021/11/20/MlhRBILQ7mpqyrn.png"/></p>
+<p>这一次，是<code>ProxyError</code>。去网上一查，你就发现，只有 http 类型的代理才能正常运行。也就是说，你要把你的代理设置改成这样：</p>
+<p><img alt="在Windows设置中的代理地址前添加http" src="https://i.loli.net/2021/11/20/21KSixgUTeJyWLv.png"/></p>
+<p>但是，这是自动配置的啊？！</p>
+<p>继续改代码，我们找到了<code>urllib3/poolmanager.py</code>的第<code>477</code>行，看起来这里是加载代理地址的</p>
+<p>既然这个只支持<code>http</code>，那就改呗：</p>
+<p><img alt="修改代码的截图" src="https://i.loli.net/2021/11/20/PE39FLv8W6Zszeo.png"/></p>
+<p>也就是，在<code>proxy = parse_url(proxy_url)</code>前添加这段代码：</p>
+<pre><code class="lang-python">proxy_url = proxy_url.replace("https://", "http://")
+</code></pre>
+<h2>尾声</h2>
+<p><img alt="pip成功在开启代理的情况下装包" src="https://i.loli.net/2021/11/20/hov3ViZl2AMCPWm.png"/></p>
+<p>至此，你终于享受到了一个开着代理也能使用 pip 的体验。</p>
+<p>这就是标题中的，“一劳永逸”。</p>
+<p>希望 CSDN，简书等垃圾平台少一些抄袭，多一些真材实料，不要只会说“关了代理就’解决‘了”，这才不是科技圈应有的样子。</p>
+<h2>关于patch</h2>
+<p>为了写这篇 blog 去复现 bug 的时候，我发现不更改<code>ssl.py</code>也不会出现问题，所以只用修改<code>poolmanager.py</code>就可以了。</p>
+<h2>参考资料</h2>
+<p><a href="https://www.cnblogs.com/davyyy/p/14388623.html">Python 遭遇 ProxyError 问题记录</a></p>

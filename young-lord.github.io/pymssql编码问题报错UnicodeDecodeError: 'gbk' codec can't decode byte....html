@@ -1,0 +1,48 @@
+<h2>原文：<a href="https://young-lord.github.io/posts/pymssql-unicode-error">pymssql编码问题报错UnicodeDecodeError: 'gbk' codec can't decode byte...</a></h2>
+<hr/>
+<p>tags: [SQL Server, Python, bugfix]
+title: "pymssql编码问题报错UnicodeDecodeError: 'gbk' codec can't decode byte..."
+slug: pymssql-unicode-error</p>
+<h2>last_modified_at: 2023-11-1</h2>
+<h2>TLDR</h2>
+<p>一言以概之，就是拿<code>pyodbc</code>换掉<code>pymssql</code>。</p>
+<h3>安装<code>msodbc</code>驱动</h3>
+<h4>Windows</h4>
+<p>首先阅读<a href="https://github.com/mkleehammer/pyodbc/wiki/Connecting-to-SQL-Server-from-Windows">此Wiki</a>了解驱动与SQL Server的版本对应关系，然后在<a href="https://learn.microsoft.com/zh-cn/sql/connect/odbc/windows/release-notes-odbc-sql-server-windows">下载页面</a>选择对应链接下载并安装驱动</p>
+<h4>Linux</h4>
+<p>自行参阅<a href="https://github.com/mkleehammer/pyodbc/wiki/Connecting-to-SQL-Server-from-Linux">此Wiki</a>及该项目Wiki中的相关文章进行驱动的安装与配置。</p>
+<h3>使用<code>pyodbc</code>替换<code>pymssql</code></h3>
+<p><code>pip install pyodbc</code>安装<code>pyodbc</code>，并将代码里的<code>pymssql</code>改为<code>pyodbc</code></p>
+<h4>连接数据库</h4>
+<p>把代码里的<code>connect</code>如下更改：</p>
+<pre><code class="lang-python">pymssql.connect(
+            server=Config.DATABASE_ADDRESS,
+            user=Config.DATABASE_USERNAME,
+            password=Config.DATABASE_PASSWORD,
+            database=Config.DATABASE_DB,
+            charset="CP936",  # mssb
+            tds_version="7.0",
+        )
+</code></pre>
+<p>改为：</p>
+<pre><code class="lang-python">{% raw %}pyodbc.connect(f'DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={Config.DATABASE_ADDRESS};DATABASE={Config.DATABASE_DB};UID={Config.DATABASE_USERNAME};PWD={Config.DATABASE_PASSWORD};TrustServerCertificate=yes'){% endraw %}
+</code></pre>
+<p>（注意，此处的<strong>18</strong>要改为你安装的驱动的版本，否则会报错）</p>
+<p>（对于Linux，你必须使用DSN配置连接信息而<strong>不能使用上面的方法</strong>，具体自行参见<a href="https://github.com/mkleehammer/pyodbc/wiki/Connecting-to-SQL-Server-from-Linux">Wiki</a>）</p>
+<h4>执行SQL</h4>
+<p>把代码里的<code>Cursor</code>对象的<code>execute</code>方法中的<code>%s</code>, <code>%d</code>等占位符全部换为<code>?</code>，即：</p>
+<pre><code class="lang-python">db.execute(
+    "insert into [aa] ([name],[value]) values (%s, %d)",
+    (name, value),
+)
+</code></pre>
+<p>改为：</p>
+<pre><code class="lang-python">db.execute(
+    "insert into [aa] ([name],[value]) values (?, ?)",
+    (name, value),
+)
+</code></pre>
+<p>完事！</p>
+<h2>其他解决方案</h2>
+<h3>更改charset参数</h3>
+<p>将<code>pymssql.connect</code>中的参数改为<code>gbk</code>/<code>gb2312</code>/<code>gb18030</code>/<code>CP936</code>可能有奇效&lt;del&gt;，但这太玄学了&lt;/del&gt;。</p>

@@ -1,0 +1,60 @@
+<h2>原文：<a href="https://young-lord.github.io/posts/allow-proc-stat">允许安卓应用访问 /proc/stat</a></h2>
+<hr/>
+<p>tags: [Android, Magisk, SELinux]
+title: 允许安卓应用访问 /proc/stat
+last_modified_at: 2022-12-21
+slug: allow-proc-stat
+redirect_from:</p>
+<h2>  - /posts/允许安卓应用访问proc_stat</h2>
+<h2>背景</h2>
+<p>Android 8.0更新后，<code>/proc/stat</code>的访问被限制，因此带来很多不便。对我来说，主要是以下两点：</p>
+<ol>
+<li>AccuBattery等监测CPU各核心使用情况的软件无法（完全）正常工作</li>
+<li>Termux中的Python中的psutil尝试访问<code>/proc/stat</code>，导致终端产生如下的大段警告信息（严格来讲，是不影响主程序的报错）</li>
+</ol>
+<pre><code class="lang-plaintext">Traceback (most recent call last):
+  File "/data/data/com.termux/files/usr/lib/python3.10/site-packages/psutil/_common.py", line 399, in wrapper
+    return cache[key]
+KeyError: (('/proc',), frozenset())
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/usr/lib/python3.10/site-packages/psutil/_pslinux.py", line 285, in &lt;module&gt;
+    set_scputimes_ntuple("/proc")
+  File "/data/data/com.termux/files/usr/lib/python3.10/site-packages/psutil/_common.py", line 401, in wrapper
+    ret = cache[key] = fun(*args, **kwargs)
+  File "/data/data/com.termux/files/usr/lib/python3.10/site-packages/psutil/_pslinux.py", line 268, in set_scputimes_ntuple
+    with open_binary('%s/stat' % procfs_path) as f:
+  File "/data/data/com.termux/files/usr/lib/python3.10/site-packages/psutil/_common.py", line 728, in open_binary
+    return open(fname, "rb", buffering=FILE_READ_BUFFER_SIZE)
+PermissionError: [Errno 13] Permission denied: '/proc/stat'
+</code></pre>
+<p>一般的解决方式执行是<code>setenforce 0</code>，也就是关闭SELinux，但这在我看来&lt;del&gt;太暴力了&lt;/del&gt;不安全且影响应用正常运行</p>
+<p>因此，本文使用Magisk注入一条SELinux规则，允许访问<code>/proc/stat</code></p>
+<h2>做法（二选一即可）</h2>
+<h3>模块</h3>
+<h4>成品（推荐）</h4>
+<p>可以在<a href="https://github.com/Young-Lord/NoProcStatRestriction/releases/download/v0.0.1/NoProcStatRestriction.zip">这里</a>直接下载、刷入。</p>
+<h4>手动编辑</h4>
+<p>创建模块、定位目录等见<a href="https://young-lord.github.io/posts/修改安卓10音量阶数">上篇博文</a>，这里不再赘述</p>
+<p>找到模块目录后，若没有<code>sepolicy.rule</code>，则新建</p>
+<p>在<code>sepolicy.rule</code>中加入如下一行：</p>
+<pre><code class="lang-plaintext">allow * proc_stat file { open read getattr }
+</code></pre>
+<h3>magiskpolicy（临时）</h3>
+<p>执行以下这条即可。</p>
+<pre><code class="lang-shell">magiskpolicy --live "allow * proc_stat file { open read getattr }"
+</code></pre>
+<p>其中<code>--live</code>表示立即生效，因此不需重启即可看到效果，但重启后失效。不加<code>--live</code>貌似没有任何效果</p>
+<h2>关于<code>*</code></h2>
+<p>为什么是<code>*</code>？根据<a href="http://aospxref.com/android-9.0.0_r61/xref/system/sepolicy/prebuilts/api/28.0/private/untrusted_app_27.te#5">相关注释</a>，用户的应用（目前）根据<code>targetSdkVersion</code>分为
+<code>untrusted_app</code>,<code>untrusted_app_25</code>,<code>untrusted_app_27</code>三类（安卓5以上才有<code>untrusted_app_25</code>，安卓8及以上才有<code>untrusted_app_27</code>），但我懒得分别写，所以就这样吧。
+要是你觉得这不好，也可以把<code>*</code>换成<code>{ untrusted_app untrusted_app_25 untrusted_app_27 }</code>，直观效果是一样的。</p>
+<p>以下是分别替换后的版本：</p>
+<pre><code class="lang-plaintext">allow { untrusted_app untrusted_app_25 untrusted_app_27 } proc_stat file { open read getattr }
+magiskpolicy --live "allow { untrusted_app untrusted_app_25 untrusted_app_27 } proc_stat file { open read getattr }"
+</code></pre>
+<h2>参考资料</h2>
+<p><a href="https://topjohnwu.github.io/Magisk/guides.html">Developer Guides | Magisk</a></p>
+<p><a href="https://www.cnblogs.com/blogs-of-lxl/p/7515023.html">Android : SELinux 简析&amp;修改 - sheldon_blogs - 博客园</a></p>

@@ -1,0 +1,139 @@
+<h2>原文：<a href="https://young-lord.github.io/posts/arcaea-crack">Arcaea 的一些破解记录</a></h2>
+<hr/>
+<p>tags: [Arcaea, 逆向, '#DISCONTINUED']
+title: Arcaea 的一些破解记录
+last_modified_at: 2023-3-18
+slug: arcaea-crack
+redirect_from:</p>
+<h2>  - /posts/Arcaea的一些破解记录</h2>
+<p><strong>免责声明：本博文相关内容已涉及 lowiro 的实际利益。本博文内容仅用于个人软件安全研究与学习。请勿将博文内容用于商业或者非法用途，如果阁下愿意继续阅读，请您承诺将为自己的全部行为负责。</strong></p>
+<p>&lt;small&gt;&lt;del&gt;[出处](https://wlt.tql.moe)&lt;/del&gt;&lt;/small&gt;</p>
+<p>本文基于Arcaea 3.7.0c（及以前的）（或许还会有以后的）版本，arm64-v8a</p>
+<h2>工具</h2>
+<h3><a href="https://hex-rays.com">IDA</a></h3>
+<p>一些功能&amp;快捷键：</p>
+<ul>
+<li>数据库快照：存放数据库的历史更改<code>Ctrl+Shift+T</code></li>
+<li>F5：快速切换至伪代码</li>
+</ul>
+<h4>插件</h4>
+<h5><a href="https://www.zynamics.com/software.html">Bindiff</a></h5>
+<p>咕</p>
+<h5><a href="https://github.com/keystone-engine/keypatch">Keypatch</a></h5>
+<p>咕</p>
+<h3><a href="https://frida.re/">Frida</a></h3>
+<p>咕</p>
+<h3><a href="https://www.gnu.org/software/gdb/">gdb</a></h3>
+<p>&lt;del&gt;众所周知，&lt;/del&gt;gdb是一个功能强大的调试器，我们可以用它来调试native层的程序</p>
+<h4>安装</h4>
+<p>首先，最好不要用Windows，坑太多了（如果你成功了请教教我）</p>
+<p>我们可以用WSL+Ubuntu，以下内容皆基于此基础展开`</p>
+<p>由于目标是<code>aarch64</code>架构，所以需要多架构的gdb（这也就是不用Windows的原因）。执行<code>sudo apt install gdb-multiarch</code>，随后执行<code>gdb-multiarch</code>以确定安装成功</p>
+<p>gdbserver可以在<a href="https://developer.android.google.cn/ndk/downloads?hl=zh-cn">Android NDK</a>的<code>prebuilt/android-arm64/gdbserver/</code>目录下找到，也可以用<a href="/files/gdbserver">我上传的版本</a>（gdbserver 7.11 for arm64，来自NDK 19c for linux）</p>
+<p>把gdbserver丢到<code>/data/local/tmp/</code>目录下，赋予777权限</p>
+<h4>连接</h4>
+<p>手机端打开arc、usb调试开关</p>
+<p>（adb可以用Windows上的）使用adb连接手机（有线/无线），输入<code>adb forward tcp:23946 tcp:23946</code></p>
+<p>进入shell（<code>adb shell</code>），切换root(<code>su</code>)</p>
+<p>执行<code>pid=`ps | grep moe | awk '{print $2}'`;echo $pid</code>，得到的数字即为arc的PID（在一些设备上，<code>ps</code>要改为<code>ps -A</code>）</p>
+<p>执行<code>cat /proc/$pid/maps | grep cocos | grep '[0-9a-f]*' -o | sed -n '1,1p'</code>，得到一个16进制数（形如<code>7f68dcd000</code>），把他丢python里，记为<code>base_addr</code>，这就是so文件的基址&lt;sup&gt;[需要验证]&lt;/sup&gt;</p>
+<p>执行<code>/data/local/tmp/gdbserver :23946 --attach $pid</code>，开启gdb服务端</p>
+<p>一行版，用于开始程序后立刻attach：<code>pkg="moe.low.arc";killall $pkg;am start -W $pkg/low.moe.AppActivity&gt;/dev/null;pid=`pidof $pkg`;cat /proc/$pid/maps | grep cocos | grep '[0-9a-f]*' -o | sed -n '1,1p';/data/local/tmp/gdbserver :23946 --attach $pid</code></p>
+<p><strong>（注意：上述命令可能因环境不同而变化，请按需更改！）</strong></p>
+<p>打开<code>gdb-multiarch</code>，输入<code>target remot localhost:23946</code>，等待gdb加载（中途的分页按<code>c</code>以继续）</p>
+<p>加载完成后，光标停留在<code>(gdb)</code>后面，此时可以输入指令</p>
+<h4>使用</h4>
+<p>进程暂停时输入<code>c</code>以恢复进程运行，进程运行时输入<code>Ctrl+C</code>以暂停进程</p>
+<p>在IDA找到你需要下断点的位置（形如<code>0x1F3FF</code>），记作<code>offset</code>，进入python，执行<code>base_addr+offset</code>，得到一个十进制数（形如<code>547220276223</code>），回到gdb输入<code>b *547220276223（得到的十进制数）</code>下断点</p>
+<p>输入<code>i reg</code>可以查看寄存器的值，如果想查看含向量寄存器和浮点寄存器的值，则需要使用<code>i all-reg</code></p>
+<p>用<code>ni</code>替代<code>n</code>，用<code>si</code>替代<code>s</code>来步进</p>
+<p>更多用法可参考其它教程，比如<a href="https://www.yanbinghu.com/2019/04/20/41283.html">这篇</a></p>
+<h3><a href="https://blog.coderstory.cn/corepatch-official-download/">核心破解</a></h3>
+<p>需要Xposed框架（作用域：Android系统），用于绕过签名、版本校验（可以直接安装签名错误或没有签名的apk）</p>
+<p>下载地址：</p>
+<ul>
+<li>安卓10-11：<a href="https://github.com/LSPosed/CorePatch/releases/tag/3.5">https://github.com/LSPosed/CorePatch/releases/tag/3.5</a></li>
+<li>安卓7-10：<a href="https://www.lanzoux.com/i7z2rqh">https://www.lanzoux.com/i7z2rqh</a></li>
+<li>安卓4-7：<a href="https://www.lanzoui.com/iaKd1jdk6pi">https://www.lanzoui.com/iaKd1jdk6pi</a></li>
+</ul>
+<h3>NS相关</h3>
+<h4><a href="https://github.com/SciresM/hactool">hactool</a></h4>
+<p>咕</p>
+<h4><a href="https://github.com/shuffle2/nx2elf">nx2elf</a> &amp; <a href="https://github.com/switchbrew/switch-tools">elf2nso</a></h4>
+<p>咕</p>
+<h2>内容</h2>
+<h3>.so相关</h3>
+<h4><code>ScoreState</code>结构体</h4>
+<p><strong>警告：本表可能存在问题，如发现问题请提Issue</strong></p>
+<p>（原版来自<a href="https://blog.hoshi.tech/archives/11/">西城飘雪的博客</a>）</p>
+<pre><code class="lang-cpp">struct ScoreState {
+    pointer vtable;    // 0 0 指向vtable的指针 占8字节
+    unsigned int _referenceCount;//8 8 cocos2d内部使用
+    //skip
+    int noteCount;    // 16    10
+    int maxCombo;    // 20    14
+    int score;        // 24    18
+    int score_check;    // 28    1c        score / 3
+    float hp;        // 32  20
+    float unk36      //36 24
+    float unk40         //40 28
+    BYTE unk44         //44 2c
+    BYTE unk45         //45 2d
+    float unk48         // 48 30 貌似恒为0
+    float unk52         //52 34 仅风暴
+    float unk56         //56 38 仅风暴/Ether Strike异象
+    float unk60         //60 3C 仅风暴 回忆系数*物量
+    float unk64         //64 40 仅风暴 初始化：100-unk60 if unk60&lt;100 else 0；更新：继承上次更新的v16
+    float hit_hps         //68 44 仅风暴 将在击中note时增加应增加的回忆度（pure:2*回忆系数 far:1*回忆系数）
+    float nonhit_hps         //72 48 仅风暴 将在未击中note时减少应扣除的回忆度（同一般Hard血条一致）
+    float unk76         //76 4c 仅风暴
+    int combo;        // 80  50
+    int shiny_pure; // 84  54
+    int pure;         // 88  58
+    int far;         // 92  5c
+    int lost;         // 96  60
+    int shiny_pure_check    // 100 64          shiny_pure/6
+    int pure_check    // 104 68          pure/5
+    int far_check    // 108 6c          far*2
+    int lost_check     // 112 70        lost*6
+    int far_late         //116 74 far的late数
+    int far_early         //120 78 far的early数
+    int pure_late         //124 7c 小p的late数
+    int pure_early         //128 80 小p的early数
+    bool(?) unk132        //132 84
+    float hp_base_value // 136 88 回忆系数（风暴时为回忆系数*2）
+    int unk92       //13a 92
+    int skill_type; // 152    98        //0普通，1简单，2困难，5过载，6风暴
+    int unk156      //156 9c
+    LogicChart* lc   //160 A0 占8字节
+    GameResult* gr   //168 a8
+    int lasttime     //176  b0 上次调用ScoreState::update的时间（毫秒）
+    bool unk180          //180 b4
+    int unk184           //184 b8
+    int unk188           //188 bc
+    CharacterAbility* ca //192 C0 占8字节
+    bool unk200          //200 c8
+} ScoreState;
+//铺面等级：*(int *)(*(__ *)(TheLogicChart_ptr + 24) + 136LL)
+</code></pre>
+<h4><code>GameResult</code>结构体</h4>
+<pre><code class="lang-cpp">struct GameResult {
+    pointer vtable;    // 0 0 指向vtable的指针 占8字节
+    //skip
+    int unk12//12 xx
+    int score;//16 10
+    int shiny_pure//20
+    int pure//24
+    int far//28
+    int unk32//32
+    int unk36//36
+    bool unk56//56 xx
+    int unk80//80 xx
+} GameResult;
+</code></pre>
+<h4>去除<code>Tempestissimo</code>的硬编码</h4>
+<p>已过时，删除</p>
+<h3>Frida相关</h3>
+<p>咕</p>
+<h3>gdb相关</h3>
+<p>貌似没啥x</p>

@@ -1,0 +1,70 @@
+<h2>原文：<a href="https://young-lord.github.io/posts/arcaea-hash">Arcaea 的校验研究</a></h2>
+<hr/>
+<p>tags: [Arcaea, 逆向]
+title: Arcaea 的校验研究
+last_modified_at: 2022-8-13
+slug: arcaea-hash
+redirect_from:</p>
+<h2>  - /posts/Arcaea的校验研究</h2>
+<p><strong>免责声明：本博文相关内容已涉及 lowiro 的实际利益。本博文内容仅用于个人软件安全研究与学习。请勿将博文内容用于商业或者非法用途，如果阁下愿意继续阅读，请您承诺将为自己的全部行为负责。</strong></p>
+<p>&lt;small&gt;&lt;del&gt;[出处](https://wlt.tql.moe)&lt;/del&gt;&lt;/small&gt;</p>
+<h3><code>Cocos2dxPrefsFile.xml</code>内的校验</h3>
+<pre><code class="lang-xml">&lt;?xml version='1.0' encoding='utf-8' standalone='yes' ?&gt;
+&lt;map&gt;
+    &lt;!--以下注释内的代码均使用Python3的格式化字符串，如当fr_v=1时，f"a{fr_v}v"即为"a1b"--&gt;
+    &lt;!--DEVICE_ID是随设备改变的设备识别码（非准确定义），见后文--&gt;
+    &lt;int name="lu" value="2000001" /&gt;
+    &lt;int name="fr_v" value="0" /&gt;
+    &lt;string name="fr_k"&gt;1234321abcde12345678ababa00000&lt;/string&gt;
+    &lt;!--md5("f{fr_v}ok{fr_v}")--&gt;
+    &lt;string name="cs_v"&gt;anokumene|0|6,,anokumene|1|5,anokumene|2|2,axiumcrisis|0|3&lt;/string&gt;
+    &lt;string name="cs_k"&gt;1234321abcde12345678ababa00000&lt;/string&gt;
+    &lt;!--md5(cs_v)--&gt;
+    &lt;string name="p_v"&gt;extend,yugamu,core&lt;/string&gt;
+    &lt;string name="p_k"&gt;1234321abcde12345678ababa00000&lt;/string&gt;
+    &lt;!--md5(f"{DEVICE_ID}{lu}{p_v}{int(lu)*2}")--&gt;
+    &lt;!--lu就是最近一次登录的UID（7位）（也就是名为lu的值）（没有则为0），下同--&gt;
+    &lt;string name="wu_v"&gt;scenery_chap1,babaroque,infinityheaven3&lt;/string&gt;
+    &lt;string name="wu_k"&gt;1234321abcde12345678ababa00000&lt;/string&gt;
+    &lt;!--md5(f"{DEVICE_ID}{lu}{wu_v}{int(lu)*2}")--&gt;
+    &lt;string name="ac_v"&gt;0,1,9&lt;/string&gt;
+    &lt;string name="ac_k"&gt;1234321abcde12345678ababa00000&lt;/string&gt;
+    &lt;!--md5(f"{DEVICE_ID}{lu}{ac_v}{int(lu)*2}")--&gt;
+    &lt;string name="st_v"&gt;1|1|0|0,1|2|0|0,1|3|0|0&lt;/string&gt;
+    &lt;string name="st_k"&gt;1234321abcde12345678ababa00000&lt;/string&gt;
+    &lt;!--md5(st_v)--&gt;
+    &lt;string name="un_k"&gt;1234321abcde12345678ababa00000&lt;/string&gt;
+    &lt;!--用于校验files/un文件，规则为：
+    如果un文件是这样：
+
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"/&gt;
+
+&lt;plist version="1.0"&gt;
+    &lt;dict&gt;
+        &lt;key&gt;fractureray|0|101&lt;/key&gt;
+        &lt;integer&gt;0&lt;/integer&gt;
+        &lt;key&gt;fractureray|2|101&lt;/key&gt;
+        &lt;integer&gt;0&lt;/integer&gt;
+        &lt;key&gt;fractureray|1|101&lt;/key&gt;
+        &lt;integer&gt;7&lt;/integer&gt;
+    &lt;/dict&gt;
+&lt;/plist&gt;
+
+    那么md5的值就是：
+    fractureray|2|101&amp;0$fractureray|1|101&amp;7$fractureray|0|101&amp;0$
+
+    也就是：
+    key[0]&amp;integer[0]$key[1]&amp;integer[1]$（省略）key[x]&amp;integer[x]$
+    （最后也有一个"$"）
+    --&gt;
+&lt;/map&gt;
+</code></pre>
+<h3>其他</h3>
+<p>对三个 list(songlist 等)的 hash 是<code>md5(str(md5(f.read()))*2)</code></p>
+<p>(即如果 file 内容是 345，那最终的结果是<code>md5(md5(345)+md5(345)))</code></p>
+<p>Device ID 形如：<code>12345abcde12345f</code></p>
+<p>lu（即 UID）形如：<code>2000001</code></p>
+<p>int(lu)*2 形如：<code>4000002</code></p>
+<p>ac_v 形如：<code>0,1,9</code></p>
+<p>则 ac_k（对 ac_v 的校验）为：<code>md5("12345abcde12345f20000010,1,94000002")</code></p>

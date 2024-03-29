@@ -1,0 +1,55 @@
+<h2>原文：<a href="https://young-lord.github.io/posts/selinux-tools-for-android">为安卓编译 SELinux 相关工具</a></h2>
+<hr/>
+<p>tags: [Android, SELinux]
+title: 为安卓编译 SELinux 相关工具
+last_modified_at: 2022-12-20
+slug: selinux-tools-for-android
+redirect_from:</p>
+<h2>  - /posts/为安卓编译SELinux相关工具</h2>
+<h2>目标</h2>
+<p>在Termux环境下编译、安装<a href="https://github.com/SELinuxProject/setools">SETools</a>以更好分析SELinux</p>
+<h2>做法</h2>
+<p>先把SETools源码下载下来，装好基础依赖：</p>
+<pre><code class="lang-shell">git clone -b 4.4.0 --depth 1 https://github.com/SELinuxProject/setools.git
+pip install setuptools NetworkX Cython
+pkg in clang
+</code></pre>
+<p>再把SELinux源码下载下来，编译安装其中的两个依赖库：</p>
+<pre><code class="lang-shell">git clone -b 3.4 --depth 1 https://github.com/SELinuxProject/selinux
+cd selinux
+</code></pre>
+<p>编译过程会遇到一堆坑，这里我已经整合成了diff，可以如下方式打补丁：</p>
+<pre><code class="lang-shell">wget https://young-lord.github.io/files/selinux-compile-termux.diff
+git apply selinux-compile-termux.diff
+</code></pre>
+<p>然后就可以愉快编译了：</p>
+<pre><code class="lang-shell">cd libselinux
+make PREFIX=$PREFIX install
+cd ../libsepol
+make PREFIX=$PREFIX install
+cd ../..
+</code></pre>
+<p>接下来是SETools：</p>
+<pre><code class="lang-shell">cd setools
+python setup.py build_ext
+python setup.py build
+python setup.py install --prefix $PREFIX
+</code></pre>
+<h2>使用</h2>
+<pre><code class="lang-shell">tsu # 提升为root权限
+seinfo # 显示当前SELinux状态
+sesearch --help # 查询特定规则
+</code></pre>
+<p>注意，这里只有很少一部分工具是能用的，大部分（如：sepolgen, audit2allow）均无法使用。若要使用，需要花大量时间再去修改编译完整的SELinux，不如整台服务器装……或者，更好的方法是用proot模拟Ubuntu，如下：</p>
+<pre><code class="lang-shell">pkg install proot-distro
+su -c cp /sys/fs/selinux/policy .
+proot-distro install ubuntu
+proot-distro login ubuntu
+apt update # 也可以先换源 https://mirror.tuna.tsinghua.edu.cn/help/ubuntu-ports/
+apt install policycoreutils-python-utils
+mv /data/data/com.termux/files/home/policy .
+audit2allow -p policy &lt; error_dmesg.log &gt; rules.txt # audit2allow等可以在指定policy文件后正常使用
+# 顺便提一嘴，我这里需要在 proot-distro 中注视掉包含 /sys 的两行，否则无法进入Ubuntu系统
+</code></pre>
+<h2>感想</h2>
+<p>&lt;del&gt;比编译Linux内核简单多了&lt;/del&gt;</p>
