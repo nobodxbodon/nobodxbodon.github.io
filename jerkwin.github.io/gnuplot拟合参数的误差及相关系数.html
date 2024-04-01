@@ -1,0 +1,106 @@
+<h2>原文：<a href="https://jerkwin.github.io/2015/01/09/gnuplot拟合参数的误差及相关系数">gnuplot拟合参数的误差及相关系数</a></h2>
+<hr/>
+<p>layout: post
+ title: gnuplot拟合参数的误差及相关系数
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gnuplot</li>
+<li>origin
+math: true</li>
+</ul>
+<hr/>
+<h2>2015-01-09 11:10:33</h2>
+<p>gnuplot的<code>fit</code>命令可以做拟合, 但使用的是非线性拟合方法, 即便对于线性模型也是一样, 
+而且拟合结果中不会给出线性相关系数 $R^2$. <code>stat</code>命令可以给出线性相关系数, 可惜无法用于带误差的拟合.
+如果我们需要 $R^2$ 的话, 可以利用<code>fit</code>命令, 并根据相关系数的定义进行计算. 具体方法如下.</p>
+<p>根据<a href="http://zh.wikipedia.org/wiki/%E7%B7%9A%E6%80%A7%E5%9B%9E%E6%AD%B8">线性回归</a>的方差分析</p>
+<p>$$SST=\sum_i (y_i-\bar y)^2 \
+SSR=\sum_i (\hat y_i-\bar y)^2 \
+SSE=\sum_i (y_i-\hat y_i)^2 \
+SST=SSR+SSE \
+R^2={SSR \over SST}={SST-SSE \over SST}=1-{SSE \over SST}=1-{\sum_i (\hat y_i-\bar y)^2 \over \sum_i (y_i-\bar y)^2}$$</p>
+<p>其中, SST(sum of squares for total)为总平方和, 即数据的总体方差, 
+SSR(sum of squares for regression, 也可写做模型平方和，SSM，sum of squares for model)为回归平方和, 即拟合数据的总体方差,
+SSE(sum of squares for error)为残差平方和, 即数据与其拟合值的方差.</p>
+<p>gnuplot的<code>fit</code>命令会给出拟合后的sum of squares of residuals, 也称为拟合的 $\c^2$, 存于内置变量FIT_WSSR中.
+名字中虽然有SSR, 但实际上它相应于SSE, 也就是残差的平方和.
+知道了这一点, 再和上面的公式进行对比, 可以发现, SST可看作是数据对常数项拟合的FIT_WSSR, 而SSE则是数据对线性模型拟合的FIT_WSSR.
+这样我们利用<code>fit</code>命令先做一次常数拟合得到SST, 再做一次线性拟合得到SSE, 就能计算出 $R^2$ 了.</p>
+<h3>测试数据</h3>
+<pre><code># X       Y      Yerr
+1.23457  3.4326 0.1534
+0.694444 4.7962 0.1788
+0.444444 6.1129 0.1876
+0.326531 6.6983 0.1290
+0.25     7.1511 0.1468
+</code></pre>
+<h3>代码</h3>
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;gnuplot&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span style="color: #00A000"&gt;mean&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;m       &lt;span style="color: #008800; font-style: italic"&gt;# 拟合后m即为Y的平均值&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; &lt;span style="color: #00A000"&gt;mean&lt;/span&gt;(x) &lt;span style="color: #BB4444"&gt;'&lt;/span&gt;File&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2:3&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; m
+&lt;span style="color: #B8860B"&gt;SST&lt;/span&gt; &lt;span style="color: #666666"&gt;=&lt;/span&gt; FIT_WSSR  &lt;span style="color: #008800; font-style: italic"&gt;# 对平均值的方差, 即SST&lt;/span&gt;</p>
+<p>&lt;span style="color: #AA22FF; font-weight: bold"&gt;f&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;A&lt;span style="color: #666666"&gt;+&lt;/span&gt;B&lt;span style="color: #666666"&gt;*&lt;/span&gt;x      &lt;span style="color: #008800; font-style: italic"&gt;# 线性模型&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; &lt;span style="color: #00A000"&gt;f&lt;/span&gt;(x) &lt;span style="color: #BB4444"&gt;'&lt;/span&gt;File&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2:3&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; A&lt;span style="color: #666666"&gt;,&lt;/span&gt; B
+&lt;span style="color: #B8860B"&gt;SSE&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;FIT_WSSR    &lt;span style="color: #008800; font-style: italic"&gt;# 对线性模型的方差, 即SSE&lt;/span&gt;</p>
+<p>&lt;span style="color: #AA22FF; font-weight: bold"&gt;print&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"R^2="&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1-&lt;/span&gt;SSE&lt;span style="color: #666666"&gt;/&lt;/span&gt;SST
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</p>
+<h3>结果</h3>
+<pre><code>After 4 iterations the fit converged.
+final sum of squares of residuals : 11.001
+rel. change during last iteration : -1.77313e-010
+
+degrees of freedom    (FIT_NDF)                        : 3
+rms of residuals      (FIT_STDFIT) = sqrt(WSSR/ndf)    : 1.91494
+variance of residuals (reduced chisquare) = WSSR/ndf   : 3.66699
+p-value of the Chisq distribution (FIT_P)              : 0.0117207
+
+Final set of parameters            Asymptotic Standard Error
+=======================            ==========================
+A               =  7.89179         +/- 0.2438       (3.09%)
+B               = -3.75272         +/- 0.3618       (9.642%)
+
+R^2=0.972868859990092
+</code></pre>
+<p>常用的origin软件<code>Analysis--&gt;Fit Linear</code>给出的拟合结果如下:</p>
+<pre><code>Linear Regression for Data1_B:
+Y = A + B * X
+Weight given by Data1_C error bars.
+
+Parameter  Value      Error
+----------------------------------------
+A          7.89179    0.12733
+B         -3.75272    0.18895
+----------------------------------------
+
+R           SD         N    P
+----------------------------------------
+-0.98634    1.91494    5    0.00191
+----------------------------------------
+</code></pre>
+<p>对比可知, 二者给出的SD相同, $R^2$ 相同, 拟合参数值也相同, 但参数的拟合误差不同.
+检查后发现, 与origin的<code>Analysis--&gt;Fit Linear</code>不同, gnuplot的<code>fit</code>给出的拟合参数误差是经过SD标度的误差.
+比如, 对常数项A的误差, origin给出的是0.12733, 将其乘上SD 1.91494, 就得到0.2438293102, 这正是gnuplot给出的误差.
+我不能确定这两种值哪个更合理或是更常用一些, 只是在这里提醒大家在对比时要注意到它们的不同.
+此外, origin的非线性拟合可是使用误差项, 并可以指定不同的权重方法, 也可以选择是否对拟合参数的误差进行SD标度.</p>
+<p><strong>注意</strong>, 当不考虑误差项Yerr进行拟合时, gnuplot和origin给出的拟合参数的误差完全相同.</p>
+<h3>网络资料</h3>
+<ul>
+<li><a href="http://blog.sciencenet.cn/blog-373392-506131.html">谈谈gnuplot（二十四）：拟合</a></li>
+<li><a href="http://rca.is-programmer.com/2013/1/2/modeling-of-data-00.36899.html">能伸亦能屈，但不脱离中庸之道</a></li>
+<li><a href="https://groups.google.com/forum/#!topic/comp.graphics.apps.gnuplot/070JgTqPHhg">Fitting: How does gnuplot calculate the covariance matrix?</a></li>
+</ul>
+<h3>评论</h3>
+<ul>
+<li>2017-01-19 10:22:05 <code>zzl</code> 问个问题，明明是负相关的数据，怎么计算出来的是正值？</li>
+<li>2017-01-19 15:53:25 <code>Jerkwin</code> 哪个数是正值? R^2肯定是正值的, R为负值.</li>
+</ul>

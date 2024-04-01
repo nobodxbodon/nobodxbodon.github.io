@@ -1,0 +1,157 @@
+<h2>原文：<a href="https://kexizeroing.github.io/react-18-suspense-transition">React 18 Suspense and startTransition</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "React 18 Suspense and startTransition"
+slug: react-18-suspense-transition
+description: ""
+added: "Oct 7 2023"
+tags: [react]</p>
+<h2>updatedDate: "Feb 5 2024"</h2>
+<p>A key property of Concurrent React is that rendering is interruptible. With synchronous rendering, once an update starts rendering, nothing can interrupt it until the user can see the result on screen. In a concurrent render, this is not always the case. React may start rendering an update, pause in the middle, then continue later. It may even abandon an in-progress render altogether.</p>
+<p>Concurrent React is opt-in — it’s only enabled when you use a concurrent feature. you can gradually start adding concurrent features at your own pace. The new root API in React 18 enables the new concurrent renderer, which allows you to opt-into concurrent features. Continue to read <a href="https://react.dev/blog/2022/03/08/react-18-upgrade-guide">How to Upgrade to React 18</a>.</p>
+<pre><code class="lang-js">// Before
+import { render } from 'react-dom';
+const container = document.getElementById('app');
+render(&lt;App tab="home" /&gt;, container);
+
+// After
+import { createRoot } from 'react-dom/client';
+const container = document.getElementById('app');
+const root = createRoot(container);
+root.render(&lt;App tab="home" /&gt;);
+</code></pre>
+<h2>Transitions</h2>
+<p>Consider typing in an input field that filters a list of data. Here, whenever the user types a character, we update the input value and use the new value to search the list and show the results. For large screen updates, this can cause lag on the page while everything renders, making typing or other interactions feel slow and unresponsive. Conceptually, there are two different updates that need to happen. The first update is an urgent update, to change the value of the input field. The second, is a less urgent update to show the results of the search.</p>
+<p>Until React 18, all updates were rendered urgently. A transition is a new concept in React to distinguish between urgent and non-urgent updates.</p>
+<ul>
+<li>Urgent updates reflect direct interaction, like typing, clicking, pressing, and so on.</li>
+<li>Transition updates transition the UI from one view to another.</li>
+</ul>
+<pre><code class="lang-jsx">import { startTransition } from 'react';
+
+// Urgent: Show what was typed
+setInputValue(input);
+
+// Mark any state updates inside as transitions
+startTransition(() =&gt; {
+  // Transition: Show the results
+  setSearchQuery(input);
+});
+</code></pre>
+<p><code>startTransition</code> allows you to mark certain updates in the app as non-urgent, so they are paused while the more urgent updates like clicks or key presses come in. If a transition gets interrupted by the user, React will throw out the stale rendering work that wasn’t finished and render only the latest update.</p>
+<p>By default, React 18 still handles updates as urgent. You can use <code>startTransition</code> to wrap any update that you want to move to the background. (If some state update causes a component to suspend, that state update should be wrapped in a transition.)</p>
+<blockquote><p>How is it different from <code>setTimeout</code>?</p>
+<ol>
+<li><code>startTransition</code> is not scheduled for later like <code>setTimeout</code> is. The function passed to <code>startTransition</code> runs synchronously, but any updates inside of it are marked as “transitions”. React will use this information later when processing the updates to decide how to render the update. This means that we start rendering the update earlier than if it were wrapped in a timeout. </li>
+<li>If the user is still typing or interacting with the page when the timeout fires, they will still be blocked from interacting with the page. But state updates marked with <code>startTransition</code> are interruptible, so they won’t lock up the page.</li>
+</ol>
+</blockquote>
+<p>What if you want to display something on the search results while waiting for the expensive UI render to finish? For this, we can use the <code>isPending</code> flag that comes from the <code>useTransition</code> hook.</p>
+<pre><code class="lang-jsx">import { useTransition } from 'react';
+
+const [isPending, startTransition] = useTransition();
+
+{isPending &amp;&amp; &lt;Spinner /&gt;}
+</code></pre>
+<h2>New Suspense Features</h2>
+<p>Suspense allows you to render a fallback component while a component is waiting for some asynchronous operations.</p>
+<p>Suspense (React 16) on the client. It would throw an error when used in SSR. Suspense and code-splitting using <code>React.lazy</code> were not compatible with SSR, until React 18.</p>
+<pre><code class="lang-jsx">import React, { lazy, Suspense } from 'react';
+
+const LazyComments = lazy(() =&gt; import('./Comments'));
+
+const Component = () =&gt; (
+  &lt;Suspense fallback={&lt;div&gt;Loading...&lt;/div&gt;}&gt;
+    &lt;LazyComments /&gt;
+  &lt;/Suspense&gt;
+);
+</code></pre>
+<p>SSR lets you render your React components on the server into HTML and send it to the user. It's useful because it lets users with worse connections start reading or looking at the content while JavaScript is loading. The problem with SSR today is a “waterfall”: fetch data (server) → render to HTML (server) → load code (client) → hydrate (client). Neither of the stages can start until the previous stage has finished. This is why it’s inefficient.</p>
+<p>React 18 includes architectural improvements to React SSR performance <em>(with <code>renderToPipeableStream</code> and <code>&lt;Suspense&gt;</code>)</em>. It lets you use <code>&lt;Suspense&gt;</code> to break down your app into smaller independent units. As a result, your app’s users will see the content sooner and be able to start interacting with it much faster. When the data for a component is ready on the server, React will send additional HTML into the same stream, as well as a minimal inline <code>&lt;script&gt;</code> tag to put that HTML in the “right place”. Read "New Suspense SSR Architecture in React 18": <a href="https://github.com/reactwg/react-18/discussions/37">https://github.com/reactwg/react-18/discussions/37</a></p>
+<pre><code class="lang-js">import { renderToPipeableStream } from 'react-dom/server';
+
+app.use('/', (request, response) =&gt; {
+  const { pipe } = renderToPipeableStream(&lt;App /&gt;, {
+    // This points to the JavaScript file used to bootstrap the client-side code.
+    bootstrapScripts: ['/main.js'],
+    // The `onShellReady` callback fires when the entire shell has been rendered. 
+    // The part of your app outside of any `&lt;Suspense&gt;` boundaries is called the shell.
+    // By the time `onShellReady` fires, components in nested `&lt;Suspense&gt;` might still be loading data.
+    onShellReady() {
+      response.setHeader('content-type', 'text/html');
+      pipe(response);
+    }
+  });
+});
+</code></pre>
+<ol>
+<li>To opt into <strong>streaming HTML</strong> on the server, you’ll need to switch from <code>renderToString</code> to the new <code>renderToPipeableStream</code> method.</li>
+<li>To opt into <strong>selective hydration</strong> on the client, you’ll need to switch to <code>hydrateRoot</code> on the client and then start wrapping parts of your app with <code>&lt;Suspense&gt;</code>.</li>
+<li>Only Suspense-enabled data sources will activate the Suspense component. Server Components integrate with Suspense out of the box.</li>
+</ol>
+<blockquote><p>Understand Node stream:<br/>
+The HTTP response object is a writable stream. All streams are instances of <code>EventEmitter</code>. They emit events that can be used to read and write data. The <code>pipe()</code> function reads data from a readable stream as it becomes available and writes it to a destination writable stream. All that the <code>pipe</code> operation does is subscribe to the relevant events on the source and call the relevant functions on the destination. The <code>pipe</code> method is the easiest way to consume streams.</p>
+</blockquote>
+<h3>Streaming in Next.js</h3>
+<p>Streaming enables you to progressively render UI from the server, which allows you to break down the page's HTML into smaller chunks and progressively send those chunks from the server to the client. This enables parts of the page to be displayed sooner, without waiting for all the data to load before any UI can be rendered. Streaming is built into the Next.js App Router by default.</p>
+<pre><code class="lang-tsx">import { Suspense } from 'react'
+import { PostFeed, Weather } from './Components'
+
+export default function Posts() {
+  return (
+    &lt;section&gt;
+      &lt;Suspense fallback={&lt;p&gt;Loading feed...&lt;/p&gt;}&gt;
+        &lt;PostFeed /&gt;
+      &lt;/Suspense&gt;
+      &lt;Suspense fallback={&lt;p&gt;Loading weather...&lt;/p&gt;}&gt;
+        &lt;Weather /&gt;
+      &lt;/Suspense&gt;
+    &lt;/section&gt;
+  )
+}
+</code></pre>
+<h2>Suspense and <code>startTransition</code></h2>
+<p>These two APIs are designed for different use cases and can absolutely be used together. Read from <a href="https://github.com/reactwg/react-18/discussions/94">https://github.com/reactwg/react-18/discussions/94</a></p>
+<p>When a component suspends, the closest parent Suspense boundary switches to showing the fallback. This can lead to a jarring user experience if it was already displaying some content. To prevent the whole site layout got replaced by <code>BigSpinner</code>, you can mark the navigation state update as a transition with <code>startTransition</code>. This tells React that the state transition is not urgent, and it’s better to keep showing the previous page instead of hiding any already revealed content.</p>
+<pre><code class="lang-jsx">export default function App() {
+  return (
+    &lt;Suspense fallback={&lt;BigSpinner /&gt;}&gt;
+      &lt;Router /&gt;
+    &lt;/Suspense&gt;
+  );
+}
+
+function Router() {
+  const [page, setPage] = useState('/');
+
+  function navigate(url) {
+    startTransition(() =&gt; {
+      setPage(url);
+    });
+  }
+
+  let content;
+  if (page === '/') {
+    content = (
+      &lt;IndexPage navigate={navigate} /&gt;
+    );
+  } else if (page === '/the-beatles') {
+    content = (
+      &lt;ArtistPage artist={{ id: 'the-beatles' }} /&gt;
+    );
+  }
+  return (
+    &lt;Layout&gt;
+      {content}
+    &lt;/Layout&gt;
+  );
+}
+
+function BigSpinner() {
+  return &lt;h2&gt;Loading...&lt;/h2&gt;;
+}
+</code></pre>
+<ul>
+<li>When you initially load data on an unloaded page (ex. navigating to a new page). Suspense is a way to specify fallbacks instead of content, so it should used in this case.</li>
+<li>When you load new data on a page that has already loaded (ex. tab navigations). In this case, it's bad to hide something the user has already seen. In this case, <code>startTransition</code> lets you show a pending indicator until that render completes, and avoid retriggering Suspense boundaries.</li>
+</ul>

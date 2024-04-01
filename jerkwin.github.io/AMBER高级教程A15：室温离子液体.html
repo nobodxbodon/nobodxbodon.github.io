@@ -1,0 +1,303 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/06/28/AMBER高级教程A15：室温离子液体">AMBER高级教程A15：室温离子液体</a></h2>
+<hr/>
+<p>layout: post
+ title: AMBER高级教程A15：室温离子液体
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>amber
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li><p>toc
+{:toc}</p>
+</li>
+<li><p>原作: Chris Lim and David A. Case, <a href="http://ambermd.org/tutorials/advanced/tutorial15/Tutorial2.xhtml">原始文档</a></p>
+</li>
+<li>2018-06-28 17:45:16 翻译: 刘胜堂, 唐小峰(苏州大学)</li>
+</ul>
+<p>(<strong>译者注</strong>: 离子液体指全部由离子组成的液体, 常见的盐需要在高温下才呈现液态, 如KCl, KOH等, 而在室温或者室温附近呈液态的由离子构成的物质称为室温离子液体, 如本教程中提到的[bmim][BF4]室温离子液体.)</p>
+<p>本教程的目的是指导使用Amber, AmberTools以及VMD的用户模拟室温离子液体并计算径向分布函数(RDF).</p>
+<p>室温离子液体(RTILs), 正如它的名字所言, 是一种在室温下以液态存在的盐. RTILs引起各个研究领域的兴趣是因为它们具有独特的物理学和热力学性质: 如可忽略的蒸汽压, 高热稳定性, 高电化学稳定性以及不易燃等特点. 此外, 离子液体具有高电导和宽电化学窗口, 这意味着它们既不容易被氧化也不容易被还原, 因此它们是电池中高效和绿色电解质的优良候选物. 由于RTILs具有各种潜在应用价值, 关于RTILs的模拟工作也广泛的普及, 并设计和测试了各种阳离子和阴离子的组合, 以期拓展我们对这个领域的认识.</p>
+<p>在本教程中, 我们将生成1-丁基-3-甲基咪唑四氟硼酸盐([bmim][BF4])和乙腈(CH3CN)来重现参考文献[1,2]中的数据. (<strong>译者注</strong>: 原文在这里添加参考文献的名称和期刊号, 我们直接放在参考文献部分, 并给出原文文献.)</p>
+<p><strong>提示</strong>: 该教程中用的是普适Amber力场(GAFF), 而不是文献中的优化过的力场. 模拟结果的某些部分与上述论文部分结果吻合的不是很好, 但这也给我们一个很好的启示: GAFF可以帮助你开始模拟, 并能够提供合理准确的结果, 从这点出发也许已经足够. 但如果你需要更为精准的结果, GAFF可以作为力场改进的基石, 这涉及特定的体系, 在该教程中不再详细描述.</p>
+<h2>1 创建初始结构</h2>
+<p><img alt="" src="https://jerkwin.github.io/pic/amb/amb_A15.png"/></p>
+<p>图1: 离子液体组分分子结构(上图为1-丁基-3-甲基咪唑, 即[bmim], 左下角图为四氟硼酸, 即[BF4], 右下角为乙腈, 即CH3CN)</p>
+<h3>1.1 用<code>xleap</code>绘制分子</h3>
+<p>我们用<code>xleap</code>绘制分子并用它产生pdb文件. 首先在命令窗口输入<code>xleap</code>, 弹出如下窗口(图2):</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/3_Users_case_projects_ionic_liquids_xleap1.jpg"/></p>
+<p>图2: <code>xleap</code>窗口</p>
+<p>接下来, 我们将创建我们第一个组分, 在<code>xleap</code>命令窗中键入: <code>edit BF4</code>, 弹出如下窗口(图3):</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/4_Users_case_projects_ionic_liquids_xleap_window.jpg"/></p>
+<p>图3: 弹出的分子绘制界面</p>
+<p>这里我们将创建一个BF4分子, 所需的图形窗口弹出如图3所示. 绘制分子非常直观: 在<code>Manipulation</code>边框中勾选<code>绘制(Draw)</code>项, 选择合适的元素, 鼠标左键绘制一个原子, 然后拖动绘制一个键. 这里对于BF4, 我们从<code>Elements</code>栏目中从<code>other elements</code>下拉菜单中选择Boron元素, 然后左键绘制一个硼原子(图4所示).</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/5_Users_case_projects_ionic_liquids_xleap_draw1.jpg"/></p>
+<p>图4: 绘制了一个硼原子</p>
+<p>紧接着, 在其他元素选项中(<code>other elements</code>)选择<code>氟原子(Fluorine)</code>, 并且从硼原子出拖动鼠标到你所需放置氟原子的位置.</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/6_Users_case_projects_ionic_liquids_xleap_draw2.jpg"/></p>
+<p>图5</p>
+<p>用同样的方式拖动其他三个氟原子, 大概形成正四面体的结构即可. 这一步不需要完美的几何结构, 粗略估计已经足够(<strong>译者注</strong>: 后面能量最小化会正确优化结构).</p>
+<p>提示: 摁住<code>ctrl</code>键并且左键移动鼠标旋转可以观察分子; 摁住<code>ctrl</code>并右击鼠标后, 向上移动放大分子, 向下移动则缩小分子. 如果单击选择好了一个原子, 摁住<code>shift</code>后单击绘图面板中的任意其他位置则取消选择(<strong>译者注</strong>: 释放<code>shift</code>键后才可以看到取消选择的状态).</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/7_Users_case_projects_ionic_liquids_xleap_draw3.jpg"/></p>
+<p>图6</p>
+<p>通过拖动鼠标在分子上方选择所有的原子(或通过单击单独的原子选择), 在<code>Edit</code>菜单下选择<code>Relax selection</code>选项后, <code>xleap</code>将为我们优化BF4分子的几何结构.</p>
+<p>提示: 如果键盘上的NUM/CAPS(<strong>译者注</strong>: 数码锁定/大写锁定)锁打开的话菜单栏可能无法正常工作, 请注意关闭.</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/8_Users_case_projects_ionic_liquids_xleap_draw5.jpg"/></p>
+<p>图7</p>
+<p>关闭退出该窗口. 提示: 不要点击窗口右上角的<code>X</code>按钮, 因为这样会直接完全关闭<code>xleap</code>窗口, 而你的文件没有被保存, 所以要在<code>Unit</code>菜单栏下<code>Close</code>选项保存退出.</p>
+<h3>1.2 创建pdb文件</h3>
+<p>为生成我们所需的BF4分子, 在命令窗口中输入如下指令:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;savepdb&lt;/span&gt; BF4 bf4.pdb
+&lt;/pre&gt;&lt;/div&gt;<h3>1.3 重复步骤</h3>
+<p>重复步骤1和2创建剩下的两种分子.</p>
+<p>(提示: 在本教程中, 我们用<code>acn</code>指代乙腈, <code>bmi</code>指代<code>bmim</code>, <code>bf4</code>指代<code>BF4</code>)</p>
+<h2>2 Antechamber</h2>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;antechamber&lt;/span&gt; –help (# 你可以更多地了解antechamber).
+&lt;/pre&gt;&lt;/div&gt;<h3>2.1 产生乙腈的mol2和frcmod文件</h3>
+<p>我们用<code>leap</code>产生包含电荷信息的mol2文件. 下面命令将为我们从pdb文件生成mol2文件, 在leap命令窗口中键入:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;antechamber&lt;/span&gt; –i can.pdb –fi pdb –o can.mol2 –fo mol2 –c bcc –nc 0
+&lt;/pre&gt;&lt;/div&gt;<p>(<code>-i</code>表示输入文件, <code>-fi</code>是输入文件格式, <code>-o</code>为输出文件, <code>-fo</code>为输出文件格式, <code>-c</code>为所用电荷方法, <code>-nc</code>表示分子的净电荷. 不要忘记分别用<code>-nc 1</code>或者<code>-nc -1</code>来指定阳离子和阴离子的电荷.)</p>
+<h3>2.2 硼原子的问题</h3>
+<p><code>Antechamber</code>不认识硼原子, 所以我们需要自己手动输入其参数. 我们用到的参考文献中给出了所需每个原子的的电荷, 所以我们将用到这些数值.</p>
+<p><strong>2.2.1 不带电荷模式运行antechamber</strong></p>
+<p>输入命令:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;antechamber&lt;/span&gt; –i bf4.pdb –fi pdb –o bf4.mol2 –fo mol2
+&lt;/pre&gt;&lt;/div&gt;<p><strong>2.2.2 编辑mol2文件</strong></p>
+<p>采用你所喜欢的文本编辑器(如vi或gedit), 打开<code>bf4.mol2</code>文件, 我们需要修改以下几点:</p>
+<p>第一, 如果第三行的第二个数字值为<code>0</code>, 把它修改成<code>4</code>. 这意味着我们的分子包含四个键(四个氟原子键连到硼原子).</p>
+<p>第二, 定位到<code>ATOM</code>部分的最后一列, 这些数值代表了每个原子的电荷, 我们看到它们现在全部是<code>0</code>, 因为我们没有去指定它们. 随后用参考给出的这些值修改这列数值. (硼原子: 1.1504, 氟原子: -0.5376)</p>
+<p>最后, 我们需要手动添加键信息. 键信息由指定的键id号, 成键的两个原子编号(根据mol2文件中<code>ATOM</code>原子编号而来), 以及键类型(<code>1</code>为单重建, <code>2</code>为双重键等等)所组成.</p>
+<p>具体来说, 我们将在<code>BOND</code>类别下首先添加这样一条的信息:</p>
+<pre><code>1 1 2 1
+</code></pre>
+<p>这条记录的意思是说第一条记录(第一个数值)是对B1原子(第二个数值)和F2原子(第三个数值)会形成单重建(第四个数值).</p>
+<p>类似的, 添加另外三条记录:</p>
+<pre><code>1 1 3 1
+1 1 4 1
+1 1 5 1
+</code></pre>
+<p>提示: 键的id号全部是<code>1</code>, 因为键id号在这里是没有含义的.</p>
+<h3>2.3 接下来, 在<code>xLEaP</code>中输入:</h3>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;ACN&lt;/span&gt; = loadmol2 acn.mol2  &lt;span style="color:#080;font-style:italic"&gt;  # 加载mol2文件&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;edit&lt;/span&gt; ACN                 &lt;span style="color:#080;font-style:italic"&gt;  # 允许可视化分子, 便于查找问题&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;quit&lt;/span&gt;                     &lt;span style="color:#080;font-style:italic"&gt;  # 退出xLEap&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>用<code>antechamber</code>生成bmim和BF4部分的mol2文件, 并用适当的名称替换输入名称和输出名称. 对每个分子重复步骤1和2. 这里你可以得到我们生成的mol2文件: <a href="http://ambermd.org/tutorials/advanced/tutorial15/acn.mol2"><code>acn.mol2</code></a>, <a href="http://ambermd.org/tutorials/advanced/tutorial15/bmi.mol2"><code>bmi.mol2</code></a>和<a href="http://ambermd.org/tutorials/advanced/tutorial15/bf4.mol2"><code>bf4.mol2</code></a>, 并与你生成的文件进行比较.</p>
+<h2>3 Parmchk</h2>
+<p><code>Parmchk</code>创建力场修正文件(<code>frcmod</code>)并补充缺少的参数. 以下命令可为先前创建的mol2文件生成一个<code>frcmod</code>文件:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parmchk&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; acn.mol2 &lt;span style="color:#666"&gt;-f&lt;/span&gt; mol2 &lt;span style="color:#666"&gt;-o&lt;/span&gt; frcmod.acn
+&lt;/pre&gt;&lt;/div&gt;<p>对剩余的两个mol2文件重复此步骤. 可以在这里得到我们生成的frcmod文件: <a href="http://ambermd.org/tutorials/advanced/tutorial15/frcmod.acn"><code>frcmod.acn</code></a>, <a href="http://ambermd.org/tutorials/advanced/tutorial15/frcmod.bmi"><code>frcmod.bmi</code></a>和<a href="http://ambermd.org/tutorials/advanced/tutorial15/frcmod.bf4"><code>frcmod.bf4</code></a>. 你可以将它们与你自己所生成的frcmod文件相比较. 请注意, <code>frcmod.acn</code>文件基本上是空的, 因为该分子所需的所有参数都在<code>gaff.dat</code>文件中. 如果你愿意, 也可以不用这些frcmod文件.</p>
+<h2>4 Packmol</h2>
+<blockquote><p>Packmol可以在给定范围内排布组装分子, 为分子动力学模拟提供起始原子坐标. Packmol程序考虑了短程排斥相互作用从而保证了在模拟中体系不会奔溃</p>
+</blockquote>
+<p><strong>1</strong>. 在<a href="http://www.ime.unicamp.br/~martinez/packmol/">http://www.ime.unicamp.br/~martinez/packmol/</a>下载Packmol并按照安装说明进行安装.</p>
+<p><strong>2</strong>. 创建一个名为<code>input.inp</code>的输入文件, 例如:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tolerance&lt;/span&gt; 2.0     &lt;span style="color:#080;font-style:italic"&gt;  # 原子间的容忍最短距离&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;output&lt;/span&gt; ionic2.pdb &lt;span style="color:#080;font-style:italic"&gt;  # 输出文件名&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;filetype&lt;/span&gt; pdb      &lt;span style="color:#080;font-style:italic"&gt;  # 输出文件类型&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;#&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;#&lt;/span&gt; 创建 [bmim][BF4]和乙腈分子的周期性盒子
+&lt;span style="color:#A2F"&gt;#&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;structure&lt;/span&gt; bf4.pdb
+    &lt;span style="color:#A2F"&gt;number&lt;/span&gt; 102              &lt;span style="color:#080;font-style:italic"&gt;  # 分子格式&lt;/span&gt;
+    &lt;span style="color:#A2F"&gt;inside&lt;/span&gt; cube 0. 0. 0. 35.&lt;span style="color:#080;font-style:italic"&gt;  # 盒子原点以及盒子长度, 单位为A&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;end&lt;/span&gt; structure
+&lt;span style="color:#A2F"&gt;#&lt;/span&gt; 填充bmim分子
+&lt;span style="color:#A2F"&gt;structure&lt;/span&gt; bmi.pdb
+    &lt;span style="color:#A2F"&gt;number&lt;/span&gt; 102
+    &lt;span style="color:#A2F"&gt;inside&lt;/span&gt; cube 0. 0. 0. 35.
+&lt;span style="color:#A2F"&gt;end&lt;/span&gt; structure
+&lt;span style="color:#A2F"&gt;#&lt;/span&gt; 填充乙腈分子
+&lt;span style="color:#A2F"&gt;structure&lt;/span&gt; acn.pdb
+    &lt;span style="color:#A2F"&gt;number&lt;/span&gt; 154
+    &lt;span style="color:#A2F"&gt;inside&lt;/span&gt; cube 0. 0. 0. 35.
+&lt;span style="color:#A2F"&gt;end&lt;/span&gt; structure
+&lt;/pre&gt;&lt;/div&gt;<p><strong>3</strong>. 运行Packmol</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;packmol&lt;/span&gt; &lt; input.inp
+&lt;/pre&gt;&lt;/div&gt;<p><strong>4</strong>. 在可视化分子动力学软件(VMD)中查看由packmol生成的pdb文件:</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/9_Users_case_projects_ionic_liquids_ionic2pdb.jpg"/></p>
+<p>图8: packmol生成的结构</p>
+<h2>5 使用tLEaP生成Amber <code>prmtop</code>文件</h2>
+<p>用<code>tLEaP</code>为刚才packmol中产生的pdb文件生成参数拓扑文件(prmtop)和坐标文件(inpcrd).</p>
+<p><strong>1</strong>. 创建一个输入文件(名为<code>commands.in</code>):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;#&lt;/span&gt; 相应地更改文件的位置
+&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.gaff
+&lt;span style="color:#A2F"&gt;BMI&lt;/span&gt; = loadmol2 bmi.mol2
+&lt;span style="color:#A2F"&gt;BF4&lt;/span&gt; = loadmol2 bf4.mol2
+&lt;span style="color:#A2F"&gt;ACN&lt;/span&gt; = loadmol2 acn.mol2
+&lt;span style="color:#A2F"&gt;ionicbox&lt;/span&gt; = loadPdb ionicbox.pdb&lt;span style="color:#080;font-style:italic"&gt;  # 这里和上面pdb名字不一致, 将上述packmol生成的ionic2.pdb文件改名为ionicbox.pdb (译者注)&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;loadamberparams&lt;/span&gt; frcmod.bf4
+&lt;span style="color:#A2F"&gt;loadamberparams&lt;/span&gt; frcmod.bmi
+&lt;span style="color:#A2F"&gt;loadamberparams&lt;/span&gt; frcmod.acn
+&lt;span style="color:#A2F"&gt;setbox&lt;/span&gt; ionicbox centers
+&lt;span style="color:#A2F"&gt;saveAmberParm&lt;/span&gt; ionicbox ionicbox.prmtop ionicbox.inpcrd
+&lt;/pre&gt;&lt;/div&gt;<p><strong>2</strong>. 用输入文件(<code>commans.in</code>)运行tLEaP:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt; &lt;span style="color:#666"&gt;-f&lt;/span&gt; commands.in
+&lt;/pre&gt;&lt;/div&gt;<h2>6 用Sander进行最小化</h2>
+<p>创建一个名为<code>runmin.sh</code>的脚本. 该脚本将创建输入文件并运行<code>sander</code>. <code>imin = 1</code>告诉sander进行最小化, <code>ntpr = 100</code>表示每100步保存一次重启文件, <code>ntwx = 100</code>表示每100步输出一次轨迹, <code>maxcyc = 10000</code>表示最小化循环10000次, <code>ntb = 1</code>指定周期性边界条件.</p>
+<p>注意: 如果要第二次运行模拟, 请确保修改sander的参数. 例如, <code>min1</code>完成后, 第二次输入坐标文件应为<code>min1.x</code>, 而输出文件则应以<code>min2</code>开头.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;bash&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;#!/bin/bash&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# 创建mdin文件&lt;/span&gt;
+cat &gt; mdin &lt;span style="color: #BB4444"&gt;&lt;&lt; EOF&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;minimization&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&amp;cntrl&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;imin=1, ntpr=100, ntwx=100, maxcyc=10000,&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;ntb=1,&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&amp;end&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;EOF&lt;/span&gt;
+sander -O          &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+-i mdin.in         &lt;span style="color: #BB6622; font-weight: bold"&gt;\ &lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 输入文件&lt;/span&gt;
+-o min1.o          &lt;span style="color: #BB6622; font-weight: bold"&gt;\ &lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 输出文件&lt;/span&gt;
+-p ionicbox.prmtop &lt;span style="color: #BB6622; font-weight: bold"&gt;\ &lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 拓扑文件&lt;/span&gt;
+-c ionicbox.inpcrd &lt;span style="color: #BB6622; font-weight: bold"&gt;\ &lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 输入坐标文件&lt;/span&gt;
+-r min1.x          &lt;span style="color: #BB6622; font-weight: bold"&gt;\ &lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 重启文件&lt;/span&gt;
+-x min1.nc         &lt;span style="color: #BB6622; font-weight: bold"&gt;\ &lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 输出坐标并保存在轨迹中&lt;/span&gt;
+-e min1.dat           &lt;span style="color: #008800; font-style: italic"&gt;# 能量数据&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>用以下命令运行这个程序:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;./runmin.sh&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>你应当查看Amber手册以了解更多有关这些参数的信息.</p>
+<h2>7 运行分子动力学模拟</h2>
+<p>创建名为<code>runmd.sh</code>的脚本文件</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;bash&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;#!/bin/bash&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# 创建mdin文件&lt;/span&gt;
+cat &gt; mdin &lt;span style="color: #BB4444"&gt;&lt;&lt; EOF&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;equilibration for box&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&amp;cntrl&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;imin=0, ntpr=3000, ntwx=3000,&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;ntx=1, irest=0,&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;tempi=298., temp0=298., ntt=3,&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;gamma_ln=5., ntb=2, ntp=1, taup=1.0, ioutfm=1, nstlim=3000000,&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;ntwr=1000, dt=.001, ig=-1,&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;/&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;EOF&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# 运行sander命令&lt;/span&gt;
+sander -O  &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+-i mdin    &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+-o md1.out &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+-p ionicbox.prmtop &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+-c min1.x          &lt;span style="color: #BB6622; font-weight: bold"&gt;\ &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;# 能量最小化的重启文件&lt;/span&gt;
+-r md1.x &lt;span style="color: #BB6622; font-weight: bold"&gt;\$&lt;/span&gt;RUN.rst7
+-x md1.nc &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+-e md1.dat
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>再次提醒, 你应该看看Amber手册, 以了解这个输入文件到底在做什么.</p>
+<p>注意: MD模拟产生的重启文件中包含速度信息, 而最小化的启动文件没有包含速度信息. 为了标记这些差异性, 使用<code>ntx = 5</code>和<code>irest = 1</code>标记重启文件, 以便在后面的模拟中区分这些重启文件.</p>
+<p>另请注意: 当你运行下一个模拟时, 请使用上一个输出中的重启文件作为新的输入坐标文件.</p>
+<h2>8 用<code>ptraj</code>成像</h2>
+<p>我们用packmol创建的盒子显示出一个基本问题: 大部分分子暴露于真空, 这会使模拟结果产生偏差. 在周期性边界下, 我们的盒子在所有三个维度都会周期性"复制", 以使我们的系统代表真实的散装液体环境. 因此, 当一个分子从一侧离开盒子时, 它会从另一侧进入. <code>Ptraj</code>的镜像工具重新调整了离开盒子的分子, 为我们提供了中心盒子中的正确分子构象.</p>
+<p>创建一个输入文件<code>ptraj.in</code>:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; md1.nc    &lt;span style="color:#080;font-style:italic"&gt;  # 轨迹中位于中心的分子构象盒子名称&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;image&lt;/span&gt; center
+&lt;span style="color:#A2F"&gt;trajout&lt;/span&gt; ptraj.out&lt;span style="color:#080;font-style:italic"&gt;  # 输出文件的名称&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>要运行ptraj, 请运行以下命令:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;ptraj&lt;/span&gt; prmtop ptraj.in
+&lt;/pre&gt;&lt;/div&gt;<p>Ptmtop是我们盒子的拓扑文件.</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/10_Users_case_projects_ionic_liquids_mdionic2.jpg"/>
+<img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/11_Users_case_projects_ionic_liquids_image.jpg"/></p>
+<p>图9: MD结果:(左)在ptraj处理之前; (右)ptraj处理之后</p>
+<p><strong>径向分布函数(RDFs)</strong></p>
+<p><strong>1</strong>. 首先分析密度, 看平均密度是否靠近目标值.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;awk&lt;/span&gt; '/Density/ { print $3 }; $1=="A" &amp;&amp; $2=="V" {exit 0}' md1.out &gt; density.dat
+&lt;/pre&gt;&lt;/div&gt;<p>这个awk脚本计算输入文件(<code>md1.out</code>), 并输出每行出现<code>Density</code>一词的第三列. 密度输出到<code>density.dat</code>文件中. 当awk到达输出文件中的"平均"部分时, 脚本退出.</p>
+<p><strong>2</strong>. 使用xmgrace绘制密度数据图:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;xmgrace&lt;/span&gt; density.dat
+&lt;/pre&gt;&lt;/div&gt;<p><strong>3</strong>. 要计算平均密度, 请检查xmgrace中的设置, 或运行以下脚本:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;awk&lt;/span&gt; '{ sum = sum + $1 }; END { print "average = ", sum/NR }' density.dat
+&lt;/pre&gt;&lt;/div&gt;<p>这个awk脚本利用<code>density.dat</code>中的数据, 并将每行的第一列添加到<code>sum</code>中, 然后输出除以<code>NR</code>(awk中定义行数的变量)的总和得到平均值.</p>
+<p><strong>4</strong>. 检查<code>Energy Total</code>以查看系统是否处于平衡状态.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;awk&lt;/span&gt; '/Etot/ {print $3}; ($1=="A" &amp;&amp; $2=="V") {exit 0};' Eq2.1.out &gt; etot.dat
+&lt;/pre&gt;&lt;/div&gt;<p>如果要使用xmgrace绘制<code>Energy Total</code>数据图, 请使用与上述绘制密度数据图类似的命令.</p>
+<p>以下是[bmim] [BF4]和乙腈的离子液体混合物的MD模拟的Energy Total图示例:</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/12_Users_case_projects_ionic_liquids_Densitytutorial.jpg"/>
+<img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/13_Users_case_projects_ionic_liquids_Etottutorial.jpg"/></p>
+<p>图10: 密度(左)和总能量(右)随时间的变化曲线.</p>
+<p><strong>5</strong>. 一旦密度达到目标值且总能量处于平衡状态, 便可以计算径向分布函数.</p>
+<p>这里得到的平均密度为1.0774cc/mol, 参考文献中的密度1.087cc/mol.</p>
+<p>为了计算径向分布函数, 我们将使用<code>ptraj</code>, 这是一个用于分析输入坐标文件中的三维坐标的程序. 我们将计算乙腈[CH3CN]的N1原子的径向分布函数.</p>
+<p><strong>1)</strong> 创建一个输入文件(<code>ptraj.in</code>):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; ＜trajectory filename＞
+&lt;span style="color:#A2F"&gt;radial&lt;/span&gt; CH3CN_N1 .1 15.0 :ACN@N
+&lt;/pre&gt;&lt;/div&gt;<p><strong>2)</strong> 运行</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;ptraj&lt;/span&gt; prmtop ptraj.in
+&lt;/pre&gt;&lt;/div&gt;<p><code>CH3CN_N1</code>是输出文件名称的标题, .1(指的是0.1, 译者注)是计算间隔的大小, 15.0是直方图的最大值, 以及<code>:ACN@N</code>是用于选择我们想要用于分析的原子的筛选命令(即acn分子中的N原子).</p>
+<p>运行<code>ptraj.in</code>文件后生成的输出文件将为: <code>CH3CN_N1_carnal.xmgr</code>, <code>CH3CN_N1_standard.xmgr</code> <code>CH3CN_N1_volume.xmgr</code></p>
+<p>使用Xmgrace打开文件以查看RDF的结果图. 例如:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;xmgrace&lt;/span&gt; CH3CN_N1_volume.xmgr
+&lt;/pre&gt;&lt;/div&gt;<p>上述命令将打开xmgrace中的<code>CH3CN_N1_volume.xmgr</code>文件. x轴是以埃为单位的距离, 并且g(r)表示在一个原子(乙腈中的一个氮)的给定距离(r)处找到原子(在这种情况下为另一个乙腈中的氮)的概率. 第一个峰(约四埃)代表N原子的第一个聚集层, 第二个峰(少于六埃)代表N原子的第二个聚集层.</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/14_Users_case_projects_ionic_liquids_rdfcrof25ns.jpg"/></p>
+<p>图11: 径向分布函数</p>
+<h2>9 自扩散系数</h2>
+<p>根据爱因斯坦关系, 自扩散系数D可以用下面的公式计算:</p>
+<p>$$D<em>i = {1 \over 6} \lim</em>{t \to \infty} {d\over dt} \lt [\vec r_i(t) -\vec r_i(0)]^2 \gt$$</p>
+<p>其中 $D_i$ 表示每个组分的自扩散系数, $\lt \gt$ 符号中表示为均方根位移, 即MSD, 而 $\vec r_i(t)$ 表示其质心的的坐标向量, $\vec r_i(0)$ 为初始时刻的质心坐标向量. (<strong>译者注</strong>: 教程中的公式应该是由于网页转换公式出现了问题, 这里按照参考文献1给出的公式重新改写)</p>
+<p>为了计算自扩散系数D, 我们将</p>
+<p>1) 使用<code>ptraj</code>和gnuplot绘制平均MSD随时间的图
+2) 找出图的斜率
+3) 将值代入方程得到D</p>
+<h3>9.1 创建输入文件</h3>
+<p>Ptraj将计算MSD并且输出x(时间)和y(MSD)到gnuplot的文件中.</p>
+<p>创建名为<code>ptraj.in</code>的文件并输入以下内容:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; trajName  &lt;span style="color:#080;font-style:italic"&gt;  # 在这里输入你的轨迹名称(例如, Eq1.nc)&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;diffusion&lt;/span&gt; mask timestep average
+&lt;/pre&gt;&lt;/div&gt;<p><code>mask</code>这里表示筛选分子所需的命令. 例如, 如果您想为乙腈计算D, 请将<code>mask</code>替换为<code>:ACN</code>. 要为所有残基计算D(这是本教程的内容), 请使用<code>:*</code>.</p>
+<p><code>Timestep</code>为<code>dt * ntwx</code>, 是输出轨迹的时间间隔(以皮秒为单位).</p>
+<h3>9.2 运行ptraj</h3>
+<p>运行以下命令:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;ptraj&lt;/span&gt; nameOfYourTopologyFile ptraj.in
+&lt;/pre&gt;&lt;/div&gt;<h3>9.3 运行gnuplot</h3>
+<p>打开gnuplot(在shell中输入gnuplot). 你应该在提示信息后出现后的一行左侧看到<code>&gt;</code>, 这意味着我们已经可以运行gnuplot命令了.</p>
+<p><img alt="" src="http://ambermd.org/tutorials/advanced/tutorial15/15_Users_case_projects_ionic_liquids_gnuplot1.jpg"/></p>
+<p>图12</p>
+<p>输入:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;plot&lt;/span&gt; 'diffusion_r.xmgr' with lines
+&lt;/pre&gt;&lt;/div&gt;<h3>9.4 计算</h3>
+<p>使用该图作为参考, 计算图的斜率并将该值代入到公式中. 斜率的单位是平方埃每皮秒.</p>
+<p>注意: 虽然公式表明应该采用图形末尾附近的斜率, 但ptraj的扩散工具在图形的开头是最准确的. 这是显而易见的, 因为噪声似乎随着x的增加而增加.</p>
+<p>另请注意: 模拟中恒温和恒压设置可能会破坏扩散系数. 为了获得更精确的测量结果, 请关闭温度和压强控制再模拟一次.</p>
+<p>这里我们得斜率得为0.0635990平方埃每皮秒(或者是63.5990×10^-11^平方米每秒(m/s)). 为了得到扩散系数, 我们需要将这个数字除以6, 即我们得到的扩散系数为10.5998×10^-11^米平方每秒(m/s). 而参考文献的扩散常数为14.9×10^-11^米平方每秒(m/s), 这种差异的可能原因是我们用的是Amber普适力场, 而参考文献使用的是修正过的精细力场.</p>
+<h2>10 结论</h2>
+<p>我们模拟室温离子液体时, 使用xleap"手动"绘制分子, 使用antechamber优化几何结构, 使用xleap/tleap生成拓扑和坐标文件, 并使用sander进行最小化和MD模拟. 另外, 我们还使用ptraj对我们收集的数据进行分析, 例如计算径向分布函数(RDF)和自扩散系数(self-diffusion coefficients), 并且我们使用xmgrace和gnuplot来帮助我们可视化数据. 希望在本教程结束时, 你会对AMBER组件提供的众多工具感到更加得心应手, 现在你可以继续进行更复杂的模拟(以及更复杂的分析!).</p>
+<h2>参考文献:</h2>
+<ol>
+<li>Wu, X. P.; Liu, Z. P.; Huang, S. P.; Wang, W. C. Molecular dynamics simulation of room-temperature ionic liquid mixture of [bmim][BF4] and acetonitrile by a refined force field. Phys. Chem. Chem. Phys. 2005, 7 (14), 2771-2779.</li>
+<li>Liu, Z. P.; Huang, S. P.; Wang, W. C. A refined force field for molecular simulation of imidazolium-based ionic liquids. Journal of Physical Chemistry B 2004, 108 (34), 12978-12989.</li>
+</ol>

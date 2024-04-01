@@ -1,0 +1,49 @@
+<h2>原文：<a href="https://xnum.github.io/2017/09/11/windows-session-0">windows服務與 session 0</a></h2>
+<hr/>
+<p>layout: post
+title: windows服務與 session 0
+categories:</p>
+<h2>- windows programming</h2>
+<p>Windows的服務程式在Vista開始</p>
+<p>與使用者程式分開，獨立在session 0執行</p>
+<p>如此一來服務就無法直接與使用者桌面的sessions互動</p>
+<p>即無法使用PostMessage和SendMessage傳遞訊息</p>
+<p>ref: <a href="https://msdn.microsoft.com/en-us/library/windows/desktop/bb203962(v=vs.85">Service Changes for Windows Vista</a>.aspx)</p>
+<hr/>
+<p>但服務仍然有程式間通訊的需求</p>
+<p>必須透過特定寫法實作，如：</p>
+<ul>
+<li>WTSSendMessage (用途即MessageBox)</li>
+<li>RunProcessAsUser (在該使用者session執行一個child process)</li>
+<li>IPCs<ul>
+<li>Events</li>
+<li>Named Pipes</li>
+<li>Mailslots</li>
+<li>Memory-Mapped files</li>
+<li>Sockets</li>
+</ul>
+</li>
+</ul>
+<p>根據不同需求來選用不同寫法</p>
+<p>ref: <a href="https://blogs.technet.microsoft.com/askperf/2007/04/27/application-compatibility-session-0-isolation/">Application Compatibility – Session 0 Isolation</a></p>
+<hr/>
+<p>IPC通常會創建一個kernel object來進行操作，其中需要一個security attributes的參數</p>
+<p>無獨有偶在使用RunProcessAsUser也需要這樣一個參數</p>
+<p>ref: <a href="http://www.cnblogs.com/gnielee/archive/2010/04/08/session0-isolation-part2.html">穿透Session 0 隔离（二）(WTSSendMessage/RunProcessAsUser)</a></p>
+<p>在Session 0執行的程式為SYSTEM帳號權限，而security attributes使用預設設定(傳NULL)時</p>
+<blockquote><p>The ACLs in the default security descriptor for a named pipe grant full control to the LocalSystem account, administrators, and the creator owner. They also grant read access to members of the Everyone group and the anonymous account.</p>
+</blockquote>
+<p>則只有同樣擁有admin才能完整存取，否則只能讀</p>
+<p>ref: <a href="https://msdn.microsoft.com/zh-tw/library/windows/desktop/aa365150(v=vs.85">CreateNamedPipe function</a>.aspx)</p>
+<p>但是反過來由其他session當write end，服務程式當read end就可行</p>
+<p>回到正題，對於security attributes較好的設定是利用<a href="https://msdn.microsoft.com/zh-tw/library/windows/desktop/aa379649(v=vs.85">well-known SIDs</a>.aspx)指定允許full access的對象</p>
+<p>使用的方式<a href="https://www.experts-exchange.com/questions/23117867/Add-write-access-for-'everyone'-to-named-pipe-ACL.html">在此</a></p>
+<p>而我的選擇是直接將DACL設為NULL</p>
+<p>在security attributes的屬性中，DACL代表可存取控制列表，每個節點代表一個允許的對象和權限</p>
+<p>但DACL為NULL時，則Everyone都可以得到full access control</p>
+<p><a href="https://stackoverflow.com/questions/38412919/the-security-attributes-struct-and-createnamedpipe">The SECURITY_ATTRIBUTES struct and CreateNamedPipe()</a></p>
+<hr/>
+<p>Events也需要相同的權限設定方式</p>
+<p><a href="http://tech.it168.com/a2009/0923/736/000000736809_all.shtml">VS与Win7共舞：系统服务的Session 0隔离</a></p>
+<p><a href="http://blog.darkthread.net/post-2017-07-05-about-shared-memory.aspx">Memory mapped file</a>就不一樣了</p>
+<p>這部分我並未做嘗試</p>

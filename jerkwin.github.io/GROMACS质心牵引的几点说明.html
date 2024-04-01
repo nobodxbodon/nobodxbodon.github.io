@@ -1,0 +1,222 @@
+<h2>原文：<a href="https://jerkwin.github.io/2015/10/12/GROMACS质心牵引的几点说明">GROMACS质心牵引的几点说明</a></h2>
+<hr/>
+<p>layout: post
+ title: GROMACS质心牵引的几点说明
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li>2015-10-12 00:01:47</li>
+</ul>
+<p>GROMACS的质心牵引功能也称为牵引代码(或拉伸代码, Pull Code), 可用于<a href="http://jerkwin.github.io/9999/10/31/GROMACS%E4%B8%AD%E6%96%87%E6%95%99%E7%A8%8B/#TOC1.7.4">伞形采样</a>, 并计算平均力势PMF, 在分子动力学模拟特别是涉及生物分子的模拟中经常用到. GROMACS手册中涉及到这个功能的说明主要有两处:</p>
+<ol>
+<li><a href="http://jerkwin.github.io/GMX/GMXman-6#6.4%E7%89%B5%E5%BC%95%E4%BB%A3%E7%A0%81">6.4 牵引代码</a></li>
+<li><a href="http://jerkwin.github.io/GMX/GMXman-7#7.3.21%E8%B4%A8%E5%BF%83%E7%89%B5%E5%BC%95">7.3.21 质心牵引</a></li>
+</ol>
+<p>在使用本功能前, 请先仔细阅读并试着理解手册中的说明. 下面是我参考Sobereva的博文<a href="http://sobereva.com/40">Gromacs的pull code介绍(3.3.x+4.0.x)</a>并根据自己的一些经验整理的几点说明, 希望能帮助大家更好地理解并使用这个功能.</p>
+<p>在进行质心牵引时, 首先要明确使用哪种牵引方式, 然后再明确沿什么方向进行牵引, 最后再是其他的一些设置, 如牵引速率, 力常数等. 这些牵引参数都可以直接在.mdp文件中进行定义. 下面对其中重要的几个关键词进行说明.</p>
+<h2>牵引方式: <code>pull</code></h2>
+<p>牵引方式的设置使用<code>pull</code>关键词, 有下面几个选项.</p>
+<ul>
+<li><p><code>pull=no</code> 无 &lt;br&gt;
+  不使用质心牵引. 以下所有的牵引选项都将被忽略(选项如果存在于.mdp文件中会导致警告)</p>
+</li>
+<li><p><code>pull=umbrella</code> 伞形牵引 &lt;br&gt;
+使用参考组与一个或多个组之间的伞势牵引质心</p>
+</li>
+<li><p><code>pull=constraint</code> 约束牵引 &lt;br&gt;
+使用参考组与一个或多个组之间的约束牵引质心. 设置与umbrella完全相同, 但使用的是刚性约束而不是简谐势. &lt;br&gt;
+使用约束牵引时, 会保持参考组和牵引组两组原子质心间的距离不变(使用SHAKE算法实现), 监测它们之间的限制力.</p>
+</li>
+<li><p><code>pull=constant-force</code> 恒力牵引 &lt;br&gt;
+使用线性势牵引质心, 牵引力恒定. 此选项无须定义参考组, 也无须使用<code>pull-coord*-init</code>和<code>pull-coord1-rate</code>参数.</p>
+</li>
+</ul>
+<h3>伞形牵引的详细说明</h3>
+<p>使用伞形牵引时, 会在牵引点(牵引组质心)和弹簧点(用于定义牵引距离的虚拟位置)之间施加一个简谐势以维持牵引组相对于参考组的位置, 相当于牵引点与弹簧点之间存在一个虚拟的弹簧, 弹簧的一端处于牵引点, 另一端处于弹簧点. 牵引过程中, 弹簧点会匀速远离, 这样就会给牵引组原子一个外力, 拉动牵引组原子. 弹簧点的远离速度由<code>pull-coord*-rate</code>设定, 弹簧的弹性系数(简谐势的力常数)由<code>pull-coord*-k</code>设定. 因此, 牵引组原子所受的外力取决于弹簧点与牵引点之间的距离和弹簧的弹性常数.</p>
+<p>举例来说吧, 对下面的设置</p>
+<pre><code>A(参考点)-------B(牵引点)====C(弹簧点)
+</code></pre>
+<p>A为参考组, B为牵引组, C为弹簧点.</p>
+<p>t=0时刻AC间的距离(对应于C的初始位置)由<code>pull-coord*-init</code>设定. 牵引开始后AC间的距离会以<code>pull-coord*-rate</code>设定的速率均匀增加, C的移动会增大BC之间的距离, 产生弹力进而拉动B. B所受力的大小等于BC的距离乘以由<code>pull-coord*-k</code>设定的力常数.</p>
+<p>从初始位置开始, C的移动方向有牵引几何设置决定: 当<code>pull-geometry=distance</code>时, C始终沿AB方向移动; 当<code>pull-geometry=direction</code>时, C沿由<code>pull-coord*-vec</code>设定的方向移动.</p>
+<p>牵引时, 如果没有定义参考组, 牵引组就处于绝对坐标中, 参考点被设为(0 0 0).
+如果参考点不是固定坐标而是一组可移动的原子, 牵引时, 如果参考组发生了移动, 牵引组也会随之移动, 将参考点的位置变化累加到弹簧点上, 以保持AC间距均匀增加.</p>
+<p>此外, 弹簧点的移动速率可设置为0, 这样相当于在BC之间添加了一个固定的弹簧, 可用于伞形采样.</p>
+<h2>牵引几何: <code>pull-geometry</code></h2>
+<p>牵引几何主要用于控制牵引的方向, 使用<code>pull-geometry</code>关键词设定. 有下面几个选项.</p>
+<ul>
+<li><p><code>pull-geometry=distance</code> &lt;br&gt;
+沿着连接两组的矢量进行牵引. 可以使用pull-dim选择分量. &lt;br&gt;
+牵引组原子的受力方向始终沿参考点与牵引点的连线方向.</p>
+</li>
+<li><p><code>pull-geometry=direction</code> &lt;br&gt;
+在<code>pull-coord*-vec</code>方向进行牵引.</p>
+</li>
+<li><p><code>pull-geometry=direction-periodic</code> &lt;br&gt;
+与<code>pull-geometry=direction</code>相同, 但允许距离超过盒长的一半. 使用这种几何设置, 盒子在牵引维度不应该发生变化(例如, 无压力缩放), 不会将拉力添加到维里.</p>
+</li>
+<li><p><code>pull-geometry=cylinder</code> &lt;br&gt;
+用于相对于层的牵引, 参考质心由参考组的一个局部圆柱部分给出. 牵引方向为 <code>pull-vec</code>. 使用两个半径从参考组中选择一个圆柱, 圆柱围绕的轴以<code>pull-vec</code>方向通过牵引组. 半径<code>pull-r1</code>之内的所有相对权重为1, <code>pull-r1</code>和<code>pull-r0</code>之间的权重被切换到零. 也会使用质量权重. 注意, 半径应小于盒子长度的一半. 对于倾斜圆柱, 半径应该比盒长一半更小, 因为参考组中的原子与牵引组质心同时具有径向和轴向分量.</p>
+</li>
+</ul>
+<p>总的来说, 使用<code>pull-geometry=distance</code>时, 牵引方向是牵引组质心与参考组质心连线的瞬时方向; 使用<code>pull-geometry=direction</code>时则是直接定义牵引组的拉伸方向; <code>pull-geometry=cylinder</code>则适合用于生物膜体系.</p>
+<h2>牵引方式与牵引几何的组合</h2>
+<h3>使用<code>pull=umbrella</code></h3>
+<ul>
+<li><p><code>pull-geometry=distance</code> &lt;br&gt;
+始终沿参考组质心与牵引组质心连线的方向进行牵引. 弹簧点只会沿两质心的连线方向移动. 弹簧点t=0时刻在此连线方向上距参考点的距离由<code>pull-coord*-init</code>设定, 弹簧点在连线方向上的移动速率由<code>pull-coord*-rate</code>设定, 逐渐靠近还是逐渐远离可以通过此值的正负号来控制. &lt;br&gt;
+在这种情况下, <code>pull-coord*-vec</code>的设定对弹簧点的运动方向无任何影响, 也不会对结果产生影响.</p>
+</li>
+<li><p><code>pull-geometry=direction</code> &lt;br&gt;
+定义矢量<code>pull-coord*-vec</code>, 为t=0时刻过牵引组质心的矢量. 设参考组在这个向量上投影点为P, 则弹簧点在t时刻的位置为 &lt;br&gt;
+P+(<code>pull-coord*-init</code>+t<em>`pull-coord</em>-rate<code>)*uni(</code>pull-coord*-vec`) &lt;br&gt;
+其中uni()代表求单位矢量.</p>
+</li>
+</ul>
+<p>上面几种情况都是假定参考组是绝对坐标或者被固定住, 如果参考组在牵引过程中位置会发生变化, 弹簧点位置也会相应变化, 以维持间距均匀增长.</p>
+<h3>使用<code>pull=constraint</code></h3>
+<p>与<code>pull=umbrella</code>一样, 区别在于使用约束算法将牵引组位置固定在弹簧点位置上, 而不会被弹簧点拉着走.</p>
+<p>比较常用的是<code>pull-geometry=distance</code>, 可使参考组与牵引组之间的距离保持固定不变(即<code>pull-coord*-init</code>)或者刻意让其逐渐改变(即<code>pull-coord*-init</code>+time<em>`pull-coord</em>-rate`), 而它们之间的相对角度方位可随意变化.</p>
+<h3>使用<code>pull=constant-force</code></h3>
+<p>注意, 这种情况下拉力大小始终不变, 由<code>pull-coord*-k</code>设定. 无论使用哪种几何都没有弹簧点的概念, 因此<code>pull-coord*-rate</code>, <code>pull-coord*-init</code>对结果无影响.</p>
+<ul>
+<li><p><code>pull-geometry=distance</code> &lt;br&gt;
+如果设定的参考组为原子组, 则无论何时, 始终朝参考组方向拉伸牵引组. 若牵引过程中越过了参考组, 拉力会反向. 如果参考组为绝对坐标, 则拉力方向始终是t=0时刻牵引组朝着参考组的方向, 即便牵引组可能已经越过了参考组. &lt;br&gt;
+<code>pull-coord*-vec</code>的设定对弹簧点的运动方向无任何影响, 也不会对结果产生影响.</p>
+</li>
+<li><p><code>pull-geometry=direction</code> &lt;br&gt;
+将牵引组(将其假想为坐标原点)向<code>pull-coord*-vec</code>的反方向拉. <code>pull-group0-name</code>的设定不会对结果产生影响.</p>
+</li>
+</ul>
+<h3>总结</h3>
+<p>上述几种组合中, 假定参考组位置固定, 若不进行位置固定, 则参考组与牵引组的运动是对称的, 质心位置保持不变(包括<code>pull=constant-force</code>+<code>pull-geometry=direction</code>这种不直接涉及到参考组的模式也是如此), 两个组相当于等价.</p>
+<p>常用的组合是<code>pull=constraint</code>+<code>pull-geometry=distance</code>可约束牵引组与参考组的距离; <code>pull=constant-force</code>+<code>pull-geometry=direction</code>方便地直接将牵引组往某个方向拉.</p>
+<h2>其他参数</h2>
+<ul>
+<li><p><code>pull-ngroups</code> &lt;br&gt;
+牵引组的数量, 使用时不包括绝对参考组. 牵引组可以在多个牵引坐标中重复使用. 下面只给出了第1组的牵引选项, 对其他组的选项, 只需简单地增加组编号即可.</p>
+</li>
+<li><p><code>pull-group0-name</code> &lt;br&gt;
+设定参考组. 会计算定义的groupx与这个组的距离. 比如为得到两个粒子之间的约束力, 则可以一个定义为group1, 一个定义为这个组. 如果使用<code>pull=umbrella</code>并且不定义这个组, 则外力是从绝对坐标而来. &lt;br&gt;
+如果用了参考组, 则牵引组都是相对于参考组坐标的, 而体系质心不会因为牵引了某些原子而平移, 字面上看是参考组不动, 实际上与牵引组反方向运动. 如果不定义参考组, 牵引组在绝对坐标中拉伸. 如果此时设了<code>comm_mode=none</code>, 就会导致体系质心也发生移动, 若启用了质心去除, 质心基本维持在原处.</p>
+</li>
+<li><p><code>pull-dim</code> &lt;br&gt;
+控制哪个方向上的力真正有效, 力的哪些分量表达出来, 往哪个方向牵引. 默认为<code>pull-dim=Y Y Y</code>. 无论哪种牵引模式, 如何设定牵引几何和牵引方向, 这里为<code>N</code>的方向都会被忽略, 最终在牵引组上真正生效的是力在<code>pull-dim</code>允许方向上的分量. 但如果是<code>pull=constant-force</code>, 则在<code>pull-dim</code>允许方向上的总受力仍是<code>pull-coord*-k</code>.</p>
+</li>
+<li><p><code>pull-coord*-init</code> &lt;br&gt;
+弹簧点最初位置相对于参考点的距离. 如果想让初始的牵引力为0, 则弹簧点的初始位置必须设为牵引点相对于参考组的值.</p>
+</li>
+<li><p><code>pull-start</code> &lt;br&gt;</p>
+<ul>
+<li><p><code>no</code> &lt;br&gt;
+不修改pull-init</p>
+</li>
+<li><p><code>yes</code> &lt;br&gt;
+将初始构型的质心距离添加到<code>pull-coord*-init</code>. 最终的<code>pull-coord*-init</code>相当于设定的<code>pull-coord*-init</code>加上牵引组与参考组之间质心的距离.</p>
+</li>
+</ul>
+</li>
+</ul>
+<h2>输出结果</h2>
+<p><code>mdrun</code>时可利用<code>-pf</code>选项指定输出xvg文件的名称, 其中包含时间和对应时刻牵引组的受力(外加的牵引力, 而非牵引组的净受力); <code>-px</code>指定的xvg输出文件中包含时间, 坐标和对应时刻的受力, 其中第一列为时间, 后面几列为参考组的绝对坐标, 牵引组相对于参考组的坐标. 只有<code>pull-dim</code>设为<code>Y</code>的维度才输出. 这些量的输出频率由<code>pull-nstfout</code>和<code>pull-nstxout</code>选项控制.</p>
+<p>输出文件中的单位默认是GROMACS的标准单位, 时间ps, 位置nm, 力kJ/mol-nm.</p>
+<p>如果运行不久就出现一堆.pdb文件, 提示<code>write pdb</code>之类, 说明体系崩溃了, 可能因为牵引速度过快, 或力常数过大, 可以试着把它们改小些. 可利用VMD等可视化软件查看牵引轨迹, 检查牵引过程是否合理, 比如牵引过程中是否出现过度碰撞, 挤压等.</p>
+<h2>不同版本关键词的差异</h2>
+<p>上文中所用的关键词都是基于GROMACS 5.x, 它们与GROMACS 4.x的存在一定差异.</p>
+&lt;table id='tab-0'&gt;&lt;caption&gt;GROMACS不同版本中牵关键词的比较&lt;/caption&gt;
+&lt;tr&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;GMX 4.x&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;GMX 5.x&lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-geometry = position&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;废弃&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;无&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-print-reference&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;无&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-ncoords&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-group0&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;废弃&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-weights0&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;废弃&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-pbcatom0&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;废弃&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-group1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-group1-name&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-weights1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-group1-weights&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-pbcatom1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-group1-pbcatom&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;无&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-coord1-groups&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;无&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-coord1-origin&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-vec1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-coord1-vec&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-init1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-coord1-init&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-rate1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-coord1-rate&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-k1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-coord1-k&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-kB1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pull-coord1-kB&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;<h2>示例说明</h2>
+<p>下面是一个<a href="/GMX/CH4pull.zip">运行示例</a>, 将甲烷分子从水层的一侧牵引至另一侧. 运行文件基于GROMACS 4.x版本, 但稍加修改就应该可以用于GROMACS 5.x版本. 详细建模过程就不细说了, 大致如下:</p>
+<ol>
+<li>创建1x1x1 nm^3^的水盒子</li>
+<li>将盒子z方向长度改为4 nm, 并使体系在盒子内居中</li>
+<li>将甲烷置于盒子z方向中轴线上, 其中心距盒子中心1 nm</li>
+<li>设定运行参数和牵引参数, 运行1 ps, 沿z方向牵引, 牵引速度 2 nm/ps, 力常数 1000 kJ/mol-nm^2^</li>
+<li>运行模拟</li>
+</ol>
+<p>注意, 使用的各种数据和参数, 在用于实际体系时要根据情况做相应的更改.</p>
+<p>模拟轨迹如下</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jerkwin.github.io/GMX/CH4pull.gif"/></p>
+<p>看见在上面的模拟条件下, 1 ps时间内甲烷分子没有完全穿过水层, 需要增加模拟时间或是增大弹簧的力常数.</p>
+<p>分析下输出文件<code>pullx.xvg</code>和<code>pullf.xvg</code>. 初始时牵引点和弹簧点同时处于z~0~=1 nm处, 牵引开始后弹簧点以v=2 nm/ps的速度匀速远离, 同时带动牵引点远离. <code>pullx.xvg</code>中给出了牵引点每个时刻的位置, 再结合知道的力常数k=1000 kJ/mol-nm^2^, 我们就可以计算出每个时间的牵引力</p>
+<p>$$F(t)=(z_0+v<em>t-z)</em>k$$</p>
+<p>与文件中给出的数据完全一致</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jerkwin.github.io/GMX/CH4pullf.png"/></p>
+<h2>评论</h2>
+<ul>
+<li>2016-04-20 13:35:54 <code>gaoli</code> 你好，请问文章最后的F-T图是用什么命令做的呢？谢谢</li>
+<li>2016-04-21 13:22:28 <code>Jerkwin</code> 使用gnuplot做的图, 很简单的命令</li>
+</ul>

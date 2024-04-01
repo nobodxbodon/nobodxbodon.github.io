@@ -1,0 +1,46 @@
+<h2>原文：<a href="https://xnum.github.io/2017/11/21/Build-libuv-mingw-w64">Cross compile libuv 1.16.0 with mingw-w64 on Linux</a></h2>
+<hr/>
+<p>layout: post
+title: Cross compile libuv 1.16.0 with mingw-w64 on Linux
+categories:</p>
+<h2>- UNIX</h2>
+<p>在Windows上libuv推薦的方式是透過vcbuild編譯</p>
+<p>也是offical的binary release編譯方式</p>
+<p>但編譯後的dll會相依於Visual Studio的Runtime (vcruntime140.dll)</p>
+<p>執行環境上沒有安裝相關Runtime時，就無法執行</p>
+<p>為了解決這個問題，且又能跨平台，我選擇改用gcc toolchain自行編譯</p>
+<p>gcc toolchain的幾種主流方法：</p>
+<ul>
+<li>cygwin x86_64</li>
+<li>TDM-GCC-64 </li>
+<li>mingw-w64</li>
+</ul>
+<p>p.s. 偶然發現的一篇<a href="http://mingw.5.n7.nabble.com/importing-sys-queue-h-td9462.html">文章</a>講到cygwin和mingw的不同</p>
+<blockquote><p>porting unix software to windows is NOT the 
+purpose of MinGW -- that's what the Cygwin project is for.  MinGW is a 
+gcc compiler for creating win32 programs</p>
+</blockquote>
+<p>編譯還需要幾個相關工具<code>libtool</code> <code>automake</code> <code>m4</code> <code>aclocal</code></p>
+<p>在Windows上編譯還需要另外安裝這些工具，而且被該死的OfficeScan擋住以致於編譯速度天殺的慢</p>
+<p>只好選擇在Linux上安裝mingw-w64編譯Windows的binary</p>
+<p>由於開發機上沒有外網，要自己拉rpm安裝，以下是離線安裝需要的rpms</p>
+<ul>
+<li>mingw64-gcc-4.9.2-el6.x86_64</li>
+<li>mingw64-headers-3.3.0-1.el6.noarch</li>
+<li>mingw64-winpthreads-3.3.0-1.el6.x86_64</li>
+<li>mingw64-filesystem-100-1.el6.noarch</li>
+<li>mingw64-crt-3.3.0-1.el6.noarch</li>
+<li>mingw64-cpp-4.9.2-1.el6.x86_64</li>
+<li>mingw64-binutils-2.25-2.el6_x86_64</li>
+<li>mingw-binutils-generic-2.25-2.el6.x86_64</li>
+<li>mingw-filesystem-base-100-1.el6.noarch</li>
+<li>libmpc-0.8-3.el6.x86_64</li>
+<li>gmp-4.3.1-12.el6.x86_64</li>
+<li>mpfr-2.4.1-6.el6.x86_64</li>
+</ul>
+<p>接著照<a href="https://github.com/joyent/libuv/wiki/Cross-compilation">這篇</a>下指令</p>
+<p>但還會缺少<code>NDIS_IF_MAX_STRING_SIZE</code>的定義，在報錯處加上<code>#define NDIS_IF_MAX_STRING_SIZE IF_MAX_STRING_SIZE</code></p>
+<p>出現headers No Such File時，改成全小寫，在Linux上檔案名稱是大小寫相異的</p>
+<p>預設標頭檔安裝在<code>/usr/x86_64-w64-mingw32/sys-root/mingw/include/</code> 這邊應該都能找到檔案</p>
+<p>這樣就能順利編譯了</p>
+<p>與程式進行連結時，LDFLAGS需要這些參數<code>-luv -lws2_32 -lmswsock -ladvapi32 -liphlpapi -lpsapi -luserenv</code></p>

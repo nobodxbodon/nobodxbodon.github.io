@@ -1,0 +1,32 @@
+<h2>原文：<a href="https://xnum.github.io/2022/01/27/gentoo-k8s-upgrade">kubernetes 升級 (1.20 -&gt; 1.23) on gentoo</a></h2>
+<hr/>
+<p>layout: post
+title: kubernetes 升級 (1.20 -&gt; 1.23) on gentoo
+date: 2022-01-27 00:00 +0800
+categories:</p>
+<ul>
+<li>k8s</li>
+<li>gentoo</li>
+</ul>
+<hr/>
+<p>升級需要手動修正的：</p>
+<p>cert-manager 升級到 1.6.1，相關資源升級到 cert-manger.io/v1
+Ingress升級到networking.k8s.io/v1，需要加上 <code>ingressClassName: nginx</code>
+PodSecurityPolicy在1.25後deprecated，預防性先停用相關設定
+ServiceTopology deprecated，移除相關設定</p>
+<p>升級順序 (版本無法跳過，需逐個minor version升級)：</p>
+<ol>
+<li>挑一個master node <code>emerge --ask =sys-cluster/kubeadm-1.22.5</code></li>
+<li><code>kubeadm upgrade plan</code> 看一下是否符合升級條件</li>
+<li><code>kubeadm upgrade apply v1.22.5</code></li>
+<li>確定新的 etcd kue-api-server kube-controller-manager kube-scheduler kube-proxy 都已正常執行</li>
+<li>其他node執行 <code>kubeadm upgrade node</code></li>
+<li>as same as step4</li>
+<li>所有node執行 <code>emerge =sys-cluster/kubelet-1.22.5 =sys-cluster/kubectl-1.22.5</code></li>
+<li>如果不是用docker CRI 修改 <code>/etc/systemd/system/multi-user.target.wants/kubelet.service</code> 把docker.service改成例如crio.service</li>
+<li>(optional) cordon node &amp;&amp; drain node 但是我懶得做也沒出甚麼問題</li>
+<li><code>systemctl daemon-reload &amp;&amp; systemctl restart kubelet</code></li>
+<li>(optional) uncordon node</li>
+</ol>
+<p>master node如果restart kubelet要稍微給一點時間間隔，讓etcd能夠重新連線，避免倒站</p>
+<p>一直重複更新直到最新版</p>

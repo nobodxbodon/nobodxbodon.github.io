@@ -1,0 +1,298 @@
+<h2>原文：<a href="https://kexizeroing.github.io/create-a-video-player">Create a video player</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Create a video player"
+slug: create-a-video-player
+description: ""
+added: "Sep 18 2022"
+tags: [web]</p>
+<h2>updatedDate: "Dec 14 2023"</h2>
+<h2>Creating a cross-browser video player</h2>
+<blockquote><p>Refer to this <a href="https://developer.mozilla.org/en-US/docs/Web/Guide/Audio_and_video_delivery/cross_browser_video_player">article</a> in MDN and you can check the example running live <a href="https://iandevlin.github.io/mdn/video-player">here</a>.</p>
+</blockquote>
+<h3>HTML Markup</h3>
+<p>To start off with, let's take a look at the HTML that makes up the player. First of all the <code>&lt;video&gt;</code> element is defined, contained within a <code>&lt;figure&gt;</code> element that acts as the video container.</p>
+<pre><code class="lang-html">&lt;figure id="videoContainer"&gt;
+  &lt;video id="video" controls preload="metadata" poster="img/poster.jpg"&gt;
+    &lt;source
+      src="video/tears-of-steel-battle-clip-medium.mp4"
+      type="video/mp4" /&gt;
+    &lt;source
+      src="video/tears-of-steel-battle-clip-medium.webm"
+      type="video/webm" /&gt;
+    &lt;source
+      src="video/tears-of-steel-battle-clip-medium.ogg"
+      type="video/ogg" /&gt;
+  &lt;/video&gt;
+  &lt;figcaption&gt;
+    &amp;copy; xyz |
+    &lt;a href=""&gt;xyz.org&lt;/a&gt;
+  &lt;/figcaption&gt;
+&lt;/figure&gt;
+</code></pre>
+<p>Even though this player will define its own custom control set, the <code>controls</code> attribute is still added to the <code>&lt;video&gt;</code> element, and the player's default control set is switched off later with JavaScript. Doing things this way still allows users who have JavaScript turned off to still have access to the browser's native controls.</p>
+<p>A poster image is defined for the video, and the <code>preload</code> attribute is set to <code>metadata</code>, which informs the browser that it should initially only attempt to load the metadata from the video file rather than the entire video file. This provides the player with data such as video duration and format.</p>
+<p>The next step is to define a custom control set, also in HTML, which will be used to control the video.</p>
+<ul>
+<li>Play/pause</li>
+<li>Mute</li>
+<li>Volume control</li>
+<li>Progress bar</li>
+<li>Skip ahead</li>
+<li>Go fullscreen</li>
+</ul>
+<pre><code class="lang-html">&lt;ul id="video-controls" class="controls"&gt;
+  &lt;li&gt;&lt;button id="playpause" type="button"&gt;Play/Pause&lt;/button&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;button id="stop" type="button"&gt;Stop&lt;/button&gt;&lt;/li&gt;
+  &lt;li class="progress"&gt;
+    &lt;progress id="progress" value="0" min="0"&gt;
+      &lt;span id="progress-bar"&gt;&lt;/span&gt;
+    &lt;/progress&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;button id="mute" type="button"&gt;Mute/Unmute&lt;/button&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;button id="volinc" type="button"&gt;Vol+&lt;/button&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;button id="voldec" type="button"&gt;Vol-&lt;/button&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;button id="fs" type="button"&gt;Fullscreen&lt;/button&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</code></pre>
+<p>The <code>span</code> within the <code>&lt;progress&gt;</code> element is for browsers that do not support the progress element and will be updated at the same time as progress (this <code>span</code> element won't be visible on browsers that support <code>progress</code>).</p>
+<p>The controls are initially hidden with a CSS <code>display:none</code> and will be enabled with JavaScript. Again if a user has JavaScript disabled, the custom control set will not appear and they can use the browser's default control set unhindered.</p>
+<p>Before dealing with the individual buttons, a number of initialization calls are required.</p>
+<pre><code class="lang-js">const videoContainer = document.getElementById('videoContainer');
+const video = document.getElementById('video');
+const videoControls = document.getElementById('video-controls');
+
+// Hide the default controls
+video.controls = false;
+
+// Display the user defined video controls
+videoControls.style.display = 'block';
+</code></pre>
+<h3>Play/Pause</h3>
+<p>When a <code>click</code> event is detected on the play/pause button, the handler first checks if the video is currently paused or has ended; if so, it uses the <code>play()</code> method to playback the video. Otherwise the video must be playing, so it is paused using the <code>pause()</code> method.</p>
+<pre><code class="lang-js">playpause.addEventListener('click', (e) =&gt; {
+  if (video.paused || video.ended) {
+    video.play();
+  } else {
+    video.pause();
+  }
+});
+</code></pre>
+<h3>Stop</h3>
+<p>The Media API doesn't have a stop method, so to mimic this the video is paused, and its <code>currentTime</code> (i.e. the video's current playing position) and the <code>&lt;progress&gt;</code> element's position is set to 0.</p>
+<pre><code class="lang-js">stop.addEventListener('click', (e) =&gt; {
+  video.pause();
+  video.currentTime = 0;
+  progress.value = 0;
+});
+</code></pre>
+<h3>Mute</h3>
+<p>The mute button is a simple toggle button that uses the Media API's <code>muted</code> attribute to mute the video: this is a <code>Boolean</code> indicating whether the video is muted or not.</p>
+<pre><code class="lang-js">mute.addEventListener('click', (e) =&gt; {
+  video.muted = !video.muted;
+});
+</code></pre>
+<h3>Volume</h3>
+<p>Two volume control buttons have been defined, one for increasing the volume and another for decreasing it. Media API's <code>volume</code> attribute holds the current volume value of the video. Valid values for this attribute are 0 and 1 and anything in between. The function is defined to increase or decrease the video's <code>volume</code> attribute in steps of 0.1, ensuring that it doesn't go lower than 0 or higher than 1.</p>
+<pre><code class="lang-js">function alterVolume(dir) {
+  const currentVolume = Math.floor(video.volume * 10) / 10;
+  if (dir === '+' &amp;&amp; currentVolume &lt; 1) {
+    video.volume += 0.1;
+  } else if (dir === '-' &amp;&amp; currentVolume &gt; 0) {
+    video.volume -= 0.1;
+  }
+}
+</code></pre>
+<h3>Progress</h3>
+<p>When the <code>&lt;progress&gt;</code> element was defined above in the HTML, only two attributes were set, <code>value</code> and <code>min</code>, both being given a value of 0. It also needs to have a maximum value set so that it can display its range correctly, and this can be done via the <code>max</code> attribute, which needs to be set to the maximum playing time of the video. This is obtained from the video's <code>duration</code> attribute, which again is part of the Media API.</p>
+<blockquote><p>If there is no <code>value</code> attribute, the progress bar is indeterminate; this indicates that an activity is ongoing with no indication of how long it is expected to take.</p>
+</blockquote>
+<p>Ideally, the correct value of the video's <code>duration</code> attribute is available when the <code>loadedmetadata</code> event is raised, which occurs when the video's metadata has been loaded:</p>
+<pre><code class="lang-js">video.addEventListener('loadedmetadata', () =&gt; {
+  progress.setAttribute('max', video.duration);
+});
+</code></pre>
+<p>Another event, <code>timeupdate</code>, is raised periodically as the video is being played through. This event is ideal for updating the progress bar's value, setting it to the value of the video's <code>currentTime</code> attribute, which indicates how far through the video the current playback is. The <code>&lt;span&gt;</code> element mentioned earlier, for browsers that do not support the <code>&lt;progress&gt;</code> element, is also updated at this time, setting its width to be a percentage of the total time played.</p>
+<pre><code class="lang-js">video.addEventListener('timeupdate', () =&gt; {
+  progress.value = video.currentTime;
+  progressBar.style.width = `${Math.floor(video.currentTime * 100 / video.duration)}%`;
+});
+</code></pre>
+<p>Coming back to the <code>video.duration</code> problem, unfortunately in some mobile browsers, when <code>loadedmetadata</code> is raised, <code>video.duration</code> may not have the correct value. So something else needs to be done. When the <code>timeupdate</code> event is raised, in most mobile browsers the video's <code>duration</code> attribute should now have the correct value. This can be taken advantage of to set the <code>progress</code> element's <code>max</code> attribute if it is currently not set:</p>
+<pre><code class="lang-js">video.addEventListener('timeupdate', () =&gt; {
+  if (!progress.getAttribute('max')) progress.setAttribute('max', video.duration);
+  progress.value = video.currentTime;
+  progressBar.style.width = `${Math.floor(video.currentTime * 100 / video.duration)}%`;
+});
+</code></pre>
+<h3>Skip Ahead</h3>
+<p>Another feature of most browser default video control sets is the ability to click on the video's progress bar to "skip ahead" to a different point in the video. This can also be achieved by adding a <code>click</code> event listener to the <code>progress</code> element:</p>
+<pre><code class="lang-js">progress.addEventListener('click', (e) =&gt; {
+  const rect = progress.getBoundingClientRect();
+  const pos = (e.pageX  - rect.left) / progress.offsetWidth;
+  video.currentTime = pos * video.duration;
+});
+</code></pre>
+<h3>Fullscreen</h3>
+<p>If the browser is currently in fullscreen mode, then it must be exited and vice versa. Interestingly <code>document</code> must be used for exiting/cancelling fullscreen mode, whereas any HTML element can request fullscreen mode, here the <code>videoContainer</code> is used as it also contains the custom controls which should also appear with the video in fullscreen mode.</p>
+<pre><code class="lang-js">function handleFullscreen() {
+  if (document.fullscreenElement !== null) {
+    // The document is in fullscreen mode
+    document.exitFullscreen();
+    setFullscreenData(false);
+  } else {
+    // The document is not in fullscreen mode
+    videoContainer.requestFullscreen();
+    setFullscreenData(true);
+  }
+}
+
+// used to set some CSS to improve the styling of the custom controls when they are in fullscreen
+function setFullscreenData(state) {
+  videoContainer.setAttribute('data-fullscreen', !!state);
+}
+</code></pre>
+<p>When a video goes into fullscreen mode, it usually displays a message indicating that the user can press the <code>Esc</code> key to exit fullscreen mode, so the code also needs to listen for relevant events in order to call the <code>setFullscreenData()</code> function to ensure the control styling is correct:</p>
+<pre><code class="lang-js">document.addEventListener('fullscreenchange', (e) =&gt; {
+  setFullscreenData(!!document.fullscreenElement);
+});
+</code></pre>
+<h3>Media buffering and time ranges</h3>
+<p>Sometimes it's useful to know how much <code>&lt;audio&gt;</code> or <code>&lt;video&gt;</code> has downloaded or is playable without delay — a good example of this is the buffered progress bar of an audio or video player.</p>
+<p>The <code>buffered</code> attribute will tell us which parts of the media has been downloaded. It returns a <code>TimeRanges</code> object, which will tell us which chunks of media have been downloaded. This is usually contiguous but if the user jumps about while media is buffering, it may contain holes.</p>
+<pre><code class="lang-js">// a simple audio example
+const audio = document.getElementById('my-audio');
+const bufferedTimeRanges = audio.buffered;
+</code></pre>
+<p>TimeRanges are a series of non-overlapping ranges of time, with start and stop times. A TimeRanges Object consists of the following properties:</p>
+<ul>
+<li><code>length</code>: The number of time ranges in the object.</li>
+<li><code>start(index)</code>: The start time, in seconds, of a time range.</li>
+<li><code>end(index)</code>: The end time, in seconds, of a time range.</li>
+</ul>
+<p>Without any user interaction there is usually only one time range, but if you jump about in the media more than one time range can appear.</p>
+<pre><code class="lang-js">// represents two buffered time ranges:
+// one spanning 0 to 5 seconds and the second spanning 15 to 19 seconds.
+audio.buffered.length;   // returns 2
+audio.buffered.start(0); // returns 0
+audio.buffered.end(0);   // returns 5
+audio.buffered.start(1); // returns 15
+audio.buffered.end(1);   // returns 19
+</code></pre>
+<p>If we wish to create our own custom player, it is better perhaps to give an indication of how much media has actually downloaded — this what the browser's native players seem to display.</p>
+<pre><code class="lang-js">window.onload = () =&gt; {
+  const audio = document.getElementById('my-audio');
+
+  // The progress event is fired as data is downloaded, 
+  // this is a good event to react to if we want to display buffering progress.
+  audio.addEventListener('progress', () =&gt; {
+    const duration = audio.duration;
+    if (duration &gt; 0) {
+      for (let i = 0; i &lt; audio.buffered.length; i++) {
+        if (
+          audio.buffered.start(audio.buffered.length - 1 - i) &lt;
+          audio.currentTime
+        ) {
+          document.getElementById('buffered-amount').style.width = `${
+            (audio.buffered.end(audio.buffered.length - 1 - i) * 100) / duration
+          }%`;
+          break;
+        }
+      }
+    }
+  });
+
+  // The timeupdate event is fired 4 times a second as the media plays,
+  // and that's where we increment our playing progress bar.
+  audio.addEventListener('timeupdate', () =&gt; {
+    const duration = audio.duration;
+    if (duration &gt; 0) {
+      document.getElementById('progress-amount').style.width = `${audio.currentTime / duration * 100}%`;
+    }
+  });
+};
+</code></pre>
+<h3>Mobile Web Video Playback</h3>
+<blockquote><p>Refer to this article: <a href="https://web.dev/media-mobile-web-video-playback">https://web.dev/media-mobile-web-video-playback</a></p>
+</blockquote>
+<p>Rather than adjusting our video controls in the <code>click</code> event listener, we use the <code>play</code> and <code>pause</code> video events. Making our controls events based helps with flexibility and will allow us to keep our controls in sync if the browser intervenes in the playback.</p>
+<pre><code class="lang-js">video.addEventListener('play', function () {
+  playPauseButton.classList.add('playing');
+});
+
+video.addEventListener('pause', function () {
+  playPauseButton.classList.remove('playing');
+});
+
+video.addEventListener('ended', function () {
+  playPauseButton.classList.remove('playing');
+  video.currentTime = 0;
+});
+</code></pre>
+<p>Prevent automatic fullscreen. On iOS, <code>video</code> elements automatically enter fullscreen mode when media playback begins. I recommend you set the <code>playsinline</code> attribute of the <code>video</code> element to force it to play inline on iPhone and not enter fullscreen mode when playback begins. Note that this has no side effects on other browsers.</p>
+<p>When user clicks the "fullscreen button", let's exit fullscreen mode with <code>document.exitFullscreen()</code> if fullscreen mode is currently in use by the document. Otherwise, request fullscreen on the video container with the method <code>requestFullscreen()</code> if available or fallback to <code>webkitEnterFullscreen()</code> on the video element only on iOS.</p>
+<pre><code class="lang-js">fullscreenButton.addEventListener('click', function (event) {
+  event.stopPropagation();
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    requestFullscreenVideo();
+    lockScreenInLandscape();  // will explain it later
+  }
+});
+
+function requestFullscreenVideo() {
+  if (videoContainer.requestFullscreen) {
+    videoContainer.requestFullscreen();
+  } else {
+    video.webkitEnterFullscreen();
+  }
+}
+</code></pre>
+<p>As user rotates device in landscape mode, let's be smart about this and automatically request fullscreen to create an immersive experience. How does this work? As soon as we detect the screen orientation changes, let's request fullscreen if the browser window is in landscape mode. If not, let's exit fullscreen.</p>
+<pre><code class="lang-js">if ('orientation' in screen) {
+  screen.orientation.addEventListener('change', function () {
+    if (screen.orientation.type.startsWith('landscape')) {
+      requestFullscreenVideo();
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
+  });
+}
+</code></pre>
+<p>As video may be better viewed in landscape mode, we may want to lock screen in landscape when user clicks the "fullscreen button". Locking screen in landscape is as easy as calling <code>screen.orientation.lock('landscape')</code>. However, we should do this only when device is in portrait mode with <code>matchMedia('(orientation: portrait)')</code> and can be held in one hand with <code>matchMedia('(max-device-width: 768px)')</code> as this wouldn't be a great experience for users on tablet.</p>
+<pre><code class="lang-js">function lockScreenInLandscape() {
+  if (!('orientation' in screen)) {
+    return;
+  }
+  if (matchMedia('(orientation: portrait) and (max-device-width: 768px)').matches) {
+    screen.orientation.lock('landscape');
+  }
+}
+</code></pre>
+<p>Pause video on page visibility change. Code below pauses video when page is hidden. This happens when screen lock is active or when you switch tabs for instance.</p>
+<pre><code class="lang-js">document.addEventListener('visibilitychange', function () {
+  if (document.hidden) {
+    video.pause();
+  }
+});
+</code></pre>
+<p>If you use the new <em>Intersection Observer API</em>, you can be even more granular at no cost. This API lets you know when an observed element enters or exits the browser's viewport. Let's show/hide a mute button based on the video visibility in the page.</p>
+<pre><code class="lang-js">if ('IntersectionObserver' in window) {
+  function onIntersection(entries) {
+    entries.forEach(function (entry) {
+      muteButton.hidden = video.paused || entry.isIntersecting;
+    });
+  }
+  var observer = new IntersectionObserver(onIntersection);
+  observer.observe(video);
+}
+</code></pre>
+<h2>Open-source web video players</h2>
+<ul>
+<li><a href="https://github.com/canalplus/rx-player">https://github.com/canalplus/rx-player</a></li>
+<li><a href="https://github.com/shaka-project/shaka-player">https://github.com/shaka-project/shaka-player</a></li>
+<li><a href="https://github.com/bytedance/xgplayer">https://github.com/bytedance/xgplayer</a></li>
+<li><a href="https://github.com/DIYgod/DPlayer">https://github.com/DIYgod/DPlayer</a></li>
+<li><a href="https://github.com/sampotts/plyr">https://github.com/sampotts/plyr</a></li>
+</ul>

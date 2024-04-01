@@ -1,0 +1,59 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/08/29/Pi-Pi堆积距离和堆积角度的计算">Pi-Pi堆积距离和堆积角度的计算</a></h2>
+<hr/>
+<p>layout: post
+ title: Pi-Pi堆积距离和堆积角度的计算
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>数理</li>
+<li>gmx
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li>2018-08-29 21:51:38</li>
+</ul>
+<h2>Pi-Pi堆积的概念和意义</h2>
+<p>略</p>
+<h2>Pi-Pi堆积的表征量</h2>
+<p>表征Pi-Pi堆积的物理量一般使用两个, 距离和角度. 距离为某一组原子质心或中心到另一组原子所在平面的距离, 角度为两组原子所在平面之间的夹角. 计算这两个量就需要知道如何计算一组原子所在平面的方程. 对于完全刚性的平面组原子, 三个非共线原子就可以确定其所在的平面方程(平面的三点式方程). 对于近似刚性的原子组, 则需要通过多元线性拟合来确定平面方程.</p>
+<p>有了平面方程 $ax+by+cz+d=0, \vec n=(a,b,c)$, 可计算空间一点 $\vec r(x,y,z)$ 到平面的距离</p>
+<p>$$d={\vec r \cdot \vec n +d\over \abs {\vec n} }$$</p>
+<p>也可计算此<a href="https://www.cnblogs.com/nobodyzhou/p/6145030.html">点到平面的垂足</a></p>
+<p>$$\vec v=\vec r - {\vec n \cdot \vec r+d \over \abs{\vec n}^2} \vec n$$</p>
+<h2>Pi-Pi堆积量的计算</h2>
+<p><code>gmx analyze</code>可以进行多元线性拟合得到平面方程. 通过脚本调用即可, 虽然麻烦但不困难, 就不再示例了.</p>
+<p>这里我们用vmd加上<a href="https://core.tcl.tk/tcllib/wiki?name=Downloads">tcl数学库</a>来进行计算. vmd并没有自带这个库, 须自行安装. 我们只需要其中的线性代数库<code>linalg.tcl</code>, 其中包含了多元线性拟合的奇异值分解算法<code>leastSquaresSVD</code>, 使用倒也方便. 这里多说一句, vmd加上tcl的数学库后基本可以进行各式分析了, 虽然速度未必佳.</p>
+<p>既然是决定用vmd进行分析了, 那顺便也学习一下vmd的绘图方法吧. 将计算结果实时显示出来, 也更容易确定计算结果是否正确.</p>
+<h2>代码</h2>
+<p>见 <a href="https://jerkwin.github.io/gmxtools/">gmxtool</a></p>
+<h3>使用方法</h3>
+<p>得到了轨迹以后, 先对轨迹进行处理: 分子完整化, , 然后就可以计算Pi-Pi堆积量了.</p>
+<ol>
+<li>运行MD模拟, 获得轨迹</li>
+<li>对轨迹进行处理: 先<code>gmx trjconv -pbc whole</code>完整化分子, 再<code>gmx trjconv -center -fit rot+trans</code>对分子进行居中叠合</li>
+<li>vmd载入轨迹: <code>vmd conf.gro traj.xtc</code></li>
+<li>修改<code>pistack.tcl</code>中的两个原子组</li>
+<li>vmd命令窗口执行<code>source pistack.tcl</code></li>
+<li>分析得到的输出文件<code>pistack.xvg</code>, 也可以播放轨迹, 查看每一帧计算结果</li>
+</ol>
+<h3>示例</h3>
+<p>两个苯分子的模拟</p>
+<p>输出文件<code>pistack.xvg</code>中每行数据会依次列出</p>
+<ul>
+<li>轨迹帧的编号</li>
+<li>每帧中每组原子的中心: <code>Xcnt(1) Ycnt(1) Zcnt(1)</code>, <code>Xcnt(2) Ycnt(2) Zcnt(2)</code></li>
+<li>每组原子所在平面方程的系数: <code>a(1) b(1) c(1)</code>, <code>a(2) b(2) c(2)</code></li>
+<li>两平面的夹角: <code>A(n1,n2)</code></li>
+<li>第一组原子中心到第二组原子所在平面的距离: <code>D(c1,p2)</code></li>
+<li>第二组原子中心到第一组原子所在平面的距离: <code>D(c2,p1)</code>.</li>
+</ul>
+<p><img alt="" src="https://jerkwin.github.io/pic/pistack.png"/></p>
+<h3>存在问题</h3>
+<ol>
+<li>轨迹过大时速度不佳</li>
+<li>考虑到周期性边界条件, 所得距离和角度可能存在不连续性</li>
+<li>vmd每帧绘制时<code>draw material Transparent</code>似乎不起作用? 必须存在错误语句才可以?</li>
+<li>tcl是totally command language, 也是toy command language, 太(Tai)差(Cha)了(Le)</li>
+</ol>

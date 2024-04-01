@@ -1,0 +1,106 @@
+<h2>原文：<a href="https://xnum.github.io/2019/12/17/cpp-function">c++裡的bind和lambda，為什麼沒辦法變成c-style function pointer</a></h2>
+<hr/>
+<p>layout: post
+title: c++裡的bind和lambda，為什麼沒辦法變成c-style function pointer
+date: 2019-12-17 00:00 +0800</p>
+<h2>categories: C/C++</h2>
+<p>在c裡面，function pointer是一個儲存function位置的指標，可以拿來pass一個function讓別人呼叫，通常用來實作callback function。</p>
+<p>例如nats c lib裡的<a href="https://github.com/nats-io/nats.c#advanced-usage">error handling</a>，為了識別或做一些hacky技巧，還會指定一個void*讓它傳回來。</p>
+<p>關於void*，最直觀的例子就是pthread_create裏頭的parameter了，例如<a href="http://man7.org/linux/man-pages/man3/pthread_create.3.html">這個的example</a></p>
+<p>然而有些設計不良的API是沒有提供這個實用的方式的，於是我開始尋找使用C++的方式把這個東西丟進去，例如bind</p>
+<pre><code class="lang-cpp">typedef void(* handler) ();
+
+void run(handler h)
+{
+    h();
+}
+
+void gg(int i) {}
+
+int main() {
+    run(bind(gg, 3));
+
+    return 0;
+}
+</code></pre>
+<p>然後編譯器就生氣了</p>
+<pre><code>error: cannot convert ‘std::_Bind_helper&lt;false, void (&amp;)(int), int&gt;::type {aka std::_Bind&lt;void (*(int))(int)&gt;}’ to ‘handler {aka void (*)()}’ for argument ‘1’ to ‘void run(handler)’
+</code></pre>
+<p>一段一開始看不太懂的錯誤，上Stack Overflow找找看，發現有人提供轉成std::function的方法，馬上抄來試試看。</p>
+<pre><code class="lang-cpp">int main() {
+    function&lt;void()&gt; f = (bind(gg, 3));
+    handler *h = f.target&lt;void(*)()&gt;();
+    if(!h) return 1;
+    run(*h);
+
+    return 0;
+}
+</code></pre>
+<p>編譯過了，但是果然return 1。沒辦法了，試試看lambda吧。</p>
+<pre><code class="lang-cpp">int main() {
+    int i = 3;
+    function&lt;void()&gt; f = ([i]() {});
+    handler *h = f.target&lt;void(*)()&gt;();
+    if(!h) return 1;
+    run(*h);
+
+    return 0;
+}
+</code></pre>
+<p>果不其然也return 1了。到底是為什麼呢，只好來仔細的研究看看。</p>
+<p>先從bind開始吧，c++有個半殘但勉強能用的東西可以揭開他們的真面目..typeid(x)</p>
+<pre><code class="lang-cpp">int i = 3;
+auto lambda = [i]() {};
+auto b = bind(gg, i);
+function&lt;void()&gt; f = ([i]() {});
+cout &lt;&lt; typeid(lambda).name() &lt;&lt; endl;
+cout &lt;&lt; typeid(b).name() &lt;&lt; endl;
+cout &lt;&lt; typeid(f).name() &lt;&lt; endl;
+</code></pre>
+<p>果然印出一堆亂碼</p>
+<pre><code>Z4mainEUlvE_
+St5_BindIFPFviEiEE
+St8functionIFvvEE
+</code></pre>
+<p>做個<a href="https://gcc.gnu.org/onlinedocs/libstdc++/manual/ext_demangling.html">demangling</a></p>
+<pre><code>main::{lambda()#1}
+std::_Bind&lt;void (*(int))(int)&gt;
+std::function&lt;void ()&gt;
+</code></pre>
+<p>先來看bind，根據<a href="https://gcc.gnu.org/onlinedocs/gcc-7.4.0/libstdc++/api/a00071_source.html#l00450">source code</a></p>
+<pre><code class="lang-cpp">   template&lt;typename _Signature&gt;
+        struct _Bind;
+</code></pre>
+<p>原來根本不是什麼function，是struct阿，那它是怎麼呼叫的呢，繼續往下找</p>
+<pre><code class="lang-cpp">       // Call unqualified
+       template&lt;typename... _Args,
+           typename _Result = _Res_type&lt;tuple&lt;_Args...&gt;&gt;&gt;
+    _Result
+    operator()(_Args&amp;&amp;... __args)
+    {
+      return this-&gt;__call&lt;_Result&gt;(
+          std::forward_as_tuple(std::forward&lt;_Args&gt;(__args)...),
+          _Bound_indexes());
+    }
+</code></pre>
+<p>原來是overload operator()，再繼續往下看__call怎麼實作的</p>
+<pre><code class="lang-cpp">       // Call unqualified
+       template&lt;typename _Result, typename... _Args, std::size_t... _Indexes&gt;
+    _Result
+    __call(tuple&lt;_Args...&gt;&amp;&amp; __args, _Index_tuple&lt;_Indexes...&gt;)
+    {
+      return std::__invoke(_M_f,
+          _Mu&lt;_Bound_args&gt;()(std::get&lt;_Indexes&gt;(_M_bound_args), __args)...
+          );
+    }
+</code></pre>
+<p>內部用了invoke執行該function，而參數<code>_M_f</code>和<code>_M_bound_args</code>其實是struct的member</p>
+<pre><code class="lang-cpp">       _Functor _M_f;
+       tuple&lt;_Bound_args...&gt; _M_bound_args;
+</code></pre>
+<p>而<a href="https://gcc.gnu.org/onlinedocs/gcc-7.4.0/libstdc++/api/a06222.html#a8c5a08fdc36581c53fa597667322cf7d">std::function</a>其實就是個可以封裝各種functor物件或function pointer的class</p>
+<p>把bind傳給std::function只是把它藏進去，還是沒辦法變成function pointer。也就是說std::function應該視為function的interface用來進行傳遞和呼叫。</p>
+<p>而lambda就沒有實際出現在c++ header裡了，不過在<a href="https://en.cppreference.com/w/cpp/language/lambda">cppreference</a>裡就有基本的說明</p>
+<pre><code>Constructs a closure: an unnamed function object capable of capturing variables in scope.
+</code></pre>
+<p>lambda也是個function object，但與bind最大的差別在bind要提供一個具名的function，但lambda儲存的是匿名function，並且是由編譯器幫忙完成的，相對的bind是藉由template展開來完成。</p>

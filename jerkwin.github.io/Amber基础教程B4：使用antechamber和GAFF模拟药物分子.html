@@ -1,0 +1,447 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/01/03/Amber基础教程B4：使用antechamber和GAFF模拟药物分子">Amber基础教程B4：使用antechamber和GAFF模拟药物分子</a></h2>
+<hr/>
+<p>layout: post
+ title: Amber基础教程B4：使用antechamber和GAFF模拟药物分子
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>amber
+chem: true
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li>原始文档: Ross Walker and Sishi Tang, <a href="http://ambermd.org/tutorials/basic/tutorial4b/index.htm">TUTORIAL B4: Simulating a pharmaceutical compound using antechamber and the Generalized Amber Force Field</a></li>
+<li>2018-01-03 15:52:14 翻译: 李睿; 修订: 李继存</li>
+</ul>
+<p><img alt="" src="https://jerkwin.github.io/pic/amb/amb_b4.png"/></p>
+<p>antechamber是AMBER自带的一组工具, 可用于准备有机分子的<code>prep</code>输入文件, LEaP可以读取这种输入文件并将其用于创建<code>prmtop</code>和<code>inpcrd</code>文件. antechamber程序可以与GAFF(general AMBER force field)联合使用, 非常适于设置涉及有机药物分子或其他有机分子的模拟. 在本教程中, 我们将使用antechamber为BMS的HIV逆转录酶(HIV-RT)抑制剂Sustiva(efavirenz, 中文名<a href="https://zh.wikipedia.org/wiki/%E4%BE%9D%E6%B3%95%E9%9F%A6%E4%BB%91">依法韦仑</a>)创建leap输入文件, 然后我们将对Sustiva与HIV-RT的复合物进行模拟.</p>
+<h1>antechamber教程: 使用antechamber和GAFF力场创建LEaP输入文件用于模拟Sustiva(efavirenz)-RT复合物</h1>
+<ul>
+<li>编写: Ross Walker and Sishi Tang</li>
+<li>2018-01-03 15:52:14 翻译: 李睿; 修订: 李继存</li>
+</ul>
+<p><img alt="" src="https://jerkwin.github.io/pic/amb/amb_b4_sustiva.png"/></p>
+<h2>简介</h2>
+<p>在本教程中, 我们将使用AmberTools自带的Antechamber软件包, 生成蛋白-配体复合物的<code>prmtop</code>和<code>inpcrd</code>文件, 并进行短时间的GB模拟.</p>
+<p>Antechamber设计与通用AMBER力场(GAFF, general AMBER force field)一起使用[1]. 这个力场是特别设计的, 涵盖了大多数药物分子, 且与传统AMBER力场兼容. 这样, 在模拟中可以将这两种力场混合起来, 共同用于处理蛋白和药物分子形成的复合物. 就像传统的AMBER力场一样, GAFF使用简单的简谐势函数来描述键和键角. 但与针对蛋白质和DNA的传统AMBER力场不同的是, GAFF使用的原子类型通用得多, 因此可以涵盖大部分有机分子. 目前的GAFF力场实现中包括了基本的原子类型和特殊的原子类型. 电荷的计算方法可以是HF/6-31G* RESP[2]或AM1-BCC[3].</p>
+<p>设计时, GAFF力场是一种完整的力场(因此缺失的参数非常少). 它几乎涵盖了所有由C, N, O, S, P, H, F, Cl, Br和I等元素组成的有机化合物. 此外, 因为GAFF完全兼容AMBER大分子力场, 所以它应该能够成为一个有用的分子力学工具, 用于进行理性的药物设计, 尤其是在结合自由能计算和分子对接研究方面.</p>
+<p>Antechamber工具集设计用来快速地生成拓扑文件, 用于AMBER模拟程序. 当你需要自动筛选大量化合物时, 这个工具十分有用. 使用GAFF时, antechamber可用于自动计算电荷和原子类型, 这样就可以在shell脚本中使用它们处理大量的化合物, 大大加快了处理速度. 然而, 就像其他的自动化计算程序一样, Antechamber并不完美. 如果你计划专注于单个体系的模拟, 就应该考虑手动指定原子类型, 并小心确证模拟的方方面面. 使用Antechamber时, 你可能解决以下问题:</p>
+<ol>
+<li>自动识别化学键以及原子类型</li>
+<li>判断原子等价性</li>
+<li>生成残基拓扑文件</li>
+<li>发现缺失的力场参数并提供合理的建议值</li>
+</ol>
+<p>然而, 请牢记Antechamber并不能替代对体系的严格核查. 你始终都应该仔细检查Antechamber指定的原子类型, 并自己验证其选择的合理性. 在使用科学软件时, 任何"黑箱"式的操作方式都是不可取的!</p>
+<p>在本教程中我们将使用Antechamber工具集和LEaP来创建处方药Sustiva(Efavirenz, 依法韦仑)的拓扑文件和坐标文件. <a href="https://zh.wikipedia.org/wiki/%E4%BE%9D%E6%B3%95%E9%9F%A6%E4%BB%91">依法韦仑</a>是人免疫缺陷病毒类型1(HIV-1, 艾滋病病毒)的特异性非核苷类逆转录酶(RT, reverse transcriptase)抑制剂, 由Bristol Myers Squibb公司市场化, 用于控制人类HIV感染的过程. Sustiva的化学名称为(S)-6-chloro-(cyclopropylethynyl)-1,4-dihydro-4-(trifluoromethyl)-2H-3,1-benzoxazin-2-one, 化学式为C&lt;sub&gt;14&lt;/sub&gt;H&lt;sub&gt;9&lt;/sub&gt;ClF&lt;sub&gt;3&lt;/sub&gt;NO&lt;sub&gt;2&lt;/sub&gt;, 二维结构如下:</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/amb/amb_b4_sustiva_2d.png"/></p>
+<p><a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sustiva.pdb">sustiva.pdb</a>是Sustiva的3D结构, 我们将根据它来构建拓扑和坐标文件. 这个文件是从RT-sustiva复合物的PDB文件(PDB编号: <a href="http://www.rcsb.org/pdb/explore/explore.do?structureId=1FKO">IFKO</a>)中抽取出来的. PDB文件中与Sustiva的坐标相应的残基名称为<code>EFZ</code>(代表Efavirenz).</p>
+<p>首先使用VMD打开<code>sustiva.pdb</code>查看一下其结构.</p>
+&lt;figure&gt;&lt;script&gt;var Mol1=new ChemDoodle.TransformCanvas3D('Mol-1',642,396);Mol1.specs.shapes_color='#fff';Mol1.specs.backgroundColor='black';Mol1.specs.set3DRepresentation('Ball and Stick');Mol1.specs.projectionPerspective_3D=false;Mol1.specs.compass_display=true;
+/*//Mol1.specs.atoms_resolution_3D=15;
+//Mol1.specs.bonds_resolution_3D=15;
+//Mol1.specs.crystals_unitCellLineWidth=1.5;*/
+Mol1.nextFrame=function(delta){var matrix=[];ChemDoodle.lib.mat4.identity(matrix);var change=delta*Math.PI/15000;ChemDoodle.lib.mat4.rotate(matrix,change,[1,0,0]);ChemDoodle.lib.mat4.rotate(matrix,change,[0,1,0]);ChemDoodle.lib.mat4.rotate(matrix,change,[0,0,1]);ChemDoodle.lib.mat4.multiply(this.rotationMatrix, matrix)};
+Mol1.startAnimation=ChemDoodle._AnimatorCanvas.prototype.startAnimation;Mol1.stopAnimation=ChemDoodle._AnimatorCanvas.prototype.stopAnimation;Mol1.isRunning=ChemDoodle._AnimatorCanvas.prototype.isRunning;Mol1.dblclick=ChemDoodle.RotatorCanvas.prototype.dblclick;Mol1.timeout=5;Mol1.handle=null;
+var Fmol='21\ngeo\nCl -4.685 -32.725 25.222 \nF -0.755 -36.632 25.697 \nF 1.078 -37.043 24.672 \nF -0.784 -37.177 23.626 \nO 1.524 -34.934 20.910 \nO 0.989 -34.880 23.058 \nN -0.681 -34.971 21.434 \nC -1.662 -34.414 22.313 \nC -2.915 -33.947 21.843 \nC -3.838 -33.423 22.771 \nC -3.533 -33.373 24.119 \nC -2.310 -33.829 24.593 \nC -1.386 -34.378 23.681 \nC -0.002 -34.957 24.144 \nC 0.552 -34.236 25.315 \nC 0.985 -33.657 26.241 \nC 1.605 -32.802 27.586 \nC 2.808 -33.083 27.639 \nC 2.404 -31.980 27.123 \nC -0.121 -36.472 24.539 \nC 0.665 -34.932 21.725 \n';
+Mol1.loadMolecule(ChemDoodle.readXYZ(Fmol));Mol1.startAnimation();Mol1.stopAnimation();function setProj1(yesPers){Mol1.specs.projectionPerspective_3D=yesPers;Mol1.setupScene();Mol1.repaint()}function setModel1(model){Mol1.specs.set3DRepresentation(model);Mol1.setupScene();Mol1.repaint()}function setSpeed1(){Mol1.timeout=500-document.getElementById('spd1').value;Mol1.loadMolecule(ChemDoodle.readXYZ(Fmol));Mol1.startAnimation()}&lt;/script&gt;&lt;br&gt;&lt;span class='meta'&gt;视图: &lt;input type='radio' name='group2' onclick='setProj1(true)'&gt;投影 &lt;input type='radio' name='group2' onclick='setProj1(false)' checked=''&gt;正交    速度: &lt;input type='range' id='spd1' min='1' max='500' onchange='setSpeed1()'/&gt;&lt;br&gt;模型: &lt;input type='radio' name='model' onclick='setModel1('Ball and Stick')' checked=''&gt;球棍 &lt;input type='radio' name='model' onclick='setModel1('van der Waals Spheres')'&gt;范德华球 &lt;input type='radio' name='model' onclick='setModel1('Stick')'&gt;棍状 &lt;input type='radio' name='model' onclick='setModel1('Wireframe')'&gt;线框 &lt;input type='radio' name='model' onclick='setModel1('Line')'&gt;线型   &lt;input type='checkbox' onclick='Mol1.specs.atoms_displayLabels_3D=this.checked;Mol1.repaint()'&gt;名称&lt;br&gt;左键: 转动   滚轮: 缩放   双击: 自动旋转开关   Alt+左键: 移动&lt;/span&gt;&lt;br&gt;&lt;figurecaption&gt;Fig.1&lt;/figurecaption&gt;&lt;/figure&gt;<p>我们将使用Antechamber指定这个分子中每个原子的原子类型, 并计算每个原子上的电荷. Antechamber是Antechamber工具集中最重要程序, 可以进行多种文件类型的转换并指定换原子类型以及原子电荷. 根据输入文件, Antechamber执行下列程序(AmberTools中包含了所有这些程序): <code>sqm</code>, <code>atomtype</code>, <code>amlbcc</code>, <code>bondtype</code>, <code>espgen</code>, <code>respgen</code>和<code>prepgen</code>. 它还会生成一系列中间文件(文件名全部为大写字母).</p>
+<h2>创建Sustiva的参数和坐标文件</h2>
+<p>首先, 使用<code>reduce</code>程序为PDB文件添加所有的氢原子:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;reduce&lt;/span&gt; sustiva.pdb &gt; sustiva_h.pdb
+&lt;/pre&gt;&lt;/div&gt;<p>加氢后的sustiva坐标如下<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sustiva_h.pdb"><code>sustiva_h.pdb</code></a>.</p>
+&lt;figure&gt;&lt;script&gt;var Mol2=new ChemDoodle.TransformCanvas3D('Mol-2',642,396);Mol2.specs.shapes_color='#fff';Mol2.specs.backgroundColor='black';Mol2.specs.set3DRepresentation('Ball and Stick');Mol2.specs.projectionPerspective_3D=false;Mol2.specs.compass_display=true;
+/*//Mol2.specs.atoms_resolution_3D=15;
+//Mol2.specs.bonds_resolution_3D=15;
+//Mol2.specs.crystals_unitCellLineWidth=1.5;*/
+Mol2.nextFrame=function(delta){var matrix=[];ChemDoodle.lib.mat4.identity(matrix);var change=delta*Math.PI/15000;ChemDoodle.lib.mat4.rotate(matrix,change,[1,0,0]);ChemDoodle.lib.mat4.rotate(matrix,change,[0,1,0]);ChemDoodle.lib.mat4.rotate(matrix,change,[0,0,1]);ChemDoodle.lib.mat4.multiply(this.rotationMatrix, matrix)};
+Mol2.startAnimation=ChemDoodle._AnimatorCanvas.prototype.startAnimation;Mol2.stopAnimation=ChemDoodle._AnimatorCanvas.prototype.stopAnimation;Mol2.isRunning=ChemDoodle._AnimatorCanvas.prototype.isRunning;Mol2.dblclick=ChemDoodle.RotatorCanvas.prototype.dblclick;Mol2.timeout=5;Mol2.handle=null;
+var Fmol='30\nH\nCl -4.685 -32.725 25.222\nF -0.755 -36.632 25.697\nF 1.078 -37.043 24.672\nF -0.784 -37.177 23.626\nO 1.524 -34.934 20.910\nO 0.989 -34.880 23.058\nN -0.681 -34.971 21.434\nC -1.662 -34.414 22.313\nC -2.915 -33.947 21.843\nC -3.838 -33.423 22.771\nC -3.533 -33.373 24.119\nC -2.310 -33.829 24.593\nC -1.386 -34.378 23.681\nC -0.002 -34.957 24.144\nC 0.552 -34.236 25.315\nC 0.985 -33.657 26.241\nC 1.605 -32.802 27.586\nC 2.808 -33.083 27.639\nC 2.404 -31.980 27.123\nC -0.121 -36.472 24.539\nC 0.665 -34.932 21.725\nH 2.472 -31.798 26.040\nH 2.585 -31.017 27.623\nH 3.348 -33.100 28.597\nH 3.235 -33.882 27.015\nH 0.784 -32.761 28.317\nH -0.981 -35.402 20.583\nH -2.066 -33.763 25.664\nH -4.811 -33.050 22.419\nH -3.163 -33.993 20.772\n';
+Mol2.loadMolecule(ChemDoodle.readXYZ(Fmol));Mol2.startAnimation();Mol2.stopAnimation();function setProj2(yesPers){Mol2.specs.projectionPerspective_3D=yesPers;Mol2.setupScene();Mol2.repaint()}function setModel2(model){Mol2.specs.set3DRepresentation(model);Mol2.setupScene();Mol2.repaint()}function setSpeed2(){Mol2.timeout=500-document.getElementById('spd2').value;Mol2.loadMolecule(ChemDoodle.readXYZ(Fmol));Mol2.startAnimation()}&lt;/script&gt;&lt;br&gt;&lt;span class='meta'&gt;视图: &lt;input type='radio' name='group2' onclick='setProj2(true)'&gt;投影 &lt;input type='radio' name='group2' onclick='setProj2(false)' checked=''&gt;正交    速度: &lt;input type='range' id='spd2' min='1' max='500' onchange='setSpeed2()'/&gt;&lt;br&gt;模型: &lt;input type='radio' name='model' onclick='setModel2('Ball and Stick')' checked=''&gt;球棍 &lt;input type='radio' name='model' onclick='setModel2('van der Waals Spheres')'&gt;范德华球 &lt;input type='radio' name='model' onclick='setModel2('Stick')'&gt;棍状 &lt;input type='radio' name='model' onclick='setModel2('Wireframe')'&gt;线框 &lt;input type='radio' name='model' onclick='setModel2('Line')'&gt;线型   &lt;input type='checkbox' onclick='Mol2.specs.atoms_displayLabels_3D=this.checked;Mol2.repaint()'&gt;名称&lt;br&gt;左键: 转动   滚轮: 缩放   双击: 自动旋转开关   Alt+左键: 移动&lt;/span&gt;&lt;br&gt;&lt;figurecaption&gt;Fig.2&lt;/figurecaption&gt;&lt;/figure&gt;<p>为了与PDB文件的名称保持一致, 我们将PDB文件中的残基名称<code>EFZ</code>改为<code>SUS</code>, 并将其另存为新的PDB文件<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sustiva_new.pdb"><code>sustiva_new.pdb</code></a>.</p>
+<p>现在使用antechamber来处理新得到的sustiva的PDB文件. 为了能够在LEaP中定义新的单元, 我们需要创建<code>mol2</code>文件, 简单地运行如下命令即可:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;antechamber&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; sustiva_new.pdb &lt;span style="color:#666"&gt;-fi&lt;/span&gt; pdb &lt;span style="color:#666"&gt;-o&lt;/span&gt; sustiva.mol2 &lt;span style="color:#666"&gt;-fo&lt;/span&gt; mol2 &lt;span style="color:#666"&gt;-c&lt;/span&gt; bcc &lt;span style="color:#666"&gt;-s&lt;/span&gt; 2
+&lt;/pre&gt;&lt;/div&gt;<p>上面命令的选项说明如下:</p>
+<ul>
+<li><code>-i sustiva_new.pdb</code>: 指定输入3D结构文件的名称</li>
+<li><code>-fi pdb</code>: 指定输入文件的格式为PDB(我们也可以使用任何其他支持的文件格式, 包括Gaussian的Z矩阵[gzmat], Gaussian输出文件[gout], MDL[mdl], amber重启[rst], Sybyl Mol2[mol2])</li>
+<li><code>-o sustiva.mol2</code>: 指定输出文件的名称</li>
+<li><code>-fo mol2</code>: 说明输出文件的类型为Tripos Mol2格式(这是LEaP支持的内部格式)</li>
+<li><code>-c bcc</code>: 指示antechamber使用AM1-BCC电荷模型来计算原子上的电荷</li>
+<li><code>-s 2</code>: 指定antechamber程序提供的状态信息的冗长度. 我们选择提供更多信息(<code>2</code>)</li>
+</ul>
+<p>执行上面的命令, 屏幕输出应类似如下:</p>
+<pre><code>Running: /usr/local/amber10/bin/bondtype -j full -i ANTECHAMBER_BOND_TYPE.AC0 -o ANTECHAMBER_BOND_TYPE.AC -f ac
+
+Running: /usr/local/amber10/bin/atomtype -i ANTECHAMBER_AC.AC0 -o ANTECHAMBER_AC.AC -p gaff
+
+Total number of electrons: 160; net charge: 0
+
+Running: /usr/local/amber10/bin/mopac.sh
+
+Running: /usr/local/amber10/bin/am1bcc -i ANTECHAMBER_AM1BCC_PRE.AC -o ANTECHAMBER_AM1BCC.AC -f ac
+-p /usr/local/amber10/dat/antechamber/BCCPARM.DAT -s 2 -j 1
+
+Running: /usr/local/amber10/bin/atomtype -f ac -p bcc -o ANTECHAMBER_AM1BCC.AC -i ANTECHAMBER_AM1BCC_PRE.AC
+</code></pre>
+<p>在工作目录下会产生一系列的文件:</p>
+<pre><code>ANTECHAMBER_AC.AC      ANTECHAMBER_AM1BCC_PRE.AC  ATOMTYPE.INF  mopac.out  sustiva.mol2
+ANTECHAMBER_AC.AC0     ANTECHAMBER_BOND_TYPE.AC   divcon.pdb    mopac.pdb  sustiva.pdb
+ANTECHAMBER_AM1BCC.AC  ANTECHAMBER_BOND_TYPE.AC   mopac.in
+</code></pre>
+<p>名称全部大写的所有文件是antechamber计算时使用的中间文件, 并不重要也不需要保存, 你可以放心地删除它们. 程序默认没有删除这些文件是因为有些情况下计算可能出错, 这时可利用这些文件来排查错误. <code>mopac.in</code>和<code>mopac.out</code>文件是mopac输入与mopac输出文件, 用于antechamber计算电荷. 除了验证mopac计算是否成功, mopac文件在这里不需要.</p>
+<p>我们之所以首先运行antechamber, 就是为了得到我们真正需要的<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sustiva.mol2"><code>sustiva.mol2</code>文件</a>. 这个文件中包含了sustiva 残基的定义, 包括所有的电荷信息以及原子类型. 我们可以将它载入LEaP, 用以创建<code>prmtop</code>以及<code>inpcrd</code>文件. 让我们来快速地浏览一下文件的内容:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;sustiva.mol2&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;@&lt;span style="color: #666666"&gt;&lt;&lt;/span&gt;TRIPOS&lt;span style="color: #666666"&gt;&gt;&lt;/span&gt;MOLECULE
+SUS
+   &lt;span style="color: #666666"&gt;30&lt;/span&gt;    &lt;span style="color: #666666"&gt;32&lt;/span&gt;     &lt;span style="color: #666666"&gt;1&lt;/span&gt;     &lt;span style="color: #666666"&gt;0&lt;/span&gt;     &lt;span style="color: #666666"&gt;0&lt;/span&gt;
+SMALL
+bcc
+
+@&lt;span style="color: #666666"&gt;&lt;&lt;/span&gt;TRIPOS&lt;span style="color: #666666"&gt;&gt;&lt;/span&gt;ATOM
+      &lt;span style="color: #666666"&gt;1&lt;/span&gt; CL         &lt;span style="color: #666666"&gt;-4.6850&lt;/span&gt;  &lt;span style="color: #666666"&gt;-32.7250&lt;/span&gt;   &lt;span style="color: #666666"&gt;25.2220&lt;/span&gt; cl      &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.073100&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;2&lt;/span&gt; F1         &lt;span style="color: #666666"&gt;-0.7550&lt;/span&gt;  &lt;span style="color: #666666"&gt;-36.6320&lt;/span&gt;   &lt;span style="color: #666666"&gt;25.6970&lt;/span&gt; f       &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.231400&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;3&lt;/span&gt; F2          &lt;span style="color: #666666"&gt;1.0780&lt;/span&gt;  &lt;span style="color: #666666"&gt;-37.0430&lt;/span&gt;   &lt;span style="color: #666666"&gt;24.6720&lt;/span&gt; f       &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.221400&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;4&lt;/span&gt; F3         &lt;span style="color: #666666"&gt;-0.7840&lt;/span&gt;  &lt;span style="color: #666666"&gt;-37.1770&lt;/span&gt;   &lt;span style="color: #666666"&gt;23.6260&lt;/span&gt; f       &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.216800&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;5&lt;/span&gt; O1          &lt;span style="color: #666666"&gt;1.5240&lt;/span&gt;  &lt;span style="color: #666666"&gt;-34.9340&lt;/span&gt;   &lt;span style="color: #666666"&gt;20.9100&lt;/span&gt; o       &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.573600&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;6&lt;/span&gt; O2          &lt;span style="color: #666666"&gt;0.9890&lt;/span&gt;  &lt;span style="color: #666666"&gt;-34.8800&lt;/span&gt;   &lt;span style="color: #666666"&gt;23.0580&lt;/span&gt; os      &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.371900&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;7&lt;/span&gt; N          &lt;span style="color: #666666"&gt;-0.6810&lt;/span&gt;  &lt;span style="color: #666666"&gt;-34.9710&lt;/span&gt;   &lt;span style="color: #666666"&gt;21.4340&lt;/span&gt; n       &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.459500&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;8&lt;/span&gt; C1         &lt;span style="color: #666666"&gt;-1.6620&lt;/span&gt;  &lt;span style="color: #666666"&gt;-34.4140&lt;/span&gt;   &lt;span style="color: #666666"&gt;22.3130&lt;/span&gt; ca      &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS      &lt;span style="color: #666666"&gt;0.084700&lt;/span&gt;
+      &lt;span style="color: #666666"&gt;9&lt;/span&gt; C2         &lt;span style="color: #666666"&gt;-2.9150&lt;/span&gt;  &lt;span style="color: #666666"&gt;-33.9470&lt;/span&gt;   &lt;span style="color: #666666"&gt;21.8430&lt;/span&gt; ca      &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.167000&lt;/span&gt;
+     &lt;span style="color: #666666"&gt;10&lt;/span&gt; C3         &lt;span style="color: #666666"&gt;-3.8380&lt;/span&gt;  &lt;span style="color: #666666"&gt;-33.4230&lt;/span&gt;   &lt;span style="color: #666666"&gt;22.7710&lt;/span&gt; ca      &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.069500&lt;/span&gt;
+     &lt;span style="color: #666666"&gt;11&lt;/span&gt; C4         &lt;span style="color: #666666"&gt;-3.5330&lt;/span&gt;  &lt;span style="color: #666666"&gt;-33.3730&lt;/span&gt;   &lt;span style="color: #666666"&gt;24.1190&lt;/span&gt; ca      &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.025500&lt;/span&gt;
+     &lt;span style="color: #666666"&gt;12&lt;/span&gt; C5         &lt;span style="color: #666666"&gt;-2.3100&lt;/span&gt;  &lt;span style="color: #666666"&gt;-33.8290&lt;/span&gt;   &lt;span style="color: #666666"&gt;24.5930&lt;/span&gt; ca      &lt;span style="color: #666666"&gt;999&lt;/span&gt; SUS     &lt;span style="color: #666666"&gt;-0.040200&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>可以看到, 这个文件中包含了sustiva分子的三维结构, 每个原子的原子序号(第一列), 原子名称(第二列), 原子类型(第六列)以及每个原子上的电荷(最后一列). 在文件的最后还指定了成键信息. 但是这个文件并不包含任何参数. GAFF的所有参数都是在<code>$AMBERHOME/dat/leap/parm/gaff.dat</code>中定义的. 此外, 你还应该注意到, 所有GAFF原子类型的名称都以小写字母表示. 这是为了保证GAFF力场独立于大分子的AMBER力场. 所有传统AMBER力场都使用大写字母表示原子类型. 这样就可以在一次模拟中同时使用GAFF和传统力场, 而不必担心混淆.</p>
+<p>虽然参数文件中定义了大多数键, 键角, 二面角参数的可能组合, 但我们的分子仍可能包含了未知原子类型的组合, 其相应的键, 键角, 二面角参数不存在. 如果是这样的话, 在使用LEaP创建<code>prmtop</code>和<code>inpcrd</code>文件之前, 我们必须指定这些缺失的参数.</p>
+<p>我们可以使用<code>parmchk2</code>检查mol2文件, 看是否存在缺失参数:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parmchk2&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; sustiva.mol2 &lt;span style="color:#666"&gt;-f&lt;/span&gt; mol2 &lt;span style="color:#666"&gt;-o&lt;/span&gt; sustiva.frcmod
+&lt;span style="color:#080;font-style:italic"&gt;# 如果使用parmchk2报错, 改用parmchk试试&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>执行上述命令后会生成<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sustiva.frcmod"><code>sustiva.frcmod</code>文件</a>. 这是一个参数文件, 能够载入LEaP中用于添加缺失的参数, 这样就能包含所有缺失的参数. 如果可以, antechamber会根据对相似参数的类比补充缺失参数. 在模拟之前, 你应该仔细检查这些参数. 如果antechamber不能经验地计算一些参数的值, 也无法通过类比获得它们, antechamber会为这些参数指定它认为合理的值, 或者是插入占位空间(所有参数为<code>0</code>), 并返回<code>ATTN: needs revision</code>的信息. 在这种情况下, 你必须自己手动为这些参数指定合理的值. 随着GAFF的发展, 希望缺失参数的数目可以越来越少. 让我们看看<code>frcmod</code>文件的内容:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;sustiva.frcmod&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;remark goes here
+MASS
+
+BOND
+
+ANGLE
+ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;c3&lt;span style="color: #666666"&gt;-&lt;/span&gt;c1   &lt;span style="color: #666666"&gt;64.784&lt;/span&gt;     &lt;span style="color: #666666"&gt;110.735&lt;/span&gt;   Calculated with empirical approach
+c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;cx   &lt;span style="color: #666666"&gt;56.400&lt;/span&gt;     &lt;span style="color: #666666"&gt;177.990&lt;/span&gt;   same as c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;c3
+c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;cx&lt;span style="color: #666666"&gt;-&lt;/span&gt;hc   &lt;span style="color: #666666"&gt;48.300&lt;/span&gt;     &lt;span style="color: #666666"&gt;109.750&lt;/span&gt;   same as c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;c3&lt;span style="color: #666666"&gt;-&lt;/span&gt;hc
+c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;cx&lt;span style="color: #666666"&gt;-&lt;/span&gt;cx   &lt;span style="color: #666666"&gt;64.200&lt;/span&gt;     &lt;span style="color: #666666"&gt;111.590&lt;/span&gt;   same as c1&lt;span style="color: #666666"&gt;-&lt;/span&gt;c3&lt;span style="color: #666666"&gt;-&lt;/span&gt;c3
+
+DIHE
+
+IMPROPER
+ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;ha         &lt;span style="color: #666666"&gt;1.1&lt;/span&gt;          &lt;span style="color: #666666"&gt;180.0&lt;/span&gt;         &lt;span style="color: #666666"&gt;2.0&lt;/span&gt;          General improper torsional angle (&lt;span style="color: #666666"&gt;2&lt;/span&gt; general atom types)
+n &lt;span style="color: #666666"&gt;-&lt;/span&gt;o &lt;span style="color: #666666"&gt;-&lt;/span&gt;c &lt;span style="color: #666666"&gt;-&lt;/span&gt;os        &lt;span style="color: #666666"&gt;10.5&lt;/span&gt;          &lt;span style="color: #666666"&gt;180.0&lt;/span&gt;         &lt;span style="color: #666666"&gt;2.0&lt;/span&gt;          General improper torsional angle (&lt;span style="color: #666666"&gt;2&lt;/span&gt; general atom types)
+c &lt;span style="color: #666666"&gt;-&lt;/span&gt;ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;n &lt;span style="color: #666666"&gt;-&lt;/span&gt;hn         &lt;span style="color: #666666"&gt;1.1&lt;/span&gt;          &lt;span style="color: #666666"&gt;180.0&lt;/span&gt;         &lt;span style="color: #666666"&gt;2.0&lt;/span&gt;          General improper torsional angle (&lt;span style="color: #666666"&gt;2&lt;/span&gt; general atom types)
+ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;ca&lt;span style="color: #666666"&gt;-&lt;/span&gt;n          &lt;span style="color: #666666"&gt;1.1&lt;/span&gt;          &lt;span style="color: #666666"&gt;180.0&lt;/span&gt;         &lt;span style="color: #666666"&gt;2.0&lt;/span&gt;          Using default value
+
+NONBON
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>我们可以看到, 一共缺失了4个键角参数和4个反常二面角参数. 考虑到本教程的目的, 我们直接假定antechamber建议的参数可以接受, 无须修改. 理想情况下, 你应该实际测试这些参数(例如通过与ab initio计算进行比较)以保证其合理性. 如果你看到任何列出的带有<code>ATTN: needs revision</code>注释的参数, 都意味着antechamber无法确定合适的参数, 在模拟之前你必须手动提供这些参数的值. 默认情况下antechamber会将这些参数设置为<code>0</code>.</p>
+<p>现在我们已经准备好了将sustiva载入LEaP作为一个单元的所有工作, 只需要运行<code>tleap</code>保证GAFF力场能够使用即可.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt; &lt;span style="color:#666"&gt;-f&lt;/span&gt; oldff/leaprc.ff99SB
+&lt;/pre&gt;&lt;/div&gt;<p><code>tleap</code>出现并运行后, 我们还需要保证<code>tleap</code>可以调用GAFF力场, <code>$AMBERHOME/dat/leap/cmd/</code>有一个脚本可以帮我们完成这件事. 我们可以使用下面的命令将其载入<code>tleap</code>:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.gaff
+&lt;/pre&gt;&lt;/div&gt;<p>现在我们的<code>tleap</code>终端看起来应该类似如下所示:</p>
+<pre><code>Welcome to LEaP!
+(no leaprc in search path)
+Sourcing: /usr/local/amber10/dat/leap/cmd/oldff/leaprc.ff99SB
+Log file: ./leap.log
+Loading parameters: /usr/local/amber10/dat/leap/parm/parm99.dat
+Reading title:
+PARM99 for DNA,RNA,AA, organic molecules, TIP3P wat. Polariz.&amp; LP incl.02/04/99
+Loading parameters: /usr/local/amber10/dat/leap/parm/frcmod.ff99SB
+Reading force field modification type file (frcmod)
+Reading title:
+Modification/update of parm99.dat (Hornak &amp; Simmerling)
+Loading library: /usr/local/amber10/dat/leap/lib/all_nucleic94.lib
+Loading library: /usr/local/amber10/dat/leap/lib/all_amino94.lib
+Loading library: /usr/local/amber10/dat/leap/lib/all_aminoct94.lib
+Loading library: /usr/local/amber10/dat/leap/lib/all_aminont94.lib
+Loading library: /usr/local/amber10/dat/leap/lib/ions94.lib
+Loading library: /usr/local/amber10/dat/leap/lib/solvents.lib
+&gt; source leaprc.gaff
+----- Source: /usr/local/amber10/dat/leap/cmd/leaprc.gaff
+----- Source of /usr/local/amber10/dat/leap/cmd/leaprc.gaff done
+Log file: ./leap.log
+Loading parameters: /usr/local/amber10/dat/leap/parm/gaff.dat
+Reading title:
+AMBER General Force Field for organic mol., add. info. at the end (June, 2003)
+&gt;
+</code></pre>
+<p>现在我们可以载入sustiva单元(<code>sustiva.mol2</code>):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;SUS&lt;/span&gt; = loadmol2 sustiva.mol2
+&lt;/pre&gt;&lt;/div&gt;<p>选择如果你在<code>tleap</code>中键入<code>list</code>, 应该可以看到新添加到<code>SUS</code>单元:</p>
+<pre><code>&gt; SUS = loadmol2 sustiva.mol2
+Loading Mol2 file: ./sustiva.mol2
+Reading MOLECULE named SUS
+&gt; list
+ACE       ALA       ARG       ASH       ASN       ASP       CALA      CARG
+CASN      CASP      CCYS      CCYX      CGLN      CGLU      CGLY      CHCL3BOX
+CHID      CHIE      CHIP      CHIS      CILE      CIO       CLEU      CLYS
+CMET      CPHE      CPRO      CSER      CTHR      CTRP      CTYR      CVAL
+CYM       CYS       CYX       Cl-       Cs+       DA        DA3       DA5
+DAN       DC        DC3       DC4       DC5       DCN       DG        DG3
+DG5       DGN       DT        DT3       DT5       DTN       GLH       GLN
+GLU       GLY       HID       HIE       HIP       HIS       HOH       IB
+ILE       K+        LEU       LYN       LYS       Li+       MEOHBOX   MET
+MG2       NALA      NARG      NASN      NASP      NCYS      NCYX      NGLN
+NGLU      NGLY      NHE       NHID      NHIE      NHIP      NHIS      NILE
+NLEU      NLYS      NMABOX    NME       NMET      NPHE      NPRO      NSER
+NTHR      NTRP      NTYR      NVAL      Na+       PHE       PL3       POL3BOX
+PRO       QSPCFWBOX RA        RA3       RA5       RAN       RC        RC3
+RC5       RCN       RG        RG3       RG5       RGN       RU        RU3
+RU5       RUN       Rb+       SER       SPC       SPCBOX    SPCFWBOX  SPF
+SPG       SUS       T4E       THR       TIP3PBOX  TIP3PFBOX TIP4PBOX  TIP4PEWBOX
+TP3       TP4       TP5       TPF       TRP       TYR       VAL       WAT
+frcmod99SBgaff      parm99
+</code></pre>
+<p>到这一步为止, 我们尚未加载<code>parmchk2</code>提供的<code>frcmod</code>文件, 因此检查我们的<code>SUS</code>单元就会发现缺少4个键角类型参数. 运行下面的命令进行检查</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;check&lt;/span&gt; SUS
+&lt;/pre&gt;&lt;/div&gt;<p>结果如下</p>
+<pre><code>&gt; check SUS
+Checking 'SUS'....
+Checking parameters for unit 'SUS'.
+Checking for bond parameters.
+Checking for angle parameters.
+Could not find angle parameter: ca - c3 - c1
+Could not find angle parameter: c1 - c1 - cx
+Could not find angle parameter: c1 - cx - hc
+Could not find angle parameter: c1 - cx - cx
+Could not find angle parameter: c1 - cx - cx
+There are missing parameters.
+Unit is OK.
+</code></pre>
+<p>缺失的键角类型参数为<code>ca-c3-c1</code>, <code>c1-c1-cx</code>, <code>c1-cx-hc</code>和<code>c1-cx-cx</code>. 它们涉及环丙基和C-C三键的键角. 这并不意外, 因为这种体系类型在有机分子中非常少见. 现在我们可以加载<code>frcmod</code>文件指示<code>tleap</code>为缺失的键角类型使用其中的参数. 使用如下命令加载<code>frcmod</code>文件:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;loadamberparams&lt;/span&gt; sustiva.frcmod
+&lt;/pre&gt;&lt;/div&gt;<p>如果再次检查<code>SUS</code>单元, 我们应该发现已经没有缺失的参数了:</p>
+<pre><code>&gt; loadamberparams sustiva.frcmod
+loading parameters: ./sustiva.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+remark goes here
+&gt; check SUS
+Checking 'SUS'....
+Checking parameters for unit 'SUS'.
+Checking for bond parameters.
+Checking for angle parameters.
+Unit is OK.
+</code></pre>
+<p>现在我们就可以创建sustiva的库文件(<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sus.lib"><code>sus.lib</code></a>), 以及<code>prmtop</code>文件和<code>inpcrd</code>文件(<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sustiva.prmtop"><code>sustiva.prmtop</code></a>, <a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sustiva.inpcrd"><code>sustiva.inpcrd</code></a>):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;saveoff&lt;/span&gt; SUS sus.lib
+&lt;span style="color:#A2F"&gt;saveamberparm&lt;/span&gt; SUS sustiva.prmtop sustiva.inpcrd
+&lt;/pre&gt;&lt;/div&gt;<p><code>tleap</code>的输出中会有一些警告, 我们可以放心地忽略它们, 因为这是由sustiva中三角形键的结构导致的(只有当你理解了导致警告的确切原因时才可以忽略, 不是所有的警告都可以忽略!).</p>
+<pre><code>&gt; saveoff SUS sus.lib
+Building topology.
+Building atom parameters.
+&gt;
+&gt; saveamberparm SUS sustiva.prmtop sustiva.inpcrd
+Checking Unit.
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+1-4: angle 7 12 duplicates bond ('triangular' bond) or angle ('square' bond)
+
+1-4: angle 7 9 duplicates bond ('triangular' bond) or angle ('square' bond)
+
+1-4: angle 9 12 duplicates bond ('triangular' bond) or angle ('square' bond)
+
+Building improper torsion parameters.
+ total 8 improper torsions applied
+Building H-Bond parameters.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+  (Residues lacking connect0/connect1 -
+   these don't have chain types marked:
+
+        res     total affected
+
+        SUS     1
+  )
+ (no restraints)
+&gt;
+</code></pre>
+<p>你可以在<code>tleap</code>终端中逐行输入上面的命令, 也可以将上面的命令逐行写入<code>tleap</code>的输入文件中(<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/tleap.in"><code>tleap.in</code></a>), 然后一次生成所有需要的文件:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt; &lt;span style="color:#666"&gt;-f&lt;/span&gt; tleap.in
+&lt;/pre&gt;&lt;/div&gt;<h2>创建Sustiva-RT复合物的拓扑和坐标文件</h2>
+<p>既然可以将传统的AMBER力场和GAFF混合使用, 我们就可以载入HIV病毒逆转录酶(RT, reverse transcriptase)的片段作为受体, 使用ff99SB力场进行处理, 同时载入Sustiva分子作为配体, 使用GAFF力场进行处理. 为此, 我们需要使用之前步骤中生成的Sustiva库文件(<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/sus.lib"><code>sus.lib</code></a>).</p>
+<p>在PDB数据库RCSB中可以找到RT-Sustiva复合物(PDB编号: 1FKO). 相应的PDB文件为<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO.pdb"><code>1FKO.pdb</code></a>.</p>
+<p>HIV逆转录酶是异质二聚体, 由p51和p66两个亚基组成. 它是个很大的蛋白质, 分子量为117 KDa. 鉴于此教程的目的, 我们将截取与Sustiva邻近的那部分残基作为模拟体系, 包括p66亚基的指掌结构域. 截取的PDB文件为<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_trunc.pdb"><code>1FKO_trunc.pdb</code></a>.</p>
+<p>加载Sustiva的库文件后, 为了使<code>tleap</code>能够识别1FKO的PDB文件, 我们需要将1FKO PDB文件中Sustiva的残基名称从<code>EFZ</code>改为<code>SUS</code>. 由于Sustiva库文件中的原子名称与1FKO PDB文件中Sustiva分子的原子名称相同, 所以不需要进行更多修改. 在其他情况下, 始终要检查PDB文件和库文件中的原子名称是否匹配, 残基名称是否匹配. 修改后的PDB文件为<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_trunc_sus.pdb"><code>1FKO_trunc_sus.pdb</code></a>.</p>
+<p>现在我们可以将PDB文件载入<code>tleap</code>.</p>
+<p>首先, 如先前步骤中的那样, 我们启动<code>tleap</code>, 加载力场以及参数信息:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt; &lt;span style="color:#666"&gt;-f&lt;/span&gt; oldff/leaprc.ff99SB
+
+&lt;span style="color:#A2F"&gt;&gt;source&lt;/span&gt; leaprc.gaff
+
+&lt;span style="color:#A2F"&gt;&gt;loadamberparams&lt;/span&gt; sustiva.frcmod
+&lt;/pre&gt;&lt;/div&gt;<p>再加载Sustiva的库文件(<code>sus.lib</code>)和复合物的PDB文件<code>1FKO_trunc_sus.pdb</code>:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;&gt;loadoff&lt;/span&gt; sus.lib
+
+&lt;span style="color:#A2F"&gt;&gt;complex&lt;/span&gt; = loadpdb 1FKO_trunc_sus.pdb
+&lt;/pre&gt;&lt;/div&gt;<p>最后创建截取的RT-sustiva复合物的拓扑和坐标文件:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;&gt;saveamberparm&lt;/span&gt; complex 1FKO_sus.prmtop 1FKO_sus.inpcrd
+&lt;span style="color:#A2F"&gt;&gt;savepdb&lt;/span&gt; complex 1FKO_sus.pdb
+&lt;span style="color:#A2F"&gt;&gt;quit&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>你可以使用VMD查看截取的RT-sustiva复合物的结构(<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_sus.pdb">1FKO_sus.pdb</a>)</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/amb/amb_b4_RT.png"/></p>
+<p>类似先前的操作, 我们将以上操作命令写入<code>tleap</code>输入文件(<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/tleap2.in"><code>tleap2.in</code></a>), 并执行生成RT-sustiva复合物的所有文件:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt; &lt;span style="color:#666"&gt;-f&lt;/span&gt; tleap2.in
+&lt;/pre&gt;&lt;/div&gt;<h2>Sustiva-RT复合物的能量最小化和平衡</h2>
+<p>一旦有了RT-Sustiva复合物的拓扑和坐标文件, 我们就可以对其运行短时间的GB模拟了. 注意, 为了使模拟不影响完成本教程所需的总时间, 这里给出的模拟流程很短. 在真正的"成品"模拟中你应该运行足够长时间的模拟(ns)以得到好的统计收敛性.</p>
+<p>首先, 我们将对复合物进行能量最小化以去除所有可能不合理的原子接触. 输入<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/min.in">文件<code>min.in</code></a>如下所示:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;min.in&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2
+3
+4
+5&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;Initial minimisation of sustiva&lt;span style="color: #666666"&gt;-&lt;/span&gt;RT complex
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;cntrl
+  imin&lt;span style="color: #666666"&gt;=1&lt;/span&gt;, maxcyc&lt;span style="color: #666666"&gt;=200&lt;/span&gt;, ncyc&lt;span style="color: #666666"&gt;=50&lt;/span&gt;,
+  cut&lt;span style="color: #666666"&gt;=16&lt;/span&gt;, ntb&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, igb&lt;span style="color: #666666"&gt;=1&lt;/span&gt;,
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;end
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>我们将进行总共200步的能量最小化(<code>MAXCYC</code>), 其中开始的50步使用最速下降法(<code>NCYC</code>), 剩下的使用共轭梯度法(<code>MAXCYC</code>-<code>NCYC</code>). 因为这不是周期性体系的模拟并且我们想要准确处理静电(<code>NTB=0</code>, <code>CUT=16</code>), 所以我们使用大的截断16埃是合理的. 对于隐式溶剂模型, 我们将使用Hawkins, Cramer和Truhlar发展的GB模型(<code>IGB=1</code>). 相关的完整说明见AMBER手册.</p>
+<p>使用如下命令运行能量最小化:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;sander&lt;/span&gt; &lt;span style="color:#666"&gt;-O&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; min.in &lt;span style="color:#666"&gt;-o&lt;/span&gt; 1FKO_sus_min.out &lt;span style="color:#666"&gt;-p&lt;/span&gt; 1FKO_sus.prmtop &lt;span style="color:#666"&gt;-c&lt;/span&gt; 1FKO_sus.inpcrd &lt;span style="color:#666"&gt;-r&lt;/span&gt; 1FKO_sus_min.crd  &amp;
+&lt;/pre&gt;&lt;/div&gt;<p>运行需要一定时间. 耐心等待一段时间后(在我的本地机器上花费了大约三分钟)就可得到输出文件. 如果你不愿等待, 可以下载输出文件<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_sus_min.out"><code>1FKO_sus_min.out</code></a>和<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_sus_min.crd"><code>IFKO_sus_min.crd</code></a>.</p>
+<p>如果需要, 你可以使用<code>ambpdb</code>生成能量最小化后的结构的PDB文件(<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_sus_min.pdb"><code>1FKO_sus_min.pdb</code></a>):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;ambpdb&lt;/span&gt; &lt;span style="color:#666"&gt;-p&lt;/span&gt; 1FKO_sus.prmtop &lt; 1FKO_sus_min.crd &gt; 1FKO_sus_min.pdb
+&lt;/pre&gt;&lt;/div&gt;<p>使用肉眼查看你的结构是一个好的习惯, 因为人类的眼睛非常善于发现模拟的异常.</p>
+<p>下一步骤是使用热浴对RT-Sustiva复合物进行升温. 为节省教程操作时间, 我们只进行1 ps的快速升温. 实际操作中应该使用更长的时间.</p>
+<p>我们的<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/eq.in">升温文件<code>eq.in</code></a>如下:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;eq.in&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;Initial MD equilibration
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;cntrl
+  imin&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, irest&lt;span style="color: #666666"&gt;=0&lt;/span&gt;,
+  nstlim&lt;span style="color: #666666"&gt;=1000&lt;/span&gt;,dt&lt;span style="color: #666666"&gt;=0.001&lt;/span&gt;, ntc&lt;span style="color: #666666"&gt;=1&lt;/span&gt;,
+  ntpr&lt;span style="color: #666666"&gt;=20&lt;/span&gt;, ntwx&lt;span style="color: #666666"&gt;=20&lt;/span&gt;,
+  cut&lt;span style="color: #666666"&gt;=16&lt;/span&gt;, ntb&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, igb&lt;span style="color: #666666"&gt;=1&lt;/span&gt;,
+  ntt&lt;span style="color: #666666"&gt;=3&lt;/span&gt;, gamma_ln&lt;span style="color: #666666"&gt;=1.0&lt;/span&gt;,
+  tempi&lt;span style="color: #666666"&gt;=0.0&lt;/span&gt;, temp0&lt;span style="color: #666666"&gt;=300.0&lt;/span&gt;,
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;end
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>我们将运行MD(<code>imin=0</code>), 且不是重启运行(<code>irest=0</code>). 在上面的示例中我们不使用SHAKE约束, 因为氢原子的运动可能影响结合能(也可能不影响, 这里只是为了示例). 由于不使用SHAKE约束, 所以我们需要使用比常规情况更小的时间步长. 我们使用的时间步长为1 fs, 运行1000步(<code>dt = 0.001</code>, <code>nstlim=1000</code>, <code>ntc=1</code>, 共运行2 ps), 每20步输出一次输出文件, 每20步输出一次轨迹(mdcrd)文件(<code>ntpr=20</code>,<code>ntwx=20</code>). 我们使用Langevin动力学方法控制温度, 碰撞频率为1 ps^-1. 我们的体系从0 K开始, 目标温度为300 K(<code>ntt=3</code>, <code>gamma_ln=1.0</code>, <code>tempi=0.0</code>, <code>temp0=300.0</code>).</p>
+<p>输入以下命令执行模拟:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;sander&lt;/span&gt; &lt;span style="color:#666"&gt;-O&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; eq.in &lt;span style="color:#666"&gt;-o&lt;/span&gt; 1FKO_sus_eq.out &lt;span style="color:#666"&gt;-p&lt;/span&gt; 1FKO_sus.prmtop &lt;span style="color:#666"&gt;-c&lt;/span&gt; 1FKO_sus_min.crd &lt;span style="color:#666"&gt;-r&lt;/span&gt; 1FKO_sus_eq.rst &lt;span style="color:#666"&gt;-x&lt;/span&gt; 1FKO_sus_eq.mdcrd &amp;
+&lt;/pre&gt;&lt;/div&gt;<p>升温轨迹和重启坐标分别保存在<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_sus_eq.mdcrd"><code>1FKO_sus_eq.mdcrd</code></a>和<a href="http://ambermd.org/tutorials/basic/tutorial4b/files/1FKO_sus_eq.rst"><code>1FKO_sus_eq.rst</code></a>中. 现在sustiva-RT复合物已经进行过能量最小化和升温, 你可以查看一下体系300 K时的轨迹快照. 这个结构可以用于下一步平衡的初始结构.</p>
+<h2>参考资料</h2>
+<ol>
+<li>Wang, J., Wolf, R.M., Caldwell, J.W., Kollman, P.A., Case, D.A. "Development and Testing of a General Amber Force Field", J. Comp. Chem., 2004, 25, 1157 - 1173.</li>
+<li>Bayly, C.I., Cieplak, P., Cornell, W.D., Kollman, P.A. "A Well-Behaved Electrostatic Potential Based Method Using Charge Restraints for Deriving Atomic Charges : The RESP Model", J. Phys. Chem, 1993, 10269-10280.</li>
+<li>Jakalian, A., Bush, B.L., Jack, B.D., Bayly, C.I., "Fast, Efficient Generation of High-Quality Atomic Charges. AM1-BCC Model: I. Method.", J. Comp. Chem., 2000, 21, 132-146.</li>
+</ol>
+<hr/>
+<h1>译者 李睿 附言</h1>
+<h2>总结</h2>
+<ol>
+<li>本教程涉及使用GAFF力场创建小分子化合物的拓扑以及相关参数文件, 小分子配体-蛋白质受体复合物参数文件的组装以及简单的amber MD模拟流程.</li>
+<li>使用程序: <code>antechamber</code>, <code>parmchk2</code>, <code>tleap</code>.</li>
+<li>处理步骤: 1. 小分子参数文件的前处理; 2. 复合物的组装; 3. 部分MD模拟.</li>
+</ol>
+<h2>命令及部分流程测试</h2>
+<p>注意: 我使用的是自己的体系所以名字与教程不同, 但操作流程一致.</p>
+<h3>1. 前处理</h3>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;reduce&lt;/span&gt; part1.pdb &gt; part.pdb
+&lt;span style="color:#080;font-style:italic"&gt;# 加H这一步非常重要, 只有使用正确加氢之后的结构进行模拟才符合实际情况.&lt;/span&gt;
+&lt;span style="color:#080;font-style:italic"&gt;# 每次加氢之后必须检查结构是否正确, 这是本教程的关键!&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;antechamber&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; part.pdb &lt;span style="color:#666"&gt;-fi&lt;/span&gt; pdb &lt;span style="color:#666"&gt;-o&lt;/span&gt; pa.mol2 &lt;span style="color:#666"&gt;-fo&lt;/span&gt; mol2 &lt;span style="color:#666"&gt;-c&lt;/span&gt; bcc
+&lt;span style="color:#080;font-style:italic"&gt;# 由pdb文件生成mol2文件, &lt;span style="color:#666"&gt;-s&lt;/span&gt; 可以不用, 输出信息更少.&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;parmchk&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; pa.mol2 &lt;span style="color:#666"&gt;-f&lt;/span&gt; mol2 &lt;span style="color:#666"&gt;-o&lt;/span&gt; pa.frcmod
+&lt;span style="color:#080;font-style:italic"&gt;# 检查mol2文件缺失的参数, 在frccmod文件内补全.&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<h3>2. 使用<code>tleap</code>加载数据并进行处理和转换</h3>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt;                    &lt;span style="color:#080;font-style:italic"&gt;  # 开启leap, 载入信息&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.ff99SB     &lt;span style="color:#080;font-style:italic"&gt;  # 注意大小写一致&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.gaff       &lt;span style="color:#080;font-style:italic"&gt;  # 加载要使用的GAFF力场&lt;/span&gt;
+                         &lt;span style="color:#080;font-style:italic"&gt;  # 不理解为什么还要加载 tleap &lt;span style="color:#666"&gt;-f&lt;/span&gt; oldff/leaprc.ff99SB&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;OMET=loadmol2&lt;/span&gt; pa.mol2    &lt;span style="color:#080;font-style:italic"&gt;  # 将pa.mol2文件以 OMET 名称载入leap&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;loadamberparams&lt;/span&gt; pa.frcmod&lt;span style="color:#080;font-style:italic"&gt;  # 载入缺失参数文件pa.frcmod&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;check&lt;/span&gt; OMET               &lt;span style="color:#080;font-style:italic"&gt;  # 程序自检OMET分子结构&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;saveoff&lt;/span&gt; OMET OMET.lib    &lt;span style="color:#080;font-style:italic"&gt;  # 将leap内OMET分子结构保存为OMET.lib文件用与复合物的组装.&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;saveamberparm&lt;/span&gt; OMET OMET.prmtop OMET.inpcrd
+&lt;span style="color:#080;font-style:italic"&gt;# 将leap内OMET分子结构保存为OMET.prmtop和OMET.inpcrd文件备用&lt;/span&gt;
+&lt;span style="color:#080;font-style:italic"&gt;# 两个文件扩展名也可分别为.top和.crd, 仔细看名称, 一一对应.&lt;/span&gt;
+&lt;span style="color:#080;font-style:italic"&gt;# 注: acpype &lt;span style="color:#666"&gt;-p&lt;/span&gt; OMET.prmtop &lt;span style="color:#666"&gt;-x&lt;/span&gt; OMET.inpcrd &lt;span style="color:#666"&gt;-d&lt;/span&gt;&lt;/span&gt;
+&lt;span style="color:#080;font-style:italic"&gt;#     将amber文件转换到gromacs文件, 这与非标准残基的处理方法相同&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<h3>3. 复合物的组装</h3>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt;                    &lt;span style="color:#080;font-style:italic"&gt;  # 开启leap, 载入信息&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.ff99SB     &lt;span style="color:#080;font-style:italic"&gt;  # 注意大小写一致&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.gaff       &lt;span style="color:#080;font-style:italic"&gt;  # 加载要使用的gaff力场.&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;loadamberparams&lt;/span&gt; pa.frcmod&lt;span style="color:#080;font-style:italic"&gt;  # 载入缺失参数补充文件&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;loadoff&lt;/span&gt; OMET.lib         &lt;span style="color:#080;font-style:italic"&gt;  # 将之前处理的lib文件载入&lt;/span&gt;
+&lt;span style="color:#080;font-style:italic"&gt;# 注: OMET=loadmol2 OMET.mol2&lt;/span&gt;
+&lt;span style="color:#080;font-style:italic"&gt;# 经测试, 如果出现如下图原子缺失错误则需要再次载入OMET.mol2, 并进行相应修改&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;complex&lt;/span&gt; = loadpdb 1FKO_trunc_sus.pdb&lt;span style="color:#080;font-style:italic"&gt;  # 将复合物模板载入leap进行识别&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;saveamberparm&lt;/span&gt; complex 1FKO_sus.prmtop 1FKO_sus.inpcrd&lt;span style="color:#080;font-style:italic"&gt;  # 输出prmtop和inpcrd文件&lt;/span&gt;
+
+&lt;span style="color:#A2F"&gt;savepdb&lt;/span&gt; complex complex.pdb&lt;span style="color:#080;font-style:italic"&gt;  # 保存为pdb格式&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p><img alt="" src="https://jerkwin.github.io/pic/amb/amb_b4_err.png"/></p>
+<h3>4. 部分MD模拟</h3>
+<p>限于工作需要, 我学习amber的初衷是用amber来补充gromacs做不到的事情, (笑. 对我来说, 目前的需求在于分子模拟入门并应用, 追求准确的结果或者能被广泛接受的模拟技术流程, 而不是花式做模拟). 所以我日常工作多使用amber的免费部分进行数据处理, 转换, 以及模拟后能量分析. 长程模拟都在gromacs上进行.</p>
+<p>总而言之, 我在使用amber进行模拟这部分基本没什么心得, 就不在此班门弄斧了.</p>
+<h2>后记</h2>
+<p>时间仓促, 翻译部分有点粗糙, 本着求真务实的态度, 请各位老师批评指正.</p>
+<p>感谢GROMACS/AMBER中文组的各位老师同学对我学习的帮助与支持, 我相信只有互利, 才能共赢.</p>
+<p>祝各位模拟顺利~~o(<em>￣︶￣</em>)o.</p>
+<p>谢谢大家!</p>

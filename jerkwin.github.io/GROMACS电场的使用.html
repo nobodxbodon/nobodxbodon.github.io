@@ -1,0 +1,255 @@
+<h2>原文：<a href="https://jerkwin.github.io/2016/06/29/GROMACS电场的使用">GROMACS电场的使用</a></h2>
+<hr/>
+<p>layout: post
+ title: GROMACS电场的使用
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li>2016-06-29 11:05:40</li>
+</ul>
+<p>GROMACS源代码中有关电场的代码至少可追溯至3.3版本, 但由于低版本手册中没有提及, 所以很多人以为GROMACS是不支持电场的. 在GROMACS 5.x版本的手册中虽然提到了电场的选项, 但仍语焉不详, 且说明与实际代码实现不一致, 导致很多误解. 在这里, 我根据网上查阅到的资料, 以及源代码和实际测试, 对GROMACS的电场选项说明一下. 使用的GROMACS版本为5.1.2.</p>
+<h2>手册7.3.26中电场选项的说明</h2>
+<blockquote><ul>
+<li><code>E-x</code>; <code>E-y</code>; <code>E-z</code>:</li>
+</ul>
+<p>如果你想在某个方向上使用电场, 在适当的E-*后输入3个数字. 第一个数字为余弦的数目, 因为只实现了单个余弦项(频率为0), 所以输入1即可; 第二个数字: 电场强度, 以V/nm为单位; 第三个数字: 余弦的相位, 你可以在这里输入任何数字, 因为频率为零的余弦没有相位.</p>
+</blockquote>
+<p><strong>补充说明</strong></p>
+<p>实际上, 这几个选项在源码中称为电场的空间部分, 也就是电场不随时间变化的部分, 即用以设定电场强度. 这里你也可以使用多个余弦项, 每个余弦项指定两个参数, 强度大小和相位. 但正如上面所说, 代码中只实现了使用一个余弦项的功能, 所以即便指定了多个余弦项, 也只有第一个起作用, 其他被忽略. 另外, 只有设定的电场强度有意义, 相位参数没有在代码中使用, 所有随意给个数字即可.</p>
+<p>例如, 你可以使用两个余弦项, 那就指定<code>E-x = 2 第一项电场强度 任意数字 第二项电场强度 任意数字</code>, 但效果与<code>E-x = 1 电场强度 任意数字</code>是一样的. 还要注意, 第一个数字必须写为整数, 不能带小数点, 写成<code>1.0</code>这种会出问题.</p>
+<blockquote><ul>
+<li><code>E-xt</code>; <code>E-yt</code>; <code>E-zt</code>:</li>
+</ul>
+<p>使用这些选项你可以设置一个脉冲交变电场. 这个交变电场的形式为高斯脉冲:</p>
+<p>$$E(t) = E_0 \exp \left[-{(t-t_0)^2 \over 2 \s^2} \right] \cos\left[\w(t-t_0)\right]$$</p>
+<p>例如, x方向的<code>E-x</code>和<code>E-xt</code>各自有三个字段, 一共需要定义四个参数, 就像下面这样:</p>
+<p><code>E-x = 1 E0 0</code></p>
+<p>&lt;del&gt;&lt;code&gt;E-xt = omega t0 sigma&lt;/code&gt;&lt;/del&gt;</p>
+<p>&lt;del&gt;在特殊的例子里如果 &lt;code&gt;sigma = 0&lt;/code&gt;, 那么指数项将被省略, 只使用余弦项.&lt;/del&gt;</p>
+<p>更多的细节可参考论文Carl Caleman and David van der Spoel: Picosecond Melting of Ice by an Infrared Laser Pulse - A Simulation Study Angew. Chem. Intl. Ed. 47 pp. 14 17-1420 (2008)。</p>
+</blockquote>
+<p><strong>补充说明</strong></p>
+<p>这几个选项称为电场的时间部分, 也就是电场随时间变化的部分, 不包含空间强度部分的信息. 手册中的说明有误, 错误部分已经标识删除线.</p>
+<p>在这里你可以选择使用单个余弦变化的电场, 或是高斯脉冲交变电场. 但选项参数的设置有讲究, 且高斯脉冲电场的<code>sigma</code>参数不能为<code>0</code>, 否则运行出错.</p>
+<p>与<code>E-x</code>等选项一样, <code>E-xt</code>等选项的参数设置格式中, 第一个数字也是余弦项的数目, 后面跟着每个余弦项的频率omega和相位phi, 但源码中没有使用phi, 所以只有设定的omega有意义, phi可以随意给个数字.</p>
+<p>使用高斯脉冲电场时, <code>E-xt</code>等选项的第一个参数必须为<code>3</code>, 且后面跟着6个数字, 分别是<code>omega 任意数字 t0 任意数字 sigma 任意数字</code>.</p>
+<p>使用余弦电场时, <code>Ex-t</code>等选项的第一个参数不为<code>3</code>即可, 但仍然只有第一项起作用, 所以使用<code>1 omega 任意数字</code>即可.</p>
+<h2>源代码中的电场部分</h2>
+<p>GROMACS中电场的实现代码位于<code>.\gromacs-5.1.2\src\gromacs\mdlib\sim_util.cpp</code>的<code>calc_f_el</code>函数,</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;c&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span style="color: #008800; font-style: italic"&gt;/*&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * calc_f_el calculates forces due to an electric field.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; *&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * force is kJ mol^-1 nm^-1 = e * kJ mol^-1 nm^-1 / e&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; *&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * Et[] contains the parameters for the time dependent&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * part of the field.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * Ex[] contains the parameters for&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * the spatial dependent part of the field.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * The function should return the energy due to the electric field&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * (if any) but for now returns 0.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; *&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * WARNING:&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * There can be problems with the virial.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * Since the field is not self-consistent this is unavoidable.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * For neutral molecules the virial is correct within this approximation.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * For neutral systems with many charged molecules the error is small.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * But for systems with a net charge or a few charged molecules&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * the error can be significant when the field is high.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; * Solution: implement a self-consistent electric field into PME.&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt; */&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;static&lt;/span&gt; &lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt; &lt;span style="color: #00A000"&gt;calc_f_el&lt;/span&gt;(&lt;span style="color: #00BB00; font-weight: bold"&gt;FILE&lt;/span&gt; &lt;span style="color: #666666"&gt;*&lt;/span&gt;fp, &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;  start, &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; homenr,
+                      real charge[], rvec f[],
+                      t_cosines Ex[], t_cosines Et[], &lt;span style="color: #00BB00; font-weight: bold"&gt;double&lt;/span&gt; t)
+{
+    rvec Ext;
+    real t0;
+    &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;  i, m;
+
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (m &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;; (m &lt;span style="color: #666666"&gt;&lt;&lt;/span&gt; DIM); m&lt;span style="color: #666666"&gt;++&lt;/span&gt;)
+    {
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Et[m].n &lt;span style="color: #666666"&gt;&gt;&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;)
+        {
+            &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Et[m].n &lt;span style="color: #666666"&gt;==&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt;)
+            {
+                t0     &lt;span style="color: #666666"&gt;=&lt;/span&gt; Et[m].a[&lt;span style="color: #666666"&gt;1&lt;/span&gt;];
+                Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; cos(Et[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;(t&lt;span style="color: #666666"&gt;-&lt;/span&gt;t0))&lt;span style="color: #666666"&gt;*&lt;/span&gt;exp(&lt;span style="color: #666666"&gt;-&lt;/span&gt;sqr(t&lt;span style="color: #666666"&gt;-&lt;/span&gt;t0)&lt;span style="color: #666666"&gt;/&lt;/span&gt;(&lt;span style="color: #666666"&gt;2.0*&lt;/span&gt;sqr(Et[m].a[&lt;span style="color: #666666"&gt;2&lt;/span&gt;])));
+            }
+            &lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
+            {
+                Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; cos(Et[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;t);
+            }
+        }
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
+        {
+            Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;1.0&lt;/span&gt;;
+        }
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Ex[m].n &lt;span style="color: #666666"&gt;&gt;&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;)
+        {
+            &lt;span style="color: #008800; font-style: italic"&gt;/* Convert the field strength from V/nm to MD-units */&lt;/span&gt;
+            Ext[m] &lt;span style="color: #666666"&gt;*=&lt;/span&gt; Ex[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;FIELDFAC;
+            &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (i &lt;span style="color: #666666"&gt;=&lt;/span&gt; start; (i &lt;span style="color: #666666"&gt;&lt;&lt;/span&gt; start&lt;span style="color: #666666"&gt;+&lt;/span&gt;homenr); i&lt;span style="color: #666666"&gt;++&lt;/span&gt;)
+            {
+                f[i][m] &lt;span style="color: #666666"&gt;+=&lt;/span&gt; charge[i]&lt;span style="color: #666666"&gt;*&lt;/span&gt;Ext[m];
+            }
+        }
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
+        {
+            Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;;
+        }
+    }
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (fp &lt;span style="color: #666666"&gt;!=&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;NULL&lt;/span&gt;)
+    {
+        fprintf(fp, &lt;span style="color: #BB4444"&gt;"%10g  %10g  %10g  %10g #FIELD&lt;/span&gt;&lt;span style="color: #BB6622; font-weight: bold"&gt;\n&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"&lt;/span&gt;, t,
+                Ext[XX]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC, Ext[YY]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC, Ext[ZZ]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC);
+    }
+}
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>可以看到, 函数<code>calc_f_el</code>中传入的<code>Ex[]</code>和<code>Et[]</code>的数据类型都是<code>t_cosines</code>. 这种数据类型的定义于<code>.\gromacs-5.1.2\src\gromacs\legacyheaders\types\inputrec.h</code>:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;c&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;typedef&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;struct&lt;/span&gt; {
+    &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;   n;    &lt;span style="color: #008800; font-style: italic"&gt;/* Number of terms              */&lt;/span&gt;
+    real &lt;span style="color: #666666"&gt;*&lt;/span&gt;a;    &lt;span style="color: #008800; font-style: italic"&gt;/* Coeffients (V / nm )                     */&lt;/span&gt;
+    real &lt;span style="color: #666666"&gt;*&lt;/span&gt;phi;  &lt;span style="color: #008800; font-style: italic"&gt;/* Phase angles                    */&lt;/span&gt;
+} t_cosines;
+
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;typedef&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;struct&lt;/span&gt; {
+    real E0;            &lt;span style="color: #008800; font-style: italic"&gt;/* Field strength (V/nm)                        */&lt;/span&gt;
+    real omega;         &lt;span style="color: #008800; font-style: italic"&gt;/* Frequency (1/ps)                             */&lt;/span&gt;
+    real t0;            &lt;span style="color: #008800; font-style: italic"&gt;/* Centre of the Gaussian pulse (ps)            */&lt;/span&gt;
+    real sigma;         &lt;span style="color: #008800; font-style: italic"&gt;/* Width of the Gaussian pulse (FWHM) (ps)      */&lt;/span&gt;
+} t_efield;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>在这里我们还可以看到, 虽然定义了高斯脉冲电场使用的数据类型<code>_efield</code>, 但它没有传入函数<code>calc_f_el</code>, 所以没有办法直接使用.</p>
+<p>如果你需要实现特殊的电场形式, 修改<code>calc_f_el</code>函数即可, 且可以像目前实现高斯脉冲电场的方法一样, 重用传入的参数.</p>
+<h2>&lt;code&gt;mdrun&lt;/code&gt;时查看电场信息</h2>
+<p><code>mdrun</code>运行模拟后, 输出的<code>.log</code>文件中会给出设定的电场信息, 类似于</p>
+<pre><code>E-x:
+   n = 2
+     a = 1.000000e+001 2.000000e+001
+     phi = 1.000000e+001 3.000000e+001
+E-xt:
+   n = 3
+     a = 1.000000e+003 1.000000e-001 1.000000e-002
+     phi = 0.000000e+000 0.000000e+000 0.000000e+000
+E-y:
+   n = 0
+E-yt:
+   n = 0
+E-z:
+   n = 0
+E-zt:
+   n = 0
+</code></pre>
+<p>你可以从这里看到自己设定的值是否正确读入了.</p>
+<p><code>mdrun</code>运行时有一个选项<code>-field</code>, 可以指定一个<code>.xvg</code>文件, 里面记录每个时间步的电场大小, 默认输出文件为<code>field.xvg</code>. 利用这个文件你可以查看所加的电场是否正确.</p>
+<h3>余弦电场</h3>
+<p>在<code>.mdp</code>中的设置强度为10 V/nm, 频率为100 ps&lt;sup&gt;-1&lt;/sup&gt;(即100 THz)的余弦电场</p>
+<pre><code>E-x              = 1 10 0
+E-xt             = 1 100 0
+</code></pre>
+<p>GROMACS输出的数据与设置完全一致</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/GMXfld-1.png"/></p>
+<h3>高斯脉冲电场</h3>
+<p>在<code>.mdp</code>中的设置强度为10 V/nm, 频率为100 ps&lt;sup&gt;-1&lt;/sup&gt;(即100 THz), 脉冲中心0.1 ps, 方差0.01 ps的高斯脉冲电场</p>
+<pre><code>E-x              = 1 10 0
+E-xt             = 3 100 0 .1 0 .01 0
+</code></pre>
+<p>GROMACS输出的数据与设置完全一致</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/GMXfld-2.png"/></p>
+<h2>使用电场的示例</h2>
+<p>研究电场对体系的影响时, 最好先使用NVE系综进行测试, 看看<code>.mdp</code>中的选项设置在不加电场时能否保证能量守恒. 严格的能量守恒是很难做到的, 只要在关心的时间尺度内能量守恒即可, 也可以根据能量漂移的速率来决定, 大致小于相应温度下的平动能就能接受. 能量守恒测试通过后, 再打开电场选项, 看电场对体系总能量的影响. 成品模拟时一般是使用NVT或NPT的.</p>
+<p>下面测试下GROMACS自带的<code>spc216.gro</code>水盒子NVE系综下不同电场的影响, 电场设置与上面的相同.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/GMXfld-3.png"/></p>
+<p>可以看到加了电场后, 体系总能量会增大很多. 你可以<a href="/prog/GMXfld.zip">下载</a>所用的文件, 自己进行测试.</p>
+<p><strong>参考资料</strong></p>
+<ul>
+<li><a href="http://comments.gmane.org/gmane.science.biology.gromacs.user/72057">source cord routines for electric fields</a></li>
+<li><a href="https://www.mail-archive.com/gromacs.org_gmx-users@maillist.sys.kth.se/msg15960.html">electric field</a></li>
+<li><a href="https://www.mail-archive.com/gromacs.org_gmx-users@maillist.sys.kth.se/msg01881.html">question about variables in calc_f_el() in sim_util.c</a></li>
+</ul>
+<h2>评论</h2>
+<ul>
+<li>2017-02-20 14:29:52 <code>hjx</code> 非常不错，学习了。感谢李老师。</li>
+</ul>

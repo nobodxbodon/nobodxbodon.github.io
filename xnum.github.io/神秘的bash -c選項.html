@@ -1,0 +1,77 @@
+<h2>原文：<a href="https://xnum.github.io/2018/01/30/bash--c">神秘的bash -c選項</a></h2>
+<hr/>
+<p>layout: post
+title: 神秘的bash -c選項
+categories:</p>
+<h2>- UNIX</h2>
+<p>某天在執行命令盯著螢幕看的時候，發現一行有趣的指令，大致如下...</p>
+<pre><code>num@instance-1:~$ ssh remote-1 "ps -ef | grep bash"
+ubuntu   25570 25569  0 02:50 ?        00:00:00 bash -c ps -ef | grep bash
+ubuntu   25572 25570  0 02:50 ?        00:00:00 grep bash
+</code></pre>
+<p>透過ssh發給遠端主機的命令中，夾帶了一個<code>-c</code>，在man中的解釋為</p>
+<pre><code>-c        If the -c option is present, then commands are read from the first non-option argument command_string.  
+          If there are arguments after the command_string, they are assigned to the positional
+          parameters, starting with $0.
+</code></pre>
+<p>一般使用以下指令都是正常的</p>
+<pre><code>bash -c 'w'
+bash -c 'ls'
+bash -c 'echo hello world'
+</code></pre>
+<p>那如果後面繼續帶參數呢...就沒有反應了</p>
+<pre><code>$ bash -c 'echo hello world' xxx yyy zzz
+hello world
+</code></pre>
+<p>上網四處逛逛，看到了<a href="http://baohaojun.github.io/blog/2013/12/11/0-ssh-remote-command-and-bash--c-string.html">一篇</a>類似文章</p>
+<p>這開始令人不解了...用那麼久沒看過指令這樣下的</p>
+<pre><code>num@instance-1:~$ ssh localhost bash -c "echo hello world" true
+
+num@instance-1:~$ ssh localhost bash -c "echo hello world"
+
+num@instance-1:~$ ssh localhost bash -c "true; echo hello world"
+hello world
+</code></pre>
+<p>所以這個神奇的參數到底在作什麼，哪來的<code>-c</code>又<code>true</code>的，後來又找到<a href="http://wangcong.org/2011/10/30/-e5-85-b3-e4-ba-8e-bash-c/">一篇</a></p>
+<p>先撇開ssh這件事，看看<code>-c</code>搞什麼名堂</p>
+<p>試著跑了一次</p>
+<pre><code>num@instance-1:~$ bash -c 'echo "$0 is $0, $1 is $1, $2 is $2"' foo bar biz
+foo is foo, bar is bar, biz is biz
+</code></pre>
+<p>test.sh檔案內容</p>
+<pre><code>num@instance-1:~$ cat test.sh
+#!/bin/bash
+
+echo "$0 is $0, $1 is $1, $2 is $2"
+echo $*
+</code></pre>
+<p>存成檔案再跑一次</p>
+<pre><code>num@instance-1:~$ bash -c './test.sh' foo bar biz
+./test.sh is ./test.sh,  is ,  is
+</code></pre>
+<p>直接執行的話，結果是這樣</p>
+<pre><code>num@instance-1:~$ ./test.sh foo bar biz
+./test.sh is ./test.sh, foo is foo, bar is bar
+</code></pre>
+<p>太令人混亂了。於是我換了一個方法，直接在執行指令處印出args：</p>
+<pre><code>num@instance-1:~$ bash -c 'echo "$@"' aaa bbb ccc
+bbb ccc
+num@instance-1:~$ ./test.sh aaa bbb ccc
+./test.sh is ./test.sh, aaa is aaa, bbb is bbb
+aaa bbb ccc
+num@instance-1:~$ bash -c './test.sh' aaa bbb ccc
+./test.sh is ./test.sh,  is ,  is
+</code></pre>
+<p>結果顯示，使用<code>bash -c</code>時，是把後面的args都傳給<strong><code>bash</code>自身</strong>，而不是傳給<code>-c</code><strong>裡面的命令</strong></p>
+<p>那麼回到剛開始的ssh localhost bash -c這個問題..</p>
+<p>我們已經知道執行ssh remote1 echo hello world的時候，實際上ssh會到remote1這台機器執行</p>
+<pre><code>bash -c "echo hello world"
+</code></pre>
+<p>所以前面的指令帶換後也會產生一樣的結果</p>
+<pre><code>num@instance-1:~$ bash -c "bash -c "echo hello world" true"
+
+num@instance-1:~$ bash -c "bash -c "echo hello world""
+
+num@instance-1:~$ bash -c "bash -c "true; echo hello world""
+hello world
+</code></pre>

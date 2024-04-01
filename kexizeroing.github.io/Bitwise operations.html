@@ -1,0 +1,64 @@
+<h2>原文：<a href="https://kexizeroing.github.io/bitwise-operations">Bitwise operations</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Bitwise operations"
+slug: bitwise-operations
+description: ""
+added: "Sep 5 2020"
+tags: [other]</p>
+<h2>updatedDate: "Nov 13 2022"</h2>
+<h3>Two's complement</h3>
+<p>Let's look at 4-bit integers. Tiny, but useful for illustration purposes. Since there are four bits in such an integer, it can assume one of 16 values. What are those values? The answer depends on whether this integer is a <code>signed int</code> or an <code>unsigned int</code>. Signed integers can represent both positive and negative numbers, while unsigned integers are only non-negative.</p>
+<pre><code>0000    0
+0001    1
+0010    2
+0011    3
+0100    4
+0101    5
+0110    6
+0111    7
+1000   -8
+1001   -7
+1010   -6
+1011   -5
+1100   -4
+1101   -3
+1110   -2
+1111   -1
+</code></pre>
+<blockquote><p>I'm curious if there's a reason -1 is represented by 1111 (two's complement) rather than 1001 which is binary 1 with first bit as negative flag.</p>
+</blockquote>
+<p>In computers, integers are stored in two's complement form. In two's complement representation, computers can treat addition of positive and negative numbers equally, eliminating the need for separately designing special hardware circuits for subtraction operations, and avoiding any ambiguity regarding positive and negative zero.</p>
+<p>Say you have two numbers, 2 and -1. In your "intuitive" way of representing numbers, they would be <code>0010</code> and <code>1001</code>, respectively. In the two's complement way, they are <code>0010</code> and <code>1111</code>. Now, let's say I want to add them.</p>
+<p>Two's complement addition is very simple. You add numbers normally and <strong>any carry bit at the end is discarded</strong>. So they're added as follows:</p>
+<pre><code>   0010
++  1111
+= 10001
+=  0001 (discard the carry)
+</code></pre>
+<p><code>0001</code> is 1, which is the expected result of <code>2 + (-1)</code>. But in the "intuitive" method, adding is more complicated:</p>
+<pre><code>   0010
++  1001
+=  1011
+</code></pre>
+<p>Which is -3. Simple addition doesn't work in this case. You need to note that one of the numbers is negative and use a different algorithm if that's the case. But two's complement is a clever way of storing integers so that common math problems are very simple to implement. Try adding 2 (<code>0010</code>) and -2 (<code>1110</code>) together and you get <code>10000</code>. The most significant bit is overflow, so the result is actually <code>0000</code>.</p>
+<p>Additionally, in the "intuitive" storage method, there are two zeroes <code>0000</code> and <code>1000</code> and we need to take extra steps to make sure that non-zero values are also not negative zero.</p>
+<p>There's another bonus that when you need to extend the width of the register the value is being stored in. With two's complement, storing a 4-bit number in an 8-bit register is only a matter of repeating its most significant bit until it pads the width of the bigger register.</p>
+<pre><code>    0001 (one, in 4 bits)
+00000001 (one, in 8 bits)
+    1110 (negative two, in 4 bits)
+11111110 (negative two, in 8 bits)
+</code></pre>
+<h3>Left shift and Right shift</h3>
+<p>In an arithmetic shift (<code>&lt;&lt;</code> and <code>&gt;&gt;</code>), the bits that are shifted out of either end are discarded. In a <strong>left arithmetic shift</strong>, zeros are shifted in on the right; in a <strong>right arithmetic shift</strong>, the sign bit is shifted in on the left, thus preserving the sign of the operand. A left arithmetic shift by <code>n</code> is equivalent to multiplying by <code>2^n</code> <em>(provided the value does not overflow)</em>, while a right arithmetic shift by <code>n</code> is equivalent to dividing by <code>2^n</code>.</p>
+<p>In a logical shift, zeros are shifted in to replace the discarded bits. Therefore, the logical and arithmetic left-shifts are exactly the same, so we <strong>only have <code>&gt;&gt;&gt;</code> don't have <code>&lt;&lt;&lt;</code></strong>. The logical right-shift inserts zeros into the most significant bit instead of copying the sign bit, so it is ideal for unsigned binary numbers, while the arithmetic right-shift is ideal for signed two's complement binary numbers.</p>
+<p>An example of replacing if-branch with some bitwise operations.</p>
+<pre><code class="lang-java">// the data is 32-bit int array between 0 and 255
+if (data[c] &gt;= 128)
+  sum += data[c];
+
+// be replaced with
+int t = (data[c] - 128) &gt;&gt; 31;
+sum += ~t &amp; data[c];
+</code></pre>
+<p>Arithmetically shift right by 31, it becomes either all ones if it is smaller than 128 or all zeros if it is greater or equal to 128. (0111 -&gt; 0011 -&gt; 0001 -&gt; 0000 or 1000 -&gt; 1100 -&gt; 1110 -&gt; 1111). The second line adds to the sum either <code>0xFFFFFFFF &amp; data[c]</code> (so <code>data[c]</code>) in the case that <code>data[c] &gt;= 128</code>, or <code>0 &amp; data[c]</code> (so zero) in the case that <code>data[c] &lt; 128</code>.</p>

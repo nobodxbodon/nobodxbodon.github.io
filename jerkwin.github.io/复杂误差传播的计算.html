@@ -1,0 +1,108 @@
+<h2>原文：<a href="https://jerkwin.github.io/2019/05/13/复杂误差传播的计算">复杂误差传播的计算</a></h2>
+<hr/>
+<p>layout: post
+ title: 复杂误差传播的计算
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>数理</li>
+<li>编程
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li>2019-05-13 05:47:58</li>
+</ul>
+<p>在数据处理中, 有时我们需要根据拟合参数的误差计算相应变量的误差, 也就是计算<a href="https://zh.wikipedia.org/wiki/%E8%AF%AF%E5%B7%AE%E4%BC%A0%E6%92%AD">误差传播</a>. 对于简单的模型, 计算比较简单, 可以手动完成; 对于复杂的模型, 涉及导数的计算, 处理起来就有点麻烦, 还容易出错. 所以我觉得还是找个比较统一的处理方法才好. 想了一下, 我们需要使用能够进行符号计算的程序, 也就是能够处理公式的程序, 而不仅仅是计算数值. 常用的符号处理程序有mathematica, maple, maxima, matlab, 虽然都能用, 但都太笨重了, 不适合用于处理这么简单的问题. 就想起很老的一个<a href="http://www.eigenmath.org/">符号计算器EigenMath</a>. 看来一下, 这个程序的Windows版已经不再更新了, 只有一个很老的版本还在网上流传. 不过网站上也提供了源码, 可以自己编译.</p>
+<p>下面是一个处理的代码和例子</p>
+<p>拟合的模型为</p>
+<p>$$y=f(T, P_1, P_2, P_3, P_4)= P_1 - {P_2 \over T} \exp({P_3 \over T^2+P_4})$$</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;error.eigenmath&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800"&gt;# 定义拟合函数&lt;/span&gt;
+f(T, P1, P2, P3, P4)&lt;span style="color: #666666"&gt;=&lt;/span&gt; P1 &lt;span style="color: #666666"&gt;-&lt;/span&gt; (P2&lt;span style="color: #666666"&gt;/&lt;/span&gt;T)&lt;span style="color: #666666"&gt;*&lt;/span&gt;exp(P3&lt;span style="color: #666666"&gt;/&lt;/span&gt;(T&lt;span style="color: #666666"&gt;^2+&lt;/span&gt;P4))
+
+&lt;span style="color: #008800"&gt;# 最终误差的计算根据需要, 可以采用任意一种&lt;/span&gt;
+
+&lt;span style="color: #008800"&gt;# 误差计算方法1: 简单方法&lt;/span&gt;
+f1&lt;span style="color: #666666"&gt;=&lt;/span&gt;d(f,P1) &lt;span style="#FF0000"&gt;#&lt;/span&gt; &lt;span style="#FF0000"&gt;计算对每个参数的导数&lt;/span&gt;
+f2&lt;span style="color: #666666"&gt;=&lt;/span&gt;d(f,P2)
+f3&lt;span style="color: #666666"&gt;=&lt;/span&gt;d(f,P3)
+f4&lt;span style="color: #666666"&gt;=&lt;/span&gt;d(f,P4)
+df(x,P1,P2,P3,P4 dP1, dP2, dP3, dP4)&lt;span style="color: #666666"&gt;=&lt;/span&gt;sqrt( (f1&lt;span style="color: #666666"&gt;*&lt;/span&gt;dP1)&lt;span style="color: #666666"&gt;^2+&lt;/span&gt;(f2&lt;span style="color: #666666"&gt;*&lt;/span&gt;dP2)&lt;span style="color: #666666"&gt;^2+&lt;/span&gt;(f3&lt;span style="color: #666666"&gt;*&lt;/span&gt;dP3)&lt;span style="color: #666666"&gt;^2+&lt;/span&gt;(f4&lt;span style="color: #666666"&gt;*&lt;/span&gt;dP4)&lt;span style="color: #666666"&gt;^2&lt;/span&gt; )
+
+&lt;span style="color: #008800"&gt;# 误差计算方法2: 使用梯度, 数组&lt;/span&gt;
+g&lt;span style="color: #666666"&gt;=&lt;/span&gt;d(f,(P1, P2, P3, P4)) &lt;span style="#FF0000"&gt;#&lt;/span&gt; &lt;span style="#FF0000"&gt;梯度&lt;/span&gt;
+d&lt;span style="color: #666666"&gt;=&lt;/span&gt;(dP1, dP2, dP3, dP4)  &lt;span style="#FF0000"&gt;#&lt;/span&gt; &lt;span style="#FF0000"&gt;各个参数的误差&lt;/span&gt;
+
+a&lt;span style="color: #666666"&gt;=&lt;/span&gt;zero(&lt;span style="color: #666666"&gt;4&lt;/span&gt;)
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;(i,&lt;span style="color: #666666"&gt;1&lt;/span&gt;,&lt;span style="color: #666666"&gt;4&lt;/span&gt;, a[i]&lt;span style="color: #666666"&gt;=&lt;/span&gt;g[i]&lt;span style="color: #666666"&gt;*&lt;/span&gt;d[i])
+DeltaF1&lt;span style="color: #666666"&gt;=&lt;/span&gt;abs(a)
+DeltaF1
+
+&lt;span style="color: #008800"&gt;# 误差计算方法3: 使用数组方法&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;(i,&lt;span style="color: #666666"&gt;1&lt;/span&gt;,&lt;span style="color: #666666"&gt;4&lt;/span&gt;, g[i]&lt;span style="color: #666666"&gt;=&lt;/span&gt;g[i]&lt;span style="color: #666666"&gt;^2&lt;/span&gt;, d[i]&lt;span style="color: #666666"&gt;=&lt;/span&gt;d[i]&lt;span style="color: #666666"&gt;^2&lt;/span&gt;)    &lt;span style="#FF0000"&gt;#&lt;/span&gt; square
+DeltaF2&lt;span style="color: #666666"&gt;=&lt;/span&gt;sqrt(dot(g,d))
+DeltaF2
+
+&lt;span style="color: #008800"&gt;# 给定参数的拟合值&lt;/span&gt;
+P1&lt;span style="color: #666666"&gt;=45.6388&lt;/span&gt;
+P2&lt;span style="color: #666666"&gt;=56542&lt;/span&gt;
+P3&lt;span style="color: #666666"&gt;=352754&lt;/span&gt;
+P4&lt;span style="color: #666666"&gt;=2932.55&lt;/span&gt;
+&lt;span style="color: #008800"&gt;# 拟合误差&lt;/span&gt;
+dP1&lt;span style="color: #666666"&gt;=0.1013&lt;/span&gt;
+dP2&lt;span style="color: #666666"&gt;=65.08&lt;/span&gt;
+dP3&lt;span style="color: #666666"&gt;=349&lt;/span&gt;
+dP4&lt;span style="color: #666666"&gt;=81.57&lt;/span&gt;
+
+&lt;span style="color: #008800"&gt;# 输出结果&lt;/span&gt;
+
+&lt;span style="color: #008800"&gt;#for(i,0,9,T=400+i*25, print(T,float(df(T,P1,P2,P3,P4 dP1, dP2, dP3, dP4))) )&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;(i,&lt;span style="color: #666666"&gt;0&lt;/span&gt;,&lt;span style="color: #666666"&gt;1&lt;/span&gt;,T&lt;span style="color: #666666"&gt;=400+&lt;/span&gt;i&lt;span style="color: #666666"&gt;*25&lt;/span&gt;, print(&lt;span style="color: #00BB00; font-weight: bold"&gt;float&lt;/span&gt;(DeltaF2)) )&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<h2>其他</h2>
+<p>可以考虑利用js的符号处理库将其改为在线工具, 可以利用的js库比较多了, 随便看到的几个似乎都可以</p>
+<ul>
+<li><a href="https://mathjs.org/index.html">https://mathjs.org/index.html</a></li>
+<li><a href="https://nerdamer.com/examples.html">https://nerdamer.com/examples.html</a></li>
+<li><a href="http://algebrite.org/">http://algebrite.org/</a></li>
+</ul>

@@ -1,0 +1,99 @@
+<h2>原文：<a href="https://xnum.github.io/2020/03/07/cpp-mock">C++ 的 gmock 小技巧</a></h2>
+<hr/>
+<p>layout: post
+title: C++ 的 gmock 小技巧
+date: 2020-03-07 01:45 +0800
+categories:</p>
+<h2>- C/C++</h2>
+<p>在C++寫測試時可能會用到gmock來輔助，相對於測試的程式碼，是先執行動作後，才ASSERT回傳的結果，</p>
+<p>mock通常是先EXPECT接下來會發生的事，才執行動作。</p>
+<p>這樣在閱讀程式碼的時候就需要跳著看：先看要執行的動作是什麼，再看做了哪些假設。</p>
+<p>如下是一個簡單的例子：</p>
+<pre><code>TEST(ShopTest, Normal)
+{
+  NaggyMock&lt;MockRepo&gt; repo;
+  Shop shop(&amp;repo);
+
+  EXPECT_CALL(repo, AddItem(87, _)).WillOnce(Return());
+  EXPECT_CALL(repo, Equip(87, _)).WillOnce(Return());
+  shop.InitUser(87);
+
+  EXPECT_CALL(repo, AddItem(56, _)).WillOnce(Return());
+  EXPECT_CALL(repo, Equip(56, _)).WillOnce(Return());
+  shop.InitUser(56);
+}
+</code></pre>
+<p>將程式碼的順序反過來寫，卻可以保有同樣的執行順序，就是我想達成的目的，有幾種方法</p>
+<ol>
+<li>shared_ptr 的 deleter</li>
+</ol>
+<p>這類似自行撰寫一個class在dtor呼叫特定function，並傳入lambda來指定行為。</p>
+<p>這邊的<code>...</code>是不定長度參數，用來省略shared_ptr會傳入的參數。</p>
+<p>相對的問題是需要指定一個scope控制defer object的生命週期，造成程式碼多出不必要的行數。</p>
+<p>3 lines -&gt; 6 lines</p>
+<pre><code>using defer = shared_ptr&lt;void&gt;;
+
+TEST(ShopTest, SharedPointerDefer)
+{
+  NaggyMock&lt;MockRepo&gt; repo;
+  Shop shop(&amp;repo);
+
+  {
+    defer __(nullptr, [&amp;](...) { shop.InitUser(87); });
+
+    EXPECT_CALL(repo, AddItem(87, _)).WillOnce(Return());
+    EXPECT_CALL(repo, Equip(87, _)).WillOnce(Return());
+  }
+
+  {
+    defer __(nullptr, [&amp;](...) { shop.InitUser(56); });
+
+    EXPECT_CALL(repo, AddItem(56, _)).WillOnce(Return());
+    EXPECT_CALL(repo, Equip(56, _)).WillOnce(Return());
+  }
+}
+</code></pre>
+<ol>
+<li>BOOST_SCOPE_EXIT</li>
+</ol>
+<p>效果跟1一樣，但較為簡潔，不需要自己寫nullptr...</p>
+<p>但clang-format的特定選項會使其展開，而生出更多無謂的行數。</p>
+<p>3 lines -&gt; 6 lines -&gt; 9 lines</p>
+<pre><code>  {
+    BOOST_SCOPE_EXIT_ALL(&amp;)
+    {
+      shop.InitUser(87);
+    };
+
+    EXPECT_CALL(repo, AddItem(87, _)).WillOnce(Return());
+    EXPECT_CALL(repo, Equip(87, _)).WillOnce(Return());
+  }
+</code></pre>
+<ol>
+<li>C Macro</li>
+</ol>
+<p>利用c的macro交換statment的執行順序。</p>
+<p>這邊因為只提供兩個參數，在EXPECT有多行時需要自己用<code>{}</code>包起來。</p>
+<p>更進階的作法是利用<code>__VA_ARGS__</code>提供不定長度參數的macro並展開。</p>
+<pre><code>#define WHEN(x, y)                \
+  if(1) {                         \
+    y;                            \
+    x;                            \
+  }
+
+TEST(ShopTest, CMacro)
+{
+  NaggyMock&lt;MockRepo&gt; repo;
+  Shop shop(&amp;repo);
+
+  WHEN(shop.InitUser(87), {
+    EXPECT_CALL(repo, AddItem(87, _)).WillOnce(Return());
+    EXPECT_CALL(repo, Equip(87, _)).WillOnce(Return());
+  });
+
+  WHEN(shop.InitUser(56), {
+    EXPECT_CALL(repo, AddItem(56, _)).WillOnce(Return());
+    EXPECT_CALL(repo, Equip(56, _)).WillOnce(Return());
+  });
+}
+</code></pre>

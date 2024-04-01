@@ -1,0 +1,116 @@
+<h2>原文：<a href="https://jerkwin.github.io/2019/09/06/使用GROMACS计算分子间相互作用">使用GROMACS计算分子间相互作用</a></h2>
+<hr/>
+<p>layout: post
+ title: 使用GROMACS计算分子间相互作用
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<ul>
+<li>2019-09-06 19:55:15 整理: 吴伟; 修订: 李继存</li>
+</ul>
+<p><img alt="" src="https://jerkwin.github.io/pic/gmx_Eint.png"/></p>
+<p>GMX将分子间相互作用分为范德华相互作用和库伦相互作用. 范德华相互作用是短程相互作用, 所以大部分能量都以 <code>EVdw-SR</code> 体现, 而长程部分以色散校正的形式体现, 即 <code>EDisper.-corr.</code>. 库伦相互作用即静电相互作用, 是长程相互作用. GMX处理静电时可以采用两种不同的方式, 截断和PME. 前者用于孤立的团簇体系, 后者用于周期性体系. 如果使用截断方式, 库伦相互作用就是简单的对势加和, 分解也很简单. 如果采用PME方式, 截断距离内的短程库伦 <code>ECoulomb-SR</code> 和倒易空间中的长程库伦 <code>ECoul.-recip.</code> 加起来才是整个体系的库伦相互作用. 这种方法也是能够写成对势累加形式的, 但过于麻烦, 所以一般程序不会支持, 因此也就导致没法直接将整个库伦作用分解到分子之间的贡献. 所以, 使用GMX计算两种或者两种以上分子的分子间相互作用时, 利用能量组功能, 可以直接得到分子间的范德华相互作用, 但对于分子间的库伦作用, 如果你使用了PME的话, 就只能通过相互作用的定义进行计算.</p>
+<p>理论是这样, 但实际大多数时候, 我们需要计算的, 或者说我们感兴趣的都是一些孤立分子之间的库伦相互作用, 而不是这些分子处于周期性盒子中, 具有一定浓度情况下的库伦相互作用. 所以你在要进行PME的库伦相互作用能分解之前, 先想一想, 这是不是你需要的. 如果不是, 那你使用简单截断方法, 将截断值设为无穷大, 就可以得到结果了.</p>
+<p>如果你铁了心要进行PME库伦相互作用的分解, 那就继续向下看.</p>
+<h2>方法</h2>
+<p>体系中有A, B两种分子, 离子和水, 要计算A, B两种分子之间的相互作用</p>
+<h3>1. 使用 <code>gmx trjconv</code>将A, B的轨迹提取出来</h3>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; trjconv &lt;span style="color:#666"&gt;-f&lt;/span&gt; md.xtc &lt;span style="color:#666"&gt;-s&lt;/span&gt; md.tpr &lt;span style="color:#666"&gt;-n&lt;/span&gt; &lt;span style="color:#666"&gt;-o&lt;/span&gt; AB.xtc&lt;/pre&gt;&lt;/div&gt;<h3>2. 使用GMX的 <code>rerun</code> 方法, 重跑一遍轨迹, 计算AB体系中的相互作用.</h3>
+<p>首先需要AB体系的 <code>AB.tpr</code>文件, 所以先抽取一帧只含AB分子的构型</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; trjconv &lt;span style="color:#666"&gt;-f&lt;/span&gt; md.gro &lt;span style="color:#666"&gt;-s&lt;/span&gt; md.tpr &lt;span style="color:#666"&gt;-n&lt;/span&gt; &lt;span style="color:#666"&gt;-o&lt;/span&gt; AB.gro&lt;/pre&gt;&lt;/div&gt;<p>编辑拓扑文件, 只留下A和B, 保存为 <code>AB.top</code>, 然后生成tpr文件, 并重跑</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; grompp &lt;span style="color:#666"&gt;-f&lt;/span&gt; md.mdp &lt;span style="color:#666"&gt;-c&lt;/span&gt; AB.gro &lt;span style="color:#666"&gt;-p&lt;/span&gt; AB.top &lt;span style="color:#666"&gt;-o&lt;/span&gt; AB.tpr
+&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; mdrun &lt;span style="color:#666"&gt;-s&lt;/span&gt; AB.tpr &lt;span style="color:#666"&gt;-rerun&lt;/span&gt; AB.xtc &lt;span style="color:#666"&gt;-e&lt;/span&gt; AB.edr&lt;/pre&gt;&lt;/div&gt;<p>此外, 要获得只含A和B的tpr文件, 使用<code>gmx convert-tpr -n</code>可能更方便.</p>
+<h3>3. 将轨迹中A组分和B组分的轨迹分别提取出来, 分别用上述方法重跑一遍轨迹, 分别得到A体系和B体系的能量</h3>
+<h3>4. 使用 <code>gmx energy</code> 分析计算相互作用的能量</h3>
+<p>具体计算方法如下表所示：</p>
+&lt;table id='tab-0'&gt;&lt;caption&gt;  &lt;input type='button' id='tab-0_tog' value='折叠表格' onclick="togtab('tab-0', this.value)"&gt;&lt;/caption&gt;&lt;tr&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;能量项&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;AB&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;A&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;B&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;A-B&lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;EVdw-SR&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;V1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;V2&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;V3&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;V1-V2-V3&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;EDisper.-corr.&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;D1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;D2&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;D3&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;D1-D2-D3&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;ECoulomb-SR&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;C1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;C2&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;C3&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;C1-C2-C3&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;ECoul.-recip.&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;R1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;R2&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;R3&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;R1-R2-R3&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;Etotal&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;V1+D1+C1+R1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;V2+D2+C2+R2&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;V3+D3+C3+R3&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;(V1+D1+C1+R1)-(V2+D2+C2+R2)-(V3+D3+C3+R3)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tfoot&gt;&lt;tr&gt;&lt;td colspan="5" style="text-align:left"&gt;
+注：AB为A和B整个体系的相互作用；A-B为A和B之间的相互作用.&lt;br&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/tfoot&gt;
+&lt;/table&gt;<h2>示例</h2>
+<p>下面是计算的两种染料分子(各27个)之间的相互作用, 在水溶液中, 染料分子均呈阴离子形式存在(每个染料分子均带两个负电荷).</p>
+&lt;table id='tab-1'&gt;&lt;caption&gt;溶液中, 染料分子间的平均非键相互作用能(100 ns至200 ns)  &lt;input type='button' id='tab-1_tog' value='折叠表格' onclick="togtab('tab-1', this.value)"&gt;&lt;/caption&gt;&lt;tr&gt;
+  &lt;th rowspan="1" colspan="2" style="text-align:center;"&gt;分子间能量项(kJ/mol)&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;E(AB)&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;E(A)&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;E(B)&lt;/th&gt;
+  &lt;th rowspan="1" colspan="2" style="text-align:center;"&gt;分子间相互作用能ΔE(A-B)&lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="2" colspan="1" style="text-align:center;"&gt;vdw&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;LJ(SR)&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-2362.31&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-1044.44&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-647.835&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-670.035&lt;/td&gt;
+  &lt;td rowspan="2" colspan="1" style="text-align:center;"&gt;-672.487&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;Disper.-corr.&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-4.28051&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-1.02088&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-0.80754&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-2.452&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="2" colspan="1" style="text-align:center;"&gt;coulomb&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;Coulomb(SR)&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;51184&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;28962.4&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;22365&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;-143.4&lt;/td&gt;
+  &lt;td rowspan="2" colspan="1" style="text-align:center;"&gt;2743&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;Coul.-recip.&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;27988.2&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;12809.1&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;12292.7&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;2886.4&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;<p>由于计算的染料是都是阴离子, 相互之间形成聚集体, 虽然短程静电相互作用为负值, 但长程静电相互作用为正值, 总的静电相互作用能为正值, 并且总相互作用能也为正值.</p>

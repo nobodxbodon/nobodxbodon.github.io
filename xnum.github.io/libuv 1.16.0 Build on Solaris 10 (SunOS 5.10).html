@@ -1,0 +1,59 @@
+<h2>原文：<a href="https://xnum.github.io/2017/11/16/libuv-solaris10-build">libuv 1.16.0 Build on Solaris 10 (SunOS 5.10)</a></h2>
+<hr/>
+<p>layout: post
+title: libuv 1.16.0 Build on Solaris 10 (SunOS 5.10)
+categories:</p>
+<h2>- UNIX</h2>
+<h2>環境</h2>
+<p>Solaris 10 (SunOS dev-ts1 5.10 Generic_150400-26 sun4v sparc sun4v)</p>
+<p>$ isainfo
+sparcv9 sparc</p>
+<p>gcc 3.3.2</p>
+<p>Reading specs from /usr/local/lib/gcc-lib/sparc-sun-solaris2.10/3.3.2/specs
+Configured with: ../configure --with-as=/usr/ccs/bin/as --with-ld=/usr/ccs/bin/ld --disable-nls
+Thread model: posix
+gcc version 3.3.2</p>
+<h2>事前工具準備</h2>
+<ul>
+<li>automake 1.15</li>
+<li>autoconf 2.69</li>
+<li>m4 1.4.17</li>
+<li>aclocal 1.15</li>
+<li>texinfo (2.4.6 build fail 2.4.0 pass)</li>
+<li>libtool 2.4</li>
+</ul>
+<h2>編譯</h2>
+<pre><code>./autogen.sh
+
+32bit:
+CFLAGS="-DSUNOS_NO_IFADDRS -D__EXTENSIONS__ -D_XOPEN_SOURCE=500 -D__SUNPRO_C" ./configure
+
+64bit:
+CFLAGS="-DSUNOS_NO_IFADDRS -D__EXTENSIONS__ -D_XOPEN_SOURCE=500 -D__SUNPRO_C -m64" LDFLAGS=-m64./configure
+</code></pre>
+<p>解說：
+<code>SUNOS_NO_IFADDRS</code> Solaris10的libsocket沒有ifaddrs.h
+<code>-D__EXTENSIONS__ -D_XOPEN_SOURCE=500</code>似乎沒什麼用 下保險的
+<code>__SUNPRO_C</code> to use <a href="https://docs.oracle.com/cd/E23824_01/html/821-1465/atomic-cas-uint-3c.html#scrolltoc">Solaris atomic.h</a>
+builtin atomic operation caused link failed <code>__sync_val_compare_and_swap undefined reference</code></p>
+<p>修改<code>src/unix/getaddrinfo.c</code> <a href="https://github.com/slowfranklin/tracker/commit/ca217d15b61c048bc54e321d354e7ffcb3764277">實作strnlen</a></p>
+<p>修改Makefile LDFLAGS加上-lm</p>
+<pre><code>make -j 16
+</code></pre>
+<h2>測試</h2>
+<pre><code>make check
+</code></pre>
+<p>failed list:</p>
+<ul>
+<li>fs_event</li>
+<li>tcp_oob</li>
+<li>poll_duplex</li>
+<li>poll_unidirectional</li>
+<li>tcp_ipv6_link_local</li>
+<li>platform output</li>
+</ul>
+<h2>安裝</h2>
+<pre><code>make install
+</code></pre>
+<p>/usr/local/lib/libuv.a
+/usr/local/include/uv.h</p>

@@ -1,0 +1,93 @@
+<h2>原文：<a href="https://jerkwin.github.io/2014/05/09/石墨烯-建模-几何性质及力场模拟">石墨烯：建模, 几何性质及力场模拟</a></h2>
+<hr/>
+<p>layout: post
+ title: 石墨烯：建模, 几何性质及力场模拟
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>md
+math: true</li>
+</ul>
+<hr/>
+<h2>2014-05-09 17:45:40</h2>
+<p>无论是做何种类型的计算研究, 首要的工作就是建模.
+对分子动力学模拟MD而言, 还要加上体系的力场化, 明确指出体系中的各种相互作用.
+石墨烯的MD也不例外.</p>
+<h3>建模</h3>
+<p>只要熟悉晶体方面的知识, 石墨烯的建模不算复杂, 一种简单的方法可参考
+<a href="http://emuch.net/html/201201/4059579.html">建立石墨烯（Graphene）的模型</a>.
+这种方法构造出来的是六方结构, 用作MD不是很方便. 
+在六方结构上进行增删原子可得到四方结构, 但手动做起来有点麻烦.
+所以还是写个简单的脚本来实现吧.</p>
+<p>脚本实现的原理如下: 将石墨烯分解为含有四个C原子的基本单元, 再将基本单元在二维平面中排布.</p>
+<p>若以C-C键长为单位, 基本单元的长宽分别为 $\sqrt 3, 3$, 其中的C原子坐标为 $(0,1/2) (0,5/2) (\sqrt 3/2, 1) (\sqrt 3/2, 2)$</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/2014-05-09-Graphene_3-2.png"/></p>
+<h3>几何性质</h3>
+<p>力场化之前需要清楚石墨烯的几何性质, 主要是原子个数, 键数, 键角数, 二面角个数之间的关系.</p>
+&lt;table&gt;&lt;caption&gt;石墨烯化学几何关系&lt;/caption&gt;
+&lt;tr&gt;
+&lt;th style="text-align:center;"&gt; 化学 &lt;/th&gt;
+&lt;th style="text-align:center;"&gt; 几何    &lt;/th&gt;
+&lt;th colspan="2" style="text-align:center;"&gt; 数目 &lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style="text-align:center;"&gt; 碳环数  &lt;/td&gt;
+&lt;td style="text-align:center;"&gt; 六边形数  &lt;/td&gt;
+&lt;td colspan="2" style="text-align:center;"&gt; 0.5N&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style="text-align:center;"&gt; 原子数  &lt;/td&gt;
+&lt;td style="text-align:center;"&gt; 顶点数 V  &lt;/td&gt;
+&lt;td colspan="2" style="text-align:center;"&gt; N&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style="text-align:center;"&gt; 键数    &lt;/td&gt;
+&lt;td style="text-align:center;"&gt; 棱数/边数E&lt;/td&gt;
+&lt;td colspan="2" style="text-align:center;"&gt; 1.5N&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style="text-align:center;"&gt; 键角数  &lt;/td&gt;
+&lt;td style="text-align:center;"&gt; 角数      &lt;/td&gt;
+&lt;td colspan="2" style="text-align:center;"&gt; 3N&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style="text-align:center;"&gt;二面角数 &lt;/td&gt;
+&lt;td style="text-align:center;"&gt;           &lt;/td&gt;
+&lt;td colspan="2" style="text-align:center;"&gt; 6N&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td style="text-align:center;"&gt;1-3相邻数&lt;/td&gt;
+&lt;td style="text-align:center;"&gt;           &lt;/td&gt;
+&lt;td colspan="2" style="text-align:center;"&gt; 3N&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;<p>数算方法</p>
+<ul>
+<li>每个原子有3条键, 每条键隶属于2个原子, 总键数为3N/2=1.5N</li>
+<li>每个原子周围3个键角, 总键角数3N</li>
+<li>每条键对应4个二面角, 总二面角数3N*2=6N</li>
+<li>1-3相邻数目与键角数相同</li>
+</ul>
+<p>从拓扑角度来说, 对闭曲面, 其顶点数 $V$, 棱数 $E$, 面数 $F$ 与
+<a href="http://zh.wikipedia.org/wiki/%E6%AC%A7%E6%8B%89%E7%A4%BA%E6%80%A7%E6%95%B0">欧拉示性数</a> $\c$ 和
+<a href="http://zh.wikipedia.org/wiki/%E4%BA%8F%E6%A0%BC">亏格</a> $g, k$ 之间存在下面的关系</p>
+<p>$$V-E+F=\c =\begin{cases}
+2(1-g) &amp;可定向曲面  \ \
+2-k    &amp;不可定向曲面
+\end{cases}$$</p>
+<p>石墨烯周期性体系与闭合的碳环面拓扑等价, 为可定向曲面, 其亏格 $g=1$, 因此
+$V-E+F=0$.根据前面已知的关系</p>
+<p>$F=E-V=V/2$</p>
+<p>因此, 也可以根据六边形个数计算键数, 键角数和二面角数</p>
+<ul>
+<li>每个六边形有6条棱, 每条棱隶属于2个六边形, 总棱数 $E=6F/3=3F=3V/2$</li>
+<li>每个六边形6个角, 总角数 $6V/2=3V$</li>
+<li>每个六边形相应于12个二面角, 总二面角数 $12V/2=6V$</li>
+</ul>
+<h3>力场化</h3>
+<ul>
+<li>准备力场参数可以根据原子之间的连接关系推算出所有的键, 键角和二面角, 还要注意周期性边界条件PBC的使用.</li>
+<li>使用Gromacs做MD时, 对这种无限体系需要使用<code>periodic_molecules = yes</code>选项, 否则计算有误.</li>
+<li>由于此选项, 体系很小时, 并行使用核数不能过多, 否则dd出错</li>
+</ul>
+<p><img alt="" src="https://jerkwin.github.io/pic/2014-05-09-Graphene_MD.gif"/></p>

@@ -1,0 +1,193 @@
+<h2>原文：<a href="https://kexizeroing.github.io/understand-npm-concepts">Understand npm concepts</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Understand npm concepts"
+slug: understand-npm-concepts
+description: ""
+added: "Dec 14 2022"
+tags: [web]</p>
+<h2>updatedDate: "Mar 5 2024"</h2>
+<h3>package.json and package-lock.json</h3>
+<p><code>package-lock.json</code> (called package locks, or lockfiles) is automatically generated for any operations where npm modifies either the <code>node_modules</code> tree or <code>package.json</code>. This file is intended to be committed into source repositories. The purpose of the <code>package-lock.json</code> is to avoid the situation where installing modules from the same <code>package.json</code> results in two different installs. <code>package-lock.json</code> is a large list of each dependency listed in your <code>package.json</code>, the specific version that should be installed, the location (URI) of the module, a hash that verifies the integrity of the module, the list of packages it requires.</p>
+<ol>
+<li>If you run <code>npm i</code> against the <code>package.json</code> and <code>package-lock.json</code>, the latter will never be updated, even if the <code>package.json</code> would be happy with newer versions.</li>
+<li>If you manually edit your <code>package.json</code> to have different ranges and run <code>npm i</code> and those ranges aren't compatible with your <code>package-lock.json</code>, then the latter will be updated with version that are compatible with your <code>package.json</code>.</li>
+<li>Listed dependencies in <code>package-lock.json</code> file have mixed (sha1/sha512) integrity checksum. npm changed the integrity checksum from sha1 to sha512. Only packages published with npm@5 or later will include a sha512 integrity hash.</li>
+</ol>
+<blockquote><p>Two fields are mandatory in <code>package.json</code>:</p>
+<ul>
+<li><code>name</code>, can be scoped</li>
+<li><code>version</code>, has to be a valid SemVer number</li>
+</ul>
+<p>Package code entry points:</p>
+<ul>
+<li><code>main</code>, default entry point (CJS or ESM)</li>
+<li><code>module</code>, ESM-specific entry point</li>
+<li><code>exports</code>, modern entry points, more flexible</li>
+</ul>
+</blockquote>
+<p>&lt;img alt="package-code-entries" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/package-code-entries.png" width="700" /&gt;</p>
+<h3>npm install and npm ci</h3>
+<p><code>npm install</code> reads <code>package.json</code> to create a list of dependencies and uses <code>package-lock.json</code> to inform which versions of these dependencies to install. If a dependency is not in <code>package-lock.json</code> it will be added by <code>npm install</code>.</p>
+<p><code>npm ci</code> (named after <strong>C</strong>ontinuous <strong>I</strong>ntegration) installs dependencies directly from <code>package-lock.json</code> and uses <code>package.json</code> only to validate that there are no mismatched versions. If any dependencies are missing or have incompatible versions, it will throw an error. It will delete any existing <code>node_modules</code> folder to ensure a clean state. It never writes to <code>package.json</code> or <code>package-lock.json</code>. It does however expect a <code>package-lock.json</code> file in your project — if you do not have this file, <code>npm ci</code> will not work and you have to use <code>npm install</code> instead.</p>
+<p><code>npm audit</code> automatically runs when you install a package with <code>npm install</code>. It checks direct dependencies and devDependencies, but does not check peerDependencies. Read more about <a href="https://overreacted.io/npm-audit-broken-by-design">npm audit: Broken by Design</a> by Dan Abramov.</p>
+<p><code>npm outdated</code>, a built-in npm command, will check the registry to see if any installed packages are currently outdated. By default, only the direct dependencies of the root project are shown. Use <code>--all</code> to find all outdated meta-dependencies as well.</p>
+<blockquote><ul>
+<li><a href="https://github.com/depcheck/depcheck">depcheck</a> check your npm module for unused dependencies.</li>
+<li><a href="https://github.com/antfu/taze">Taze</a> is a modern cli tool that keeps your deps fresh. No installation required — <code>npx taze</code>. <code>-g</code> for global and <code>-I</code> for interactive.</li>
+<li><a href="https://github.com/raineorshine/npm-check-updates">npm-check-updates</a> upgrades your <code>package.json</code> dependencies to the latest versions, ignoring specified versions.</li>
+<li><a href="https://marketplace.visualstudio.com/items?itemName=pflannery.vscode-versionlens">Version Lens</a> VS Code extension shows the latest version for each package.</li>
+</ul>
+</blockquote>
+<h3>npm ls</h3>
+<p><code>npm ls</code> (aliases: list, la, ll) list dependencies that have been installed to <code>node_modules</code>. It throws an error for discrepancies between <code>package.json</code> and its lock file.</p>
+<ul>
+<li>If <code>depth</code> is not set (default is 1), <code>npm ls</code> will show only the immediate dependencies of the root project.</li>
+<li><code>npm ls &lt;package&gt;</code> to check a specific package.</li>
+</ul>
+<pre><code class="lang-js">const cp = require("child_process");
+const verify = () =&gt; cp.exec("npm ls", error =&gt; {
+  if (error) {
+    console.error("Dependency mismatch between package.json and lock. Run: npm install");
+    throw error;
+  }
+  console.log("Dependencies verified =)");
+});
+
+verify();
+</code></pre>
+<blockquote><p>What do "idealTree" and "reify" mean in the context of npm?<br/>
+An <code>idealTree</code> is the tree of package data that we intend to install. <code>actualTree</code> is the representation of the actual packages on disk.</p>
+<p>During lockfile validation, npm compares the inventory of package items in the tree that is about to be installed (<code>idealTree</code>) with the inventory of items stored in the package-lock file (<code>virtualTree</code>).</p>
+<p>During reification, the <code>idealTree</code> is diffed against the actual tree, and then the nodes from the ideal tree are extracted onto disk. At the end of <code>reify()</code>, the ideal tree is copied to <code>actualTree</code>, since then it reflects the actual state of the <code>node_modules</code> folder.</p>
+</blockquote>
+<h3>dependencies, devDependencies and peerDependencies</h3>
+<p><strong>Dependencies</strong> are required at runtime, like a library that provides functions that you call from your code. If you are deploying your application, dependencies has to be installed, or your app will not work. They are installed transitively (if A depends on B depends on C, npm install on A will install B and C). <em>Example: lodash, your project calls some lodash functions</em>.</p>
+<p><strong>devDependencies</strong> are dependencies you only need during development, like compilers that take your code and compile it into javascript, test frameworks or documentation generators. They are not installed transitively (if A depends on B dev-depends on C, npm install on A will install B only). <em>Example: grunt, your project uses grunt to build itself</em>.</p>
+<p><strong>peerDependencies</strong> are dependencies that your project hooks into, or modifies, in the parent project, usually a plugin for some other library. It is just intended to be a check, making sure that the project that will depend on your project has a dependency on the project you hook into. So if you make a plugin C that adds functionality to library B, then someone making a project A will need to have a dependency on B if they have a dependency on C. They are not installed, they are only checked for. <em>Example: your project adds functionality to grunt and can only be used on projects that use grunt</em>.</p>
+<p>The <code>npm install</code> command will install both <em>devDependencies</em> and <em>dependencies</em>. With the <code>--production</code> flag or when the <code>NODE_ENV</code> environment variable is set to production <code>NODE_ENV=production npm install</code>, npm will not install modules listed in devDependencies.</p>
+<p>In npm versions 3 through 6, <code>peerDependencies</code> were not automatically installed, and would raise a warning if an invalid version of the peer dependency was found in the tree. <strong>As of npm v7, <code>peerDependencies</code> are installed by default.</strong> If your dependency contains some <code>peerDependencies</code> that conflict with the root project's dependency, run <code>npm install --legacy-peer-deps</code> to tell npm to ignore peer deps and proceed with the installation anyway.</p>
+<p>Using the <code>npm uninstall --no-save</code> will tell npm not to remove the package from your <code>package.json</code> or <code>package-lock.json</code> files.</p>
+<blockquote><p><code>@npmcli/arborist</code> is the library that calculates dependency trees and manages the <code>node_modules</code> folder hierarchy for the npm command line interface. It's used in some tools like <a href="https://github.com/amio/npm-why">npm-why</a> to help identify why a package has been installed.</p>
+<p>Arborist - the npm tree doctor: <code>npx @npmcli/arborist --help</code></p>
+</blockquote>
+<h3>URLs as dependencies</h3>
+<p>See details at <a href="https://docs.npmjs.com/cli/v8/configuring-npm/package-json#urls-as-dependencies">https://docs.npmjs.com/cli/v8/configuring-npm/package-json#urls-as-dependencies</a></p>
+<ol>
+<li>Git URLs as dependencies<ul>
+<li>git+ssh://git@github.com:myaccount/myprivate.git</li>
+<li>git+ssh://git@github.com:myaccount/myprivate.git#develop</li>
+<li>git+<a href="https://[username]:[password]@github.com/myaccount/myprivate.git">https://[username]:[password]@github.com/myaccount/myprivate.git</a></li>
+</ul>
+</li>
+<li>GitHub URLs: refer to GitHub urls as <code>"foo": "user/foo-project"</code></li>
+<li>Local Paths: You can provide a path to a local directory that contains a package <code>"bar": "file:../foo/bar"</code></li>
+</ol>
+<p>You can configure npm to resolve your dependencies across multiple registries.</p>
+<pre><code class="lang-shell"># .npmrc
+
+# Fetch `@lihbr` packages from GitHub registry
+@lihbr:registry=https://npm.pkg.github.com
+
+# Fetch `@my-company` packages from My Company registry
+@my-company:registry=https://npm.pkg.my-company.com
+</code></pre>
+<h3>fix broken node modules instantly</h3>
+<p><a href="https://github.com/ds300/patch-package">patch-package</a> lets app authors instantly make and keep fixes to npm dependencies. Patches created are automatically and gracefully applied when you use npm or yarn.</p>
+<pre><code class="lang-sh"># fix a bug in one of your dependencies
+vim node_modules/some-package/brokenFile.js
+
+# run `patch-package` to create a .patch file
+npx patch-package some-package
+
+# commit the patch file to share the fix with your team
+git add patches/some-package+3.14.15.patch
+git commit -m "fix brokenFile.js in some-package"
+</code></pre>
+<h3>npm and npx</h3>
+<p>One might install a package locally on a certain project using <code>npm install some-package</code>, then we want to execute that package from the command line. Only globally installed packages can be executed by typing their name only. To fix this, you must type the local path <code>./node_modules/.bin/some-package</code>.</p>
+<p>npx comes bundled with npm version 5.2+. It will check whether the command exists in <code>$PATH</code> or in the local project binaries and then execute it. So if you wish to execute the locally installed package, all you need to do is type <code>npx some-package</code>.</p>
+<p>Have you ever run into a situation where you want to try some CLI tool, but it’s annoying to have to install a global just to run it once? npx is great for that. It will automatically install a package with that name from the npm registry and invoke it. When it’s done, the installed package won’t be anywhere in the global, so you won’t have to worry about pollution in the long-term. For example, <code>npx create-react-app my-app</code> will generate a react app boilerplate within the path the command had run in, and ensures that you always use the latest version of the package without having to upgrade each time you’re about to use it. There’s an <a href="https://github.com/junosuarez/awesome-npx">awesome-npx</a> repo with examples of things that work great with npx.</p>
+<p>npm will cache the packages in the directory <code>~/.npm/_npx</code>. The whole point of npx is that you can run the packages without installing them somewhere permanent. So I wouldn't use that cache location for anything. I wouldn't be surprised if cache entries were cleared from time to time. I don't know what algorithm, if any, npx uses for time-based cache invalidation.</p>
+<p>You can find the <code>npm-debug.log</code> file in your <code>.npm</code> directory. To find your <code>.npm</code> directory, use <code>npm config get cache</code>. <strong>(It is located in ~/.npm so shared accross nodejs versions that nvm installed.)</strong> The default location of the logs directory is a directory named <code>_logs</code> inside the npm cache.</p>
+<h3>npm init and exec</h3>
+<p><code>npm init &lt;initializer&gt;</code> can be used to set up a npm package. <code>initializer</code> in this case is an npm package named <code>create-&lt;initializer&gt;</code>, which will be installed by <code>npm exec</code>. The init command is transformed to a corresponding <code>npm exec</code> operation like <code>npm init foo</code> -&gt; <code>npm exec create-foo</code>. Another example is <code>npm init react-app myapp</code>, which is same as <code>npx create-react-app myapp</code>. If the initializer is omitted (by just calling <code>npm init</code>), init will fall back to legacy init behavior. It will ask you a bunch of questions, and then write a <code>package.json</code> for you. You can also use <code>-y/--yes</code> to skip the questionnaire altogether.</p>
+<p>npm 7 introduced the new <code>npm exec</code> command which, like npx, provided an easy way to run npm scripts on the fly. If the package is not present in the local project dependencies, <code>npm exec</code> installs the required package and its dependencies to a folder in the npm cache. With the introduction of <code>npm exec</code>, npx had been rewritten to use <code>npm exec</code> under the hood in a backwards compatible way.</p>
+<blockquote><p><code>npm create</code> is an alias for <code>npm init</code>. Check more about <code>npm init --help</code>.</p>
+</blockquote>
+<h3>npm link</h3>
+<ol>
+<li>Run <code>npm link</code> from your <code>MyModule</code> directory: this will create a global package <code>{prefix}/node/{version}/lib/node_modules/&lt;package&gt;</code> symlinked to the <code>MyModule</code> directory.</li>
+<li>Run <code>npm link MyModule</code> from your <code>MyApp</code> directory: this will create a <code>MyModule</code> folder in <code>node_modules</code> symlinked to the globally-installed package and thus to the real location of <code>MyModule</code>. <strong>Note that <code>&lt;package-name&gt;</code> is taken from <code>package.json</code>, not from the directory name.</strong></li>
+<li>Now any changes to <code>MyModule</code> will be reflected in <code>MyApp/node_modules/MyModule/</code>. Use <code>npm ls -g --depth=0 --link</code> to list all the globally linked modules.</li>
+<li>Run <code>npm unlink --no-save &lt;package&gt;</code> on your project’s directory to remove the local symlink.</li>
+</ol>
+<h3>publish npm packages</h3>
+<p>Learn how to create a new npm package and publish the code to npm by the demo <a href="https://whitep4nth3r.com/blog/build-a-business-card-cli-tool">Building a business card CLI tool</a>. Once your package is published to npm, you can run <code>npx {your-command}</code> to execute your script whenever you like.</p>
+<blockquote><p>Most popular npm packages: <a href="https://socket.dev/npm/category/popular">https://socket.dev/npm/category/popular</a></p>
+</blockquote>
+<h3>npm and pnpm</h3>
+<p>The very first package manager ever released was npm, back in January 2010. In 2020, GitHub acquired npm, so in principle, npm is now under the stewardship of Microsoft. <em>(npm should never be capitalized unless it is being displayed in a location that is customarily all-capitals.)</em></p>
+<p>npm handles the dependencies by splitting the installation process into three phases: <code>Resolving -&gt; Fetching -&gt; Linking</code>. Each phase needs to end for the next one to begin.</p>
+<p>pnpm was released in 2017. It is a drop-in replacement for npm, so if you have an npm project, you can use pnpm right away. The main problem the creators of pnpm had with npm was the redundant storage of dependencies that were used across projects. 1) The way npm manages the disc space is not efficient. 2) pnpm doesn’t have the blocking stages of installation - the processes run for each of the packages independently.</p>
+<p>Traditionally, npm installed dependencies in a flat <code>node_modules</code> folder. On the other hand, pnpm manages <code>node_modules</code> by using hard linking and symbolic linking to a global on-disk content-addressable store. It results in a nested <code>node_modules</code> folder that stores packages in a global store on your home folder (<code>~/.pnpm-store/</code>). Every version of a dependency is physically stored in that folder only once, constituting a single source of truth. pnpm identifies the files by a hash id (also called "content integrity" or "checksum") and not by the filename, which means that two same files will have identical hash id and pnpm will determine that there’s no reason for duplication.</p>
+<p>&lt;img alt="pnpm" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/008vxvgGly1h7aw9ablr4j30vm0u0q5z.jpg" width="650" /&gt;</p>
+<h3>npm scripts</h3>
+<p>npm scripts are a set of built-in and custom scripts defined in the <code>package.json</code> file. Their goal is to provide a simple way to execute repetitive tasks.</p>
+<ul>
+<li>npm makes all your dependencies' binaries available in the scripts. So you can access them directly as if they were referenced in your PATH. For example, instead of doing <code>./node_modules/.bin/eslint .</code>, you can use <code>eslint .</code> as the lint script.</li>
+<li><code>npm run</code> is an alias for <code>npm run-script</code>, meaning you could also use <code>npm run-script lint</code>.</li>
+<li>Built-in scripts can be executed using aliases, making the complete command shorter and easier to remember. For example, <code>npm run-script test</code>, <code>npm run test</code>, <code>npm test</code>, and <code>npm t</code> are same to run the test script. <code>npm run-script start</code>, <code>npm run start</code>, and <code>npm start</code> are also same.</li>
+<li>Run <code>npm run</code> if you forget what npm scripts are available. This produces a list of scripts, and displays the code that each script runs.</li>
+<li>We can use <code>&amp;&amp;</code> to run multiple scripts sequentially. If the first script fails, the second script is never executed. Another option is using the library <a href="https://github.com/mysticatea/npm-run-all">npm-run-all</a> to run multiple npm-scripts in parallel or sequential, which is simplified and cross platform.</li>
+<li><a href="https://github.com/open-cli-tools/concurrently">concurrently</a> can run multiple commands concurrently. Say you have both backend and frontend folder in the project directroy containing a <code>package.json</code> file:<pre><code class="lang-json">{
+  "scripts": {
+    "server": "nodemon backend/server.js",
+    "client": "npm run dev --prefix frontend",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  }
+}
+</code></pre>
+</li>
+<li>When a script finishes with a non-zero exit code, it means an error occurred while running the script, and the execution is terminated.</li>
+<li>Use <code>npm run &lt;script&gt; --silent</code> to reduce logs and to prevent the script from throwing an error. This can be helpful when you want to run a script that you know may fail, but you don't want it to throw an error. Maybe in a CI pipeline, you want your whole pipeline to keep running even when the test command fails.</li>
+<li>We can create "pre" and "post" scripts for any of our scripts, and npm will automatically run them in order.<pre><code class="lang-json">{
+  "scripts": {
+    "prefoo": "echo prefoo",
+    "foo": "echo foo",
+    "postfoo": "echo postfoo"
+  }
+}
+</code></pre>
+</li>
+<li><p>You can run <code>npm config ls -l</code> to get a list of the configuration parameters, and you can use <code>$npm_config_</code> prefix (like <code>$npm_config_editor</code>) to access them in the scripts. Any key-value pairs we add to our script will be translated into an environment variable with the <code>npm_config</code> prefix.</p>
+<pre><code class="lang-json">{
+  "scripts": {
+    "hello": "echo \"Hello $npm_config_firstname\""
+  }
+}
+
+// Output: "Hello Paula"
+npm run hello --firstname=Paula
+</code></pre>
+</li>
+<li><p><code>package.json</code> vars are available via <code>process.env</code> (with <code>npm_package_</code> prefix) in Node scripts by default.</p>
+<pre><code class="lang-js">{
+  "name": "foo",
+  "version":"1.2.5",
+}
+
+// When you run Node.js files via npm scripts
+// Output: 'foo', '1.2.5'
+console.log(process.env.npm_package_name, process.env.npm_package_version);
+</code></pre>
+</li>
+<li>Passing arguments to other npm scripts, we can leverage the <code>--</code> separator. e.g. <code>"pass-flags-to-other-script": "npm run my-script -- --watch"</code> will pass the <code>--watch</code> flag to the <code>my-script</code> command.</li>
+<li>One convention that you may have seen is using a prefix and a colon to group scripts, for example <code>build:dev</code> and <code>build:prod</code>. This can be helpful to create groups of scripts that are easier to identify by their prefixes.</li>
+<li><a href="https://github.com/shelljs/shx">shx</a> is a wrapper around ShellJS Unix commands, providing an easy solution for simple Unix-like, cross-platform commands in npm package scripts. ShellJS is a portable (Windows/Linux/macOS) implementation of Unix shell commands on top of the Node.js API. <code>shx</code> is good for writing one-off commands in npm package scripts (e.g. <code>"clean": "shx rm -rf out/"</code>). Run <code>npm install shx --save-dev</code> to install it, and run command in either a Unix or Windows command line.</li>
+</ul>
+<h3>The rise of supply chain attacks</h3>
+<p>Software <a href="https://socket.dev/blog/inside-node-modules">supply chain attacks</a> occur when an attacker infiltrates a vendor's network and injects malicious code into its software, which that vendor then unknowingly distributes to its customers. Imagine an attacker gets malicious code into a package hosted on npm. From there, the vulnerability spreads to the <code>node_modules</code> folders on developer machines, to the build servers, and finally to production systems.</p>
+<blockquote><p>In October 2021, a hacker advertised on a Russian forum the sale of an npm account that controlled a package with over 7 million weekly downloads. Two weeks later, <code>ua-parser-js</code> was compromised, presumably by whoever purchased the password on the hacking forum, and three versions of the package were published containing malware. In just four hours, tens of thousands of users downloaded these versions before the community identified the problem and removed the malicious packages.</p>
+<p>Anyone who ran <code>npm install ua-parser-js</code> was compromised. Anyone who installed a package that depended on <code>ua-parser-js</code> was also compromised. Anyone running npm install without a <code>package-lock.json</code> file was compromised. Anyone unlucky enough to update to a new version of <code>ua-parser-js</code>, whether manually with <code>npm update</code> or through an automated pull request such as from Dependabot, was compromised.</p>
+</blockquote>

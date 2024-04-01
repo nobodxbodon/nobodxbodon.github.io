@@ -1,0 +1,161 @@
+<h2>原文：<a href="https://xnum.github.io/2020/12/31/gentoo-k8s">Gentoo 上安裝 kubernetes</a></h2>
+<hr/>
+<p>layout: post
+title: Gentoo 上安裝 kubernetes
+date: 2020-12-31 20:01 +0800</p>
+<h2>categories: [k8s, gentoo]</h2>
+<ul>
+<li>使用 external etcd cluster w/o TLS cert</li>
+<li>3 master node HA</li>
+<li>3 worker node</li>
+<li>OpenRC</li>
+<li>containerd</li>
+</ul>
+<h2>prepare</h2>
+<pre><code>ntpdate clock.stdtime.gov.tw
+emerge --sync
+</code></pre>
+<h2>etcd</h2>
+<p><code>emerge --ask dev-db/etcd</code></p>
+<h3>修改檔案</h3>
+<p>/etc/conf.d/etcd</p>
+<pre><code>PEER0="k8s-node1"
+PEER0_IP="10.168.100.101"
+PEER1="k8s-node2"
+PEER1_IP="10.168.100.102"
+PEER2="k8s-node3"
+PEER2_IP="10.168.100.103"
+
+MY_HOST="${PEER1}"
+MY_IP="${PEER1_IP}"
+
+ETCD_OPTS="--name ${MY_HOST} --initial-advertise-peer-urls http://${MY_IP}:2380 \
+  --listen-peer-urls http://${MY_IP}:2380 \
+  --listen-client-urls http://${MY_IP}:2379,http://127.0.0.1:2379 \
+  --advertise-client-urls http://${MY_IP}:2379 \
+  --initial-cluster-token etcd-cluster-1 \
+  --initial-cluster ${PEER0}=http://${PEER0_IP}:2380,${PEER1}=http://${PEER1_IP}:2380,${PEER2}=http://${PEER2_IP}:2380 \
+  --initial-cluster-state new"
+</code></pre>
+<h3>start service</h3>
+<p><code>rc-update add etcd default</code>
+<code>rc-service etcd start</code></p>
+<h3>testing</h3>
+<p><code>etcd put foo bar</code></p>
+<h2>Load Balancer</h2>
+<pre><code>emerge keepalived haproxy
+rc-update add keepalived default
+rc-update add haproxy default
+</code></pre>
+<p>其餘方式如下，省略</p>
+<p><a href="https://github.com/kubernetes/kubeadm/blob/master/docs/ha-considerations.md#options-for-software-load-balancing">https://github.com/kubernetes/kubeadm/blob/master/docs/ha-considerations.md#options-for-software-load-balancing</a></p>
+<h2>k8s</h2>
+<h3>安裝</h3>
+<pre><code>emerge --unmerge docker
+emerge --ask cri-tools containerd
+emerge --ask ebtables ethtool
+emerge --ask sys-cluster/kubeadm kubectl kubelet
+emerge net-misc/socat conntrack-tools
+
+rc-update add kubelet default
+rc-update add containerd default
+rc-service containerd start
+</code></pre>
+<h3>系統設定</h3>
+<p>也可以寫進開機script</p>
+<h4>networking</h4>
+<pre><code>modprobe br_netfilter
+echo 1 &gt; /proc/sys/net/bridge/bridge-nf-call-iptables
+echo 1 &gt; /proc/sys/net/ipv4/ip_forward
+echo 1 &gt; /proc/sys/net/bridge/bridge-nf-call-ip6tables
+</code></pre>
+<h4>swap</h4>
+<p>/etc/fstab 砍掉 swap 分區</p>
+<pre><code>sysctl -w vm.swappiness=0
+swapoff -a
+</code></pre>
+<h4>edit hostname</h4>
+<p>vim /etc/conf.d/hostname</p>
+<h4>add ip to dns server</h4>
+<p>我有內部DNS 懶惰也可以加 /etc/hosts</p>
+<h4>加入 kubelet service 的參數</h4>
+<p>/etc/conf.d/kubelet</p>
+<pre><code>command_args="--container-runtime=remote \
+  --container-runtime-endpoint=unix:///run/containerd/containerd.sock \
+  --image-service-endpoint=unix:///run/containerd/containerd.sock \
+  --runtime-request-timeout=3m \
+  --kubeconfig=/etc/kubernetes/kubelet.conf \
+  --config=/var/lib/kubelet/config.yaml \
+  --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf"
+</code></pre>
+<h4>using crictl</h4>
+<p>加進 .profile 檔</p>
+<p>export CONTAINER_RUNTIME_ENDPOINT=unix:///run/containerd/containerd.sock</p>
+<hr/>
+<h3>external ETCD cluster 設定法</h3>
+<p><a href="https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/#set-up-the-first-control-plane-node">https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/#set-up-the-first-control-plane-node</a></p>
+<p>照著新增</p>
+<p>kubeadm init --config=kubeadm-config.yaml ...</p>
+<p>my config</p>
+<pre><code>apiVersion: kubeadm.k8s.io/v1beta2
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: abcdef.0123456789abcdef
+  ttl: 24h0m0s
+  usages:
+  - signing
+  - authentication
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: 10.168.100.101
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  name: k8s-node1
+  taints:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+apiServer:
+  timeoutForControlPlane: 4m0s
+  extraArgs:
+    advertise-address: 10.168.100.100
+certificatesDir: /etc/kubernetes/pki
+clusterName: kubernetes
+controlPlaneEndpoint: "10.168.100.100:6443"
+controllerManager: {}
+dns:
+  type: CoreDNS
+etcd:
+  external:
+    endpoints:
+    - http://10.168.100.101:2379
+    - http://10.168.100.102:2379
+    - http://10.168.100.103:2379
+imageRepository: k8s.gcr.io
+kubernetesVersion: v1.20.0
+networking:
+  dnsDomain: cluster.local
+  serviceSubnet: 10.197.0.0/16
+scheduler: {}
+---
+</code></pre>
+<h3>加入其他 node</h3>
+<p>kubeadm join ...</p>
+<p>找回加入的token</p>
+<p><code>kubeadm token create --print-join-command</code></p>
+<p><code>kubeadm certs certificate-key</code></p>
+<p>command example</p>
+<pre><code>kubeadm join 10.168.100.100:6443 --token dmjuyu.ym3ly49ntcokc8hj \
+   --discovery-token-ca-cert-hash sha256:70729369809845fc5f98b006b8f84e5e4cef7341c1899d74b9052b62b1757227
+   --control-plane \
+   --certificate-key b9d8bd1a612f9fafff08a5067da125d231612d1a7ab6fe098a62068a6996d2d3
+</code></pre>
+<h3>新增 metrics server</h3>
+<p>kubectl apply -f <a href="https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml">https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml</a></p>
+<p>在 container args 加上</p>
+<pre><code>        --kubelet-insecure-tls
+</code></pre>

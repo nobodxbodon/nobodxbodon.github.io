@@ -1,0 +1,83 @@
+<h2>原文：<a href="https://jerkwin.github.io/2016/03/31/使用GROMACS和VMD绘制空间分布函数SDF的步骤">使用GROMACS和VMD绘制空间分布函数SDF的步骤</a></h2>
+<hr/>
+<p>layout: post
+ title: 使用GROMACS和VMD绘制空间分布函数SDF的步骤
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>md</li>
+<li>gmx</li>
+<li>vmd</li>
+</ul>
+<hr/>
+<ul>
+<li>2016-03-31 22:45:21 整理: 祝小华; 补注: 李继存</li>
+</ul>
+<p>体系：油水+表活剂体系，如下图：</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_sys.png"/></p>
+<p>目标：计算表活剂头基C原子附近水分子的SDF，类似于下图：</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_exam.png"/></p>
+<p>计算步骤：</p>
+<h2>第一：使用GROMACS生成&lt;code&gt;grid.cube&lt;/code&gt;文件</h2>
+<p>步骤来源：<a href="http://jerkwin.github.io/GMX/GMXprg/#gmx-spatial--">GROMACS程序文档: gmx spatial</a></p>
+<ol>
+<li><p>使用gmx make_ndx创建两个组, 一个包含中心分子, 一个包含要统计SDF的原子</p>
+<p>我试过两种方案，一种是以一个表活剂作为中心分子建一个group，以中心分子头基附近的水建一个group，用这两个group计算SDF；另一种是以所有表活剂作为中心分子建一个group，以体系中所有水建一个group，用这两个group计算SDF。最后结果都差不多。</p>
+<p>最终选中心分子为COO, SDF的原子为体系中所有的水</p>
+</li>
+<li><p>使中心分子在盒子内居中, 同时所有其他分子处于盒子内</p>
+<pre><code> gmx_mpi trjconv -s md0.tpr -f md0.trr -n sdf.ndx -o md0_cnt.xtc -center -ur compact -pbc mol
+</code></pre>
+<p><code>Select group for centering</code>时选择中心分子组, <code>Select group for output</code>时选择<code>System</code>组</p>
+</li>
+<li><p>按中心分子对轨迹进行叠合, 移除中心分子的转动和平动</p>
+<pre><code> gmx_mpi trjconv -s md0.tpr -f md0_cnt.xtc -n sdf.ndx -o md0_cnt_fit.xtc -fit rot+trans
+</code></pre>
+<p><code>Select group for least squares fit</code>时选择中心分子组, <code>Select group for output</code>时选择<code>System</code>组</p>
+</li>
+<li><p>统计分布</p>
+<pre><code> gmx_mpi spatial -s md0.tpr -f md0_cnt_fit.xtc -n sdf.ndx -nab 80 -b 15000 -e 18000
+</code></pre>
+<p><code>Select group to generate SDF</code>时选择要统计SDF的组, <code>Select group to output coords (e.g. solute)</code>时选择中心分子组</p>
+</li>
+</ol>
+<p><strong>注意</strong>: 使用<code>gmx spatial</code>计算空间分布函数时, 在模拟过程中要尽量多输出些轨迹（约5000帧，根据结果可自行调节输出的帧数）, 这样得到的SDF才可能光滑.</p>
+<h2>第二：使用VMD载入<code>grid.cube</code>文件, 以等值面模式查看结果</h2>
+<p>步骤来源: <a href="http://blog.163.com/jjf_sxnu/blog/static/6511705720130605542933">VMD画cube文件等密度面图（轨道或电子密度等）</a></p>
+<ol>
+<li><code>new molecule</code>打开文件。</li>
+<li>选择<code>Graphics</code>下的<code>representations</code>.</li>
+<li><p>在弹出的对话框中，<code>Drawing method</code>选<code>cpk</code>，使画出的分子更漂亮。图（以所有表活剂作为中心分子建一个<code>group</code>，以体系中所有水建一个<code>group</code>的结果）如下：</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_cpk.png"/></p>
+</li>
+<li><p>点<code>Create Rep</code>，新建一个<code>Representation</code>.</p>
+</li>
+<li><p>选新建的<code>Representation</code>后，<code>Drawing method</code>选<code>isosurface</code>. 先画正的部分，即在<code>isovalue</code>中输入一个正的值如<code>0.02</code>。在<code>Coloring method</code>中选择<code>ColorID</code>，为这个面指定颜色。图（表活剂包裹在里面）如下：</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_pos.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_iso40.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_iso25.png"/></p>
+<p>【李继存 注】等值面的具体数值要根据自己的计算结果确定, 选择一个有代表性且较光滑的等值面即可. 由于示例数据尚未收敛, 所以结果看起来并不好.</p>
+</li>
+<li><p>点<code>Create Rep</code>，再新建一个<code>Representation</code>.</p>
+</li>
+<li><p>选新建的<code>Representation</code>后，<code>Drawing method</code>选<code>isosurface</code>. 再画负的部分，即在<code>isovalue</code>中输入一个负值如<code>-0.02</code>。在<code>Coloring method</code>中选择<code>ColorID</code>，为这个面指定颜色。如下图所示：</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_neg.png"/></p>
+<p>【李继存 注】对SDF, 由于不会出负值, 所以此步骤可忽略.</p>
+</li>
+<li><p>在<code>Graphics</code>中选择<code>Colors</code>, 在<code>Catagories</code>中选<code>displays</code>，<code>Name</code>中选择<code>backgroud</code>，指定背景的颜色。也可在<code>display</code>菜单下的<code>backgroud</code>指定背景为梯度颜色。</p>
+</li>
+<li>选择喜爱的方法<code>render</code>.</li>
+</ol>
+<h2>补充: 使用gopenmol作等值面图</h2>
+<ol>
+<li><p>将<code>grid.cube</code>文件转化成<code>grid.plt</code>文件</p>
+<p>操作: 菜单栏<code>run | {gCube2plt/g94cub2pl (cube)}</code>, 浏览输入文件<code>grid.cube</code>, 指定输出文件, 命名为<code>grid.plt</code>. 然后点击最下面的<code>Apply</code>. 这样就转化成<code>plt</code>格式的文件了, 与此同时还生成了一个<code>grid.crd</code>文件, 这个<code>crd</code>文件作为结构文件.</p>
+</li>
+<li><p>读入上一步的<code>grid.crd</code>文件: <code>File | Import | Coords</code></p>
+</li>
+<li><p>选择<code>Plot|Contour</code>, 然后<code>import</code>, 最后根据需要调节<code>contour levels value</code>及颜色, 并且可通过<code>detail</code>调节曲面的光滑度.</p>
+</li>
+</ol>
+<p>最终结果</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/SDF_COO.png"/></p>

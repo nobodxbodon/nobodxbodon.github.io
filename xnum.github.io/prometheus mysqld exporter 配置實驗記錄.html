@@ -1,0 +1,42 @@
+<h2>原文：<a href="https://xnum.github.io/2020/03/27/mysqld-exporter">prometheus mysqld exporter 配置實驗記錄</a></h2>
+<hr/>
+<p>layout: post
+title: prometheus mysqld exporter 配置實驗記錄
+date: 2020-03-27 13:57 +0800
+categories:</p>
+<h2>- DB</h2>
+<p>based on percona:5.7 docker image</p>
+<p>使用場景：</p>
+<ul>
+<li>client connections ~= 10</li>
+<li>deadlock is critical</li>
+<li>rows in a table ~= 100K</li>
+<li>low query latency</li>
+<li>minimum slave lag</li>
+<li>localhost: no network issue</li>
+<li>total DB size ~= 100MB</li>
+</ul>
+<p>mysqld_exporter有很多選項可以開開關關</p>
+<pre><code>  mysqld-exporter:
+    image: prom/mysqld-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "exporter:1qaz@(127.0.0.1:33306)/"
+    command:
+      - '--web.listen-address=:39104'
+      - '--collect.info_schema.innodb_metrics'
+      - '--collect.info_schema.processlist'
+      - '--no-collect.info_schema.innodb_cmp'
+      - '--no-collect.info_schema.innodb_cmpmem'
+      - '--no-collect.info_schema.query_response_time'
+</code></pre>
+<p>踩坑之一</p>
+<p><code>mysql_global_status_innodb_deadlocks</code> 在某些鄉野rules中出現，但是死活找不到</p>
+<p>解法： 打開collect.info_schema.innodb_metrics</p>
+<p>改拿 <code>mysql_info_schema_innodb_metrics_lock_lock_deadlocks_total</code></p>
+<p>踩坑之二</p>
+<p>監控slave的metric</p>
+<p><code>mysql_slave_status_seconds_behind_master</code> <code>mysql_slave_status_sql_delay</code></p>
+<p>要從slave蒐集才拿的到，master不會有</p>
+<p>據說某些case，behind_master不會發現異常，加個log position比對。</p>
+<p><code>mysql_slave_status_exec_master_log_pos-mysql_slave_status_read_master_log_pos</code></p>

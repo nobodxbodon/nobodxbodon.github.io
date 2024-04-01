@@ -1,0 +1,33 @@
+<h2>原文：<a href="https://xnum.github.io/2018/03/30/libuv-debug">記一次libuv採坑除錯記</a></h2>
+<hr/>
+<p>layout: post
+title: 記一次libuv採坑除錯記
+categories:</p>
+<h2>- dev</h2>
+<p>自行開發的程式在進行壓力測試的時候</p>
+<p>經過一段時間會噴出too many open files的錯誤，開啟的fd已經達到系統上限</p>
+<p>從/proc/[pid]/fd查看，大部分是開啟的檔案未關閉</p>
+<p>連線關閉時的錯誤處理，在關鍵function上有多條選項，不易從log分析</p>
+<pre><code>switch(status)
+{
+  case A:
+    uv_close(c-&gt;A);
+    break;
+  case B:
+    uv_cancel(c-&gt;B);
+    break;
+  case C:
+    uv_close(c-&gt;C);
+    break;
+  default:
+    release(c);
+}
+</code></pre>
+<p>因此在原始碼編譯加入coverage選項，來分析可能的問題執行路徑</p>
+<p>結果發現已開啟fd約5xx個時，<code>case C</code>已執行11xx次，而其他選項皆未執行或個位數</p>
+<p>往下追蹤該handle (fs_poll_t)的callback function</p>
+<p>發現執行次數為0次：呼叫uv_close後並不會執行callback function</p>
+<p>因此不會執行callback function裡後續的資源釋放動作</p>
+<p>在libuv API文件中說明uv_close對於In-progress request會取消並返回UV_ECANCELED</p>
+<p>但<code>fs_poll</code>不會發生這個行為，解決方法是呼叫<code>uv_fs_poll_stop</code>後主動釋放資源</p>
+<p>修正後在200 concurrent connection下的fd數量約維持在250~280</p>

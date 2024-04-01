@@ -1,0 +1,93 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/01/14/GROMACS计算距离的方法及注意点">GROMACS计算距离的方法及注意点</a></h2>
+<hr/>
+<p>layout: post
+ title: GROMACS计算距离的方法及注意点
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<ul>
+<li>2018-01-14 20:27:30</li>
+</ul>
+<p>低版本的GROMACS中(具体哪个版本就没有考古了, 猜想是3.x吧), <code>g_distance</code>计算距离时需要选择两个组, 然后程序会自动计算这两个组的原子两两配对之间的距离, 也可以计算这两个组的质心之间的距离. 可能是从4.x版本起吧, <code>gmx distance</code>使用的索引组的方法有了变化, 可以提供多个索引组, 每个组是独立的, 在其中列出要计算的原子对. 因此要计算距离的组中总原子个数必须是偶数, 否则会给出原子数目非偶数的错误. 例如, 我们要计算体系中<code>3</code>号原子和<code>5</code>, <code>9</code>, <code>13</code>, <code>19</code>之间的距离, 那么可以在索引文件中定义如下组</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;index.ndx&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;[ dist ]
+&lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;9&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;13&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;19&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>编号对也可以放于多行中, 每行一个原子对编号. 但值得注意的是, 至少在我测试的 2016.4版本中, 在处理这些编号对时, GROMACS存在错误, 对<code>1 2 2 3</code>这样的编号对, 会先将中间重复的编号合并为一个, 变成<code>1 2 3</code>, 从而导致无法计算. 解决办法也很简单, 就是更换顺序, 保证相邻编号之间不存在重复. 如上面的例子改成<code>1 2 3 2</code>就可以正常计算了.</p>
+<p>采用这种模式, 需要我们自己提供要计算的原子对. 当原子数较少时并无困难, 但原子数一多起来, 组合就多了, 手写不太现实, 所以我就写了一段代码来处理这个问题.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;gmx_ndx.bsh&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #B8860B"&gt;usage&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;     gmx_ndx    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;    Jicun LI    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;     2016-09-15 09:49:36     &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;   Usage: gmx_ndx &lt;File.ndx&gt; [Group 1] [Group 2]&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt; Default: gmx_ndx     N/A      Other     SOL"&lt;/span&gt;
+
+&lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$#&lt;/span&gt; -lt &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;echo&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$usage&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"&lt;/span&gt;; exit; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+
+&lt;span style="color: #B8860B"&gt;File&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;index; &lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$#&lt;/span&gt; -ge &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #B8860B"&gt;File&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB6688; font-weight: bold"&gt;${&lt;/span&gt;&lt;span style="color: #B8860B"&gt;1&lt;/span&gt;%.ndx&lt;span style="color: #BB6688; font-weight: bold"&gt;}&lt;/span&gt;; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;Grp1&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;Other; &lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$#&lt;/span&gt; -ge &lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #B8860B"&gt;Grp1&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;Grp2&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;SOL;   &lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$#&lt;/span&gt; -ge &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #B8860B"&gt;Grp2&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+
+&lt;span style="color: #AA22FF"&gt;echo&lt;/span&gt; -e &lt;span style="color: #BB4444"&gt;"\n生成 &lt;/span&gt;&lt;span style="color: #B8860B"&gt;$Grp1&lt;/span&gt;&lt;span style="color: #BB4444"&gt; 与 &lt;/span&gt;&lt;span style="color: #B8860B"&gt;$Grp2&lt;/span&gt;&lt;span style="color: #BB4444"&gt; 的组合新组 [ &lt;/span&gt;&lt;span style="color: #BB6688; font-weight: bold"&gt;${&lt;/span&gt;&lt;span style="color: #B8860B"&gt;Grp1&lt;/span&gt;&lt;span style="color: #BB6688; font-weight: bold"&gt;}&lt;/span&gt;&lt;span style="color: #BB4444"&gt;_&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$Grp2&lt;/span&gt;&lt;span style="color: #BB4444"&gt; ] 并追加到 &lt;/span&gt;&lt;span style="color: #B8860B"&gt;$File&lt;/span&gt;&lt;span style="color: #BB4444"&gt;.ndx 文件"&lt;/span&gt;
+
+awk -v &lt;span style="color: #B8860B"&gt;Grp1&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$Grp1&lt;/span&gt; -v &lt;span style="color: #B8860B"&gt;Grp2&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$Grp2&lt;/span&gt; &lt;span style="color: #BB4444"&gt;'&lt;/span&gt; BEGIN&lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #B8860B"&gt;RS&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"["&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #B8860B"&gt;$1&lt;/span&gt;&lt;span style="color: #666666"&gt;==&lt;/span&gt;Grp1 &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+        &lt;span style="color: #B8860B"&gt;N1&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;NF-2
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;&lt;span style="color: #666666"&gt;(&lt;/span&gt;&lt;span style="color: #B8860B"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;1; i&lt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;N1; i++&lt;span style="color: #666666"&gt;)&lt;/span&gt; G1&lt;span style="color: #666666"&gt;[&lt;/span&gt;i&lt;span style="color: #666666"&gt;]=&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;$(&lt;/span&gt;i+2&lt;span style="color: #AA22FF; font-weight: bold"&gt;)&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+
+    &lt;span style="color: #B8860B"&gt;$1&lt;/span&gt;&lt;span style="color: #666666"&gt;==&lt;/span&gt;Grp2 &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+        &lt;span style="color: #B8860B"&gt;N2&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;NF-2
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;&lt;span style="color: #666666"&gt;(&lt;/span&gt;&lt;span style="color: #B8860B"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;1; i&lt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;N2; i++&lt;span style="color: #666666"&gt;)&lt;/span&gt; G2&lt;span style="color: #666666"&gt;[&lt;/span&gt;i&lt;span style="color: #666666"&gt;]=&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;$(&lt;/span&gt;i+2&lt;span style="color: #AA22FF; font-weight: bold"&gt;)&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+
+    END &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+        print &lt;span style="color: #BB4444"&gt;"[ "&lt;/span&gt;Grp1&lt;span style="color: #BB4444"&gt;"_"&lt;/span&gt;Grp2&lt;span style="color: #BB4444"&gt;" ]"&lt;/span&gt;
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;&lt;span style="color: #666666"&gt;(&lt;/span&gt;&lt;span style="color: #B8860B"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;1; i&lt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;N1; i++&lt;span style="color: #666666"&gt;)&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+            &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;&lt;span style="color: #666666"&gt;(&lt;/span&gt;&lt;span style="color: #B8860B"&gt;j&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;1; j&lt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;N2; j++&lt;span style="color: #666666"&gt;)&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%d %d  "&lt;/span&gt;, G1&lt;span style="color: #666666"&gt;[&lt;/span&gt;i&lt;span style="color: #666666"&gt;]&lt;/span&gt;, G2&lt;span style="color: #666666"&gt;[&lt;/span&gt;j&lt;span style="color: #666666"&gt;]&lt;/span&gt;
+            print &lt;span style="color: #BB4444"&gt;""&lt;/span&gt;
+        &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$File&lt;/span&gt;.ndx &gt;&gt; &lt;span style="color: #B8860B"&gt;$File&lt;/span&gt;.ndx
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>运行脚本, 指定输出文件名称和两个组的名称, 这段代码会生成两个组的原子对组合, 并将其命名为一个新组追加到原来的索引文件中. 然后运行<code>gmx distance -s -f -n -oav -oall</code>, 选择这个新组, 就可以得到所要的距离文件了. 值得注意的是, 组中的原子对数目最好不要太多, 否则GROMACS运行时所需的内存太多, 可能导致失败.</p>
+<p>使用这种模式计算原子之间的距离很简单, 但要想计算两个组的质心之间的距离就有点麻烦, 需要利用选区语法来完成. 例如我们要计算残基1-4与残基7-9质心之间的距离, 可以使用下面的方式:</p>
+<p><code>gmx distance -s -f -select "com of resnr 1 to 4 plus com of resnr 7 to 9" -oav -oall</code></p>
+<p>其中的选区语法请参考<a href="https://jerkwin.github.io/GMX/GMXsel">GROMACS选区(selection)语法及用法</a>.</p>

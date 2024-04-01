@@ -1,0 +1,152 @@
+<h2>原文：<a href="https://xnum.github.io/2019/08/24/c-promise">c++11 promise和future</a></h2>
+<hr/>
+<p>layout: post
+title: c++11 promise和future
+date: 2019-08-24 11:16 +0800</p>
+<h2>categories: C/C++</h2>
+<p>使用promise，編譯時需要 <code>-std=c++11 -pthread</code> 才會動。</p>
+<p>就像其他語言一樣，promise主要用來做異步流程控制。</p>
+<pre><code class="lang-c++">#include &lt;future&gt;
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+
+using namespace std;
+
+void runner(promise&lt;int&gt; *p) {
+    cout &lt;&lt; "do some io task" &lt;&lt; endl;
+    p-&gt;set_value(3);
+}
+
+int main() {
+    promise&lt;int&gt; p;
+    std::thread t(runner, &amp;p);
+
+    int ret = p.get_future().get(); // Wait p.set_value()
+    cout &lt;&lt; ret &lt;&lt; endl;
+
+    t.join();
+
+    return 0;
+}
+</code></pre>
+<pre><code>do some io task
+3
+</code></pre>
+<p>比較常使用到promise的狀況是跟其他library接的時候，對方透過callback或listener，</p>
+<p>將執行完成的結果回傳，這時候就可以包裝變成同步的寫法。</p>
+<pre><code class="lang-cpp">#include &lt;future&gt;
+#include &lt;thread&gt;
+#include &lt;string&gt;
+#include &lt;exception&gt;
+#include &lt;iostream&gt;
+
+using namespace std;
+
+// Someone provides Downloader class.
+class Downloader {
+    public:
+        void SetCallback(function&lt;void(int,string)&gt; cb) { cb_ = cb; }
+        void Download(string url) {
+            thread([=] () {
+                    cout &lt;&lt; "downloading: " &lt;&lt; url &lt;&lt; endl;
+                    cb_(0, "ok");
+            }).detach();
+        }
+    private:
+        function&lt;void(int,string)&gt; cb_;
+};
+
+void download_callback(promise&lt;string&gt; *p, int status, string data) {
+    if(status != 0) {
+        p-&gt;set_exception(make_exception_ptr(runtime_error("download failed")));
+    } else {
+        p-&gt;set_value(data);
+    }
+}
+
+int main() {
+    promise&lt;string&gt; p;
+
+    Downloader d;
+    d.SetCallback(bind(download_callback, &amp;p,
+        placeholders::_1, placeholders::_2));
+    d.Download("127.0.0.1");
+
+    try {
+        string ret = p.get_future().get();
+        cout &lt;&lt; ret &lt;&lt; endl;
+    } catch(exception &amp;e) {
+        cout &lt;&lt; "future: " &lt;&lt; e.what() &lt;&lt; endl;
+    }
+
+    return 0;
+}
+</code></pre>
+<pre><code>downloading: 127.0.0.1
+ok
+</code></pre>
+<p>promise也有一些限制：它只能被使用一次，每次使用後就要宣告新的promise object。</p>
+<p>如果使用condition variable的話就可以重複使用 <code>wait()</code> 和 <code>notify_one()</code>，</p>
+<p>但是必須自己處理value的回傳。換句話說，每次呼叫function都需要一個獨立的promise object。</p>
+<p>如果上面的Download()連續呼叫兩次，程式就會發生錯誤。</p>
+<p>所以Downloader內部還需要一個mutex防止被重複呼叫，才能正確運作。</p>
+<p>一個比較好的寫法是從Downloader直接提供future物件給caller等待。</p>
+<pre><code class="lang-cpp">#include &lt;future&gt;
+#include &lt;unistd.h&gt;
+#include &lt;thread&gt;
+#include &lt;string&gt;
+#include &lt;exception&gt;
+#include &lt;iostream&gt;
+#include &lt;chrono&gt;
+
+using namespace std;
+
+class Downloader {
+    public:
+        future&lt;string&gt; Download(string url) {
+            auto p = make_shared&lt;promise&lt;string&gt;&gt;();
+            thread([=] () {
+                    cout &lt;&lt; "downloading: " &lt;&lt; url &lt;&lt; endl;
+                    sleep(1);
+                    download_callback(p.get(), 0, "ok");
+            }).detach();
+            return p-&gt;get_future();
+        }
+    private:
+        void download_callback(promise&lt;string&gt; *p, int status, string data) {
+            if(status != 0) {
+                p-&gt;set_exception(make_exception_ptr(runtime_error("download failed")));
+            } else {
+                p-&gt;set_value(data);
+            }
+        }
+};
+
+
+int main() {
+    Downloader d;
+
+    try {
+        auto now = time(NULL);
+        auto d1 = d.Download("127.0.0.1");
+        auto d2 = d.Download("127.0.0.2");
+        auto d3 = d.Download("127.0.0.3");
+        cout &lt;&lt; d1.get() &lt;&lt; endl;
+        cout &lt;&lt; d2.get() &lt;&lt; endl;
+        cout &lt;&lt; d3.get() &lt;&lt; endl;
+        cout &lt;&lt; time(NULL) - now &lt;&lt; endl;
+    } catch(exception &amp;e) {
+        cout &lt;&lt; "future: " &lt;&lt; e.what() &lt;&lt; endl;
+    }
+
+    return 0;
+}
+</code></pre>
+<pre><code>downloading: 127.0.0.3
+downloading: 127.0.0.2
+downloading: 127.0.0.1
+ok
+ok
+ok
+1
+</code></pre>

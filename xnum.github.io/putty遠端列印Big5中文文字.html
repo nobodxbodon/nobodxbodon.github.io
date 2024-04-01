@@ -1,0 +1,81 @@
+<h2>原文：<a href="https://xnum.github.io/2017/12/26/big5-remote-printing">putty遠端列印Big5中文文字</a></h2>
+<hr/>
+<p>layout: post
+title: putty遠端列印Big5中文文字
+categories:</p>
+<h2>- 筆記</h2>
+<p>古老的terminal支援將螢幕上顯示的文字直接傳送到印表機的功能</p>
+<p>透過一對<a href="https://www.censoft.com/support/kb/?p=938">控制碼</a>來開關</p>
+<p>例如一些報表或系統資訊在遠端主機上產生後列印的場合，就會使用到這項功能</p>
+<p>在putty(及大部分模擬終端軟體?)，都是以raw模式呼叫WritePrinter直接把bytes送出去</p>
+<p>不經由driver時，列印中文字需要印表機內建中文字體才支援</p>
+<p>如果raw模式不支援純文字的中文列印時，我們可以拐個彎送出PS或PCL格式的文件來達成這個功能</p>
+<pre><code>Text -&gt; PS -&gt; PCL -&gt; 印表機
+</code></pre>
+<h2>BIG5 Text to PostScript</h2>
+<p>使用<a href="https://www.rpmfind.net/linux/RPM/mandriva/2007.0/i586/media/main/release/bg5ps-1.3.0-9mdk.i586.html">bg5ps</a>進行轉換</p>
+<p>由於rpm太多相依性了，但bg5ps本身是簡單的python scripts，我直接把他解壓縮出來</p>
+<pre><code>$ rpm2cpio xxx.rpm | cpio -idmv
+</code></pre>
+<p>接著進行設定</p>
+<pre><code>$ cp etc/chinese/bg5ps.conf ~/.bg5ps.conf (來源檔為剛剛解壓縮出來的檔案)
+$ vim ~/.bg5ps.conf (設定轉換配置)
+</code></pre>
+<h4>bg5ps.conf 範例配置</h4>
+<pre><code>#chineseFontPath: 指定中文字型的路徑(預設值: 與 bg5ps 同)
+chineseFontPath="/opt"
+
+#modify the above line
+
+#fontName: 指定中文字型的檔案名稱(預設值: ntu_kai)
+#fontName="ntu_kai.ttf"
+fontName_big5="NTU_KAI.TTF"
+
+#oddPages: 0 不輸出奇數頁，1 輸出奇數頁(預設值: 1)
+#true=1, false=0
+oddPages=true
+
+#evenPages: 0 不輸出偶數頁，1 輸出偶數頁(預設值: 1)
+evenPages=true
+
+#size: 指定輸出字型的大小(預設值: 12)
+size=8.0
+
+#     leftMargin: 指定左邊界(預設值: 72.0)
+#     rightMargin: 指定右邊界(預設值: 72.0)
+#     topMargin: 指定上邊界(預設值: 72.0)
+#     bottomMargin: 指定下邊界(預設值: 72.0)
+topMargin=72.0
+bottomMargin=72.0
+leftMargin=72.0
+rightMargin=72.0
+
+#lineSpace: 指定行距(預設值: 6.0)
+lineSpace=9.0
+
+#chrSpace: 指定字距(預設值: 2.0)
+chrSpace=5.0
+
+#Encoding: 指定編碼
+#       big5,gb2312
+Encoding="big5"
+</code></pre>
+<p><a href="http://ftp.kh.edu.tw/Linux/CLE/fonts/ttf/big5/ntu/NTU_KAI.TTF">預設的字體</a></p>
+<p>執行轉換</p>
+<pre><code>$ bg5ps -if test.txt -of test.ps
+</code></pre>
+<h2>PostScript to PCL6</h2>
+<p>PCL6也稱PCL/XL，為HP公司發展的列印用標準，如果是PostScript的印表機就可以把ps檔直接送去列印了</p>
+<p>PS -&gt; PCL6需要安裝ghostscript進行轉換，如果要直接轉換，執行以下指令</p>
+<pre><code>$ gs -sDEVICE=laserjet -o test.pcl test.ps
+</code></pre>
+<p>或是先轉換成PDF格式檢查輸出再轉換</p>
+<pre><code>$ gs -sDEVICE=pdfwrite -o test.pdf test.ps
+$ gs -sDEVICE=laserjet -o test.pcl -f test.pdf
+</code></pre>
+<h2>最後把產生的pcl檔直接送給印表機</h2>
+<pre><code>!#/usr/bin/env bash
+echo -e "\033[5i"
+cat test.pcl
+echo -e "\033[4i"
+</code></pre>

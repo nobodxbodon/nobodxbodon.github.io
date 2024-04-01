@@ -1,0 +1,70 @@
+<h2>原文：<a href="https://jerkwin.github.io/2015/12/06/Windows下的AmberTools+RESP+ACPYPE">Windows下的AmberTools+RESP+ACPYPE</a></h2>
+<hr/>
+<p>layout: post
+ title: Windows下的AmberTools+RESP+ACPYPE
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>md</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<h2>2015-12-06 20:44:26</h2>
+<p>当需要使用<a href="http://ambermd.org/#AmberTools">AmberTools</a>处理小分子时, 我们首先要安装AmberTools. 在Linux下安装这个工具或许并不太难, 但要想在Windows下安装并不简单. 此外, 如果我们只是使用AmberTools中的几个工具, 将它们全都装上也没有必要. 所以, 我在这里介绍一下在Windows下如何整合一个简单的AmberTools程序包用于处理小分子.</p>
+<h2>安装Chimera软件</h2>
+<p>安装<a href="https://www.cgl.ucsf.edu/chimera/">Chimera软件</a>后, <code>chimera主目录/bin/amber14</code>目录(根据版本不同, amber后面的两个数字有区别. Chimera 1.10.2中的是amber14, 来源于AmberTools15)就是Chimera自带的CYGWIN下编译的AmberTools, 但可惜的是没有包含所有的程序, 比如拟合RESP电荷的程序就没有包含在其中, 所有我们需要自己编译resp程序.</p>
+<h2>编译RESP程序</h2>
+<p>首先下载<a href="http://ambermd.org/AmberTools15-get.html"><code>AmberTools15.tar.bz2</code></a>. 解压后, 在<code>AmberTools15主目录/amber14/AmberTools/src/etc</code>中可以找到与resp程序有关的三个源文件<code>resp.F</code>, <code>lapack.F</code>和<code>limits.h</code>. 都是很古老的Fortran源程序, 可以使用安装好的Fortran编译器进行编译. 我使用的是Intel的Fortran编译器2015版, 具体命令是</p>
+<pre><code>IntelFortran主目录/ifort.exe /fpp /DCYGWIN resp.F lapack.F
+</code></pre>
+<p>编译选项<code>/fpp</code>用于打开预处理, 因为源代码中包含了预处理命令, 选项<code>/DCYGWIN</code>用于定义宏变量, 使用<code>limits.h</code>中基于CYGWIN的设置. 这两个选项请根据你所用编译器的版本进行适当调整.</p>
+<p>编译过程中警告很多, 但都不致命, 最后正常完成, 得到<code>resp.exe</code>. 我们在命令行中试着执行一下<code>resp.exe</code>, 如果输出</p>
+<pre><code>usage: resp [-O] -i input -o output -p punch -q qin -t qout   -e espot -w qwts -s esout
+</code></pre>
+<p>那就说明我们编译的resp程序可以正常运行了.</p>
+<h2>编译acpype程序</h2>
+<p>如果你还需要将AMBER力场文件转换为GROMACS的拓扑文件, 那你需要<a href="http://svn.code.sf.net/p/ccpn/code/branches/stable/ccpn/python/acpype/"><code>acpype.py</code>脚本</a>. 它是一个Python脚本, 为使用它你需要先安装Python 2.x环境, 然后使用Python调用<code>acpype.py</code>, 这不方便, 但我们可以把<code>acpype.py</code>编译成可执行程序<code>acpype.exe</code>, 放在<code>amber14</code>中, 这样发布后就不需要用户安装Python环境了.</p>
+<p>要将Python脚本编译成可执行程序, 我们可以使用<a href="http://www.py2exe.org/"><code>py2exe</code></a>. 首先安装好Python 2.x环境和py2exe, 然后修改<code>acpype.py</code>脚本中的错误</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/GMX_acpype.png"/></p>
+<p>再准备一个<code>setup.py</code>脚本</p>
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;python&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;from&lt;/span&gt; &lt;span style="color: #0000FF; font-weight: bold"&gt;distutils.core&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;import&lt;/span&gt; setup
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;import&lt;/span&gt; &lt;span style="color: #0000FF; font-weight: bold"&gt;py2exe&lt;/span&gt;</p>
+<p>options &lt;span style="color: #666666"&gt;=&lt;/span&gt; { &lt;span style="color: #BB4444"&gt;"py2exe"&lt;/span&gt;:
+    { &lt;span style="color: #BB4444"&gt;"optimize"&lt;/span&gt;: &lt;span style="color: #666666"&gt;2&lt;/span&gt;,
+      &lt;span style="color: #BB4444"&gt;"compressed"&lt;/span&gt;: &lt;span style="color: #666666"&gt;1&lt;/span&gt;,
+      &lt;span style="color: #BB4444"&gt;"bundle_files"&lt;/span&gt;: &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 此选项只能用于32位版本的Windows&lt;/span&gt;
+    }
+}</p>
+<p>setup(
+    options &lt;span style="color: #666666"&gt;=&lt;/span&gt; options,
+    zipfile&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #AA22FF"&gt;None&lt;/span&gt;,
+    console&lt;span style="color: #666666"&gt;=&lt;/span&gt;[&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;acpype&lt;span style="color: #666666"&gt;.&lt;/span&gt;py&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;]
+)
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;
+最后执行</p>
+<pre><code>python setup.py py2exe
+</code></pre>
+<p>就可以得到一个<code>dist</code>目录, 其中就是<code>acpype.exe</code>及其运行所需的文件.</p>
+<h2>整合发布</h2>
+<p>将我们编译好的<code>resp.exe</code>, <code>acpype.exe</code>及其运行所需的文件全都复制到<code>chimera主目录/bin/amber14/bin</code>目录下, 再将<code>chimera主目录/bin/amber14</code>这个目录一起打包, 就做成了一个在Windows下可以直接使用的AmberTools程序包, 可用于处理小分子. 你如果需要这个工具包, 请点击<a href="/prog/amber14.zip">这里</a>下载. 我整合的这个工具包可用于Windows XP 32位和Windows 7 64位, 其他平台上为测试. 有关此工具包的具体使用方法请参考后续博文.</p>
+<h2>评论</h2>
+<ul>
+<li>2017-01-17 03:38:10 <code>jhli</code> 抢个沙发。。。</li>
+<li>2017-01-18 12:07:49 <code>Jerkwin</code> 这有啥好抢的. 随时都有的.</li>
+</ul>

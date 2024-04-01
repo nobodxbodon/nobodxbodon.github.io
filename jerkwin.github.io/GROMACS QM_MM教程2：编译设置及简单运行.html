@@ -1,0 +1,326 @@
+<h2>原文：<a href="https://jerkwin.github.io/2017/02/02/GMX_QMMM教程2：编译设置及简单运行">GROMACS QM/MM教程2：编译设置及简单运行</a></h2>
+<hr/>
+<p>layout: post
+ title: GROMACS QM/MM教程2：编译设置及简单运行
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<ul>
+<li>2017年02月02日 21:00:10</li>
+</ul>
+<p>上一篇博文<a href="https://jerkwin.github.io/2017/01/30/GMX_QMMM%E6%95%99%E7%A8%8B1-QMMM%E6%96%B9%E6%B3%95%E7%9A%84%E5%AE%9E%E7%8E%B0/">GROMACS QM/MM教程1: QM/MM方法的实现</a>中, 整理了GROMACS QM/MM方法的基本实现原理, 略显理论化, 本教程中具体讲解如何操作. 以下说明基于Windows下的GROMACS 5.1.4版本.</p>
+<h2>编译设置</h2>
+<p>编译GROMACS时, 要打开QM/MM功能选项. 一般是使用高斯<code>--with-qmmm-gaussian</code>, 因为后面一般是使用自己的外挂脚本, 所以就选这个我比较熟悉的. 当然, 如果你更熟悉MOPAC, ORCA或GAMESS, 也可以使用这三个, 但使用MOPAC必须修改源码, 使用GAMESS太复杂, 因此建议选择高斯或ORCA之一.</p>
+<p>编译完成后, 在mdp中使用QM/MM的相关选项, 运行grompp, 可能出现下面的错误</p>
+<ol>
+<li><p><code>QMMM is currently only supported with cutoff-scheme=group</code></p>
+<p>如果你的mdp中没有设置<code>cutoff-scheme=group</code>, 就会提示这个错误. 按要求使用此选项就可以.</p>
+</li>
+<li><p><code>QM/MM does not work in parallel, use a single rank instead</code></p>
+<p>GROMACS的QM/MM模块无法并行, 只支持单核. 运行时只能使用 <code>gmx mdrun -nt 1</code>. 但根据我的经验, 有时没有加<code>-nt 1</code>选项, <code>mdrun</code>仍可以运行, 详细情况有待考察.</p>
+</li>
+<li><p>无法找到环境变量<code>GMX_QM_GAUSS_DIR</code>, <code>GMX_QM_GAUSS_EXE</code>, <code>GMX_QM_MODIFIED_LINKS_DIR</code></p>
+<p>这三个环境变量是GROMACS调用高斯时使用的, 必须设置, 否则就无法启动高斯.</p>
+<p>GROMACS最终在命令行中调用高斯使用的命令为</p>
+<p><code>【GMX_QM_GAUSS_DIR】/【GMX_QM_GAUSS_EXE】 &lt; input.com &gt; input.log</code></p>
+<p>所以你必须设置好需要的环境变量, 保证在命令行中上面的命令能运行成功. 三个环境变量的具体说明和设置如下:</p>
+<ul>
+<li><code>GMX_QM_GAUSS_DIR</code>: 高斯安装路径, 也即高斯的可执行程序所在的目录. 遵循Linux下路径规则, 使用斜线分隔符, 但注意最后无斜线. Windows下类似<code>E:/G09w</code>, Linux下类似<code>/路径/g09</code>.</li>
+<li><code>GMX_QM_GAUSS_EXE</code>: 可执行程序/脚本的名称, 如<code>g09.exe</code>, 或者自己的脚本<code>g09.bsh</code>. 注意不能包含路径.</li>
+<li><code>GMX_QM_MODIFIED_LINKS_DIR</code>: 修改后的高斯LINKS路径. 因为我们不打算修改LINKS, 故不使用, 置空或随意设置一个路径即可.</li>
+</ul>
+</li>
+<li><p>高斯无法运行</p>
+<p>高斯运行时可能需要自己的环境变量 <code>GAUSS_EXE_DIR</code>, 需要的话, 按要求设置. 有时还需要将高斯路径加到<code>path</code>环境变量.</p>
+</li>
+</ol>
+<p>下面是不同系统的环境变量设置示例</p>
+<ul>
+<li>Windows</li>
+</ul>
+<p><img alt="" src="https://jerkwin.github.io/pic/gmx_qmmm.png"/></p>
+<ul>
+<li>Linux</li>
+</ul>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;~/.bashrc&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2
+3&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #AA22FF"&gt;export&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #B8860B"&gt;GMX_QM_GAUSS_DIR&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;E:/G09w&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #AA22FF"&gt;export&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #B8860B"&gt;GMX_QM_GAUSS_EXE&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;g09.bsh&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #AA22FF"&gt;export&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #B8860B"&gt;GMX_QM_MODIFIED_LINKS_DIR&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;''&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<h2>简单运行</h2>
+<p>上面的设置都成功后, 就可以拿一个简单的体系来测试运行了. 可惜的是, GROMACS的QM/MM模块已经很老, 且无人更新, 坐等废弃, 所以你直接拿来运行时不大会成功的. 可行的解决方案就是自己写点代码, 将高斯的运行过程包装一下, 来代替直接使用GROMACS运行高斯. 上篇博文中已经给了这么一个<a href="http://wwwuser.gwdg.de/~ggroenh/gau">bash脚本<code>gau</code></a>, 但写得比较乱, 不易扩展修改. 我整理改进了一下, 并加以注释. 想了解具体细节, 遇到问题或进行修改时, 可参考注释.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;g09.bsh&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+ 10
+ 11
+ 12
+ 13
+ 14
+ 15
+ 16
+ 17
+ 18
+ 19
+ 20
+ 21
+ 22
+ 23
+ 24
+ 25
+ 26
+ 27
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;#/bin/bash&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;请仔细阅读此脚本,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;了解具体的处理过程&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;因为你可能需要对其修改才能适用于自己的体系&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;此脚本对&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;高斯GAUSSIAN&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;程序进行封装&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;主要使用awk对输入和输出文件进行转换&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;首先对GMX&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;QM/MM模块给出的高斯输入文件进行处理,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;生成新的输入文件&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;然后调用系统已安装的高斯程序运行新的高斯输入文件&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;最后将高斯的输出文件转换为GMX需要的格式,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;供其调用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;**注意**&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;系统可能对长文件名支持不好,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;所以此脚本名称最好短一点&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;调用高斯程序的完整路径,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;根据自己的安装进行设置&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+GAUSSIAN&lt;span style="color: #666666"&gt;=&lt;/span&gt;E&lt;span style="border: 1px solid #FF0000"&gt;:&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;G09w&lt;span style="color: #666666"&gt;/&lt;/span&gt;g09.exe&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;清空前一步运行用到的临时文件&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+rm&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;-&lt;/span&gt;rf&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;fort.&lt;span style="color: #666666"&gt;7&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;gxx.&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;GMX&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;QM/MM给出一个"正常"的高斯输入文件&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;里面包含用户在mdp文件中给出的一些设置&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;但这个文件格式古老且死板,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;不适用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;因此你需要自己提供一个&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;_Gkwd.gjf,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;放于工作目录下&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;里面指定计算时要使用的关键词(【标题】之前的部分)&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;这些关键词会覆盖GMX的默认设置&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;**注意**&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;1.&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;脚本坚持在输入文件中使用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;埃&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;为单位,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;所以你&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;不能&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;再使用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Units=Bohr&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;2.&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;脚本会根据情况自动添加&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Guess=Read,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;所以你&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;不能&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;再使用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Guess=Read&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;3.&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;脚本中&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;必须&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;使用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;NoSymm&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Force&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Punch=Derivatives&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;三个关键词&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;4.&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;如果体系中有MM电荷,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;必须&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;使用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Charge&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Prop=(Field,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Read)&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;关键词&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;5.&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;其他关键词可根据自己的情况决定使用与否&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+[[&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;!&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;-&lt;/span&gt;e&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_Gkwd.gjf&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;]]&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;echo&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;NO&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_Gkwd.gjf&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;!!!&lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;exit&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;使用自定义的关键词&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+awk&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_Gkwd.gjf&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.gjf&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+awk&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;guess&lt;span style="color: #666666"&gt;=&lt;/span&gt;read&lt;span style="color: #666666"&gt;/&lt;/span&gt;{&lt;span style="color: #AA22FF; font-weight: bold"&gt;print&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;"Guess=Read"&lt;/span&gt;}&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;input.com&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.gjf&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+echo&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;""&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.gjf&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;使用GMX给出的【标题】【电荷&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;多重度】【QM坐标】【MM坐标&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;电荷大小】&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+awk&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;BEGIN&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;n&lt;span style="color: #666666"&gt;=0&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Bhr&lt;span style="color: #666666"&gt;=0.52917721092&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;==0&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;n&lt;span style="color: #666666"&gt;++&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;n&lt;span style="color: #666666"&gt;==1&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;0&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;print&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;n&lt;span style="color: #666666"&gt;==2&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;==4&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"%4d&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f\n"&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="border: 1px solid #FF0000"&gt;\&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;            &lt;/span&gt;&lt;span style="color: #666666"&gt;$1&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$2*&lt;/span&gt;Bhr,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$3*&lt;/span&gt;Bhr,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$4*&lt;/span&gt;Bhr&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;n&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;2&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;==4&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"%4s&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%10.6f\n"&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="border: 1px solid #FF0000"&gt;\&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;            &lt;/span&gt;&lt;span style="color: #BB4444"&gt;""&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$1*&lt;/span&gt;Bhr,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$2*&lt;/span&gt;Bhr,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$3*&lt;/span&gt;Bhr,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$4&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;n&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;1&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;!=4&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;print&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;input.com&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.gjf&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;高斯无法直接给出MM电荷上的梯度&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;为得到MM电荷上的梯度,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;需要指定高斯计算MM位置上的静电场&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;然后根据MM电荷的大小和静电场计算出所需要的梯度&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;为此,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;需要再次提供MM电荷位置的坐标,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;并将其写到文件的最后&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;这些坐标仍然由GMX提供的文件获得&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;**注意**&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;下面两点脚本会自动处理&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;1.&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;MM电荷部分与坐标部分之间&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;必须&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;有空行&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;2.&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;MM电荷部分&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;必须&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;以埃为单位&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+awk&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;BEGIN&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;n&lt;span style="color: #666666"&gt;=0&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Bhr&lt;span style="color: #666666"&gt;=0.52917721067&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;==0&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;n&lt;span style="color: #666666"&gt;++&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;next&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;n&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;2&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"%4s&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;%16.7f\n"&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="border: 1px solid #FF0000"&gt;\&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;        &lt;/span&gt;&lt;span style="color: #BB4444"&gt;""&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$1*&lt;/span&gt;Bhr,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$2*&lt;/span&gt;Bhr,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;$3*&lt;/span&gt;Bhr}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;input.com&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.gjf&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;高斯输入文件准备完毕,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;调用高斯进行计算&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;如果运行时还需要其他文件(如态平均系数),&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;可在此处添加&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #666666"&gt;$&lt;/span&gt;GAUSSIAN&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.gjf&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.out&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;处理得到的高斯输出文件,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;准备GMX需要的输入文件&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+awk&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;获取MM电荷值&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;Point&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Charges&lt;span style="border: 1px solid #FF0000"&gt;:&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;Nchg&lt;span style="color: #666666"&gt;=0&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;getline&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;while&lt;/span&gt;(&lt;span style="color: #666666"&gt;$1==&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"XYZ="&lt;/span&gt;)&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;      &lt;/span&gt;Nchg&lt;span style="color: #666666"&gt;++&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Q[Nchg]&lt;span style="color: #666666"&gt;=$6&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;      &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;getline&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;获取MM电荷自能,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;SCF能量&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;Self&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;energy&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;of&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;the&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;charges&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Eslf&lt;span style="color: #666666"&gt;=$7&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;SCF&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Done&lt;span style="border: 1px solid #FF0000"&gt;:&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Escf&lt;span style="color: #666666"&gt;=$5&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;获取每个MM电荷上的电场强度&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #666666"&gt;/--------&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Electric&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Field&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;--------&lt;/span&gt;&lt;span style="border: 1px solid #FF0000"&gt;/&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="border: 1px solid #FF0000"&gt;{&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;getline&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;getline&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;Npnt&lt;span style="color: #666666"&gt;=0&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;getline&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;while&lt;/span&gt;(&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;4&lt;/span&gt;)&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;      &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt;(&lt;span style="color: #666666"&gt;$2!=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"Atom"&lt;/span&gt;)&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;        &lt;/span&gt;Npnt&lt;span style="color: #666666"&gt;++&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;        &lt;/span&gt;Ex[Npnt]&lt;span style="color: #666666"&gt;=$3&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Ey[Npnt]&lt;span style="color: #666666"&gt;=$4&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Ez[Npnt]&lt;span style="color: #666666"&gt;=$5&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;      &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;      &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;getline&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;输出需要的能量和梯度&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;&lt;span style="color: #AA22FF"&gt;END&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;{&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"%19.12f\n"&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Escf&lt;span style="color: #666666"&gt;-&lt;/span&gt;Eslf&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;system&lt;/span&gt;(&lt;span style="color: #BB4444"&gt;"cat&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;fort.7"&lt;/span&gt;)&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;    &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt;(i&lt;span style="color: #666666"&gt;=1&lt;/span&gt;;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;i&lt;span style="color: #666666"&gt;&lt;=&lt;/span&gt;Nchg;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;i&lt;span style="color: #666666"&gt;++&lt;/span&gt;)&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"%20.10e%20.10e%20.10e\n"&lt;/span&gt;,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="border: 1px solid #FF0000"&gt;\&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;      &lt;/span&gt;&lt;span style="color: #666666"&gt;-&lt;/span&gt;Q[i]&lt;span style="color: #666666"&gt;*&lt;/span&gt;Ex[i],&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;-&lt;/span&gt;Q[i]&lt;span style="color: #666666"&gt;*&lt;/span&gt;Ey[i],&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;-&lt;/span&gt;Q[i]&lt;span style="color: #666666"&gt;*&lt;/span&gt;Ez[i]&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #bbbbbb"&gt;  &lt;/span&gt;}&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.out&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.&lt;span style="color: #666666"&gt;7&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;高斯使用&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;D&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;而不是&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;E&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;作为科学计数法的标识,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;改过来,&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;否则GMX无法识别&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+sed&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;s&lt;span style="color: #666666"&gt;/&lt;/span&gt;D&lt;span style="color: #666666"&gt;/&lt;/span&gt;E&lt;span style="color: #666666"&gt;/&lt;/span&gt;g&lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;_GMXtmp.&lt;span style="color: #666666"&gt;7&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;fort.&lt;span style="color: #666666"&gt;7&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>将此脚本<code>g09.bsh</code>放于高斯可执行程序所在目录下, 再将环境变量<code>GMX_QM_GAUSS_EXE</code>设为<code>g09.bsh</code>, 然后准备一个高斯关键词文件<code>_Gkwd.gjf</code>, 大致如下</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;_Gkwd.gjf&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2
+3
+4&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #666666"&gt;%&lt;/span&gt;chk&lt;span style="color: #666666"&gt;=&lt;/span&gt;input&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #666666"&gt;%&lt;/span&gt;mem&lt;span style="color: #666666"&gt;=1&lt;/span&gt;GB&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#T&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;RHF/STO-3G&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;NoSymm&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Force&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;Punch=Derivatives&lt;/span&gt;&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+Charge&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Prop&lt;span style="color: #666666"&gt;=&lt;/span&gt;(Field,&lt;span style="color: #bbbbbb"&gt; &lt;/span&gt;Read)&lt;span style="color: #bbbbbb"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>这样就可以开始测试运行了.</p>
+<h2>简单示例</h2>
+<ul>
+<li><p>两个水分子, 一个作为QM, 一个作为MM</p>
+</li>
+<li><p>CH4+与H2碰撞, 全部作为QM, 可能会反应</p>
+</li>
+</ul>
+<p>下载<a href="/prog/gmxQMMM.zip">相关输入文件</a></p>
+<p><strong>说明</strong> 使用QM方法模拟反应时, 很难一次就能跑出一条反应轨迹. 这是正常的. 因为每个反应都有特定的发生几率, 不可能随便发生. 否则相应的反应速率非常大, 与事实不符. 如果你随便一跑就得到一条反应轨迹, 除了偶然之外, 更大的可能是你的设置有问题. 此外, 同样的初始条件(构型, 速度), 使用不同的QM方法进行模拟, 得到的轨迹也大不同. 一种QM方法下的反应轨迹, 换用另一种QM方法很可能就变成非反应轨迹了. 所以, 讨论反应速率的话, 需要对大量的轨迹进行统计, 单单几条轨迹意义不大. 当然, 根据几条反应轨迹说明反应的一些特点和机制, 还是可行的.</p>
+<h2>技术细节</h2>
+<h3>GROMACS QM/MM模块涉及的源代码位置</h3>
+<ul>
+<li><code>.\src\gromacs\mdlib\qmmm.h</code></li>
+<li><code>.\src\gromacs\mdlib\qmmm.cpp</code></li>
+<li><code>.\src\gromacs\mdlib\qm_orca.cpp</code></li>
+<li><code>.\src\gromacs\mdlib\qm_mopac.cpp</code></li>
+<li><code>.\src\gromacs\mdlib\qm_gamess.cpp</code></li>
+<li><code>.\src\gromacs\mdlib\qm_gaussian.cpp</code></li>
+</ul>
+<p>各部分的功能文件名称揭示得很清楚.</p>
+<h3>其他高斯环境变量</h3>
+<p>实际上GROMACS与高斯联用时, 根据源代码还有其他一些非必要的环境变量</p>
+<ul>
+<li><code>GMX_QM_CPMCSCF</code></li>
+<li><code>GMX_QM_SA_STEP</code></li>
+<li><code>GMX_QM_ACCURACY</code></li>
+<li><code>GMX_QM_GAUSSIAN_NCPUS</code></li>
+<li><code>GMX_QM_GAUSSIAN_MEMORY</code></li>
+</ul>
+<p>实际上这些设置直接在高斯的输入文件中设置更方便, 使用环境变量反而罗嗦.</p>
+<h3>GROMACS支持的高斯输出文件格式</h3>
+<p>GROMACS与高斯联用时, 读取的高斯输出文件为<code>fort.7</code>. 这是一个文本文件, 里面的数据为</p>
+<ol>
+<li>优化后的坐标(非必需, 当工作类型为优化时才需要)</li>
+<li>能量</li>
+<li>QM原子上的梯度</li>
+<li>MM原子上的梯度</li>
+</ol>
+<p>只要此文件满足上面的数据格式, 且数据数量与体系需要的一致, GROMACS就可以读取. 下面是两个水分子的例子, 第一行为体系能量, 下面三行为QM水分子中每个原子上的力, 最后三行为MM水分子中每个原子上的力.</p>
+<pre><code>   -74.959189786700
+    0.8122428486E-01    0.4936266263E-02    0.2405930866E-01
+   -0.6954208610E-01    0.1296978682E-02   -0.7381477271E-02
+   -0.1168492817E-01   -0.6264009111E-02   -0.1670717046E-01
+    4.5870000000e-05   -3.5862000000e-05   -1.0508400000e-04
+   -2.0433000000e-05    3.7947000000e-05    7.2558000000e-05
+   -2.2935000000e-05    2.8773000000e-05    6.1716000000e-05
+</code></pre>
+<p>知晓了此文件的格式, 自己写其他量化程序的外挂脚本也就不困难了. 值得注意的是, 计算能量时一般要扣除MM电荷之间的自相互作用能.</p>

@@ -1,0 +1,108 @@
+<h2>原文：<a href="https://kexizeroing.github.io/react-hooks-clone">React hooks clone</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "React hooks clone"
+slug: react-hooks-clone
+description: ""
+added: "Sep 12 2020"
+tags: [react, code]</p>
+<h2>updatedDate: "Oct 30 2022"</h2>
+<h3>Getting Closure on Hooks presented by @swyx</h3>
+<pre><code class="lang-js">// https://www.youtube.com/watch?v=KJP1E-Y-xyo
+const React = (function() {
+  let hooks = [];
+  let idx = 0;
+
+  function useState(initVal) {
+    const state = hooks[idx] || initVal;
+    const _idx = idx;
+    const setState = newVal =&gt; {
+      hooks[_idx] = newVal;
+    };
+    idx++;
+    return [state, setState];
+  }
+
+  function useEffect(cb, depArray) {
+    const oldDeps = hooks[idx];
+    let hasChanged = true;
+
+    if(oldDeps) {
+      hasChanged = depArray.some((dep, i) =&gt; !Object.is(dep, oldDeps[i]));
+    }
+    if(hasChanged) cb();
+    hooks[idx] = depArray;
+    idx++;
+  }
+
+  function render(Component) {
+    idx = 0;
+    const C = Component();
+    C.render();
+    return C;
+  }
+
+  return { useState, useEffect, render };
+})();
+
+function Component() {
+  const [count, setCount] = React.useState(1);
+  const [text, setText] = React.useState('apple');
+
+  React.useEffect(() =&gt; {
+    console.log('useEffect with count dep')
+  }, [count]);
+
+  React.useEffect(() =&gt; {
+    console.log('useEffect empty dep')
+  }, []);
+
+  React.useEffect(() =&gt; {
+    console.log('useEffect no dep')
+  });
+
+  return {
+    render: () =&gt; console.log({count, text}),
+    click: () =&gt; setCount(count + 1),
+    type: word =&gt; setText(word)
+  }
+}
+
+var App = React.render(Component);
+App.click();
+var App = React.render(Component);
+App.type('pear');
+var App = React.render(Component);
+
+/*
+  useEffect with count dep
+  useEffect empty dep
+  useEffect no dep
+  {count: 1, text: "apple"} 
+
+  useEffect with count dep
+  useEffect no dep
+  {count: 2, text: "apple"}
+
+  useEffect no dep
+  {count: 2, text: "pear"}`
+*/
+</code></pre>
+<h3>Higher Order Components</h3>
+<p>HOCs are wrapper components that help provide additional functionality to existing components. While hooks probably replaced most of shared logic concerns, there are still use cases where higher-order components could be useful. For example, you want to fire analytics event on every click of every button, dropdown and link everywhere.</p>
+<pre><code class="lang-js">export const withLoggingOnClick = (Component) =&gt; {
+  return (props) =&gt; {
+    const log = useLoggingFromSomewhere();
+
+    const onClick = () =&gt; {
+      // console.info('Log on click something');
+      log('Log on click something');
+      props.onClick();
+    };
+
+    // return original component with all the props
+    // and overriding onClick with our own callback
+    return &lt;Component {...props} onClick={onClick} /&gt;;
+  };
+};
+</code></pre>

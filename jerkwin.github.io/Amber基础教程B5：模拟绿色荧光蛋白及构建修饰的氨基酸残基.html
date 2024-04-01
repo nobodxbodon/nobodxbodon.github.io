@@ -1,0 +1,169 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/01/07/Amber基础教程B5：模拟绿色荧光蛋白及构建修饰的氨基酸残基">Amber基础教程B5：模拟绿色荧光蛋白及构建修饰的氨基酸残基</a></h2>
+<hr/>
+<p>layout: post
+ title: Amber基础教程B5：模拟绿色荧光蛋白及构建修饰的氨基酸残基
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>amber</li>
+</ul>
+<hr/>
+<ul>
+<li>原始文档: Jason Swails, Dave Case, and Taisung Lee, <a href="http://ambermd.org/tutorials/basic/tutorial5/index.htm">TUTORIAL B5: Simulating the Green Fluorescent Protein and building a modified amino acid residue</a></li>
+<li>2018-01-07 07:43:02 翻译: 康文渊(湖南大学); 修订: 许楠(浙江大学)</li>
+</ul>
+<p>在本教程中, 我们将要学习如何使用AMBER程序为一个设计修饰过的氨基酸构建残基模板以及参数集. 与其他构建有机小分子配体的残基模板以及参数集的教程不同, 本教程中的修饰氨基酸必须与蛋白聚合物序列中前后的残基都有结合. 因此, 构建过程更复杂, 需要的步数更多.</p>
+<hr/>
+<p><strong>注意:</strong> 这些教程只是提供了示意性的例子, 用于展示如何使用AMBER来考察生物体系, 它们未必反映了有关力场的最佳选择, 因为这些选择的更新频率远高于教程. 建议你将这些教程作为自己模拟的指导, 但同时要认识到"最佳"实践可能与教程中的精确设置有所不同.</p>
+<h1>基础教程B5: 模拟绿色荧光蛋白</h1>
+<ul>
+<li>编写: Jason Swails,Dave Case, Tai-Sung Lee</li>
+<li>2018-01-07 07:43:02 翻译: 康文渊(湖南大学); 修订: 许楠(浙江大学)</li>
+</ul>
+<p><img alt="" src="http://ambermd.org/tutorials/basic/tutorial5/files/gfp_img.jpg"/></p>
+<p>绿色荧光蛋白的起始结构, 配体分子以球棍模型展示</p>
+<h2>介绍</h2>
+<p>这个教程主要介绍怎样使用AMBER进行分子动力学模拟一个带有非标准氨基酸残基的体系. 需要注意的是它不同于其他构建有机小分子力场参数的例子, 因为在该教程中, 非标准的残基是聚合物链的一部分, 所以相对更加复杂, 主要涉及获得原子的部分电荷和准备必要的文件, 从而将自定义的残基适当地插入到肽链中.</p>
+<p>我们假设你已经运行过仅含标准氨基酸残基的基本模拟体系(同时建议熟悉<a href="">基础教程B4: 使用antechamber和GAFF模拟药物分子</a>), 所以该教程关注的是构建非标准氨基酸残基力场参数的必要步骤. 不过本教程也包含了完整的GFP(绿色荧光蛋白)分子动力学模拟流程.</p>
+<p>教程的大纲如下:</p>
+<ol>
+<li>准备用于AMBER模拟的PDB文件</li>
+<li>计算非标准氨基酸残基的电荷和原子类型</li>
+<li>使用LEaP准备残基的库文件和力场参数</li>
+<li>创建用于模拟的拓扑和坐标文件</li>
+<li>使用生成的文件进行能量最小化, 加热, 平衡和成品模拟</li>
+</ol>
+<p>让我们开始模拟吧!</p>
+<h2>第1部分: 准备PDB文件</h2>
+<p>首先, 我们准备PDB文件<a href="http://www.rcsb.org/pdb/explore/explore.do?structureId=1ema">1EMA.pdb</a>, 它是包含了一个CRO荧光基团的绿色荧光蛋白(GFP). 因此我们浏览RCSB网站并下载该PDB文件(或者<a href="http://ambermd.org/tutorials/basic/tutorial5/files/1EMA.pdb">点此</a>下载副本). 你可以看到CRO残基位于PDB文件中的896行, 残基编号为66(残基65和67与残基66相连, 构成荧光团, PDB文件的头部信息中有相关描述).</p>
+<p>为了生成<code>tleap</code>可以读入的pdb文件, 第一步就是"修饰"已获得的PDB文件. Amber包括一个名为<code>pdb4amber</code>的脚本, 可以达到这个目的. <code>--help</code>选项可以显示所有可用的选项. 我们将使用<code>--dry</code>选项移除结构中的结晶水和<code>--reduce</code>选项在最理想的位置添加氢原子.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;pdb4amber&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; 1EMA.pdb &lt;span style="color:#666"&gt;-o&lt;/span&gt; gfp.pdb &lt;span style="color:#666"&gt;--dry&lt;/span&gt; &lt;span style="color:#666"&gt;--reduce&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>你需要格外注意输出的结果, 了解<code>pdb4amber</code>到底"做"了什么. 现在生成的PDB文件应该包含了每个残基的所有氢原子(该体系中没有二硫键, 如果体系中包含二硫键, <code>pdb4amber</code>会在正确的位置为你加上二硫键). 运行<code>pdb4amber</code>之后, 你需要修改生成的<code>gfp.pdb</code>文件, 将<code>MSE</code>残基(硒代甲硫氨酸, selenomethionine)改为标准的<code>MET</code>(甲硫氨酸)(我们想要模拟的是野生型, 而不是能够发生适当结晶的突变型). 你可以使用<code>sed</code>或者你喜爱的编辑软件将<code>MSE</code>全局替换为<code>MET</code>. 此外, 你需要将硒原子转换为硫原子(名称为<code>SD</code>)并将元素符号<code>SE</code>转为<code>S</code>. 建议您自己运行命令, 当然也可以下载我们的<a href="http://ambermd.org/tutorials/basic/tutorial5/files/gfp.pdb">副本gfp.pdb</a>文件进行比较.</p>
+<h2>第2部分: 计算CRO的部分电荷和原子类型</h2>
+<p>我们通过<code>1EMA.pdb</code>的头部信息了解到<code>CRO</code>是非标准氨基酸残基(实际上是由三个氨基酸残基环化形成). 因此, Amber的标准氨基酸残基库不包含该残基的原子类型和电荷. 但它们是任何分子力学模拟都必需的.  这一章节将主要关注如何推导CRO的原子电荷并判定其原子类型.</p>
+<p>我们将使用<code>antechamber</code>工具配合<code>bcc</code>电荷方案生成原子电荷, 如果你运行过介绍中提到过的Sustiva教程, 应该会对该方法很熟悉. 需要注意的是该选择不是唯一的, 并且对于所有应用场景也可能不是最佳方案. 另外一些工具, 例如<a href="http://q4md-forcefieldtools.org/">R.E.D.Tools</a>提供了更加精确的且可重复的一组电荷, 但是对于这个教程, <code>antechamber</code>工具已经足够. 如果你希望使用R.E.D., 它们也拥有不少的教程, 你可以参考它们来生成电荷和原子类型, 之后可以直接查看第4部分教程.</p>
+<p>我们可以使用Protein Data Bank中的非常有用的<code>components.cif</code>(<a href="http://www.rcsb.org/pdb/static.do?p=download/http/index.html">在此查看</a>)文件获得所需的CRO模板. 对于每个出现在该数据库中保存的PDB文件中的化合物, Protein Data Bank都会包含它的观测到的及理想的结构. 通过该方法可以解决需要自己构造坐标的问题, 并且确保原子和残基的名称会和你的PDB文件相匹配. 如果你在Protein Data Bank中搜索<code>CRO</code>并选择<code>Ligand ID</code>下的结果, 点击<code>View/Download Files</code>按钮, 就可以下载<code>CRO</code>组分的CIF文件, <code>CRO.cif</code>.(你可以<a href="http://ambermd.org/tutorials/basic/tutorial5/files/CRO.cif">点此</a>下载它的副本)</p>
+<p><code>Antechamber</code>程序将读入该组分CIF(ccif)文件, 并且会生成电荷和原子类型. 你应该查询Amber参考手册的"Antechamber and GAFF"章节了解具体细节和相关的例子. 当然你也可以在命令行中输入<code>antechamber -help</code>获取关于不同选项的信息. 这儿我们指定使用Amber原子类型(<code>-at amber</code>), 因为CRO是一个修饰过的氨基酸残基, 与那些适用于Amber原子类型参数的分子是相似的(对于更普遍的有机小分子, 通常使用gaff原子类型会更好). 我们使用如下的命令运行<code>antechamber</code>(通常需要几分钟的时间):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;antechamber&lt;/span&gt; &lt;span style="color:#666"&gt;-fi&lt;/span&gt; ccif &lt;span style="color:#666"&gt;-i&lt;/span&gt; CRO.cif &lt;span style="color:#666"&gt;-bk&lt;/span&gt; CRO &lt;span style="color:#666"&gt;-fo&lt;/span&gt; ac &lt;span style="color:#666"&gt;-o&lt;/span&gt; cro.ac &lt;span style="color:#666"&gt;-c&lt;/span&gt; bcc &lt;span style="color:#666"&gt;-at&lt;/span&gt; amber
+&lt;/pre&gt;&lt;/div&gt;<p>在生成的其他许多文件中, 你可以看到<code>cro.ac</code>文件, 它有点像PDB文件, 但是包含了成键列表, 原子部分电荷和原子类型参数. 需要注意的是<code>antechamber</code>最常用于gaff原子类型, 所以在处理Amber原子类型的时候偶尔会出现一些错误. 在这个例子中我们需要修复起始的N原子, 它应该使用与酰胺氮(N)同样的类型. 你可以简单地手动将原子类型<code>NT</code>变为<code>N</code>. (或者当作练习, 使用<code>sed</code>,<code>awk</code>,<code>perl</code>等工具修改), 你可以下载我们生成的<a href="http://ambermd.org/tutorials/basic/tutorial5/files/cro.ac">cro.ac</a>和你的进行比较.</p>
+<p>现在我们有了<code>antechamber</code>创建的分子文件, 它包含原子部分电荷和原子类型. 下一部分将会讨论如何创建残基库文件, 并准备用于LEaP.</p>
+<p>提醒: 你通常会使用<code>antechamber</code>来创建一个可以被LEaP读入的mol2文件. 由于随后我们需要使用<code>prepgen</code>处理生成的文件, 所以我们需要使用<code>prepgen</code>支持的ac格式的文件, 因为这是<code>prepgen</code>支持的唯一格式.</p>
+<h2>第3部分: 准备LEaP使用的残基库文件和力场参数</h2>
+<p>我们从Protein Data Bank下载的<code>CRO</code>组分是一个包含了所有氢原子的完整分子, 这是<code>antechamber</code>(或任何量子力学程序)计算电荷所需要的.  但是我们需要去除其头和尾部的几个原子, 从而产生一个"氨基酸"式的残基, 该残基可以直接通过N-端和C-端与其他氨基酸连接.</p>
+<p>这部分可以通过使用<code>prepgen</code>程序配合<code>mc</code>(主链)文件完成, 该文件定义哪些原子需要被移除, 哪些原子是主链的一部分(例如骨架原子). 通常需要自己创建该文件. 下面的内容是该教程的例子:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;HEAD_NAME&lt;/span&gt; N1
+&lt;span style="color:#A2F"&gt;TAIL_NAME&lt;/span&gt; C3
+&lt;span style="color:#A2F"&gt;MAIN_CHAIN&lt;/span&gt; CA1
+&lt;span style="color:#A2F"&gt;MAIN_CHAIN&lt;/span&gt; C1
+&lt;span style="color:#A2F"&gt;MAIN_CHAIN&lt;/span&gt; N3
+&lt;span style="color:#A2F"&gt;MAIN_CHAIN&lt;/span&gt; CA3
+&lt;span style="color:#A2F"&gt;OMIT_NAME&lt;/span&gt; H2
+&lt;span style="color:#A2F"&gt;OMIT_NAME&lt;/span&gt; HN11
+&lt;span style="color:#A2F"&gt;OMIT_NAME&lt;/span&gt; OXT
+&lt;span style="color:#A2F"&gt;OMIT_NAME&lt;/span&gt; HXT
+&lt;span style="color:#A2F"&gt;PRE_HEAD_TYPE&lt;/span&gt; C
+&lt;span style="color:#A2F"&gt;POST_TAIL_TYPE&lt;/span&gt; N
+&lt;span style="color:#A2F"&gt;CHARGE&lt;/span&gt; 0.0
+&lt;/pre&gt;&lt;/div&gt;<p><code>HEAD_NAME</code>和<code>TAIL_NAME</code>行的原子将会连接前后氨基酸残基. <code>MAIN_CHAIN</code>行列出连接头和尾原子之间的主链的原子, <code>OMIT_NAME</code>行列出了应该从CRO残基的最终结构中去除的原子, 因为它们不存在于完整的蛋白质中. <code>PRE_HEAD_TYPE</code>和<code>POST_TAIL_TYPE</code>行让<code>prepgen</code>知道周围蛋白质中的哪些原子类型将用于形成共价连接. (需要记住的是<code>prepgen</code>除了用于蛋白和多肽以外还可以用于其他的聚合物. ) <code>CHARGE</code>行指定了残基的总电荷, <code>prepgen</code>将确保"删除"原子的电荷在剩余的原子之间重新分配, 以便总电荷是正确的. (在这个例子中为0)</p>
+<p>你可以再一次使用<code>prepgen</code>的<code>-help</code>选项来查看该程序所有可用的设置. 假设你的上述主链文件的名字为<code>cro.mc</code>, 下面的命令将会调用<code>prepgen</code>除去N端和C端不需要的原子:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;prepgen&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; cro.ac &lt;span style="color:#666"&gt;-o&lt;/span&gt; cro.prepin &lt;span style="color:#666"&gt;-m&lt;/span&gt; cro.mc &lt;span style="color:#666"&gt;-rn&lt;/span&gt; CRO
+&lt;/pre&gt;&lt;/div&gt;<p>运行该命令后你将会得到一个定义了CRO残基的<code>cro.prepin</code>文件(可以<a href="http://ambermd.org/tutorials/basic/tutorial5/files/cro.prepin">点此下载</a>我们的文件进行比较)</p>
+<p>现在, 我们有了自定义的的残基库文件, 它包含了我们修饰过的氨基酸的原子部分电荷. 接下来我们需要检查其共价参数(键, 角和二面角)是否齐全. <code>parmchk2</code>程序将会检查哪些参数是需要的, 并且会在标准参数文件中寻找. 如果没有找到, 它将会尝试进行经验猜测, 并且将这些新的参数输出到一个我们命名为<code>frcmod.cro</code>的文件中.</p>
+<p>使用如下命令运行<code>parmchk2</code>(同样的可以使用<code>-help</code>选项查看所有可用的设置):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parmchk2&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; cro.prepin &lt;span style="color:#666"&gt;-f&lt;/span&gt; prepi &lt;span style="color:#666"&gt;-o&lt;/span&gt; frcmod.cro &lt;span style="color:#666"&gt;-a&lt;/span&gt; Y &lt;span style="color:#666"&gt;-p&lt;/span&gt; $AMBERHOME/dat/leap/parm/parm10.dat
+&lt;/pre&gt;&lt;/div&gt;<p>这里我们指定<code>parm10.dat</code>文件, 因为它是我们打算使用的ff14SB力场的主要参数数据库, (这个信息可以在你打算使用的力场的<code>leaprc</code>文件中找到).  如果我们删除这个选项, 那么<code>parmchk2</code>将会匹配gaff数据库中的参数, 这并不是我们想要的. 我们还指定打印所有的参数(即使是在<code>parm10.dat</code>中完美匹配的参数), 原因很快就会明了.</p>
+<p>完成这一步之后, 查看<code>frcmod.cro</code>(你可以比较我们的<a href="http://ambermd.org/tutorials/basic/tutorial5/files/frcmod.cro">frcmod.cro副本</a>).  你应该马上看到了标记为<code>ATTN, need revision</code>, 参数都为0的行存在问题.  这表示<code>parmchk2</code>在<code>parm10.dat</code>数据库中找不到适当的相似参数.  另外还有其他许多参数的选用是有高风险性的(这表明<code>parmchk2</code>预测的这些参数不太适合).</p>
+<p>一个简单的解决办法是通过指定<code>parmchk2</code>搜寻<code>gaff.dat</code>来"填充"之前使用<code>parm10.dat</code>选项时没找到或者相关性不高的那些参数, 从而生成比较合理的参数. 所以我们需要删除<code>frcmod.cro</code>中标为<code>ATTN:need revision</code>的参数, 并且告诉<code>parmchk2</code>在<code>gaff.dat</code>(默认设置)中搜寻缺失参数. 那些我们想要保留的来自<code>parm10.dat</code>的参数, 必须在<code>frcmod1.cro</code>文件中指定, 这些参数将不会使用gaff内的参数覆盖(这也是为什么我们需要使用<code>-a Y</code>标签打印所有参数, 包括那些出现在标准数据库中的参数). 完成这些设置的命令如下:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;grep&lt;/span&gt; &lt;span style="color:#666"&gt;-v&lt;/span&gt; "ATTN" frcmod.cro &gt; frcmod1.cro&lt;span style="color:#080;font-style:italic"&gt;  # 去除 ATTN 行&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;parmchk2&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; cro.prepin &lt;span style="color:#666"&gt;-f&lt;/span&gt; prepi &lt;span style="color:#666"&gt;-o&lt;/span&gt; frcmod2.cro
+&lt;/pre&gt;&lt;/div&gt;<p>至此, 我们用了两个<code>frcmod</code>文件, 一个参数来自于Amber参数数据库(<code>frcmod1.cro</code>,可以在此<a href="http://ambermd.org/tutorials/basic/tutorial5/files/frcmod1.cro">下载副本</a>进行比较), 另一个为比较gaff原子类型后提取的参数(<code>frcmod2.cro</code>,可以在此<a href="http://ambermd.org/tutorials/basic/tutorial5/files/frcmod2.cro">下载副本</a>进行比较), 在这两个参数文件之中拥有所有我们需要的内容. 如果你想合并它们, 你可以从<code>frcmod2.cro</code>中提取7个缺失的参数(和其他任何不太合适的参数), 将其添加到<code>frcmod1.cro</code>中. 然而, 如果你按照本教程下一章节的加载参数文件的顺序进行操作, 那么就不需要进行这一步操作. 我们接着完成下面的步骤来创建<code>prmtop</code>和<code>inpcrd</code>文件吧.</p>
+<p>与往常一样, 这里生成的参数尤其是由gaff提供的参数, 应被视为一个起始点, 也就是说要根据可用的实验或高水平的量化数据对其进行验证.  对于本教程来说, 我们将简单地继续我们在这里生成的内容.</p>
+<h2>第4部分: 创建用于模拟的拓扑和坐标文件</h2>
+<p>我们现在有了创建用于<code>sander</code>或<code>pmemd</code>的拓扑和坐标所需的所有文件! 我们只需要将这些文件加载到LEaP来创建他们. 如果你使用R.E.D. 或其他一些工具完成了电荷推导和原子类型, 欢迎回到教程.</p>
+<p>对于这个例子, 我们使用<code>ff14SB</code>力场和<code>igb=8</code>隐性水模型, 在Amber参考手册中有相关的描述. 指定使用该力场后, 将默认<code>PBRadii</code>设置为<code>mbondi3</code>集.</p>
+<p>随后我们加载之前创建的<code>cro.prepin</code>文件和参数文件. 在本教程中, 我们需要首先加载<code>frcmod2.cro</code>文件, 随后是<code>frcmod1.cro</code>文件, 从而确保那些我们更加想用的<code>ff14SB</code>参数会覆盖相关的gaff参数. 然后我们导入之前准备的1EMA PDB文件(<code>gfp.pdb</code>), 并将结果保存. 所需的命令展示在以下的脚本中, 并将其保存为<code>tleap.in</code>文件:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.protein.ff14SB
+&lt;span style="color:#A2F"&gt;set&lt;/span&gt; default PBRadii mbondi3
+&lt;span style="color:#A2F"&gt;loadAmberPrep&lt;/span&gt; cro.prepin
+&lt;span style="color:#A2F"&gt;loadAmberParams&lt;/span&gt; frcmod2.cro
+&lt;span style="color:#A2F"&gt;loadAmberParams&lt;/span&gt; frcmod1.cro
+&lt;span style="color:#A2F"&gt;x&lt;/span&gt; = loadPDB gfp.pdb
+&lt;span style="color:#A2F"&gt;saveAmberParm&lt;/span&gt; x gfp.parm7 gfp.rst7
+&lt;span style="color:#A2F"&gt;quit&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>我们可以通过如下命令运行tleap:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;tleap&lt;/span&gt; &lt;span style="color:#666"&gt;-f&lt;/span&gt; tleap.in
+&lt;/pre&gt;&lt;/div&gt;<p>这一步骤以后, 你应该有了完整的拓扑和坐标文件, 你已经可以开始模拟啦! 你可以<a href="http://ambermd.org/tutorials/basic/tutorial5/files/gfp_parmcrd.tgz">下载我们创建的副本</a>和你的进行比较.进入部分5!</p>
+<h2>第5部分: 模拟; 最小化, 加热, 平衡和正式(模拟)</h2>
+<p>由于本教程的目的是对修饰过的聚合物"链"进行参数化, 本部分仅作简要介绍. 在你自己的项目中, 你当然可以自由选择显式溶剂模型和比我们在这里使用的更仔细的能量最小化, 加热和平衡程序(也许利用位置限制来防止结构扭曲).</p>
+<h4>最小化</h4>
+<p>我们使用的最小化输入文件如下. 我们将该文件命名为<code>min.in</code>:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;min.in&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2
+3
+4&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;  &lt;span&gt;&lt;/span&gt;simple generalized Born minimization script
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;cntrl
+   imin&lt;span style="color: #666666"&gt;=1&lt;/span&gt;, ntb&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, maxcyc&lt;span style="color: #666666"&gt;=100&lt;/span&gt;, ntpr&lt;span style="color: #666666"&gt;=10&lt;/span&gt;, cut&lt;span style="color: #666666"&gt;=1000.&lt;/span&gt;, igb&lt;span style="color: #666666"&gt;=8&lt;/span&gt;,
+ &lt;span style="color: #666666"&gt;/&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>我们可以使用<code>sander</code>模块运行最小化:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;sander&lt;/span&gt; &lt;span style="color:#666"&gt;-O&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; min.in &lt;span style="color:#666"&gt;-p&lt;/span&gt; gfp.parm7 &lt;span style="color:#666"&gt;-c&lt;/span&gt; gfp.rst7 &lt;span style="color:#666"&gt;-o&lt;/span&gt; min1.out &lt;span style="color:#666"&gt;-r&lt;/span&gt; min1.rst7
+&lt;/pre&gt;&lt;/div&gt;<p>如同往常一样, 我们建议可视化查看生成的结构(<code>mini1.rst7</code>)来确保没有明显的糟糕事情发生, 并且查看输出文件来确保一切正常(例如: 结构保持完整, 在能量最小化期间总能量及其最大梯度稳步下降等). 我们创建的输出文件可以被下载, 它们已经打包成了压缩包的一部分, 同时压缩包还包含本节最后的计算过程中生成的大部分文件.</p>
+<h3>加热</h3>
+<p>下面显示了我们用于加热的输入文件.  我们将这个文件命名为<code>heat.in</code>, 并且将在从10K到300K的200ps的过程中线性地改变目标温度.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;heat.in&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;Implicit solvent initial heating mdin
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;cntrl
+   imin&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, irest&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, ntx&lt;span style="color: #666666"&gt;=1&lt;/span&gt;,
+   ntpr&lt;span style="color: #666666"&gt;=1000&lt;/span&gt;, ntwx&lt;span style="color: #666666"&gt;=1000&lt;/span&gt;, nstlim&lt;span style="color: #666666"&gt;=100000&lt;/span&gt;,
+   dt&lt;span style="color: #666666"&gt;=0.002&lt;/span&gt;, ntt&lt;span style="color: #666666"&gt;=3&lt;/span&gt;, tempi&lt;span style="color: #666666"&gt;=10&lt;/span&gt;,
+   temp0&lt;span style="color: #666666"&gt;=300&lt;/span&gt;, gamma_ln&lt;span style="color: #666666"&gt;=1.0&lt;/span&gt;, ig&lt;span style="color: #666666"&gt;=-1&lt;/span&gt;,
+   ntp&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, ntc&lt;span style="color: #666666"&gt;=2&lt;/span&gt;, ntf&lt;span style="color: #666666"&gt;=2&lt;/span&gt;, cut&lt;span style="color: #666666"&gt;=1000&lt;/span&gt;,
+   ntb&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, igb&lt;span style="color: #666666"&gt;=8&lt;/span&gt;, ioutfm&lt;span style="color: #666666"&gt;=1&lt;/span&gt;, nmropt&lt;span style="color: #666666"&gt;=1&lt;/span&gt;,
+ &lt;span style="color: #666666"&gt;/&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;wt
+   TYPE&lt;span style="color: #666666"&gt;=&lt;/span&gt;'TEMP0', ISTEP1&lt;span style="color: #666666"&gt;=1&lt;/span&gt;, ISTEP2&lt;span style="color: #666666"&gt;=100000&lt;/span&gt;,
+   VALUE1&lt;span style="color: #666666"&gt;=10.0&lt;/span&gt;, VALUE2&lt;span style="color: #666666"&gt;=300.0&lt;/span&gt;,
+ &lt;span style="color: #666666"&gt;/&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;wt TYPE&lt;span style="color: #666666"&gt;=&lt;/span&gt;'END' &lt;span style="color: #666666"&gt;/&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>需要注意的是, 我们在加热时, 结构文件需要使用上一步(能量最小化)生成的结构. 所以, 调用<code>sander</code>来进行加热操作的命令看起来像下面这样:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;sander&lt;/span&gt; &lt;span style="color:#666"&gt;-O&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; heat.in &lt;span style="color:#666"&gt;-p&lt;/span&gt; gfp.parm7 &lt;span style="color:#666"&gt;-c&lt;/span&gt; min1.rst7 &lt;span style="color:#666"&gt;-o&lt;/span&gt; heat.mdout &lt;span style="color:#666"&gt;-x&lt;/span&gt; heat.nc &lt;span style="color:#666"&gt;-r&lt;/span&gt; heat.rst7
+&lt;/pre&gt;&lt;/div&gt;<p>值得注意的是使用<code>sander</code>可能需要很长世间, 我们使用<code>pmemd.cuda</code>运行我们的模拟, 在我们的GTX680上运行能够更快速地完成. 与往常一样, 使用你最喜爱的可视化工具检查所得结构和轨迹, 以确保没有发生任何明显的糟糕事情. 和以前一样, 我们生成的文件将在本节末尾的压缩包中提供.</p>
+<h3>成品模拟</h3>
+<p>我们成功地加热了我们的结构! 现在我们已经可以进行成品模拟了. 请注意, 许多人称之为"平衡"的过程实际上就是在分析过程中忽略的成品模拟的一部分, 或者因为你使用了限制来稳定结构, 或者你使系统向平衡构型移动. 就本教程而言, 我们不区分这两个阶段, 对两个过程我们使用相同的输入.</p>
+<p>我们将使用的输入文件如下, 命名为``:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;md.in&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;Implicit solvent molecular dynamics
+ &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;cntrl
+   imin&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, irest&lt;span style="color: #666666"&gt;=1&lt;/span&gt;, ntx&lt;span style="color: #666666"&gt;=5&lt;/span&gt;,
+   ntpr&lt;span style="color: #666666"&gt;=1000&lt;/span&gt;, ntwx&lt;span style="color: #666666"&gt;=1000&lt;/span&gt;, nstlim&lt;span style="color: #666666"&gt;=500000&lt;/span&gt;,
+   dt&lt;span style="color: #666666"&gt;=0.002&lt;/span&gt;, ntt&lt;span style="color: #666666"&gt;=3&lt;/span&gt;, tempi&lt;span style="color: #666666"&gt;=300&lt;/span&gt;,
+   temp0&lt;span style="color: #666666"&gt;=300&lt;/span&gt;, gamma_ln&lt;span style="color: #666666"&gt;=1.0&lt;/span&gt;, ig&lt;span style="color: #666666"&gt;=-1&lt;/span&gt;,
+   ntp&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, ntc&lt;span style="color: #666666"&gt;=2&lt;/span&gt;, ntf&lt;span style="color: #666666"&gt;=2&lt;/span&gt;, cut&lt;span style="color: #666666"&gt;=1000&lt;/span&gt;,
+   ntb&lt;span style="color: #666666"&gt;=0&lt;/span&gt;, igb&lt;span style="color: #666666"&gt;=8&lt;/span&gt;, ioutfm&lt;span style="color: #666666"&gt;=1&lt;/span&gt;,
+ &lt;span style="color: #666666"&gt;/&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>你可以使用以下命令来运行模拟(我们将再一次使用<code>pmemd.cuda</code>):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;sander&lt;/span&gt; &lt;span style="color:#666"&gt;-O&lt;/span&gt; &lt;span style="color:#666"&gt;-i&lt;/span&gt; md.in &lt;span style="color:#666"&gt;-p&lt;/span&gt; gfp.parm7 &lt;span style="color:#666"&gt;-c&lt;/span&gt; heat.rst7 &lt;span style="color:#666"&gt;-o&lt;/span&gt; md1.mdout &lt;span style="color:#666"&gt;-x&lt;/span&gt; md1.nc &lt;span style="color:#666"&gt;-r&lt;/span&gt; md1.rst7
+&lt;/pre&gt;&lt;/div&gt;<p>就是这么简单! 当然, 你仍然需要分析你的模拟, 以便测试通过首先运行计算得到的结果. 现在你已经知道怎样给一个新的, 修饰过的, 包含在聚合链中的单体单元确定参数(例如修饰过的核苷酸或者氨基酸残基). 这里采用的方法可以应用到任何你想处理的聚合单元.</p>
+<p>正如我们的承诺, 你可以<a href="http://ambermd.org/tutorials/basic/tutorial5/files/simulation_files.tgz">下载</a>我们生成的版本. 值得注意的是你的输出绝大部分时候和我们的都会不同(甚至整体性质都会不同, 因为1ns的轨迹实在太短)</p>

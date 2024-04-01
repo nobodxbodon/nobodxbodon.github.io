@@ -1,0 +1,48 @@
+<h2>原文：<a href="https://xnum.github.io/2018/05/02/xdmq-vs-redis-cluster">xdmq和redis cluster的特性比較</a></h2>
+<hr/>
+<p>layout: post
+title: xdmq和redis cluster的特性比較
+categories:</p>
+<h2>- 心得</h2>
+<p>前陣子被問到為什麼不用redis來取代xdmq，在實作xdmq前我認為redis的角色屬於cache，較未詳細研究其底層理論。</p>
+<p>我覺得這是一個蠻好的切入點來研究redis cluster的特性。</p>
+<p>我想要利用middleware達成幾項功能</p>
+<ul>
+<li>從多台client同時接收訂單，不依靠Time sync的設計而是由middleware決定訂單順序</li>
+<li>一旦訂單順序被決定，middleware返回ACK後，沒有人可以再修改，因此ACK後也不允許掉資料</li>
+<li>持久化，所有訂單紀錄都被保留下來，可以查詢(對帳)</li>
+<li>pull模式，middleware不用管consumer的狀態</li>
+<li>middleware可以replay訂單，也就可以拿來進行回歸測試</li>
+</ul>
+<p>由於xdmq利用了raft達到需要的功能，部分的比較會直接用raft當作對象。</p>
+<h2>replication</h2>
+<p>redis cluster是async replica</p>
+<p>raft是sync replica (log在commit後才是可用的)</p>
+<h2>data sharding</h2>
+<p>在xdmq中直接基於raft實作message queue，所以其資料事實上是沒有sharding的，可以說是full replication</p>
+<p>在redis中透過<code>CRC16(key) % 16384</code>作sharding</p>
+<h2>availability</h2>
+<p>由於redis採用master-slave架構</p>
+<p>當master和slave同時死亡時可能造成cluster不可用</p>
+<p>當master資料未完全同步到slave就死亡時，可能造成資料遺失 (資料複製是async write)</p>
+<p>不可用和任何資料遺失在xdmq中都是要極力避免發生的問題</p>
+<h2>consistency</h2>
+<p>redis cluster並不保證強一致性，相對的xdmq的底層raft保證強一致性</p>
+<h2>performance</h2>
+<p>redis cluster由於data sharding的緣故可以達到較高的彈性與可擴充性</p>
+<p>相對的raft的效能瓶頸很可能發生在write，其架構中leader工作是最繁重的</p>
+<h2>network topology</h2>
+<p>redis cluster和xdmq的連線架構是一樣的，每個node都會連線到其他所有node</p>
+<p>但redis之間透過gossip協議了解其他node是否存活</p>
+<p>raft則只關心和leader的連線狀態</p>
+<h2>caching</h2>
+<p>redis cluster本質是in-memory key-value store</p>
+<p>一旦需要儲存的資料超過記憶體限制，根據設定的policy不同</p>
+<p>可能會回傳error或是刪除一些資料 (LRU)</p>
+<p>而raft是不會殺舊資料的，全都在log裡</p>
+<h2>persistence</h2>
+<p>redis分為RDB和AOF兩種</p>
+<p>RDB是一段時間建立一次snapshot</p>
+<p>AOF則是對每個write operation都做記錄，之後可以用來rebuild</p>
+<p>在xdmq中是開啟一個mmap file作為寫log的方式</p>
+<p>長到一個程度就會滿了，實際上應該要搭配log compaction</p>

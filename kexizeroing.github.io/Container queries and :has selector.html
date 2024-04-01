@@ -1,0 +1,112 @@
+<h2>原文：<a href="https://kexizeroing.github.io/container-queries-and-has-selector">Container queries and :has selector</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Container queries and :has selector"
+slug: container-queries-and-has-selector
+description: ""
+added: "Jan 08 2023"
+tags: [css]</p>
+<h2>updatedDate: "Mar 7 2024"</h2>
+<p><code>@container</code> and <code>:has()</code> are two powerful new responsive APIs landing in Chromium 105. Read at: <a href="https://developer.chrome.com/blog/has-with-cq-m105/">https://developer.chrome.com/blog/has-with-cq-m105/</a></p>
+<h2>Container Queries</h2>
+<p>Instead of relying on the viewport for styling, developers now have the ability to query the size of in-page elements too. This capability means that a component owns its responsive styling logic.</p>
+<p>To build with container queries, you must first set containment on a parent element. Do this by setting a <code>container-type</code> on the parent container. Say you might have a card with an image and some text content, setting the <code>container-type</code> to <code>inline-size</code> queries the inline-direction size of the parent which is the width of the card. Then we can use that container to apply styles to any of its children using <code>@container</code>.</p>
+<pre><code class="lang-html">&lt;div class="container"&gt;
+  &lt;div class="card"&gt;
+    &lt;div class="visual"&gt;🚀&lt;/div&gt;
+    &lt;div class="meta"&gt;
+      &lt;h1&gt;Rocket&lt;/h1&gt;
+      &lt;p class="desc"&gt;some text here&lt;/p&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+</code></pre>
+<pre><code class="lang-css">.container {
+  container-type: inline-size;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+@container (max-width: 400px) {
+  .card {
+    grid-template-columns: 1fr;
+  }
+}
+</code></pre>
+<p>Use the <code>container-type</code> property a value of <code>size</code>, <code>inline-size</code>, or <code>normal</code>.</p>
+<ul>
+<li><code>size</code>: the query will be based on the <em>inline and block</em> dimensions of the container.</li>
+<li><code>inline-size</code>: the query will be based on the <em>inline</em> dimensions of the container.</li>
+<li><code>normal</code>: The element is not a query container for any container size queries, but remains a query container for container style queries.</li>
+</ul>
+<p>When applying styles to a container using container queries, you can use container query length units. These units specify a length relative to the dimensions of a query container.</p>
+<ul>
+<li><code>cqw</code>: 1% of a query container's width</li>
+<li><code>cqh</code>: 1% of a query container's height</li>
+<li><code>cqi</code>: 1% of a query container's inline size</li>
+<li><code>cqb</code>: 1% of a query container's block size</li>
+</ul>
+<h3>Container style queries</h3>
+<p>There is also the possiblity to use style queries, which enables applying styles to elements based on a containing element's style features. Currently, the only style feature supported by style queries is CSS custom properties. In this case, the query returns true or false depending on the computed value of the containing element's custom properties. When container style queries are fully supported, they will enable you to apply styles to any element's descendants based on any property, declaration, or computed value.</p>
+<pre><code class="lang-css">@container style(--theme: green) or style(--theme: blue) {
+  output {
+    color: var(--theme);
+  }
+}
+
+@container style(--theme: red) {
+  output {
+    font-weight: bold;
+  }
+}
+</code></pre>
+<blockquote><p>Style queries are still experimental. A good reminder that mentioning "container queries" isn't enough now, we need to specify either size or style. Read more at: <a href="https://ishadeed.com/article/css-container-style-queries">https://ishadeed.com/article/css-container-style-queries</a></p>
+</blockquote>
+<h2>The <code>:has()</code> selector</h2>
+<p>The CSS <code>:has()</code> pseudo-class enables developers to check if a parent element contains children with specific parameters. For example, <code>p:has(span)</code> indicates a paragraph selector, which has a <code>span</code> inside of it. You can use this to style the parent paragraph itself, or style anything within it.</p>
+<p>Let’s expand on the example with the rocket card. What if you had a card without an image? Maybe you want to increase the size of the title and adjust the grid layout to single column so that it looks more intentional without the image.</p>
+<pre><code class="lang-css">.card:has(.visual) {
+  grid-template-columns: 1fr 1fr;
+}
+
+.card:not(:has(.visual)) h1 {
+  font-size: 4rem;
+}
+</code></pre>
+<blockquote><p><code>.card:has(:not(img))</code> means “select a card that has any element that is not an image”. <code>.card:not(:has(img))</code> means “select a card doesn't have an image”, and that's exactly what we want.</p>
+</blockquote>
+<p>Use Case 1: "Quantity Queries" are very easy in CSS now that we have <code>:has()</code>. You can just check if an element, for example, has a 10th child, like <code>.el:has(:nth-child(10))</code>, and now you know there are at least 10 children.</p>
+<p>Use Case 2: Imagine that you need to open a modal window, it's good practice to prevent the page behind it from scrolling. That's a scroll lock. We can tweak the CSS declaration on our body element to use <code>:has()</code>. As long as an element with <code>.lock-scroll</code> is in the DOM, the scroll we be locked.</p>
+<pre><code class="lang-css">body:has(.lock-scroll) {
+  overflow: hidden;
+}
+</code></pre>
+<p>Use Case 3: We can check the input state like a checkbox or radio button.</p>
+<pre><code class="lang-css">.box:has(input[type="checkbox"]:checked) {
+  .btn {
+    opacity: 1;
+    pointer-events: initial;
+  }
+}
+
+.box:has(input[value="standard"]:checked) {
+  .note {
+    display: block;
+  }
+}
+</code></pre>
+<h2>The selector <code>:is()</code> and <code>:where()</code></h2>
+<ul>
+<li>In CSS when using a selector list, if any of the selectors are invalid then the whole list is deemed invalid. When using <code>:is()</code> or <code>:where()</code> instead of the whole list of selectors being deemed invalid if one fails to parse, the incorrect or unsupported selector will be ignored and the others used. <em>(so-called "forgiving selectors")</em>.</li>
+<li>The difference between <code>:where()</code> and <code>:is()</code> is that <code>:where()</code> always has 0 specificity, whereas <code>:is()</code> takes on the specificity of the most specific selector in its arguments.</li>
+<li>The <code>:has()</code> pseudo-class itself doesn’t add any specificity weight to the selector. Like <code>:is()</code> and <code>:not()</code>, the specificity of <code>:has()</code> is equal to the highest specificity selector in the selector list.</li>
+</ul>
+<blockquote><p>A side note: Selectors matching happens from right to left. For example:</p>
+<ul>
+<li>The selector <code>.a .b .c</code> contains 3 units: <code>.a</code>, <code>.b</code>, and <code>.c</code>. When trying to find matching elements, the browser will first select all <code>.c</code> elements and will then check if they have a <code>.b</code> parent. If that’s the case, it will then check if that <code>.b</code> is a child of a <code>.a</code> element.</li>
+<li>The selector <code>.a :is(.b .c)</code> contains 2 units: <code>.a</code>, and <code>:is(.b .c)</code>. The first evaluated unit <code>:is(.b .c)</code>, which matches the <code>.c</code> elements that have a <code>.b</code> ancestor. If that’s true, the browser will then continue and check if that matched element – the <code>.c</code> – also has a <code>.a</code> ancestor.</li>
+</ul>
+</blockquote>

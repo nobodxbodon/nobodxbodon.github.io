@@ -1,0 +1,49 @@
+<h2>原文：<a href="https://jerkwin.github.io/2021/03/30/xpm2all更新：二级结构绘制,_颜色方案">xpm2all更新：二级结构绘制, 颜色方案</a></h2>
+<hr/>
+<p>layout: post
+ title: xpm2all更新：二级结构绘制, 颜色方案
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+<li>bash</li>
+</ul>
+<hr/>
+<ul>
+<li>2021-03-30 21:00:11</li>
+</ul>
+<p><code>xpm2all</code>脚本有段时间没有更新了, 因为没有看到有人提问题, 大约是用的人不多吧.</p>
+<p>最近有人在绘制二级结构图的时候遇到了两个问题: 一个是对模拟时间较长的轨迹, 数据量很大, 两种绘制方法都很慢, 而且还不一定能绘制出来; 另一个问题是, 脚本中能处理的二级结构类型少了5螺旋(π螺旋), 导致对某些含5螺旋的蛋白出错.</p>
+<p>第一个问题的原因在于, 原先的绘制方法是利用了gnuplot的自定义绘图功能, 相当于拿笔一点一点地画. 虽然这种方法自由度很高, 可以画任何东西, 但gnuplot并不是设计用来做这个的, 所以处理起来远远慢于直接绘制数据. 要想提高绘制速度, 可以直接使用类似热图的绘制方法, 方法可以参考以前的一篇文章<a href="https://jerkwin.github.io/2020/08/23/%E4%BD%BF%E7%94%A8gnuplot%E7%BB%98%E5%88%B6xpm%E6%96%87%E4%BB%B6%E5%AF%B9%E5%BA%94%E7%9A%84%E6%95%B0%E6%8D%AE/">使用gnuplot绘制xpm文件对应的数据</a>.</p>
+<p>对模拟时间较长的轨迹, 运行<code>gmx do_dssp</code>时候建议使用<code>-tu ns</code>选项, 这样输出的<code>ss.xpm</code>中时间单位为ns, 绘图更好些. 下面是一个示例, 蛋白含122个残基, 不算大, 模拟了50 ns, 每2 ps保存一帧轨迹并计算二级结构. 就有点大了. 原先的脚本在处理这么大的数据量时很容易卡死, gnuplot绘制也很难成功. 使用新的方法, 绘制起来就没有什么压力了.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-ss-large.png"/></p>
+<p>对第二个问题, 很简单, 为脚本新增加一个二级结构类型即可.</p>
+<p>修订了这两个问题之后, 也顺便看了一下绘制二级结构时所用的颜色方案. 对于每种二级结构该用哪种颜色表示, 目前看起来并没有标准. GROMACS默认有一套颜色方案, VMD有一套, PDB也有一套, 文献上还有各种不同的颜色方案. 我试了试, 觉得都不怎么漂亮, 但也没有能力或精力自己设计一套, 所以也就只能给个选项, 把我测试过的加上. 如果你看到更好的颜色方案, 欢迎告知.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-color-gmx.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-color-vmd.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-color-pdb.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-color-p1.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-color-p2.png"/></p>
+<p>此外, <code>gmx do_dssp</code>输出文件<code>ss.xpm</code>中的残基是你选择要分析的残基, 编号总是从<code>1</code>开始. 如果你分析时选择的并不是所有残基, 那么绘制时的残基编号就与原始蛋白文件中的残基编号不一致了. 为此, 我给脚本增加了另一个选项, 可以指定绘制时残基的编号从什么值开始. 对上面的例子, 如果分析的残基是从<code>200</code>开始的, 而不是从<code>1</code>开始, 那应该如下</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-ymin.png"/></p>
+<p>最后, 我还将gnuplot的绘制代码修改了一下, 更方便使用. 当然, <code>fancy</code>的绘制方式还是保留了, 但只用于残基数比较少, 模拟时间比较短的情况.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-fancy.png"/></p>
+<p>对于得到的二级结构含量文件<code>ss~count.xvg</code>, 除了使用普通的点线图绘制以外, 还可以使用堆积柱状图绘制. gnuplot支持堆积柱状图, 但其横坐标只能是字符串, 而不支持连续的数值. 这有点不好用. 一个解决方法是对数据稍加处理, 然后使用<code>boxes</code>绘制. 示例如下</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/xpm2all-count.png"/></p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #AA22FF"&gt;set&lt;/span&gt; term pngcairo enhanced truecolor font &lt;span style="color: #BB4444"&gt;"HelveticaNeueLT Pro 85 Hv,85"&lt;/span&gt; &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+fontscale &lt;span style="color: #666666"&gt;1&lt;/span&gt; linewidth &lt;span style="color: #666666"&gt;20&lt;/span&gt; pointscale &lt;span style="color: #666666"&gt;5&lt;/span&gt; size 6000,3500
+&lt;span style="color: #AA22FF"&gt;set&lt;/span&gt; tics out nomirror;
+&lt;span style="color: #AA22FF"&gt;set&lt;/span&gt; key out reverse Left spacing &lt;span style="color: #666666"&gt;2&lt;/span&gt; samplen 1/5
+&lt;span style="color: #AA22FF"&gt;set&lt;/span&gt; style fill solid 0.5 border
+&lt;span style="color: #AA22FF"&gt;set&lt;/span&gt; xl&lt;span style="color: #BB4444"&gt;"Time(ps)"&lt;/span&gt;; &lt;span style="color: #AA22FF"&gt;set&lt;/span&gt; yl&lt;span style="color: #BB4444"&gt;"#Res%"&lt;/span&gt;
+
+plot &lt;span style="color: #666666"&gt;[&lt;/span&gt;0:0.325&lt;span style="color: #666666"&gt;]&lt;/span&gt; &lt;span style="color: #666666"&gt;[&lt;/span&gt;0:100&lt;span style="color: #666666"&gt;]&lt;/span&gt; &lt;span style="color: #BB4444"&gt;'&lt;/span&gt;ss~count.xvg&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+   u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$4&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$5&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$6&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$7&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$8&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$9&lt;/span&gt;&lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"Coil    "&lt;/span&gt;, &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;''&lt;/span&gt; u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$4&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$5&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$6&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$7&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$8&lt;/span&gt;   &lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"Bend    "&lt;/span&gt;, &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;''&lt;/span&gt; u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$4&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$5&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$6&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$7&lt;/span&gt;      &lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"Turn    "&lt;/span&gt;, &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;''&lt;/span&gt; u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$4&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$5&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$6&lt;/span&gt;         &lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"B-Bridge"&lt;/span&gt;, &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;''&lt;/span&gt; u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$4&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$5&lt;/span&gt;            &lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"B-Sheet "&lt;/span&gt;, &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;''&lt;/span&gt; u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$4&lt;/span&gt;               &lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"5-Helix "&lt;/span&gt;, &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;''&lt;/span&gt; u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;+&lt;span style="color: #B8860B"&gt;$3&lt;/span&gt;                  &lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"3-Helix "&lt;/span&gt;, &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;''&lt;/span&gt; u 1:&lt;span style="color: #666666"&gt;((&lt;/span&gt;&lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;                     &lt;span style="color: #666666"&gt;)&lt;/span&gt;*100/51&lt;span style="color: #666666"&gt;)&lt;/span&gt; s f w boxes t&lt;span style="color: #BB4444"&gt;"A-Helix "&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;<p>目前就这些了.</p>

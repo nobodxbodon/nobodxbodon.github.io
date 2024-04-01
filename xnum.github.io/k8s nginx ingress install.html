@@ -1,0 +1,253 @@
+<h2>原文：<a href="https://xnum.github.io/2021/01/05/k8s-nginx-ingress-install">k8s nginx ingress install</a></h2>
+<hr/>
+<p>layout: post
+title: k8s nginx ingress install
+date: 2021-01-05 18:54 +0800</p>
+<h2>categories: k8s</h2>
+<p>2022-04-11 更新 k8s 1.23 版本寫法</p>
+<h1>前言</h1>
+<p>WAN進來先用port forward走到虛擬IP的80,443</p>
+<p>目前已經在cluster上架設keepalived + haproxy</p>
+<p>haproxy listens on <em>:80 </em>:443 並開啟 proxy protocol</p>
+<p>並自動將流量導向任意node的 :32080, :32443 使用 NodePort接收流量</p>
+<h1>設定目標</h1>
+<ul>
+<li>namespace <code>cert-manager</code><ul>
+<li>使用nginx作為ingress controller</li>
+<li>使用cert-manager取得wildcard tls cert secret並自動renew</li>
+<li>tls termination</li>
+<li>放tls secrets</li>
+</ul>
+</li>
+<li>namespace <code>panel</code><ul>
+<li>架一個 <code>panel.foo.com</code> 前後端分離</li>
+</ul>
+</li>
+<li>namespace <code>default</code><ul>
+<li>架一個k8s example guestbook 在 <code>guest.bar.io</code></li>
+</ul>
+</li>
+</ul>
+<p>一般使用者無法讀取secrets，但可以在自己的namespaec裡自由建立ingress</p>
+<p>由於有多張wildcard，不能用default certificate選項指定</p>
+<h1>nginx-ingress</h1>
+<p>使用helm3進行安裝</p>
+<pre><code>helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm install my-release ingress-nginx/ingress-nginx
+</code></pre>
+<p>ref: <a href="https://kubernetes.github.io/ingress-nginx/deploy/#using-helm">https://kubernetes.github.io/ingress-nginx/deploy/#using-helm</a></p>
+<p>自訂values.yaml部分</p>
+<pre><code>controller:
+  config:
+    use-proxy-protocol: "true"
+  extraArgs:
+    http-port: 9080
+    https-port: 9443
+  ports:
+    http: 9080
+    https: 9443
+  targetPorts:
+    http: 9080
+    https: 9443
+  type: NodePort
+  nodePorts:
+    http: 32080
+    https:32443
+</code></pre>
+<h1>cert-manager</h1>
+<pre><code>helm install \
+  cert-manager jetstack/cert-manager \
+  --namespace ingress \
+  --version v1.7.2 \
+  --set installCRDs=true
+</code></pre>
+<h1>cert-manager ACME provider</h1>
+<p>我從gandi上買個幾個domain 使用上面提供的DNS server設定DNS記錄</p>
+<ul>
+<li>1800 IN A 62.226.87.21</li>
+</ul>
+<p>接下來照著作</p>
+<p><a href="https://github.com/bwolf/cert-manager-webhook-gandi">https://github.com/bwolf/cert-manager-webhook-gandi</a></p>
+<hr/>
+<h1>Fake ingress</h1>
+<p>首先確認 certificates 已經取得</p>
+<pre><code>kubectl get certificates
+</code></pre>
+<p>在namespace <code>cert-manager</code>使用這個ingress讓nginx解TLS流量</p>
+<pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  name: foo-com-entry
+  namespace: cert-manager
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - "*.foo.com"
+    secretName: wildcard-foo-com-tls
+  rules:
+  - host: "*.foo.com"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  name: bar-io-entry
+  namespace: cert-manager
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - "*.bar.io"
+    secretName: wildcard-bar-io-tls
+  rules:
+  - host: "*.bar.io"
+</code></pre>
+<h1>Real Ingress</h1>
+<p>個別使用者可以用以下設定方式將特定host導到service上</p>
+<p>這邊tls section都省略</p>
+<pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: guestbook
+  namespace: default
+  annotations: {}
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: guest.bar.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+</code></pre>
+<p>nginx的rewrite功能我一直測試失敗，所以還是把prefix丟給service自己處理strip</p>
+<pre><code>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: panel
+  namespace: panel
+  annotations: {}
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: panel.foo.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: panel-api
+            port:
+              number: 80
+        path: /api/
+        pathType: Prefix
+      - backend:
+          service:
+            name: panel-frontend
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+</code></pre>
+<h1>缺點</h1>
+<p>走到default backend的時候由於沒有對應的cert</p>
+<p>所以會回傳Kubernetes Fake Ingress Controller Certificates</p>
+<h1>附錄: 讓 nginx 看到 external IP</h1>
+<p>nginx helm values.yaml 加上</p>
+<pre><code>controller:
+  config:                                                                       
+    use-proxy-protocol: "true"
+</code></pre>
+<p>haproxy.cfg 修改</p>
+<pre><code>global      
+    log /dev/log local0
+    log /dev/log local1 notice  
+    daemon
+
+#---------------------------------------------------------------------
+# common defaults that all the 'listen' and 'backend' sections will   
+# use if not designated in their block
+#---------------------------------------------------------------------
+defaults            
+    mode                    http
+    log                     global                                                                                
+    option                  httplog                                                                               
+    option                  dontlognull                                                                           
+    option http-server-close
+    option forwardfor       except 127.0.0.0/8                                                                    
+    option                  redispatch                                                                            
+    retries                 1                                                                                     
+    timeout connect         5s
+    timeout client          7d
+    timeout server          7d
+
+#---------------------------------------------------------------------
+# apiserver frontend which proxys to the masters
+#---------------------------------------------------------------------
+frontend apiserver                     
+    bind *:8443                                                                                                   
+    mode tcp       
+    option tcplog
+    default_backend apiserver
+
+#---------------------------------------------------------------------
+# round robin balancing for apiserver                                                                             
+#---------------------------------------------------------------------
+backend apiserver
+    mode tcp             
+    option tcp-check
+    balance     roundrobin
+        server k8s-node1 k8s-node1:6443 check
+        server k8s-node2 k8s-node2:6443 check
+        server k8s-node3 k8s-node3:6443 check
+
+#---------------------------------------------------------------------
+# ingress-http frontend which proxys to the k8s ingress controller
+#---------------------------------------------------------------------
+frontend ingress-http
+    bind *:80                   
+    mode tcp                                                                                                      
+    option tcplog                                                                                                 
+    default_backend ingress-http                                                                                  
+
+#---------------------------------------------------------------------                                            
+# round robin balancing for ingress-http                                                                          
+#---------------------------------------------------------------------                                            
+backend ingress-http          
+    mode tcp                  
+    option tcp-check          
+    balance     roundrobin                               
+        server k8s-node1 k8s-node1:32080 check send-proxy             
+        server k8s-node2 k8s-node2:32080 check send-proxy 
+        server k8s-node3 k8s-node3:32080 check send-proxy             
+
+#---------------------------------------------------------------------                                            
+# ingress-tls frontend which proxys to the k8s ingress controller
+#---------------------------------------------------------------------
+frontend ingress-tls         
+    bind *:443                                           
+    mode tcp                                                                                                      
+    option tcplog                                                                                                 
+    default_backend ingress-tls                                                                                   
+
+#---------------------------------------------------------------------
+# round robin balancing for ingress-tls
+#---------------------------------------------------------------------
+backend ingress-tls                          
+    mode tcp                                 
+    option tcp-check                         
+    balance     roundrobin
+        server k8s-node1 k8s-node1:32443 check send-proxy             
+        server k8s-node2 k8s-node2:32443 check send-proxy         
+        server k8s-node3 k8s-node3:32443 check send-proxy
+</code></pre>

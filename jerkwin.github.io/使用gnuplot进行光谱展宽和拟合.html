@@ -1,0 +1,1083 @@
+<h2>原文：<a href="https://jerkwin.github.io/2022/07/27/使用gnuplot进行光谱展宽和拟合">使用gnuplot进行光谱展宽和拟合</a></h2>
+<hr/>
+<p>layout: post
+ title: 使用gnuplot进行光谱展宽和拟合
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gnuplot
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li>2022-07-27 22:25:35</li>
+</ul>
+<p>在光谱数据的处理方面, 有两类常见任务:</p>
+<ul>
+<li>光谱展宽: 将理论计算得到的离散线状谱展宽成类似实验数据的连续谱, 便于比较.</li>
+<li>光谱拟合: 将实验得到的连续谱先分峰, 再拟合每个峰的数据.</li>
+</ul>
+<p>这两类任务都要涉及光谱中单个峰的数学表达式, 一般称其为线型函数. 基本的线型函数有两类;</p>
+<p><strong>洛伦兹线型</strong></p>
+<p>$$g_L(ν,γ_L)={γ_L／π}{1／ν^2+γ_L^2}$$</p>
+<p>半峰半宽 $γ_L$, 半峰全宽 $2γ_L$</p>
+<p><strong>高斯线型</strong>, 也称多普勒线型</p>
+<p>$$g_G(ν,σ)={1／√{2π}σ}\exp（-{ν^2／2σ^2}）, σ={γ_G／√{2㏑2} }$$</p>
+<p>半峰半宽 $γ_G=√{2㏑2}σ$, 半峰全宽 $2γ_G$</p>
+<p>线型函数实际上对应于数学上所言的概率密度分布函数, 因此, 也可以将其称为分布. 洛伦兹分布物理上常用, 数学上则称为<a href="https://en.wikipedia.org/wiki/Cauchy_distribution">柯西分布</a>. 高斯分布也就是正态分布. 这两种分布都是t分布的特例, 前者为自由度为1的t分布, 后者为自由度趋向无穷大的t分布.</p>
+<p>洛伦兹线型来源于光谱的自然增宽和压力增宽, 表明体系内部具有指数衰减过程. 高斯线型来自多普勒效应, 这也是常称其为多普勒线型的原因. 这种增宽的原因在于温度非零时分子的速度具有麦克斯韦分布(类似高斯分布). 实际条件下测得的光谱是这两种线型函数共同作用的结果, 可写为卷积的形式, 所对应的线型称为<a href="https://en.wikipedia.org/wiki/Voigt_profile">Voigt函数</a>. 这个函数为一个积分, 不存在简单的表达式, 计算比较麻烦, 所以除非必要, 一般不会用它进行光谱展宽. 但有时单独用洛伦兹展宽或高斯展宽效果不好, 为此, 又提出了一种<a href="https://docs.mantidproject.org/nightly/fitting/fitfunctions/PseudoVoigt.html">赝Voigt函数</a>来近似Voigt函数, 它是洛伦兹和高斯的线性组合, 计算简单, 所以常被用来作为效果稍好些的线型函数.</p>
+<p>因为Voigt函数在光谱领域非常重要, 所以有大量论文讨论如何快速精确地计算其值. 各种科学计算程序也大多支持Voigt函数的计算. 目前常用的是<a href="http://ab-initio.mit.edu/wiki/index.php/Faddeeva_Package"><code>libcert</code>函数库</a>, 这也是gnuplot计算Voigt函数所用的方法. Python中也有相应的<a href="https://scipython.com/book/chapter-8-scipy/examples/the-voigt-profile/">Voigt实现</a>.</p>
+<p>我以前写过简单的高斯, 洛伦兹, 赝Voigt展宽脚本, 但一直没有实现Voigt展宽, 因为自己写代码计算Voigt函数并没那么简单. 最近我发现Windows下的gnuplot 5.4自带了Voigt函数, 所以觉得没有必要再编译<code>libcert</code>或编写Voigt函数了, 可以借助gnuplot实现一个比较通用的光谱展宽方案.</p>
+<h2>函数测试</h2>
+<p>先看看gnuplot中<code>VP</code>函数的图像, 并与洛伦兹函数, 高斯函数对比一下, 获得些直观印象.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-1.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;1
+2
+3
+4
+5
+6
+7
+8
+9&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x,σ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #00A000"&gt;exp&lt;/span&gt;(&lt;span style="color: #666666"&gt;-&lt;/span&gt;(x&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)&lt;span style="color: #666666"&gt;**2/2&lt;/span&gt;)&lt;span style="color: #666666"&gt;/&lt;/span&gt;(&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;2*&lt;/span&gt;pi)&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)
+&lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x,γ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;(pi&lt;span style="color: #666666"&gt;*&lt;/span&gt;(x&lt;span style="color: #666666"&gt;*&lt;/span&gt;x&lt;span style="color: #666666"&gt;+&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;))
+&lt;span style="color: #00A000"&gt;VP01&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;(&lt;span style="color: #00A000"&gt;abs&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;&lt;span style="color: #00A000"&gt;int&lt;/span&gt;(x))&lt;span style="color: #666666"&gt;&lt;20/1E4?&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,0,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;:1/0&lt;/span&gt;)
+&lt;span style="color: #00A000"&gt;VP10&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;(&lt;span style="color: #00A000"&gt;abs&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;&lt;span style="color: #00A000"&gt;int&lt;/span&gt;(x))&lt;span style="color: #666666"&gt;&lt;20/1E4?&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1,0&lt;/span&gt;)&lt;span style="color: #666666"&gt;:1/0&lt;/span&gt;)
+
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"x"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"g(x)"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Gauss(x,σ)=exp(-½x^2/σ^2)/√(2π)σ=VP(x,σ,0)&lt;/span&gt;&lt;span style="color: #BB6622; font-weight: bold"&gt;\n&lt;/span&gt;&lt;span style="color: #BB4444"&gt;Lorentz(x,γ)=γ/(π(x^2+γ^2))=VP(x,0,γ)"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP10&lt;/span&gt;(x) &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"VP(x,1,0)"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP01&lt;/span&gt;(x) &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"VP(x,0,1)"&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-1.png"/></p>
+<p>可以看到, 在归一化的情况下, 高斯函数高瘦, 衰减更快, 洛伦兹函数则具有肥尾特征. <code>VP</code>函数在σ=0, γ=0时分别趋近于洛伦兹函数和高斯函数.</p>
+<p>在半峰宽相同的条件下, <code>VP</code>函数的表现则有不同, 这是有些误解产生的原因, 具体讨论的可以参考论文<a href="https://authors.library.caltech.edu/8907/1/HUAjas04.pdf">A Common Misunderstanding about the Voigt Line Profile</a>以及<a href="https://journals.ametsoc.org/view/journals/atsc/66/6/2009jas2906.1.xml?tab_body=pdf">Comments on “A Common Misunderstanding about the Voigt Line Profile”</a>. 将下面的图与上面的进行对比, 就可以发现其中的区别.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-2.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;1
+2
+3
+4
+5
+6
+7&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x,σ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #00A000"&gt;exp&lt;/span&gt;(&lt;span style="color: #666666"&gt;-&lt;/span&gt;(x&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)&lt;span style="color: #666666"&gt;**2/2&lt;/span&gt;)&lt;span style="color: #666666"&gt;/&lt;/span&gt;(&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;2*&lt;/span&gt;pi)&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)
+&lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x,γ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;(pi&lt;span style="color: #666666"&gt;*&lt;/span&gt;(x&lt;span style="color: #666666"&gt;*&lt;/span&gt;x&lt;span style="color: #666666"&gt;+&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;))
+
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"x"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"g(x)"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Profiles with Unit Half Widths"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1/&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;2*&lt;/span&gt;&lt;span style="color: #00A000"&gt;log&lt;/span&gt;(&lt;span style="color: #666666"&gt;2&lt;/span&gt;)))&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;2/&lt;/span&gt;(&lt;span style="color: #666666"&gt;1+&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;5&lt;/span&gt;))&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;2/&lt;/span&gt;(&lt;span style="color: #666666"&gt;1+&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;5&lt;/span&gt;)))&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-2.png"/></p>
+<h2>光谱展宽</h2>
+<p>光谱展宽的数学比较简单. 假定我们有离散的一系列峰位置和峰高, $c_i, h_i, i=1,⋯,n$, 在每个峰的中心放置一个线型函数$h_i f(ν)$, 然后将所有线型函数的值累加起来作为连续光谱的值:</p>
+<p>$$g(ν)=∑_{i=1}^n h_i f(ν-c_i)$$</p>
+<p>下面是两个示例. 第一个是苯的红外光谱, 因为分子的对称性较高, 非零强度的频率较少.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-3.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+ 10
+ 11
+ 12
+ 13
+ 14
+ 15
+ 16
+ 17
+ 18
+ 19
+ 20
+ 21
+ 22
+ 23
+ 24
+ 25
+ 26
+ 27
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
+287
+288
+289
+290
+291
+292
+293
+294
+295
+296
+297
+298
+299
+300
+301
+302
+303
+304
+305
+306
+307
+308
+309
+310
+311
+312
+313
+314
+315
+316
+317
+318
+319
+320
+321&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="#FF0000"&gt;$ben&lt;/span&gt; &lt;span style="#FF0000"&gt;&lt;&lt;EOD&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;411.52&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0139&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;412.28&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;623.36&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;623.88&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;687.17&lt;/span&gt;  &lt;span style="#FF0000"&gt;129.9979&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;727.19&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;869.06&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;874.66&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;996.19&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0196&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1001.05&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1023.49&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0009&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1025.07&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1025.25&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1068.62&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.2319&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1071.69&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.0255&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1179.01&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0018&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1203.21&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1210.16&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1340.03&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1382.68&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1519.97&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.8011&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1524.40&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.9705&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1666.82&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1667.35&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3185.61&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0034&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3195.88&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3196.31&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3212.36&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.2590&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3212.85&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.9293&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3223.34&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
+&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;
+
+&lt;span style="#FF0000"&gt;$pro&lt;/span&gt; &lt;span style="#FF0000"&gt;&lt;&lt;EOD&lt;/span&gt;
+   &lt;span style="#FF0000"&gt;5.5703&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.2248&lt;/span&gt;
+   &lt;span style="#FF0000"&gt;8.202&lt;/span&gt;     &lt;span style="#FF0000"&gt;0.0517&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;11.1187&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.1945&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;12.4887&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0312&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;14.7264&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.2752&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;20.8601&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.9193&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;26.9303&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.6772&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;30.9304&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9412&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;34.0546&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.6479&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;34.6674&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.2732&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;39.6549&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9459&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;42.5091&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.699&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;47.2868&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.9254&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;49.6395&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.3822&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;50.7001&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.3203&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;56.0899&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.7654&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;63.9532&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.0518&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;70.2859&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.1166&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;75.8429&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.1368&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;77.092&lt;/span&gt;     &lt;span style="#FF0000"&gt;1.9241&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;78.465&lt;/span&gt;     &lt;span style="#FF0000"&gt;5.9527&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;80.969&lt;/span&gt;     &lt;span style="#FF0000"&gt;3.1261&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;86.7711&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.9239&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;94.2281&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0847&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;96.7878&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.0573&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;102.5753&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.2876&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;103.5022&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.5716&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;109.5904&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.1824&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;117.5981&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.4245&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;120.7254&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.0271&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;127.1606&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.6787&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;131.1905&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.464&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;146.7241&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.3003&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;148.9796&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.2004&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;151.8352&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.1021&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;164.6458&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.014&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;168.4281&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.5959&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;178.56&lt;/span&gt;      &lt;span style="#FF0000"&gt;1.2548&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;179.8289&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.3345&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;192.0131&lt;/span&gt;   &lt;span style="#FF0000"&gt;18.7003&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;207.8927&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.8878&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;211.2551&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.0618&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;214.0112&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.7298&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;221.5261&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.1325&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;225.232&lt;/span&gt;     &lt;span style="#FF0000"&gt;7.3722&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;242.6048&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.2672&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;266.769&lt;/span&gt;     &lt;span style="#FF0000"&gt;9.7515&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;277.6434&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.3218&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;284.3466&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.0448&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;296.2707&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.5914&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;313.9051&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.5382&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;326.4214&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.8269&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;331.7138&lt;/span&gt;    &lt;span style="#FF0000"&gt;8.9124&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;334.2993&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.4369&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;340.2758&lt;/span&gt;   &lt;span style="#FF0000"&gt;15.4909&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;360.3065&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.3587&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;372.9981&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.7383&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;375.1391&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.7505&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;395.5045&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.3585&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;396.1989&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.1265&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;400.5555&lt;/span&gt;   &lt;span style="#FF0000"&gt;28.8306&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;409.9106&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.5589&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;432.7897&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.0126&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;455.7656&lt;/span&gt;   &lt;span style="#FF0000"&gt;72.503&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;463.0265&lt;/span&gt;   &lt;span style="#FF0000"&gt;95.8982&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;469.9515&lt;/span&gt;   &lt;span style="#FF0000"&gt;22.4316&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;485.0086&lt;/span&gt;   &lt;span style="#FF0000"&gt;61.404&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;486.3107&lt;/span&gt;  &lt;span style="#FF0000"&gt;144.6949&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;491.2587&lt;/span&gt;   &lt;span style="#FF0000"&gt;41.7086&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;565.8919&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.448&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;567.6956&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.495&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;601.6105&lt;/span&gt;   &lt;span style="#FF0000"&gt;40.0251&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;616.9299&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.9848&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;619.2627&lt;/span&gt;  &lt;span style="#FF0000"&gt;105.0766&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;630.8975&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.8575&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;658.5038&lt;/span&gt;   &lt;span style="#FF0000"&gt;69.1035&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;664.4005&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.2228&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;669.5269&lt;/span&gt;   &lt;span style="#FF0000"&gt;70.6619&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;681.0125&lt;/span&gt;   &lt;span style="#FF0000"&gt;92.2443&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;696.3436&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.7463&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;700.3316&lt;/span&gt;   &lt;span style="#FF0000"&gt;56.5851&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;701.3512&lt;/span&gt;   &lt;span style="#FF0000"&gt;28.4417&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;710.7345&lt;/span&gt;   &lt;span style="#FF0000"&gt;35.8959&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;714.5113&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.6981&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;716.9605&lt;/span&gt;   &lt;span style="#FF0000"&gt;30.2688&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;720.5791&lt;/span&gt;   &lt;span style="#FF0000"&gt;47.7707&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;732.277&lt;/span&gt;    &lt;span style="#FF0000"&gt;31.6282&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;741.0209&lt;/span&gt;   &lt;span style="#FF0000"&gt;56.6437&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;747.9012&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.4558&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;750.3384&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.3337&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;767.4022&lt;/span&gt;   &lt;span style="#FF0000"&gt;18.4507&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;782.7754&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.1596&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;790.3709&lt;/span&gt;   &lt;span style="#FF0000"&gt;33.9786&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;808.49&lt;/span&gt;      &lt;span style="#FF0000"&gt;3.1682&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;836.5271&lt;/span&gt;   &lt;span style="#FF0000"&gt;23.3033&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;863.5872&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.3729&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;864.7526&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.9439&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;881.4292&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.6686&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;905.2745&lt;/span&gt;   &lt;span style="#FF0000"&gt;81.3366&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;909.3038&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.0176&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;936.6016&lt;/span&gt;   &lt;span style="#FF0000"&gt;35.3285&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;938.4601&lt;/span&gt;   &lt;span style="#FF0000"&gt;64.7013&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;944.148&lt;/span&gt;    &lt;span style="#FF0000"&gt;97.6404&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;961.2511&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.9923&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;961.47&lt;/span&gt;     &lt;span style="#FF0000"&gt;29.2459&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1000.0235&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.5754&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1006.7099&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.7483&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1016.3939&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.4102&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1023.1448&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9533&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1025.4377&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.7167&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1064.4731&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.3154&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1069.9063&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.2305&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1071.8959&lt;/span&gt;   &lt;span style="#FF0000"&gt;22.7919&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1073.7106&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.824&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1077.035&lt;/span&gt;     &lt;span style="#FF0000"&gt;3.0798&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1087.8828&lt;/span&gt;   &lt;span style="#FF0000"&gt;24.381&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1088.7724&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.5369&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1091.3019&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.156&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1092.6817&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.9176&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1096.0523&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.5179&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1106.5754&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.0345&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1110.7173&lt;/span&gt;   &lt;span style="#FF0000"&gt;15.6929&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1116.1719&lt;/span&gt;   &lt;span style="#FF0000"&gt;25.9462&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1127.6926&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.684&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1128.2485&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.4408&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1135.2589&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.0076&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1135.3634&lt;/span&gt;   &lt;span style="#FF0000"&gt;19.894&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1170.9492&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.6672&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1171.5141&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.1377&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1176.381&lt;/span&gt;    &lt;span style="#FF0000"&gt;14.6126&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1185.3512&lt;/span&gt;   &lt;span style="#FF0000"&gt;14.374&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1192.013&lt;/span&gt;    &lt;span style="#FF0000"&gt;10.5838&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1203.5899&lt;/span&gt;  &lt;span style="#FF0000"&gt;140.7856&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1204.1205&lt;/span&gt;  &lt;span style="#FF0000"&gt;168.3034&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1219.4349&lt;/span&gt;   &lt;span style="#FF0000"&gt;16.6149&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1243.2615&lt;/span&gt;   &lt;span style="#FF0000"&gt;72.2718&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1244.3306&lt;/span&gt;   &lt;span style="#FF0000"&gt;19.7603&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1249.9352&lt;/span&gt;   &lt;span style="#FF0000"&gt;16.8338&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1253.7756&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.2009&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1257.1176&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.43&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1258.2583&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.9626&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1274.3982&lt;/span&gt;    &lt;span style="#FF0000"&gt;8.9235&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1277.0126&lt;/span&gt;   &lt;span style="#FF0000"&gt;73.3254&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1294.9685&lt;/span&gt;   &lt;span style="#FF0000"&gt;25.9155&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1297.3158&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.4366&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1297.5511&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.0741&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1301.119&lt;/span&gt;    &lt;span style="#FF0000"&gt;18.5913&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1313.3604&lt;/span&gt;   &lt;span style="#FF0000"&gt;14.4705&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1314.5702&lt;/span&gt;   &lt;span style="#FF0000"&gt;25.6698&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1327.0457&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.3781&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1348.8651&lt;/span&gt;   &lt;span style="#FF0000"&gt;65.0611&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1360.6187&lt;/span&gt;   &lt;span style="#FF0000"&gt;26.1801&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1365.4324&lt;/span&gt;   &lt;span style="#FF0000"&gt;18.2422&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1365.9126&lt;/span&gt;   &lt;span style="#FF0000"&gt;14.7917&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1371.9704&lt;/span&gt;   &lt;span style="#FF0000"&gt;21.2766&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1372.2487&lt;/span&gt;  &lt;span style="#FF0000"&gt;181.1006&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1398.991&lt;/span&gt;    &lt;span style="#FF0000"&gt;84.3235&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1408.7975&lt;/span&gt;   &lt;span style="#FF0000"&gt;48.6287&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1415.7099&lt;/span&gt;  &lt;span style="#FF0000"&gt;129.5311&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1428.2345&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.1065&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1429.7462&lt;/span&gt;   &lt;span style="#FF0000"&gt;51.4848&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1443.1475&lt;/span&gt;   &lt;span style="#FF0000"&gt;93.2618&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1452.4158&lt;/span&gt;   &lt;span style="#FF0000"&gt;84.7856&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1459.1361&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.9864&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1459.7117&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.1549&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1468.7118&lt;/span&gt;   &lt;span style="#FF0000"&gt;58.5782&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1489.0287&lt;/span&gt;   &lt;span style="#FF0000"&gt;37.4598&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1490.1846&lt;/span&gt;   &lt;span style="#FF0000"&gt;28.3128&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1502.2183&lt;/span&gt;   &lt;span style="#FF0000"&gt;24.6394&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1518.0248&lt;/span&gt;   &lt;span style="#FF0000"&gt;68.7913&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1528.3239&lt;/span&gt;   &lt;span style="#FF0000"&gt;54.046&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1529.8767&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.7381&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1546.5526&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.6335&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1558.1716&lt;/span&gt;   &lt;span style="#FF0000"&gt;32.5112&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1558.2001&lt;/span&gt;   &lt;span style="#FF0000"&gt;35.6352&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1562.1631&lt;/span&gt;   &lt;span style="#FF0000"&gt;39.1299&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1566.4315&lt;/span&gt;   &lt;span style="#FF0000"&gt;88.1398&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1592.0727&lt;/span&gt;   &lt;span style="#FF0000"&gt;64.9987&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1603.7566&lt;/span&gt;   &lt;span style="#FF0000"&gt;29.2215&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1605.9611&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.4568&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1606.14&lt;/span&gt;     &lt;span style="#FF0000"&gt;16.5949&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1608.7598&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.4199&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1608.9714&lt;/span&gt;   &lt;span style="#FF0000"&gt;45.8923&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1611.0471&lt;/span&gt;   &lt;span style="#FF0000"&gt;49.0506&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1612.5791&lt;/span&gt;   &lt;span style="#FF0000"&gt;29.7291&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1622.6447&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.6206&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1625.8612&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.5778&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1628.0334&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.641&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1629.0302&lt;/span&gt;  &lt;span style="#FF0000"&gt;159.3846&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1629.2513&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.1434&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1630.6931&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.4976&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1631.9014&lt;/span&gt;   &lt;span style="#FF0000"&gt;25.1015&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1633.3015&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.605&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1633.9271&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.1993&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1641.0299&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.9203&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1641.7938&lt;/span&gt;   &lt;span style="#FF0000"&gt;29.8011&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1649.826&lt;/span&gt;    &lt;span style="#FF0000"&gt;19.5962&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1650.9025&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.7789&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1676.6164&lt;/span&gt;  &lt;span style="#FF0000"&gt;135.773&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1690.6269&lt;/span&gt;  &lt;span style="#FF0000"&gt;367.0851&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1697.1001&lt;/span&gt;   &lt;span style="#FF0000"&gt;72.4277&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1697.3751&lt;/span&gt;  &lt;span style="#FF0000"&gt;518.5653&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1700.597&lt;/span&gt;   &lt;span style="#FF0000"&gt;311.6447&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1703.253&lt;/span&gt;   &lt;span style="#FF0000"&gt;234.2651&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1708.5578&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.8341&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1726.4863&lt;/span&gt;  &lt;span style="#FF0000"&gt;264.9281&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1731.3218&lt;/span&gt;  &lt;span style="#FF0000"&gt;153.7944&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1802.943&lt;/span&gt;    &lt;span style="#FF0000"&gt;78.9193&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1811.1822&lt;/span&gt;   &lt;span style="#FF0000"&gt;33.7786&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1821.9025&lt;/span&gt;   &lt;span style="#FF0000"&gt;95.8968&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1897.9733&lt;/span&gt;  &lt;span style="#FF0000"&gt;507.8488&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1908.7425&lt;/span&gt;  &lt;span style="#FF0000"&gt;740.5449&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1912.1115&lt;/span&gt;   &lt;span style="#FF0000"&gt;76.4197&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1948.6744&lt;/span&gt;  &lt;span style="#FF0000"&gt;298.6536&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1952.2258&lt;/span&gt;  &lt;span style="#FF0000"&gt;190.9105&lt;/span&gt;
+&lt;span style="#FF0000"&gt;1964.7986&lt;/span&gt;  &lt;span style="#FF0000"&gt;232.6757&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3222.6301&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.2267&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3227.4149&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.4081&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3233.4723&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.4421&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3237.1163&lt;/span&gt;   &lt;span style="#FF0000"&gt;41.8467&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3237.5387&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.6233&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3242.6788&lt;/span&gt;   &lt;span style="#FF0000"&gt;38.4305&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3245.535&lt;/span&gt;    &lt;span style="#FF0000"&gt;31.3443&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3251.8003&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.6615&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3255.9425&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.5297&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3260.8563&lt;/span&gt;   &lt;span style="#FF0000"&gt;16.8681&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3276.8333&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.83&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3283.2845&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.7968&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3288.5065&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.6577&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3294.0036&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.0576&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3296.7166&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.5492&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3308.7381&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9153&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3309.4265&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.9439&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3312.3182&lt;/span&gt;   &lt;span style="#FF0000"&gt;25.3147&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3317.6555&lt;/span&gt;   &lt;span style="#FF0000"&gt;21.2113&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3317.895&lt;/span&gt;    &lt;span style="#FF0000"&gt;20.889&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3318.5208&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.974&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3328.6494&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.0121&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3334.3257&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.5727&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3338.0091&lt;/span&gt;   &lt;span style="#FF0000"&gt;19.8689&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3340.0895&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.3902&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3346.1489&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.9576&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3349.8259&lt;/span&gt;    &lt;span style="#FF0000"&gt;8.1264&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3447.1727&lt;/span&gt;  &lt;span style="#FF0000"&gt;128.4542&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3456.8082&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9686&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3458.2356&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.0307&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3465.5113&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.466&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3468.7609&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.1457&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3470.5013&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.5949&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3718.79&lt;/span&gt;    &lt;span style="#FF0000"&gt;592.2654&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3737.2726&lt;/span&gt;  &lt;span style="#FF0000"&gt;504.0469&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3822.376&lt;/span&gt;   &lt;span style="#FF0000"&gt;132.18&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3841.1183&lt;/span&gt;   &lt;span style="#FF0000"&gt;73.0049&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3856.8681&lt;/span&gt;   &lt;span style="#FF0000"&gt;52.7314&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3863.233&lt;/span&gt;    &lt;span style="#FF0000"&gt;65.2451&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3871.7072&lt;/span&gt;  &lt;span style="#FF0000"&gt;157.5003&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3884.8637&lt;/span&gt;   &lt;span style="#FF0000"&gt;42.4131&lt;/span&gt;
+&lt;span style="#FF0000"&gt;3887.9648&lt;/span&gt;   &lt;span style="#FF0000"&gt;52.3414&lt;/span&gt;
+&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;
+
+    &lt;span style="color: #B8860B"&gt;data&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"$ben"&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 选择绘图数据&lt;/span&gt;
+
+    &lt;span style="#FF0000"&gt;stat&lt;/span&gt; &lt;span style="#FF0000"&gt;data&lt;/span&gt; &lt;span style="#FF0000"&gt;u&lt;/span&gt; &lt;span style="#FF0000"&gt;1&lt;/span&gt; &lt;span style="#FF0000"&gt;nooutput&lt;/span&gt;       &lt;span style="color: #008800; font-style: italic"&gt;# 统计峰的数目&lt;/span&gt;
+    &lt;span style="color: #B8860B"&gt;Npnt&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;STATS_records
+    &lt;span style="#FF0000"&gt;array&lt;/span&gt; &lt;span style="#FF0000"&gt;c[Npnt]&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;;&lt;/span&gt; &lt;span style="#FF0000"&gt;array&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;h&lt;/span&gt;[Npnt] &lt;span style="color: #008800; font-style: italic"&gt;# 定义数组保存峰位置, 高度&lt;/span&gt;
+
+    &lt;span style="#FF0000"&gt;stat&lt;/span&gt; &lt;span style="#FF0000"&gt;data&lt;/span&gt; &lt;span style="#FF0000"&gt;u&lt;/span&gt; &lt;span style="#FF0000"&gt;(c[$0+1]=$1,&lt;/span&gt; &lt;span style="#FF0000"&gt;1):(&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;h&lt;/span&gt;[&lt;span style="#FF0000"&gt;$&lt;/span&gt;&lt;span style="color: #666666"&gt;0+1&lt;/span&gt;]&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;$&lt;/span&gt;&lt;span style="color: #666666"&gt;2,&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt;) nooutput &lt;span style="color: #008800; font-style: italic"&gt;# 填充数组&lt;/span&gt;
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# 定义展宽函数&lt;/span&gt;
+    &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x,c,h,γG,γL)&lt;span style="color: #666666"&gt;=&lt;/span&gt;h&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #00A000"&gt;log&lt;/span&gt;(&lt;span style="color: #666666"&gt;4&lt;/span&gt;))&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L)
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# 展宽参数&lt;/span&gt;
+    &lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #B8860B"&gt;G&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;
+    &lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #B8860B"&gt;L&lt;/span&gt;&lt;span style="color: #666666"&gt;=50&lt;/span&gt;
+    &lt;span style="color: #008800; font-style: italic"&gt;# γV=VP_fwhm(γG/sqrt(log(4)),γL) # gnuplot 5.4尚不支持此函数&lt;/span&gt;
+
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"cm^{-1}"&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"a.u."&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #00A000"&gt;sprintf&lt;/span&gt;(&lt;span style="color: #BB4444"&gt;"γ_G=%.1f    γ_L=%.1f"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="#FF0000"&gt;γ&lt;/span&gt;L)
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# 绘制, 使用累加函数&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;boxwidth&lt;/span&gt; &lt;span style="color: #666666"&gt;0.01&lt;/span&gt;    &lt;span style="color: #008800; font-style: italic"&gt;# 使用柱状图画竖线, 5.5才支持Impulses&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; [&lt;span style="color: #666666"&gt;0:4000&lt;/span&gt;] \
+        data &lt;span style="color: #AA22FF"&gt;axis&lt;/span&gt; x1y2 &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; boxes lw &lt;span style="color: #666666"&gt;.5&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;""&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+        sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,0&lt;/span&gt;) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Gauss"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+        sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,0,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Lorentz"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+        sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Voigt"&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-3.png"/></p>
+<p>另一个是某蛋白部分的红外光谱, 没有对称性, 所以有很多峰.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/vp-4.png"/></p>
+<h2>光谱拟合</h2>
+<p>有了光谱展宽的经验, 处理光谱拟合也就没有太大问题了. 但光谱拟合的难点其实不在如何拟合, 而是在于分峰. 实验获得的光谱通常比较复杂, 在没有其他信息的条件下, 如何确定分峰的数目是一件很玄学的事情. 虽然也有一些数学上的处理方法, 但也不能作为最后的结论, 还是要结合实际经验和理论推测才成. 网上有很多拟合的示例, 但大都是基于赝Voig函数的:</p>
+<ul>
+<li><a href="http://emilygraceripka.com/blog/16">Data Fitting in Python Part II: Gaussian &amp; Lorentzian &amp; Voigt Lineshapes, Deconvoluting Peaks, and Fitting Residuals</a></li>
+<li><a href="https://docs.mantidproject.org/nightly/fitting/fitfunctions/PseudoVoigt.html">PseudoVoigt Fitting</a></li>
+<li><a href="https://stackoverflow.com/questions/32894417/python-pseudo-voigt-fit-experimental-data">Python Pseudo-Voigt fit experimental data</a></li>
+</ul>
+<p>下面示意一下如何使用gnuplot进行单峰拟合. 如果确定了分峰数目, 多峰拟合的过程大致类似.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-5.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+ 10
+ 11
+ 12
+ 13
+ 14
+ 15
+ 16
+ 17
+ 18
+ 19
+ 20
+ 21
+ 22
+ 23
+ 24
+ 25
+ 26
+ 27
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="#FF0000"&gt;$dat&lt;/span&gt; &lt;span style="#FF0000"&gt;&lt;&lt;EOD&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;0&lt;/span&gt;   &lt;span style="#FF0000"&gt;3.3487290833206163&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;1&lt;/span&gt;   &lt;span style="#FF0000"&gt;3.441076831745743&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;2&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.7932863251851305&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;3&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.519064207516034&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;4&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.394406511652473&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;5&lt;/span&gt;  &lt;span style="#FF0000"&gt;11.251458210206666&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;6&lt;/span&gt;   &lt;span style="#FF0000"&gt;4.679476113847004&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;7&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.313048016542345&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;8&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.348006472917458&lt;/span&gt;
+  &lt;span style="#FF0000"&gt;9&lt;/span&gt;   &lt;span style="#FF0000"&gt;6.086336477997078&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;10&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.765370342398741&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;11&lt;/span&gt;  &lt;span style="#FF0000"&gt;11.402519337778239&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;12&lt;/span&gt;  &lt;span style="#FF0000"&gt;11.151689287913552&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;13&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.546151698722557&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;14&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.323886291540909&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;15&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.133249200994414&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;16&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.242189407441712&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;17&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.887686444395982&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;18&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.759444780127321&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;19&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.21095463298772&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;20&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.693160143294264&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;21&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.239683298899614&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;22&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.476116297451632&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;23&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.128625585058783&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;24&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.94392508956097&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;25&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.274287987647595&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;26&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.552394167463973&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;27&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.51931115335406&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;28&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.923989117054466&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;29&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.646255122559495&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;30&lt;/span&gt;  &lt;span style="#FF0000"&gt;12.207746464070603&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;31&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.249531807666745&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;32&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.820667193850705&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;33&lt;/span&gt;  &lt;span style="#FF0000"&gt;11.913964012172858&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;34&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.506862412612637&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;35&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.858588835799232&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;36&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.918486963658015&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;37&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.089436171053094&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;38&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.38496801289269&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;39&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.42394419048644&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;40&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.759311758218061&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;41&lt;/span&gt;  &lt;span style="#FF0000"&gt;17.063349232010786&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;42&lt;/span&gt;  &lt;span style="#FF0000"&gt;12.232863723786215&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;43&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.988245956134314&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;44&lt;/span&gt;  &lt;span style="#FF0000"&gt;19.109899560493286&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;45&lt;/span&gt;  &lt;span style="#FF0000"&gt;18.344353100589824&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;46&lt;/span&gt;  &lt;span style="#FF0000"&gt;17.397232553539542&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;47&lt;/span&gt;  &lt;span style="#FF0000"&gt;12.372706600456558&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;48&lt;/span&gt;  &lt;span style="#FF0000"&gt;13.038720878764792&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;49&lt;/span&gt;  &lt;span style="#FF0000"&gt;19.100965014037367&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;50&lt;/span&gt;  &lt;span style="#FF0000"&gt;17.094480819566147&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;51&lt;/span&gt;  &lt;span style="#FF0000"&gt;20.801679461435484&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;52&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.763762333448557&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;53&lt;/span&gt;  &lt;span style="#FF0000"&gt;22.302320507719728&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;54&lt;/span&gt;  &lt;span style="#FF0000"&gt;23.394129891315963&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;55&lt;/span&gt;  &lt;span style="#FF0000"&gt;19.884812694503303&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;56&lt;/span&gt;  &lt;span style="#FF0000"&gt;22.09743700979689&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;57&lt;/span&gt;  &lt;span style="#FF0000"&gt;16.995815335935077&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;58&lt;/span&gt;  &lt;span style="#FF0000"&gt;24.286037929073284&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;59&lt;/span&gt;  &lt;span style="#FF0000"&gt;25.214705826961016&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;60&lt;/span&gt;  &lt;span style="#FF0000"&gt;25.305223543285013&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;61&lt;/span&gt;  &lt;span style="#FF0000"&gt;22.656121668613896&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;62&lt;/span&gt;  &lt;span style="#FF0000"&gt;30.185701748800568&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;63&lt;/span&gt;  &lt;span style="#FF0000"&gt;28.28382587095781&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;64&lt;/span&gt;  &lt;span style="#FF0000"&gt;35.63753811848088&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;65&lt;/span&gt;  &lt;span style="#FF0000"&gt;35.59816270398698&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;66&lt;/span&gt;  &lt;span style="#FF0000"&gt;35.64529822281625&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;67&lt;/span&gt;  &lt;span style="#FF0000"&gt;36.213428394807224&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;68&lt;/span&gt;  &lt;span style="#FF0000"&gt;39.56541841125095&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;69&lt;/span&gt;  &lt;span style="#FF0000"&gt;46.360702383473075&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;70&lt;/span&gt;  &lt;span style="#FF0000"&gt;55.84449512752349&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;71&lt;/span&gt;  &lt;span style="#FF0000"&gt;64.50142387788203&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;72&lt;/span&gt;  &lt;span style="#FF0000"&gt;77.75090937376423&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;73&lt;/span&gt;  &lt;span style="#FF0000"&gt;83.00423387164669&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;74&lt;/span&gt; &lt;span style="#FF0000"&gt;111.98365374689226&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;75&lt;/span&gt; &lt;span style="#FF0000"&gt;121.05211901294848&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;76&lt;/span&gt; &lt;span style="#FF0000"&gt;176.82062069814936&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;77&lt;/span&gt; &lt;span style="#FF0000"&gt;198.46769832454626&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;78&lt;/span&gt; &lt;span style="#FF0000"&gt;210.52624393366017&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;79&lt;/span&gt; &lt;span style="#FF0000"&gt;215.36708238568033&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;80&lt;/span&gt; &lt;span style="#FF0000"&gt;221.58003148955638&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;81&lt;/span&gt; &lt;span style="#FF0000"&gt;209.7551225151964&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;82&lt;/span&gt; &lt;span style="#FF0000"&gt;198.4104196333782&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;83&lt;/span&gt; &lt;span style="#FF0000"&gt;168.13949002992925&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;84&lt;/span&gt; &lt;span style="#FF0000"&gt;126.0081896958841&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;85&lt;/span&gt; &lt;span style="#FF0000"&gt;110.39003569380478&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;86&lt;/span&gt;  &lt;span style="#FF0000"&gt;90.88743461485616&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;87&lt;/span&gt;  &lt;span style="#FF0000"&gt;60.5443025644061&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;88&lt;/span&gt;  &lt;span style="#FF0000"&gt;71.00628698937221&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;89&lt;/span&gt;  &lt;span style="#FF0000"&gt;61.616294708485384&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;90&lt;/span&gt;  &lt;span style="#FF0000"&gt;45.32803695045095&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;91&lt;/span&gt;  &lt;span style="#FF0000"&gt;43.85638472551629&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;92&lt;/span&gt;  &lt;span style="#FF0000"&gt;48.863070901568086&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;93&lt;/span&gt;  &lt;span style="#FF0000"&gt;44.65252243455522&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;94&lt;/span&gt;  &lt;span style="#FF0000"&gt;41.209120125948104&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;95&lt;/span&gt;  &lt;span style="#FF0000"&gt;36.63478075990383&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;96&lt;/span&gt;  &lt;span style="#FF0000"&gt;36.098369542551325&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;97&lt;/span&gt;  &lt;span style="#FF0000"&gt;37.75419965137265&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;98&lt;/span&gt;  &lt;span style="#FF0000"&gt;41.102019290969956&lt;/span&gt;
+ &lt;span style="#FF0000"&gt;99&lt;/span&gt;  &lt;span style="#FF0000"&gt;26.874409332756752&lt;/span&gt;
+&lt;span style="#FF0000"&gt;100&lt;/span&gt;  &lt;span style="#FF0000"&gt;24.63314900554918&lt;/span&gt;
+&lt;span style="#FF0000"&gt;101&lt;/span&gt;  &lt;span style="#FF0000"&gt;26.05340465966265&lt;/span&gt;
+&lt;span style="#FF0000"&gt;102&lt;/span&gt;  &lt;span style="#FF0000"&gt;26.787053802870535&lt;/span&gt;
+&lt;span style="#FF0000"&gt;103&lt;/span&gt;  &lt;span style="#FF0000"&gt;16.51559065528567&lt;/span&gt;
+&lt;span style="#FF0000"&gt;104&lt;/span&gt;  &lt;span style="#FF0000"&gt;19.367731289491633&lt;/span&gt;
+&lt;span style="#FF0000"&gt;105&lt;/span&gt;  &lt;span style="#FF0000"&gt;17.794958746427422&lt;/span&gt;
+&lt;span style="#FF0000"&gt;106&lt;/span&gt;  &lt;span style="#FF0000"&gt;19.52785218727518&lt;/span&gt;
+&lt;span style="#FF0000"&gt;107&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.437635249660396&lt;/span&gt;
+&lt;span style="#FF0000"&gt;108&lt;/span&gt;  &lt;span style="#FF0000"&gt;21.96712662378481&lt;/span&gt;
+&lt;span style="#FF0000"&gt;109&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.311043443598177&lt;/span&gt;
+&lt;span style="#FF0000"&gt;110&lt;/span&gt;  &lt;span style="#FF0000"&gt;16.49893493905559&lt;/span&gt;
+&lt;span style="#FF0000"&gt;111&lt;/span&gt;  &lt;span style="#FF0000"&gt;16.41202114648668&lt;/span&gt;
+&lt;span style="#FF0000"&gt;112&lt;/span&gt;  &lt;span style="#FF0000"&gt;17.904512123179114&lt;/span&gt;
+&lt;span style="#FF0000"&gt;113&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.198812322372405&lt;/span&gt;
+&lt;span style="#FF0000"&gt;114&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.296623848360126&lt;/span&gt;
+&lt;span style="#FF0000"&gt;115&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.39383356078112&lt;/span&gt;
+&lt;span style="#FF0000"&gt;116&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.807540004905345&lt;/span&gt;
+&lt;span style="#FF0000"&gt;117&lt;/span&gt;  &lt;span style="#FF0000"&gt;17.405310725810278&lt;/span&gt;
+&lt;span style="#FF0000"&gt;118&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.309786310492559&lt;/span&gt;
+&lt;span style="#FF0000"&gt;119&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.117665282794073&lt;/span&gt;
+&lt;span style="#FF0000"&gt;120&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.926377010540376&lt;/span&gt;
+&lt;span style="#FF0000"&gt;121&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.000223621497955&lt;/span&gt;
+&lt;span style="#FF0000"&gt;122&lt;/span&gt;  &lt;span style="#FF0000"&gt;15.827757539949431&lt;/span&gt;
+&lt;span style="#FF0000"&gt;123&lt;/span&gt;  &lt;span style="#FF0000"&gt;19.22355433703294&lt;/span&gt;
+&lt;span style="#FF0000"&gt;124&lt;/span&gt;  &lt;span style="#FF0000"&gt;12.278007446886507&lt;/span&gt;
+&lt;span style="#FF0000"&gt;125&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.822245428954957&lt;/span&gt;
+&lt;span style="#FF0000"&gt;126&lt;/span&gt;  &lt;span style="#FF0000"&gt;13.226674931853903&lt;/span&gt;
+&lt;span style="#FF0000"&gt;127&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.551237809932955&lt;/span&gt;
+&lt;span style="#FF0000"&gt;128&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.58081654372226&lt;/span&gt;
+&lt;span style="#FF0000"&gt;129&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.329123069771072&lt;/span&gt;
+&lt;span style="#FF0000"&gt;130&lt;/span&gt;  &lt;span style="#FF0000"&gt;13.709943935412294&lt;/span&gt;
+&lt;span style="#FF0000"&gt;131&lt;/span&gt;  &lt;span style="#FF0000"&gt;11.778442391614956&lt;/span&gt;
+&lt;span style="#FF0000"&gt;132&lt;/span&gt;  &lt;span style="#FF0000"&gt;14.454930746849122&lt;/span&gt;
+&lt;span style="#FF0000"&gt;133&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.023352452542506&lt;/span&gt;
+&lt;span style="#FF0000"&gt;134&lt;/span&gt;  &lt;span style="#FF0000"&gt;11.01463585064886&lt;/span&gt;
+&lt;span style="#FF0000"&gt;135&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.621062477382623&lt;/span&gt;
+&lt;span style="#FF0000"&gt;136&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.29665510291416&lt;/span&gt;
+&lt;span style="#FF0000"&gt;137&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.633579419680572&lt;/span&gt;
+&lt;span style="#FF0000"&gt;138&lt;/span&gt;  &lt;span style="#FF0000"&gt;11.482703531988037&lt;/span&gt;
+&lt;span style="#FF0000"&gt;139&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.819073927883121&lt;/span&gt;
+&lt;span style="#FF0000"&gt;140&lt;/span&gt;  &lt;span style="#FF0000"&gt;12.095918617534196&lt;/span&gt;
+&lt;span style="#FF0000"&gt;141&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.820590920621864&lt;/span&gt;
+&lt;span style="#FF0000"&gt;142&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.620109753045565&lt;/span&gt;
+&lt;span style="#FF0000"&gt;143&lt;/span&gt;  &lt;span style="#FF0000"&gt;13.215701804432598&lt;/span&gt;
+&lt;span style="#FF0000"&gt;144&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.092085538619543&lt;/span&gt;
+&lt;span style="#FF0000"&gt;145&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.828015669152578&lt;/span&gt;
+&lt;span style="#FF0000"&gt;146&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.259655585415379&lt;/span&gt;
+&lt;span style="#FF0000"&gt;147&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.424189583067022&lt;/span&gt;
+&lt;span style="#FF0000"&gt;148&lt;/span&gt;  &lt;span style="#FF0000"&gt;13.149985946123934&lt;/span&gt;
+&lt;span style="#FF0000"&gt;149&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.471175119197948&lt;/span&gt;
+&lt;span style="#FF0000"&gt;150&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.947567075630904&lt;/span&gt;
+&lt;span style="#FF0000"&gt;151&lt;/span&gt;  &lt;span style="#FF0000"&gt;10.777888096711512&lt;/span&gt;
+&lt;span style="#FF0000"&gt;152&lt;/span&gt;   &lt;span style="#FF0000"&gt;8.477442195191612&lt;/span&gt;
+&lt;span style="#FF0000"&gt;153&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.585429992609711&lt;/span&gt;
+&lt;span style="#FF0000"&gt;154&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.032549866566089&lt;/span&gt;
+&lt;span style="#FF0000"&gt;155&lt;/span&gt;   &lt;span style="#FF0000"&gt;5.103962051624133&lt;/span&gt;
+&lt;span style="#FF0000"&gt;156&lt;/span&gt;   &lt;span style="#FF0000"&gt;9.285999577275545&lt;/span&gt;
+&lt;span style="#FF0000"&gt;157&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.421574444036404&lt;/span&gt;
+&lt;span style="#FF0000"&gt;158&lt;/span&gt;   &lt;span style="#FF0000"&gt;5.740841317806245&lt;/span&gt;
+&lt;span style="#FF0000"&gt;159&lt;/span&gt;   &lt;span style="#FF0000"&gt;2.3672530845679&lt;/span&gt;
+&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;
+
+&lt;span style="color: #B8860B"&gt;Ag&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;cg&lt;/span&gt;&lt;span style="color: #666666"&gt;=80&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;sg&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;;
+&lt;span style="color: #B8860B"&gt;Al&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;; &lt;span style="color: #AA22FF; font-weight: bold"&gt;cl&lt;/span&gt;&lt;span style="color: #666666"&gt;=80&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;gl&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;;
+&lt;span style="color: #B8860B"&gt;A&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;;  &lt;span style="color: #B8860B"&gt;c&lt;/span&gt;&lt;span style="color: #666666"&gt;=80&lt;/span&gt;;  &lt;span style="color: #B8860B"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;g&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; Ag&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;) &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; Ag&lt;span style="color: #666666"&gt;,&lt;/span&gt; cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; Al&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0,&lt;/span&gt; gl) &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; Al&lt;span style="color: #666666"&gt;,&lt;/span&gt; cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; gl
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; A&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g)    &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; A&lt;span style="color: #666666"&gt;,&lt;/span&gt; c&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g
+
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"x"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"y"&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"data"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+    Ag&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Gauss"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+    Al&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0,&lt;/span&gt; gl) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Lorentz"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+    A &lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt;  &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g)  &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Voigt"&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-5.png"/></p>
+<p>可以看到, 洛伦兹函数和Voigt函数的拟合结果区别不大, 这说明测试数据更接近洛伦兹函数.</p>
+<h2>思考</h2>
+<ul>
+<li>实际每个峰对应的半峰宽并不一定是常数, 试着改进代码以支持变化的半峰宽</li>
+<li>对于不同类型的光谱, 理论计算所给出的强度单位不同, 展宽后峰的高度与实际单位的对应情况也不同, 参考<a href="http://sobereva.com/224">使用Multiwfn绘制红外、拉曼、UV-Vis、ECD、VCD和ROA光谱图</a>, 绘制具有实际单位的谱图</li>
+<li>查找一些实验谱图, 将其数字化, 然后试着拟合, 看不同类型的实验谱图倾向于哪种线型函数</li>
+<li>如果对Voigt函数背后的数学感兴趣, 可以看看<a href="https://wulixb.iphy.ac.cn/pdf-content/10.7498/aps.62.123301.pdf">Voigt线型函数及其最大值的研究</a>, 以及<a href="https://www.mdpi.com/2624-960X/4/1/4/pdf-vor">Simple Analytical Expression of the Voigt Proﬁle</a></li>
+</ul>

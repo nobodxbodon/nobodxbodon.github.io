@@ -1,0 +1,343 @@
+<h2>原文：<a href="https://kexizeroing.github.io/get-started-with-langchain">Get started with LangChain</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Get started with LangChain"
+slug: get-started-with-langchain
+description: ""
+added: "Apr 9 2023"
+tags: [AI]</p>
+<h2>updatedDate: "Mar 21 2024"</h2>
+<p>ChatGPT isn’t the only way to interact with LLMs. OpenAI and other providers have released APIs allowing developers to interact directly with these models. And this is where LangChain comes in. LangChain is a framework for developing applications powered by language models, making them easier to integrate into applications.</p>
+<ul>
+<li>JS/TS Docs: <a href="https://js.langchain.com/docs">https://js.langchain.com/docs</a></li>
+<li>Awesome LangChain: <a href="https://github.com/kyrolabs/awesome-langchain">https://github.com/kyrolabs/awesome-langchain</a></li>
+<li>Chat with the LangChain JS/TS documentation: <a href="https://github.com/langchain-ai/chat-langchainjs">https://github.com/langchain-ai/chat-langchainjs</a></li>
+<li>Tutorials on building LLM powered applications: <a href="https://www.youtube.com/playlist?list=PLqZXAkvF1bPNQER9mLmDbntNfSpzdDIU5">https://www.youtube.com/playlist?list=PLqZXAkvF1bPNQER9mLmDbntNfSpzdDIU5</a></li>
+<li>LangChain JS Tutorial: <a href="https://www.youtube.com/playlist?list=PL4HikwTaYE0EG379sViZZ6QsFMjJ5Lfwj">https://www.youtube.com/playlist?list=PL4HikwTaYE0EG379sViZZ6QsFMjJ5Lfwj</a></li>
+<li>Flowise AI Tutorial: <a href="https://www.youtube.com/playlist?list=PL4HikwTaYE0H7wBxhvQqxYcKOkZ4O3zXh">https://www.youtube.com/playlist?list=PL4HikwTaYE0H7wBxhvQqxYcKOkZ4O3zXh</a></li>
+</ul>
+<p>&lt;img alt="langchain-components" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/008vOhrAly1hct713lr8nj314q0u0dmp.jpg" width="650"&gt;</p>
+<h3>Components: Building Blocks of LangChain</h3>
+<ul>
+<li>Schema (Text, Messages, Documents)</li>
+<li>Models (LLMs, Chat Models, Text Embedding Models)</li>
+<li>Prompts (Prompt Templates, Example Selectors, Output Parse)</li>
+<li>Indexes (Loaders, Text Splitters, Vectorstores, Retrievers)</li>
+<li>Memory (Chat Message History)</li>
+<li>Chains (Summarize, Chatbots, Question Answering)</li>
+<li>Agents (OpenAI functions, ReAct)</li>
+</ul>
+<p>LangChain makes it easy to prototype LLM applications and Agents. However, delivering LLM applications to production can be deceptively difficult. You will have to iterate on your prompts, chains, and other components to build a high-quality product. <a href="https://blog.langchain.dev/announcing-langsmith">LangSmith</a> is introduced to help developers close the gap between prototype and production.</p>
+<h3>LangChain and LlamaIndex</h3>
+<p>LlamaIndex is a remarkable data framework aimed at helping you build applications with LLMs by providing essential tools that facilitate data ingestion, structuring, retrieval, and integration with various application frameworks.</p>
+<p>There are similarities between LIamaIndex and LangChain in their functionalities including indexing, semantic search, retrieval, and vector databases. They both excel in tasks like question answering, document summarization, and building chatbots.</p>
+<p>However, each of them has its unique areas of focus. LangChain, with its extensive list of features, casts a wider net, concentrating on the use of chains and agents to connect with external APIs. On the other hand, LlamaIndex has a narrower focus shining in the area of data indexing and document retrieval. LIamaIndex and LangChain aren’t mutually exclusive. In fact, you can use both in your LLM applications. You can use both LlamaIndex’s data loader and query engine and LangChain’s agents.</p>
+<h3>Examples</h3>
+<p><code>npm install langchain</code> We currently support LangChain on Node.js 18 and 19. LangChain is written in TypeScript and provides type definitions for all of its public APIs.</p>
+<pre><code class="lang-js">// basic_call.ts
+import { OpenAI } from "langchain/llms";
+
+export const run = async () =&gt; {
+  // temperature ranges from 0(deterministic) to 1(max creativity)
+  const model = new OpenAI({ temperature: 0.1 });
+
+  const res = await model.call("What is the capital city of France?");
+  console.log({ res });
+  // output: "Paris"
+};
+</code></pre>
+<p>"Few shot" are examples provided to the LLM to help it generate a better response. In reality, you would get a user's input and then add it to your prompt before sending it to the large language model.</p>
+<pre><code class="lang-js">// few-shot.ts
+import { FewShotPromptTemplate, PromptTemplate } from "langchain/prompts";
+
+export const run = async () =&gt; {
+  const examples = [
+    { country: "United States", capital: "Washington, D.C." },
+    { country: "Canada", capital: "Ottawa" },
+  ];
+
+  const exampleFormatterTemplate = "Country: {country}\nCapital: {capital}\n";
+  // Prompt Templates: manage prompts for LLMs
+  const examplePrompt = new PromptTemplate({
+    inputVariables: ["country", "capital"],
+    template: exampleFormatterTemplate,
+  });
+  console.log("examplePrompt", examplePrompt.format(examples[0]));
+  /* country: United States
+     capital: Washington, D.C.
+  */
+
+  const fewShotPrompt = new FewShotPromptTemplate({
+    /* These are the examples we want to insert into the prompt. */
+    examples,
+    /* This is how we want to format the examples when we insert them into the prompt. */
+    examplePrompt,
+    /* The prefix is some text that goes before the examples in the prompt. Usually, this consists of intructions. */
+    prefix: "What is the capital city of the country below?",
+    /* The suffix is some text that goes after the examples in the prompt. Usually, this is where the user input will go */
+    suffix: "Country: {country}\nCapital:",
+    /* The input variables are the variables that the overall prompt expects. */
+    inputVariables: ["country"],
+    /* The example_separator is the string we will use to join the prefix, examples, and suffix together with. */
+    exampleSeparator: "\n\n",
+    /* The template format is the formatting method to use for the template. Should usually be f-string. */
+    templateFormat: "f-string",
+  });
+
+  const res = fewShotPrompt.format({ country: "France" });
+  console.log({ res });
+  /**
+   * {
+   *    res: 
+   *    "What is the capital city of the country below?"
+   *    
+   *    "Country: United States"
+   *    "Capital: Washington, D.C."
+   *    
+   *    'Country: Canada'
+        'Capital: Ottawa'
+
+        'Country: France' 
+        'Capital:'
+   * }
+   */
+};
+</code></pre>
+<p>LangChain provides a standard interface for using chat models. Chat models are a variation on language models. Rather than expose a "text in, text out" API, chat models expose an interface where "chat messages" are the inputs and outputs.</p>
+<ul>
+<li><code>HumanChatMessage</code>: A chat message that is sent as if from a Human's point of view.</li>
+<li><code>AIChatMessage</code>: A chat message that is sent from the point of view of the AI system to which the Human is corresponding.</li>
+<li><code>SystemChatMessage</code>: A chat message that gives the AI system some information about the conversation. This is usually sent at the beginning of a conversation.</li>
+<li><code>ChatMessage</code>: A generic chat message, with not only a "text" field but also an arbitrary "role" field.</li>
+</ul>
+<pre><code class="lang-js">import { ChatOpenAI } from "langchain/chat_models/openai";
+import { HumanChatMessage } from "langchain/schema";
+
+export const run = async () =&gt; {
+  const chat = new ChatOpenAI();
+  // Pass in a list of messages to `call` to start a conversation.
+  const response = await chat.call([
+    new HumanChatMessage(
+      "What is a good name for a company that makes colorful socks?"
+    ),
+  ]);
+  console.log(response);
+  // AIChatMessage { text: '\n\nRainbow Sox Co.' }
+};
+</code></pre>
+<p>OpenAI’s API is not stateful so each time you sent a request to generate a new chat message, you have to pass back any context that might be necessary to allow the model to answer the query at hand. Gives a chain the ability to remember information from previous interactions. This is useful for chatbots and conversation bots. <code>ConversationChain</code> is a simple type of memory that remembers all previous conversations and adds them as context that is passed to the LLM.</p>
+<pre><code class="lang-js">// memory.ts
+import { OpenAI } from "langchain/llms";
+import { BufferMemory } from "langchain/memory";
+import { ConversationChain } from "langchain/chains";
+
+export const run = async () =&gt; {
+  const model = new OpenAI({});
+  // buffer memory remembers previous conversational back and forths directly
+  const memory = new BufferMemory();
+  const chain = new ConversationChain({ llm: model, memory: memory });
+  const firstResponse = await chain.call({ input: "Hello, I'm John." });
+  console.log(firstResponse);
+  // {response: " Hi John! It's nice to meet you. My name is AI. What can I help you with?"}
+  const secondResponse = await chain.call({ input: "What's my name?" });
+  console.log(secondResponse);
+  // {response: ' You said your name is John. Is there anything else you would like to talk about?'}
+};
+</code></pre>
+<p>In chains, a sequence of actions is hardcoded (in code). In agents, a language model is used as a reasoning engine to determine which actions to take and in which order. Agents are like bots/personal assistants that can take actions using external tools based on instructions from the LLM. Agents use an LLM to determine which actions to take and in what order.</p>
+<p>To initialize an agent in LangChain, you need to provide a list of tools, an LLM, and the name of the agent to use. For example, the agent, <code>zero-shot-react-description</code>, consults the ReAct (Reason + Act) framework to select the appropriate tool and relies only on the tool's description.</p>
+<blockquote><p>LangChain provides the tools you can use out of the box: <a href="https://js.langchain.com/docs/integrations/toolkits">https://js.langchain.com/docs/integrations/toolkits</a></p>
+</blockquote>
+<pre><code class="lang-js">// agent-basic.ts
+import { OpenAI } from "langchain";
+import { initializeAgentExecutor } from "langchain/agents";
+import { SerpAPI, Calculator } from "langchain/tools";
+
+export const run = async () =&gt; {
+  const model = new OpenAI({ temperature: 0 });
+  // A tool is a function that performs a specific duty
+  // SerpAPI for example accesses google search results in real-time
+  const tools = [new SerpAPI(), new Calculator()];
+
+  const executor = await initializeAgentExecutor(
+    tools,
+    model,
+    "zero-shot-react-description"
+  );
+  console.log("Loaded agent.");
+
+  const input = `What are the total number of countries in Africa raised to the power of 3?`;
+
+  console.log(`Executing with input "${input}"...`);
+
+  const result = await executor.call({ input });
+
+  console.log(`Got output ${result.output}`);
+  /**
+   *  Got output, there are 54 countries in Africa
+   *  The number of countries raised to the power of 3
+   *  is 157464
+   */
+};
+</code></pre>
+<p>Embeddings are vector representations of text that computers can understand, analyze, and compare.</p>
+<pre><code class="lang-js">// embeddings.ts
+import { OpenAIEmbeddings } from "langchain/embeddings";
+
+export const run = async () =&gt; {
+  /* Embed query from the user */
+  const embeddings = new OpenAIEmbeddings();
+  const res = await embeddings.embedQuery("Hello world");
+  console.log("query vector", res);
+
+  /* Embed documents (converts your text/data to numbers) */
+  const documentRes = await embeddings.embedDocuments([
+    "Hello world",
+    "Bye bye",
+  ]);
+  console.log({ documentRes });
+  //
+};
+</code></pre>
+<p>Language models limit the amount of text that you can send to them per request. To overcome this challenge, we need to split the text into smaller chunks. The recommended TextSplitter is the <code>RecursiveCharacterTextSplitter</code>. This will split documents recursively by different characters - starting with <code>"\n\n"</code>, then <code>"\n"</code>, then <code>" "</code>. This is nice because it will try to keep all the semantically relevant content in the same place for as long as possible.</p>
+<pre><code class="lang-js">// recursive_text_splitter.ts
+import { Document } from "langchain/document";
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import fs from "fs";
+import path from "path";
+
+export const run = async () =&gt; {
+  const text = `Hi.\n\nI'm Harrison.\n\nHow? Are? You?\nOkay then f f f f.
+    This is a weird text to write, but gotta test the splittingggg some how.\n\n
+    Bye!\n\n-H.`;
+
+  const splitter = new RecursiveCharacterTextSplitter({
+    chunkSize: 10, // max size(chars) of docs chunk
+    chunkOverlap: 1, // how much overlap betwen chunks
+  });
+  const output = splitter.createDocuments([text]);
+};
+</code></pre>
+<p>Document loaders make it easy to create Documents from a variety of sources. For example, loads data from text files.</p>
+<ul>
+<li>Google Drive Loader: <a href="https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/Google%20Drive%20Loader.ipynb">https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/Google%20Drive%20Loader.ipynb</a></li>
+<li>YouTube Loader: <a href="https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/YouTube%20Loader.ipynb">https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/YouTube%20Loader.ipynb</a></li>
+</ul>
+<pre><code class="lang-js">// text_loader.ts
+import { TextLoader } from "langchain/document_loaders";
+
+export const run = async () =&gt; {
+  const loader = new TextLoader(
+    "src/document_loaders/example_data/example.txt"
+  );
+  const docs = await loader.load();
+  console.log({ docs });
+  /**
+  * {
+    docs: [
+      Document {
+        pageContent: 'this is an example text to see how langchain loads raw text.',
+        metadata: 
+      }
+    ]
+  }
+  */
+};
+</code></pre>
+<p>Takes input docs and a question sent to LLM for answer based on relevant docs.</p>
+<pre><code class="lang-js">// question_answering.ts
+import { OpenAI } from "langchain/llms";
+import { loadQAChain } from "langchain/chains";
+import { Document } from "langchain/document";
+
+export const run = async () =&gt; {
+  const model = new OpenAI({});
+  // question and answer chain
+  const chain = loadQAChain(model);
+  const docs = [
+    new Document({ pageContent: "Rachel went to Harvard" }),
+    new Document({ pageContent: "Tom went to Stanford" }),
+  ];
+
+  // call the chain with both the doc and question
+  const res = await chain.call({
+    input_documents: docs,
+    question: "Where did rachel go to college",
+  });
+  console.log({ res });
+  /**
+   * { res: { text: ' Rachel went to Harvard.' } }
+   */
+};
+</code></pre>
+<h3>How agents work under the hood</h3>
+<p>With the Agent model, LLM becomes an orchestrator, taking a question, decomposing it into chunks, then using appropriate tools to pull together an answer.</p>
+<p>Delving into the LangChain codebase, we find that this orchestration is performed by the following prompt:</p>
+<pre><code>Answer the following questions as best you can. You have access to the following tools:
+
+${tools}
+
+Use the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [search, calculator]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question
+
+Begin!
+
+Question: ${question}
+Thought:
+</code></pre>
+<p>The full code can be found at <a href="https://github.com/ColinEberhardt/langchain-mini">https://github.com/ColinEberhardt/langchain-mini</a></p>
+<pre><code class="lang-js">const googleSearch = async (question) =&gt;
+  await fetch(
+    `https://serpapi.com/search?api_key=${process.env.SERPAPI_API_KEY}&amp;q=${question}`
+  )
+    .then((res) =&gt; res.json())
+    .then((res) =&gt; res.answer_box?.answer || res.answer_box?.snippet);
+
+const tools = {
+  search: {
+    description:
+      "a search engine. useful for when you need to answer questions about current events. input should be a search query.",
+    execute: googleSearch,
+  },
+  calculator: {
+    description:
+      "Useful for getting the result of a math expression. The input to this tool should be a valid mathematical expression that could be executed by a simple calculator.",
+    // import { Parser } from "expr-eval"
+    execute: (input) =&gt; Parser.evaluate(input).toString(),
+  },
+};
+
+// construct the prompt, with our question and the tools that the chain can use
+let prompt = promptTemplate.replace("${question}", question).replace(
+  "${tools}",
+  Object.keys(tools)
+    .map((toolname) =&gt; `${toolname}: ${tools[toolname].description}`)
+    .join("\n")
+);
+
+// allow the LLM to iterate until it finds a final answer
+while (true) {
+  const response = await completePrompt(prompt);
+
+  // add this to the prompt
+  prompt += response;
+
+  const action = response.match(/Action: (.*)/)?.[1];
+  if (action) {
+    // execute the action specified by the LLMs
+    const actionInput = response.match(/Action Input: "?(.*)"?/)?.[1];
+    const result = await tools[action.trim()].execute(actionInput);
+    prompt += `Observation: ${result}\n`;
+  } else {
+    return response.match(/Final Answer: (.*)/)?.[1];
+  }
+}
+</code></pre>

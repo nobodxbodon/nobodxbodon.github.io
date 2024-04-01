@@ -1,0 +1,255 @@
+<h2>原文：<a href="https://kexizeroing.github.io/form-validation-with-react-hook-form-and-zod">Form validation with React Hook Form and Zod</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Form validation with React Hook Form and Zod"
+slug: form-validation-with-react-hook-form-and-zod
+description: ""
+added: "Aug 6 2023"
+tags: [web]</p>
+<h2>updatedDate: "Jan 2 2024"</h2>
+<h2>Setup</h2>
+<pre><code class="lang-sh"># React + TypeScript
+npm create vite@latest
+
+npm i -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+
+npm i react-hook-form @hookform/resolvers zod
+</code></pre>
+<h2>Building the Validation Schema with Zod</h2>
+<pre><code class="lang-js">import { z } from "zod";
+import { SubmitHandler, useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+</code></pre>
+<p><a href="https://github.com/colinhacks/zod">Zod</a> is a TypeScript-first schema declaration and validation library. With Zod, you declare a validator once and Zod will automatically infer the static TypeScript type. It's easy to compose simpler types into complex data structures.</p>
+<pre><code class="lang-js">import { z } from "zod";
+
+// creating a schema for strings
+const mySchema = z.string();
+
+// parsing
+mySchema.parse("tuna"); // =&gt; "tuna"
+mySchema.parse(12); // =&gt; throws ZodError
+
+// "safe" parsing (doesn't throw error if validation fails)
+mySchema.safeParse("tuna"); // =&gt; { success: true; data: "tuna" }
+mySchema.safeParse(12); // =&gt; { success: false; error: ZodError }
+
+const User = z.object({
+  username: z.string(),
+});
+
+User.parse({ username: "Ludwig" });
+
+// extract the inferred type
+type User = z.infer&lt;typeof User&gt;;
+// { username: string }
+</code></pre>
+<p>Sometimes you don't trust the data entering your app. For those cases, you should use Zod. Let’s build a schema for our form.</p>
+<pre><code class="lang-js">const formSchema = z
+  .object({
+    username: z.string().min(1, "Username is required").max(100),
+    email: z.string().email("Invalid email address").min(1, "Email is required"),
+    password: z
+      .string()
+      .min(1, "Password is required")
+      .min(8, "Password must have more than 8 characters"),
+    confirmPassword: z.string().min(1, "Password confirmation is required"),
+  })
+  // Zod lets you provide custom validation logic via refinements.
+  .refine((data) =&gt; data.password === data.confirmPassword, {
+    path: ["confirmPassword"], // path of error
+    message: "Passwords do not match",
+});
+
+// We will use this type to tell react-hook-form what our data should look like.
+type FormSchemaType = z.infer&lt;typeof formSchema&gt;;
+</code></pre>
+<h2>Implementing React Hook Form</h2>
+<p>Creating forms in React is a complex task. It involves handling all the input states and their changes and validating that input when the form gets submitted. The library <a href="https://www.react-hook-form.com">React Hook Form</a> comes with a custom hook named <code>useForm</code>, which will let us register our inputs, handle the form submission, and handle errors.</p>
+<p><a href="https://github.com/react-hook-form/resolvers">@hookform/resolvers</a> allows you to use any external validation library such as Yup, Zod, and many others. The goal is to make sure you can seamlessly integrate whichever validation library you prefer. If you're not using a library, you can always write your own logic to validate your forms.</p>
+<pre><code class="lang-jsx">const App = () =&gt; {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(schema),
+  });
+
+  return (
+    &lt;form onSubmit={handleSubmit((d) =&gt; console.log(d))}&gt;
+      &lt;input {...register('name')} /&gt;
+      {errors.name?.message &amp;&amp; &lt;p&gt;{errors.name?.message}&lt;/p&gt;}
+      &lt;input type="number" {...register('age', { valueAsNumber: true })} /&gt;
+      {errors.age?.message &amp;&amp; &lt;p&gt;{errors.age?.message}&lt;/p&gt;}
+      &lt;input type="submit" /&gt;
+    &lt;/form&gt;
+  );
+};
+</code></pre>
+<ul>
+<li><p><code>register</code>: this method allows you to register an input element and apply validation rules. What's happened to the input after invoke register API:</p>
+<pre><code class="lang-js">const { onChange, onBlur, name, ref } = register('firstName'); 
+// include type check against field path with the name you have supplied.
+
+&lt;input 
+  onChange={onChange} // assign onChange event 
+  onBlur={onBlur} // assign onBlur event
+  name={name} // assign name prop
+  ref={ref} // assign ref prop
+/&gt;
+// same as above
+&lt;input {...register('firstName')} /&gt;
+</code></pre>
+</li>
+<li><p><code>handleSubmit</code>: this function will receive the form data if form validation is successful.</p>
+</li>
+<li><code>formState</code>: this object contains information about the entire form state (i.e., <code>isDirty</code>, <code>dirtyFields</code>, <code>isSubmitted</code>, <code>isSubmitting</code>, <code>isValid</code>, <code>errors</code>). It helps you to keep on track with the user's interaction with your form application.</li>
+</ul>
+<p>Now, let's create our form. We will use <code>register</code> to tell react-hook-form what inputs to check, <code>handleSubmit</code> to handle the form submission, <code>errors</code> is an object that will contain all of the form errors, and <code>isSubmitting</code> contains a boolean that we can use to check if the form is currently being submitted. When you fill out the form and click the submit button you should be able to see the form data in the console if it is valid.</p>
+<pre><code class="lang-js">function App() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm&lt;FormSchemaType&gt;({
+    resolver: zodResolver(formSchema),
+  });
+
+  const onSubmit: SubmitHandler&lt;FormSchemaType&gt; = (data) =&gt; {
+    console.log(data);
+  };
+
+  return (
+    &lt;form onSubmit={handleSubmit(onSubmit)}
+    &gt;
+      &lt;div&gt;
+        &lt;label htmlFor="username"&gt;
+          Your username
+        &lt;/label&gt;
+        &lt;input
+          type="text"
+          id="username"
+          placeholder="Your name"
+          {...register("username")}
+        /&gt;
+        {errors.username &amp;&amp; (
+          &lt;span&gt;{errors.username?.message}&lt;/span&gt;
+        )}
+      &lt;/div&gt;
+      &lt;div&gt;
+        &lt;label htmlFor="email"&gt;
+          Your email
+        &lt;/label&gt;
+        &lt;input
+          type="email"
+          id="email"
+          placeholder="name@company.com"
+          {...register("email")}
+        /&gt;
+        {errors.email &amp;&amp; (
+          &lt;span&gt;{errors.email?.message}&lt;/span&gt;
+        )}
+      &lt;/div&gt;
+      &lt;div&gt;
+        &lt;label htmlFor="password"&gt;
+          Password
+        &lt;/label&gt;
+        &lt;input
+          type="password"
+          id="password"
+          {...register("password")}
+        /&gt;
+        {errors.password &amp;&amp; (
+          &lt;span&gt;{errors.password?.message}&lt;/span&gt;
+        )}
+      &lt;/div&gt;
+      &lt;div&gt;
+        &lt;label htmlFor="confirmPassword"&gt;
+          Confirm password
+        &lt;/label&gt;
+        &lt;input
+          type="password"
+          id="confirmPassword"
+          {...register("confirmPassword")}
+        /&gt;
+        {errors.confirmPassword &amp;&amp; (
+          &lt;span&gt;{errors.confirmPassword?.message}&lt;/span&gt;
+        )}
+      &lt;/div&gt;
+
+      &lt;button
+        type="submit"
+        disabled={isSubmitting}
+      &gt;
+        Create an account
+      &lt;/button&gt;
+    &lt;/form&gt;
+  );
+}
+</code></pre>
+<h2>Using shadcn <code>&lt;Form /&gt;</code> component</h2>
+<ul>
+<li><a href="https://ui.shadcn.com/docs/components/form">https://ui.shadcn.com/docs/components/form</a></li>
+<li><a href="https://ui.shadcn.com/examples/forms">https://ui.shadcn.com/examples/forms</a></li>
+<li><a href="https://manupa.dev/blog/anatomy-of-shadcn-ui">https://manupa.dev/blog/anatomy-of-shadcn-ui</a></li>
+</ul>
+<p>To understand shadcn/ui, first we need to know what does <code>class-variance-authority</code> do. It basically is a function, that allows us to define variants for the element we want to style. A simple variant definition has a name and a list of possible values, each with a list of classes that should apply.</p>
+<p>Let's build a button component, using <code>cva</code> to handle our variant's classes.</p>
+<pre><code class="lang-jsx">// Using `cva` to handle our variant's classes
+import { cva } from "class-variance-authority";
+
+const buttonVariants = cva(["font-semibold", "border", "rounded"], {
+  variants: {
+    intent: {
+      primary: [
+        "bg-blue-500",
+        "text-white",
+        "border-transparent",
+        "hover:bg-blue-600",
+      ],
+      // **or**
+      // primary: "bg-blue-500 text-white border-transparent hover:bg-blue-600",
+      secondary: [
+        "bg-white",
+        "text-gray-800",
+        "border-gray-400",
+        "hover:bg-gray-100",
+      ],
+    },
+    size: {
+      small: ["text-sm", "py-1", "px-2"],
+      medium: ["text-base", "py-2", "px-4"],
+    },
+  },
+  defaultVariants: {
+    intent: "primary",
+    size: "medium",
+  },
+});
+
+buttonVariants();
+// =&gt; "font-semibold border rounded bg-blue-500 text-white border-transparent hover:bg-blue-600 text-base py-2 px-4"
+
+buttonVariants({ intent: "secondary", size: "small" });
+// =&gt; "font-semibold border rounded bg-white text-gray-800 border-gray-400 hover:bg-gray-100 text-sm py-1 px-2"
+</code></pre>
+<p><a href="https://github.com/lukeed/clsx">clsx</a> is used in <code>cva</code>. It is a utility for constructing <code>className</code> strings conditionally.</p>
+<pre><code class="lang-js">import clsx from 'clsx';
+
+clsx('foo', true &amp;&amp; 'bar', 'baz');
+//=&gt; 'foo bar baz'
+
+clsx({ foo:true, bar:false, baz:isTrue() });
+//=&gt; 'foo baz'
+
+clsx({ foo:true }, { bar:false }, null, { '--foobar':'hello' });
+//=&gt; 'foo --foobar'
+
+clsx(['foo', 0, false, 'bar']);
+//=&gt; 'foo bar'
+
+clsx(['foo'], ['', 0, false, 'bar'], [['baz', [['hello'], 'there']]]);
+//=&gt; 'foo bar baz hello there'
+</code></pre>

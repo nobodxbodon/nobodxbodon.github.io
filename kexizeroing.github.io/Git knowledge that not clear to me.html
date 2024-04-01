@@ -1,0 +1,244 @@
+<h2>原文：<a href="https://kexizeroing.github.io/git">Git knowledge that not clear to me</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Git knowledge that not clear to me"
+slug: git-knowledge-not-clear
+description: ""
+added: "June 19 2022"
+tags: [system]</p>
+<h2>updatedDate: "Feb 27 2024"</h2>
+<h2>helpful links</h2>
+<ul>
+<li><a href="https://ohshitgit.com">https://ohshitgit.com</a></li>
+<li><a href="https://github.com/k88hudson/git-flight-rules">https://github.com/k88hudson/git-flight-rules</a></li>
+<li><a href="https://dev.to/g_abud/advanced-git-reference-1o9j">https://dev.to/g_abud/advanced-git-reference-1o9j</a></li>
+<li><a href="https://gitexplorer.com">https://gitexplorer.com</a></li>
+<li><a href="https://jvns.ca/blog/2023/11/01/confusing-git-terminology/">https://jvns.ca/blog/2023/11/01/confusing-git-terminology/</a></li>
+</ul>
+<h2>git reset</h2>
+<p>You’ve made some commits locally (not yet pushed), but everything is terrible, you want to undo last commits like they never happened.</p>
+<p><code>--soft</code>, does not touch the index file or the working tree at all (but resets the head). This leaves all your changed files "Changes to be committed", as git status would put it.</p>
+<p><code>--mixed</code>, resets the index but not the working tree. The commits are gone, but the contents are still on disk. This is the default action.</p>
+<p><code>--hard</code>, resets the index and working tree. Any changes to tracked files in the working tree are discarded.</p>
+<blockquote><p>A branch is a pointer to a commit. Run <code>cat .git/refs/heads/master</code> to see it. Understanding this will make it way easier to fix your branches when they're broken: you just need to figure out how to get your branch to point at the right commit again.</p>
+<ul>
+<li>The remote changes are useless and I want to overwrite them. To do this, I’ll run <code>git push --force</code>.</li>
+<li>The local changes are useless and I want to overwrite them. To do this, I’ll run <code>git reset --hard origin/main</code>.</li>
+<li>I want to keep both sets of changes on <code>main</code>. To do this, I’ll run <code>git pull --rebase</code>. It rebases <code>main</code> onto the remote <code>main</code> branch.</li>
+</ul>
+</blockquote>
+<h2>git merge</h2>
+<pre><code>*---* (master)
+     \
+      *---*---* (foo)
+
+*---*
+     \
+      *---*---* (master, foo)
+
+In this situation, the merge is fast-forward because `master` is reachable from `foo`. In other words, you just have to move the master reference to foo, and you're done.
+
+*---*---* (master)
+     \
+      *---*---* (foo)
+
+*---*---*-------* (master)
+     \         / 
+      *---*---* (foo)
+
+When your branches diverge, you have to create a commit to "join" the two branches. The new commit is the merge commit and has two parent commits.
+</code></pre>
+<ul>
+<li><p><code>--ff</code>, when possible resolve the merge as a fast-forward (only update the branch pointer to match the merged branch; do not create a merge commit). When not possible (when the merged-in history is not a descendant of the current history), create a merge commit.</p>
+</li>
+<li><p><code>--no-ff</code>, create a merge commit in all cases, even when the merge could instead be resolved as a fast-forward.</p>
+</li>
+<li><p><code>--ff-only</code>, resolve the merge as a fast-forward when possible. When not possible, refuse to merge and exit with a non-zero status.</p>
+</li>
+</ul>
+<h2>git pull --rebase vs. --merge</h2>
+<ul>
+<li><p>When you decide to push your work your push is rejected, because there's been parallel work on the same branch. At this point do a <code>git pull --rebase</code> to avoid the extra merge commits. You actually commit on top of the remote branch.</p>
+</li>
+<li><p>If you pull remote changes with the flag <code>--merge</code>, which is also the default, then your local changes are merged with the remote changes. This results in a merge commit that points to the latest local commit and the latest remote commit.</p>
+</li>
+</ul>
+<blockquote><p>Note that <code>git fetch</code> is the command that tells your local git to retrieve the latest meta-data info from the original yet doesn't do any file transferring. <code>git pull</code> on the other hand does that AND brings those changes from the remote repository.</p>
+</blockquote>
+<h2>undo a git merge with conflicts</h2>
+<ul>
+<li><p>Since your pull was unsuccessful then HEAD is the last "valid" commit on your branch: <code>git reset --hard HEAD</code></p>
+</li>
+<li><p>If you make a mistake or you’re not confident which the decision change to accept, you can stop the merge process by running <code>git merge --abort</code></p>
+</li>
+<li><p>Generally you shouldn't merge with uncommitted changes. If you have changes you don't want to commit before starting a merge, just <code>git stash</code> them before the merge and <code>git stash pop</code> after finishing the merge. <em>To stash your working directory including untracked files, use <code>git stash --include-untracked</code> or <code>git stash -u</code>.</em></p>
+</li>
+</ul>
+<h2>merge with ours &amp; theirs</h2>
+<p>Let's merge conflicting branch feature into master by <code>git merge feature</code>. You can use <code>git checkout --ours &lt;file&gt;</code> to select the changes done in master or <code>git checkout --theirs &lt;file&gt;</code> to select the changes done in feature. Then, continue as you would normally merge with <code>git add &lt;file&gt;</code> and <code>git merge --continue</code>.</p>
+<h2>merge strategies</h2>
+<p>'ort' ("Ostensibly Recursive’s Twin") is the default merge strategy when pulling or merging one branch. This strategy can only resolve two heads using a 3-way merge algorithm. When there is more than one common ancestor that can be used for 3-way merge, it creates a merged tree of the common ancestors and uses that as the reference tree for the 3-way merge. This has been reported to result in fewer merge conflicts without causing mismerges. This algorithm came from the fact that it was written as a replacement for the previous default algorithm, <code>recursive</code>.</p>
+<p>Say you and your friend both checked out a file, and made some changes to it. You removed a line at the beginning, and your friend added a line at the end. Then he committed his file, and you need to merge his changes into your copy. With a three-way merge, it can compare the two files, but it can also compare each of them against the original copy. So it can see that you removed the first line, and that your friend added the last line. And it can use that information to produce the merged version.</p>
+<h2>git pull/push without parameter</h2>
+<ul>
+<li><p><code>git pull</code>: In order to determine what remote branches to fetch when the command is run without any refspec parameters on the command line, values of the configuration variable <code>remote.&lt;origin&gt;.fetch</code> are consulted. <em>A refspec maps a branch in the local repository to a branch in a remote repository.</em> For example, <code>refs/heads/*:refs/remotes/origin/*</code> specifies that all remote branches are tracked using remote-tracking branches in <code>refs/remotes/origin/</code> hierarchy under the same name.</p>
+</li>
+<li><p><code>git push</code>: When neither the command-line nor the configuration specify what to push, the default behavior is used, which corresponds to the <code>simple</code> value for <code>push.default</code>: the current branch is pushed to the corresponding upstream branch, but as a safety measure, the push is aborted if the upstream branch does not have the same name as the local one.</p>
+</li>
+</ul>
+<blockquote><p><code>git config push.default</code>:</p>
+<ul>
+<li><code>push.default simple</code> is the default in Git. It only works if your branch is already tracking a remote branch.</li>
+<li><code>push.default current</code> will always push the local branch to a remote branch with the same name.</li>
+</ul>
+<p><code>git config push.autosetupremote true</code> assumes <code>--set-upstream</code> on default push when no upstream tracking exists for the current branch. It is useful if you want new branches to be pushed to the default remote (like the behavior of <code>push.default=current</code>) and you also want the upstream tracking to be set.</p>
+</blockquote>
+<h2>git remote</h2>
+<p>A remote URL is the place where your code is stored. You can only push to two types of URL addresses: HTTPS URL like <code>https://github.com/user/repo.git</code> or SSH URL like <code>git@github.com:user/repo.git</code>. Git associates a remote URL with a name, and your default remote is usually called <code>origin</code>.</p>
+<ul>
+<li><code>git remote [-v | --verbose]</code> will show remote url after name.</li>
+<li>use <code>git remote add</code> to match a remote URL with a name. It takes two arguments: a remote name, for example, <code>origin</code>, and a remote URL, for example, <code>https://github.com/user/repo.git</code></li>
+<li>use <code>git remote set-url</code> to change an existing remote repository URL. It takes two arguments: an existing remote name like <code>origin</code> and a new URL for the remote.</li>
+</ul>
+<h2>working on a wrong branch</h2>
+<ul>
+<li>If you did't commit the changes, use <code>git stash</code>. <strong>git stash is per-repository, not per-branch.</strong><ul>
+<li>git stash</li>
+<li>git checkout right_branch</li>
+<li>git stash apply</li>
+</ul>
+</li>
+</ul>
+<blockquote><p>The stash is a bunch of commits: When you run <code>git stash</code>, git makes some commits with your changes and labels them with a reference called <code>stash</code> (in <code>.git/refs/stash</code>).</p>
+</blockquote>
+<ul>
+<li>If you committed to the wrong branch, <code>git reset</code> those commits individually. Once you have done that, switch back to the desired branch and there you can use <code>git cherry-pick</code> to pick the specific commits.<ul>
+<li>git checkout right_branch</li>
+<li>git cherry-pick commit_hash</li>
+</ul>
+</li>
+</ul>
+<blockquote><p>To cherry-pick all the commits from commit A to commit B (where A is older than B), run: <code>git cherry-pick &lt;commitA&gt;^..&lt;commitB&gt;</code>.</p>
+<p>Usually you cannot cherry-pick a merge because you do not know which side of the merge should be considered the mainline. <em>(If a commit has two or more parents, it also represents two or more diffs - which one should be applied?)</em> <code>-m</code> option specifies the parent number (starting from 1, the order is the one in which they're listed in the commit as viewed by <code>git show</code>). For example, if your commit tree is like below:</p>
+<pre><code>- A - D - E - F  master  
+   \     /  
+    B - C        branch one
+</code></pre>
+<p>Then <code>git cherry-pick E</code> will produce the issue you faced. <code>git cherry-pick E -m 1</code> means using D-E, while <code>git cherry-pick E -m 2</code> means using B-C-E.</p>
+</blockquote>
+<ul>
+<li><code>git checkout -</code> will checkout the previous branch.</li>
+</ul>
+<h2>show the changes</h2>
+<p>Run <code>git show</code> to show the changes made in the most recent commit, which is equivalent to <code>git show HEAD</code>.</p>
+<ul>
+<li>diff two branches: git diff master..develop</li>
+<li>diff local and remote: git diff HEAD..origin/master</li>
+<li>diff for a certain folder: git diff master..yourbranch -- path/to/folder</li>
+<li>save in a file: git diff master..develop &gt; my.diff</li>
+<li>diff between a commit and the head: git diff COMMIT</li>
+</ul>
+<h2>refuse to merge unrelated histories</h2>
+<p>I always see this error when I create a new Github repository with a README.md or a LICENSE file, then pull it to a local repository at the first time. <code>git pull origin main --allow-unrelated-histories</code> should fix it, which force the merge to happen.</p>
+<h2>git log and git reflog</h2>
+<p><code>git log</code> (often use <code>git log --pretty=oneline</code>) shows the current HEAD and its ancestry. That is, it prints the commit HEAD points to, then its parent, its parent, and so on. It traverses back through the repo's ancestry by recursively looking up each commit's parent. Btw, <code>git log --full-history -- src/path/to/file.js</code> helps you find the final version of a deleted file.</p>
+<p><code>git reflog</code> doesn't traverse HEAD's ancestry. The reflog is an ordered list of the commits that HEAD has pointed to: <strong>it's the undo history for your repo</strong>. The reflog isn't part of the repo itself (it's stored separately to the commits themselves and it's purely local). If you accidentally reset to an older commit, or rebase wrongly, or any other operation that visually "removes" commits, you can use the reflog to see where you were before and <code>git reset --hard HEAD@{index}</code> back to that ref to restore your previous state.</p>
+<h2>rename branch</h2>
+<ul>
+<li>Rename the branch while working in this branch: <code>git branch -m &lt;new name&gt;</code>; rename from outside the branch: <code>git branch -m &lt;old name&gt; &lt;new name&gt;</code>.</li>
+<li>Using 'master' as the name for the initial branch. This default branch name is subject to change. To configure the initial branch name to use in all of your new repositories, call <code>git config --global init.defaultBranch &lt;name&gt;</code>.</li>
+</ul>
+<h2>change the most recent commit message after push</h2>
+<p><code>git commit --amend</code> brings up the editor with the last commit message and lets you edit the message. You can use <code>-m</code> if you want to wipe out the old message and use a new one: <code>git commit --amend -m "new commit message"</code>. And then when you push, do <code>git push --force-with-lease &lt;repository&gt; &lt;branch&gt;</code>.</p>
+<p>Btw, you can add a commit subject and description as follows: <code>git commit -m "subject line" -m "longer description"</code>.</p>
+<h2>rewrite history: squash commit, fixup and autosquash</h2>
+<ul>
+<li><a href="https://git-scm.com/book/en/v2/Git-Tools-Rewriting-History">https://git-scm.com/book/en/v2/Git-Tools-Rewriting-History</a></li>
+<li><a href="https://fle.github.io/git-tip-keep-your-branch-clean-with-fixup-and-autosquash.html">https://fle.github.io/git-tip-keep-your-branch-clean-with-fixup-and-autosquash.html</a></li>
+</ul>
+<p>For example, I want to change the git user (rewrite history) after push the code:</p>
+<ol>
+<li><code>git config user.name "New User"</code> and <code>git config user.email "newuser@gmail.com"</code> to change the user info.</li>
+<li><code>git log</code> shows commit logs and find out <strong>the commit id that ahead of your commit which you want to change</strong>.</li>
+<li><code>git rebase -i &lt;after-this-commit&gt;</code></li>
+<li>Change the word 'pick' to 'edit' (there is a commit list you can change), save and exit; rebase is stopped at the next commit (you just changed) and you can amend this commit.</li>
+<li><code>git commit --amend --reset-author --no-edit</code> and <code>git rebase --continue</code> to confirm and continue your rebase.</li>
+<li><code>git push --force-with-lease</code> to overwrite the remote history. (<strong><code>--force-with-lease</code> is safer than <code>--force</code></strong>: If a change that someone else made to the remote branch while you were working on your code, you will not overwrite any remote code.)</li>
+</ol>
+<p>Another example, I want to squash my last 3 commits together into one commit: <code>git reset --soft HEAD~3 &amp;&amp; git commit</code>. The soft reset just re-points HEAD to the last commit that you do not want to squash. Neither the index nor the working tree are touched, leaving the index in the desired state for your new commit.</p>
+<p>You also can squash all commits from a branch into one commit by <code>git merge --squash &lt;branch&gt;</code>.</p>
+<h2>git restore and git switch</h2>
+<p><code>git checkout</code> is one of the many reasons why newcomers find git confusing, and that is because its effect is context-dependent. In version 2.23 of git, two new commands have been introduced to split the old <code>git checkout</code> in two.</p>
+<p><code>git restore</code> implements the behavior of <code>git checkout</code> when running it against a file, <code>git restore -- test.txt</code>.</p>
+<p><code>git switch</code> implements the behavior of <code>git checkout</code> when running it only against a branch name, so you can use it to switch between branches: <code>git switch develop</code>. While with <code>git checkout</code> you can switch to a commit and transition into a detached HEAD state, by default <code>git switch</code> does not allow that. You need to provide the <code>-d</code> flag: <code>git switch -d commit_id</code>. Another difference is that with <code>git checkout</code> you can create and switch to the new branch using the <code>-b</code> flag. You can do the same with the new one, but the flag is <code>-c</code>: <code>git switch -c new_branch</code>.</p>
+<blockquote><p><code>git checkout -b &lt;new_branch&gt; &lt;remote_name&gt;/&lt;remote_branch&gt;</code> create and switch to a new branch based on a specific reference (branch, remote branch, tag are examples of valid references).</p>
+</blockquote>
+<h2>another git process seems to be running in this repository</h2>
+<p>Such problems generally occur when you execute two git commands simultaneously; maybe one from the command prompt and one from an IDE. Try <code>rm -f .git/index.lock</code> to delete the <code>index.lock</code> file and release the active lock.</p>
+<h2>skip git commit hooks</h2>
+<p>The pre-commit hook can be used to run tests, lint, type check, etc. The hooks are located in the <code>.git/hooks/</code> directory. Use the <code>--no-verify</code> option to bypass git commit hooks, e.g. <code>git commit -m "commit message" --no-verify</code>. And as a long-term solution, assure CI is configured.</p>
+<h2>speed up git clone</h2>
+<p><code>git clone [repo] --depth=1</code> When you don't need the entire history of a repository, you can speed up the download by specifying the number of revisions you need. You still get a <code>.git</code> folder that pertains to the project template.</p>
+<p><a href="https://github.com/Rich-Harris/degit">degit</a> makes copies of git repositories. When you run <code>degit some-user/some-repo</code>, it will find the latest commit and download the associated tar file if it doesn't exist locally. This is much quicker than using <code>git clone</code>, because you're not downloading the entire git history.</p>
+<h2>gitignore</h2>
+<ul>
+<li><a href="https://gitignore.io/">https://gitignore.io/</a></li>
+<li><a href="https://github.com/github/gitignore">https://github.com/github/gitignore</a></li>
+</ul>
+<p>After committing several times, you realize that you need to create <code>.gitignore</code> and exclude some files. You have to <code>git rm --cached</code> to remove the files that you don't want in the repo, then add and commit it.</p>
+<h2>git tag</h2>
+<ul>
+<li>To create a tag on your current branch, run <code>git tag &lt;tagname&gt;</code>. If you want to include a description with your annotated tag, run <code>git tag -a v1.1.0 -m "xyz feature is released in this tag"</code>.</li>
+<li><code>git tag</code> lists all tags.</li>
+<li>Use <code>git push origin v1.1.0</code> to push a particular tag, or <code>git push --tags</code> if you want to push all tags.</li>
+<li><code>git push origin :tagname</code> to delete a remote tag, and if you also need to delete the local tag, use <code>git tag --delete tagname</code>.</li>
+</ul>
+<h2>command auto correct</h2>
+<p>If you mistype a command, git helpfully tries to figure out what you meant, but it still refuses to do it. If you set <code>help.autocorrect</code> to 1, Git will actually run this command for you. (If you set it to 50, Git will give you 5 seconds to change your mind before executing the autocorrected command.)</p>
+<pre><code>[help]
+    autocorrect = 50
+</code></pre>
+<h2>update your GitHub fork</h2>
+<p>You cannot push code to repositories that you don’t own. So instead, you make your own copy of the repository by “forking” it. You are then free to make any changes you wish to your repository.</p>
+<p>One of the challenges with forking a repository is keeping your copy up-to-date with the original repository, or the upstream repository. We're going to add the original repository as a git remote, so we can easily fetch and pull from it. Say you want to update your GitHub fork to the new <code>main</code> branch:</p>
+<ol>
+<li>git remote add origin git@github.com:original-repo-url</li>
+<li>git checkout master</li>
+<li>git fetch origin main</li>
+<li>git rebase origin/main</li>
+</ol>
+<p>If there are merge conflicts, we need to fix it, then <code>git add .</code> and run <code>git rebase --continue</code>. Now git will apply the rest of our commits. It's notable that if you had trouble with the merge conflict, you can run <code>git rebase --abort</code> to abort the rebase and get back to where you were before you started the rebase.</p>
+<h2>make your GitHub history back to 1990</h2>
+<p><a href="https://github.com/antfu/1990-script">https://github.com/antfu/1990-script</a></p>
+<p>You can use the environment variables <code>GIT_COMMITTER_DATE</code> and <code>GIT_AUTHOR_DATE</code> to set the corresponding dates.</p>
+<p>Show commits more recent or older than a specific date:</p>
+<ul>
+<li><code>git log --since="yesterday"</code></li>
+<li><code>git log --since="2023-01-30T09:00:00" --until="2023-01-30T18:00:00"</code></li>
+</ul>
+<h2>GitHub protocol comparison</h2>
+<ul>
+<li><p>plain Git, aka <code>git://github.com/</code>, does not add security beyond what Git itself provides. The server is not verified and you cannot push over it. Now Github permanently disabled the <a href="https://github.blog/changelog/2022-03-15-removed-unencrypted-git-protocol-and-certain-ssh-keys/">unencrypted Git protocol</a>.</p>
+</li>
+<li><p>HTTPS, aka <code>https://github.com/</code>, will always verify the server automatically, using certificate authorities. Uses password authentication for pushing, and still allows anonymous pull. If you have two-factor authentication enabled, you will use a personal access token instead of your regular password.</p>
+</li>
+<li><p>HTTP, aka <code>http://github.com/</code>, doesn't work with GitHub anymore.</p>
+</li>
+<li><p>SSH, aka <code>git@github.com:</code> or <code>ssh://git@github.com/</code>, uses public-key authentication. You have to generate a keypair, then add it to your GitHub account. Authentication is needed for all connections, so you always need a GitHub account – even to pull or clone.</p>
+</li>
+</ul>
+<h2>Organize multiple Git identities</h2>
+<p>One awesome feature of the <code>.gitconfig</code> file is that you can conditionally include other config files. For every identity, you keep a separate gitconfig file and include it in the main <code>~/.gitconfig</code>. See an example: <a href="https://garrit.xyz/posts/2023-10-13-organizing-multiple-git-identities">https://garrit.xyz/posts/2023-10-13-organizing-multiple-git-identities</a></p>
+<pre><code>[user]
+  name = foo
+  email = foo@bar.com
+
+[includeIf "gitdir:~/work/"]
+  path = ~/.gitconfig-work
+
+[includeIf "gitdir:~/work/client/"]
+  path = ~/.gitconfig-client
+</code></pre>
+<h2>Git Extras</h2>
+<p><a href="https://github.com/tj/git-extras">git-extras</a> is a collection of Git utilities, which hosts more than 60 of "extras" with features that extend the basic functionality of Git. Install it with Homebrew <code>brew install git-extras</code>.</p>
+<p>To get an overview of all extras, it is worth running <code>git extras --help</code> after installation. Alternatively there is a <a href="https://github.com/tj/git-extras/blob/master/Commands.md">Commands.md</a> in the repository which lists and explains all extras.</p>

@@ -1,0 +1,202 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/07/09/GROMACS编写轨迹分析工具的示例代码(gmx2018.2">GROMACS编写轨迹分析工具的示例代码(gmx2018.2)</a>)</h2>
+<hr/>
+<p>layout: post
+ title: GROMACS编写轨迹分析工具的示例代码(gmx2018.2)
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<ul>
+<li><a href="http://manual.gromacs.org/documentation/2018.2/doxygen/html-user/page_analysistemplate.xhtml">原始文档</a></li>
+<li>2018-07-09 20:17:46 翻译: 苏耿; 校对: 包磊</li>
+</ul>
+<p>GROMACS安装包括了一个使用<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/page_analysisframework.xhtml">轨迹分析框架</a>编写轨迹分析工具的模板。</p>
+<p>它可以从安装目录下的<code>share/gromacs/template/</code>和源代码分发中的<code>share/template/</code>中找到。</p>
+<p>该文档的完整源代码也包含在本文档中：<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/template_8cpp-example.xhtml"><code>template.cpp</code></a>本页的其余部分将介绍代码以解释不同的部分。</p>
+<h2>全局定义</h2>
+<p>首先包括一些通用的C++头文件：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800"&gt;#include&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;&lt;string&gt;&lt;/span&gt;&lt;span style="color: #008800"&gt;&lt;/span&gt;
+&lt;span style="color: #008800"&gt;#include&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;&lt;vector&gt;&lt;/span&gt;&lt;span style="color: #008800"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>并继续包括分析库的头文件：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800"&gt;#include&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;&lt;gromacs/trajectoryanalysis.h&gt;&lt;/span&gt;&lt;span style="color: #008800"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<p>此头文件包含其他头文件，这些头文件一起定义了编写轨迹分析工具所需的所有基本数据类型。为方便起见，我们还将<code>gmx</code>命名空间中的所有名称导入全局范围，以避免在任何地方重复使用该名称：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;using namespace gmx;
+&lt;/pre&gt;&lt;/div&gt;<h2>工具模块类声明</h2>
+<p>然后我们定义一个实现分析工具的类：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;class &lt;span style="color: #A0A000"&gt;AnalysisTemplate&lt;/span&gt; : public TrajectoryAnalysisModule
+{
+    &lt;span style="color: #A0A000"&gt;public&lt;/span&gt;:
+        AnalysisTemplate();
+        virtual &lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt; &lt;span style="color: #00A000"&gt;initOptions&lt;/span&gt;(IOptionsContainer          &lt;span style="color: #666666"&gt;*&lt;/span&gt;options,
+                                 TrajectoryAnalysisSettings &lt;span style="color: #666666"&gt;*&lt;/span&gt;settings);
+        virtual &lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt; &lt;span style="color: #00A000"&gt;initAnalysis&lt;/span&gt;(&lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; TrajectoryAnalysisSettings &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;settings,
+                                  &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; TopologyInformation        &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;top);
+        virtual &lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt; &lt;span style="color: #00A000"&gt;analyzeFrame&lt;/span&gt;(&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; frnr, &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; t_trxframe &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;fr, t_pbc &lt;span style="color: #666666"&gt;*&lt;/span&gt;pbc,
+                                  TrajectoryAnalysisModuleData &lt;span style="color: #666666"&gt;*&lt;/span&gt;pdata);
+        virtual &lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt; &lt;span style="color: #00A000"&gt;finishAnalysis&lt;/span&gt;(&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; nframes);
+        virtual &lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt; &lt;span style="color: #00A000"&gt;writeOutput&lt;/span&gt;();
+    &lt;span style="color: #A0A000"&gt;private&lt;/span&gt;:
+        class ModuleData;
+        std&lt;span style="color: #666666"&gt;::&lt;/span&gt;string                      fnDist_;
+        &lt;span style="color: #00BB00; font-weight: bold"&gt;double&lt;/span&gt;                           cutoff_;
+        Selection                        refsel_;
+        SelectionList                    sel_;
+        AnalysisNeighborhood             nb_;
+        AnalysisData                     data_;
+        AnalysisDataAverageModulePointer avem_;
+};
+&lt;/pre&gt;&lt;/div&gt;<p>分析工具类来自于<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml"><code>gmx::TrajectoryAnalysisModule</code></a>，这个接口具有一些便捷的函数用于与其他代码早期接口进行对接.下面，我们将介绍模板中实现的不同方法（请注意，模板不会实现某些虚拟方法，因为它们不太常用），讨论在更复杂的情况下可能出现的一些问题。 有关可用虚拟方法和便捷功能的完整说明，请参阅<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml"><code>gmx::TrajectoryAnalysisModule</code></a>的文档。第一个成员变量块用于包含提供给不同选项的值。它们将根据分析工具的需要而变化。<code>AnalysisNeighborhood</code>对象提供在分析中使用的邻域搜索。最后一个变量块用于处理输出数据。有关如何使用它们的详细信息，请参照<code>initAnalysis()</code>。</p>
+<p>对于模板，我们不需要任何自定义帧本地数据。 如果您认为需要一些更复杂的分析需求，请参阅<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModuleData.xhtml"><code>gmx::TrajectoryAnalysisModuleData</code></a>的文档以获取更多详细信息。 如果您不关心并行化，则无需考虑此部分。 您可以简单地在模块类中声明所有变量，在<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml#ae5ae73770caad4ff1808c2ca655dad0e"><code>gmx::TrajectoryAnalysisModule::initAnalysis()</code></a>中初始化它们，并在<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml#a3b9d902a262ba124be565eca5b714e4b"><code>gmx::TrajectoryAnalysisModule::finishAnalysis()</code></a>中进行任何后处理。</p>
+<h2>构造</h2>
+<p>分析模块的构造函数（和可能的析构函数）应该很简单：构造函数应该只是初始化默认值，析构函数应该释放模块管理的任何内存。对于模板，我们的类中没有需要显式释放的属性，因此我们只声明一个构造函数：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;AnalysisTemplate&lt;span style="color: #666666"&gt;::&lt;/span&gt;AnalysisTemplate()
+&lt;span style="color: #666666"&gt;:&lt;/span&gt; cutoff_(&lt;span style="color: #666666"&gt;0.0&lt;/span&gt;)
+{
+registerAnalysisDataset(&lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;data_, &lt;span style="color: #BB4444"&gt;"avedist"&lt;/span&gt;);
+}
+&lt;/pre&gt;&lt;/div&gt;<h2>输入选项</h2>
+<p>模块的初始化分为几个方法，其中两个在模板中使用。<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml#aba5990675e980bf746ecd224f814d549"><code>gmx::TrajectoryAnalysisModule::initOptions()</code></a>用于设置模块理解的选项，以及通过<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisSettings.xhtml"><code>gmx::TrajectoryAnalysisSettings</code></a>设置不同的选项（有关更多详细信息，请参阅该类的文档）：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt;
+AnalysisTemplate&lt;span style="color: #666666"&gt;::&lt;/span&gt;initOptions(IOptionsContainer          &lt;span style="color: #666666"&gt;*&lt;/span&gt;options,
+                            TrajectoryAnalysisSettings &lt;span style="color: #666666"&gt;*&lt;/span&gt;settings)
+{
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;static&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; &lt;span style="color: #00BB00; font-weight: bold"&gt;char&lt;/span&gt; &lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; desc[] &lt;span style="color: #666666"&gt;=&lt;/span&gt; {
+        &lt;span style="color: #BB4444"&gt;"This is a template for writing your own analysis tools for"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"GROMACS. The advantage of using GROMACS for this is that you"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"have access to all information in the topology, and your"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"program will be able to handle all types of coordinates and"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"trajectory files supported by GROMACS. In addition,"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"you get a lot of functionality for free from the trajectory"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"analysis library, including support for flexible dynamic"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"selections. Go ahead an try it![PAR]"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"To get started with implementing your own analysis program,"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"follow the instructions in the README file provided."&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"This template implements a simple analysis programs that calculates"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"average distances from a reference group to one or more"&lt;/span&gt;,
+        &lt;span style="color: #BB4444"&gt;"analysis groups."&lt;/span&gt;
+    };
+    settings&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;setHelpText(desc);
+    options&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;addOption(FileNameOption(&lt;span style="color: #BB4444"&gt;"o"&lt;/span&gt;)
+                        .filetype(eftPlot).outputFile()
+                        .store(&lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;fnDist_).defaultBasename(&lt;span style="color: #BB4444"&gt;"avedist"&lt;/span&gt;)
+                        .description(&lt;span style="color: #BB4444"&gt;"Average distances from reference group"&lt;/span&gt;));
+    options&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;addOption(SelectionOption(&lt;span style="color: #BB4444"&gt;"reference"&lt;/span&gt;)
+                        .store(&lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;refsel_).required()
+                        .description(&lt;span style="color: #BB4444"&gt;"Reference group to calculate distances from"&lt;/span&gt;));
+    options&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;addOption(SelectionOption(&lt;span style="color: #BB4444"&gt;"select"&lt;/span&gt;)
+                        .storeVector(&lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;sel_).required().multiValue()
+                        .description(&lt;span style="color: #BB4444"&gt;"Groups to calculate distances to"&lt;/span&gt;));
+    options&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;addOption(DoubleOption(&lt;span style="color: #BB4444"&gt;"cutoff"&lt;/span&gt;).store(&lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;cutoff_)
+                        .description(&lt;span style="color: #BB4444"&gt;"Cutoff for distance calculation (0 = no cutoff)"&lt;/span&gt;));
+    settings&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;setFlag(TrajectoryAnalysisSettings&lt;span style="color: #666666"&gt;::&lt;/span&gt;efRequireTop);
+}
+&lt;/pre&gt;&lt;/div&gt;<p>对于模板，我们首先为工具设置描述文本（用于帮助文本）。然后我们声明一个选项来指定输出文件名，后跟用于设置选择的选项，最后是一个设置截止值的选项。对于cutoff，默认值将是在构造函数中设置的值，但也可以在此处显式设置它。用户为选项提供的值将存储在成员变量中。最后，我们指出该工具始终需要拓扑信息。这样做仅用于演示目的：即使没有拓扑，模板中的代码也能正常工作。</p>
+<p>有关如何定义不同类型选项的其他文档，请参阅<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1IOptionsContainer.xhtml"><code>gmx::IOptionsContainer</code></a>，<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/basicoptions_8h.xhtml"><code>basicoptions.h</code></a>和<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1SelectionOption.xhtml"><code>gmx::SelectionOption</code></a>。 您只需要定义特定于分析的选项; 通用选项，例如，用于指定输入拓扑和添加轨迹框架。</p>
+<p>要根据选项值调整设置或选择选项（例如，接受的选择数），您需要覆盖<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml#afa3457cc922f1d16c4c19cec740e0442"><code>gmx::TrajectoryAnalysisModule::optionsFinished()</code></a>。 为简单起见，这不是在模板中完成的。</p>
+<h2>分析初始化</h2>
+<p>实际分析在<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml#ae5ae73770caad4ff1808c2ca655dad0e"><code>gmx::TrajectoryAnalysisModule::initAnalysis()</code></a>中初始化：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt;
+AnalysisTemplate&lt;span style="color: #666666"&gt;::&lt;/span&gt;initAnalysis(&lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; TrajectoryAnalysisSettings &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;settings,
+                               &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; TopologyInformation         &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;/*top*/&lt;/span&gt;)
+{
+    nb_.setCutoff(cutoff_);
+    data_.setColumnCount(&lt;span style="color: #666666"&gt;0&lt;/span&gt;, sel_.size());
+    avem_.reset(new AnalysisDataAverageModule());
+    data_.addModule(avem_);
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (&lt;span style="color: #666666"&gt;!&lt;/span&gt;fnDist_.empty())
+    {
+        AnalysisDataPlotModulePointer plotm(
+                new AnalysisDataPlotModule(settings.plotSettings()));
+        plotm&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;setFileName(fnDist_);
+        plotm&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;setTitle(&lt;span style="color: #BB4444"&gt;"Average distance"&lt;/span&gt;);
+        plotm&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;setXAxisIsTime();
+        plotm&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;setYLabel(&lt;span style="color: #BB4444"&gt;"Distance (nm)"&lt;/span&gt;);
+        data_.addModule(plotm);
+    }
+}
+&lt;/pre&gt;&lt;/div&gt;<p>有关拓扑的信息作为参数传递。设置对象还可用于访问有关用户输入的信息。</p>
+<p>此方法的主要任务之一是为它们设置适当的<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1AnalysisData.xhtml"><code>gmx::AnalysisData</code></a>对象和模块（有关常规方法，请参阅<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml"><code>gmx::TrajectoryAnalysisModule</code></a>）。这些对象将用于处理工具的输出。 它们的主要目的是支持并行化，但即使您不关心并行性，它们仍然提供方便的构建块，例如，用于直方图和文件输出。</p>
+<p>对于模板，我们首先设置邻域搜索的<code>cutoff</code>。</p>
+<p>然后，我们创建并注册一个<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1AnalysisData.xhtml"><code>gmx::AnalysisData</code></a>对象，该对象将为每个帧包含每个输入选择的一列。这将包含工具的主要输出：参考选择与特定选择之间的最小距离。然后，我们创建并设置一个模块，该模块将计算每个选择的平均距离（请参阅<code>writeOutput()</code>了解其使用方式）。最后，如果提供了输出文件，我们将创建并设置一个模块，该模块将绘制到文件的每帧距离。</p>
+<p>如果分析模块在处理帧期间需要一些临时存储（即，它使用从<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModuleData.xhtml"><code>gmx::TrajectoryAnalysisModuleData</code></a>派生的自定义类），如果并行化被支持则应该在<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml#a6082fcf69bdc3b0a1945ece31437f195"><code>gmx::TrajectoryAnalysisModule::startFrames()</code></a>（见下文）中分配。</p>
+<p>如果需要根据第一帧中的数据进行初始化（最常见的是，基于框大小），则需要覆盖<a href="http://manual.gromacs.org/documentation/current/doxygen/html-lib/classgmx_1_1TrajectoryAnalysisModule.xhtml#a419a3d7f950f0731a20d6a7fafaa6d05"><code>gmx::TrajectoryAnalysisModule::initAfterFirstFrame()</code></a>，但这不在模板中使用。</p>
+<h2>分析框架</h2>
+<p>还有一个初始化方法需要重写以支持自动并行化：<code>gmx::TrajectoryAnalysisModule::startFrames()</code>。如果您不需要自定义帧本地数据（或根本不需要并行化），则可以跳过此方法并忽略<code>gmx::TrajectoryAnalysisModule::analyzeFrame()</code>的最后一个参数，以使事情更简单。在模板中，此方法不是必需的。</p>
+<p>分析的主要部分是（在大多数分析代码中）在<code>gmx::TrajectoryAnalysisModule::analyzeFrame()</code>方法中完成，每个帧调用一次：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt;
+AnalysisTemplate&lt;span style="color: #666666"&gt;::&lt;/span&gt;analyzeFrame(&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; frnr, &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; t_trxframe &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;fr, t_pbc &lt;span style="color: #666666"&gt;*&lt;/span&gt;pbc,
+TrajectoryAnalysisModuleData &lt;span style="color: #666666"&gt;*&lt;/span&gt;pdata)
+{
+&lt;/pre&gt;&lt;/div&gt;<p><code>frnr</code>参数给出了当前帧的从零开始的索引（主要用于<code>gmx::AnalysisData</code>），<code>pbc</code>包含用于距离计算的当前帧的PBC信息，例如，<code>pbc_dx()</code>，并且<code>pdata</code>指向在<code>startFrames()</code>中创建的数据结构。虽然通常不需要（时间字段除外），但可以通过<code>fr</code>访问原始帧数据。在大多数情况下，应该编写分析，使其通过选择获得所有位置数据，并且不假设它们具有恒定的大小。这就是支持选择引擎的完全灵活性所需的全部内容。</p>
+<p>对于模板，我们首先从我们的自定义数据结构中获取数据以进行速记访问（如果使用自定义数据对象，则需要<code>static_cast</code>）：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;AnalysisDataHandle     dh &lt;span style="color: #666666"&gt;=&lt;/span&gt; pdata&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;dataHandle(data_);
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; Selection        &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;refsel &lt;span style="color: #666666"&gt;=&lt;/span&gt; pdata&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;parallelSelection(refsel_);
+&lt;/pre&gt;&lt;/div&gt;<p>然后我们进行简单的计算并使用<code>AnalysisDataHandle</code>类来设置工具的每帧输出：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;AnalysisNeighborhoodSearch nbsearch &lt;span style="color: #666666"&gt;=&lt;/span&gt; nb_.initSearch(pbc, refsel);
+dh.startFrame(frnr, fr.time);
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (&lt;span style="color: #00BB00; font-weight: bold"&gt;size_t&lt;/span&gt; g &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;; g &lt;span style="color: #666666"&gt;&lt;&lt;/span&gt; sel_.size(); &lt;span style="color: #666666"&gt;++&lt;/span&gt;g)
+{
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; Selection &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;sel   &lt;span style="color: #666666"&gt;=&lt;/span&gt; pdata&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;parallelSelection(sel_[g]);
+    &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;              nr    &lt;span style="color: #666666"&gt;=&lt;/span&gt; sel.posCount();
+    real             frave &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; i &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;; i &lt;span style="color: #666666"&gt;&lt;&lt;/span&gt; nr; &lt;span style="color: #666666"&gt;++&lt;/span&gt;i)
+    {
+        SelectionPosition p &lt;span style="color: #666666"&gt;=&lt;/span&gt; sel.position(i);
+        frave &lt;span style="color: #666666"&gt;+=&lt;/span&gt; nbsearch.minimumDistance(p.x());
+    }
+    frave &lt;span style="color: #666666"&gt;/=&lt;/span&gt; nr;
+    dh.setPoint(g, frave);
+}
+dh.finishFrame();
+&lt;/pre&gt;&lt;/div&gt;<p>处理完所有帧后，调用<code>gmx::TrajectoryAnalysisModule::finishAnalysis()</code>一次。这是对数据进行任何自定义后处理的地方。对于模板，我们什么都不做，因为所有必要的处理都在数据模块中完成：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt;
+AnalysisTemplate&lt;span style="color: #666666"&gt;::&lt;/span&gt;finishAnalysis(&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;/*nframes*/&lt;/span&gt;)
+{
+}
+&lt;/pre&gt;&lt;/div&gt;<p>如果在<code>gmx::TrajectoryAnalysisModule::startFrames()</code>中创建的数据结构用于跨帧聚合数据，则需要覆盖<code>gmx::TrajectoryAnalysisModule::finishFrames()</code>以组合数据结构中的数据（详情请参阅方法文档）。这对于模板来说不是必需的，因为ModuleData结构仅包含在分析单个帧期间使用的数据。</p>
+<h2>输出</h2>
+<p>最后，大多数程序需要在分析完成后输出一些值。在某些情况下，这可以通过正确链接数据模块来实现，但通常需要进行一些自定义处理。所有这些活动都应该在<code>gmx::TrajectoryAnalysisModule::writeOutput()</code>中完成。这使得更容易在例如脚本语言中重用分析模块，其中可能不期望输出到文件中。模板只打印出每个分析组的平均距离：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt;
+AnalysisTemplate&lt;span style="color: #666666"&gt;::&lt;/span&gt;writeOutput()
+{
+    &lt;span style="color: #008800; font-style: italic"&gt;// We print out the average of the mean distances for each group.&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (&lt;span style="color: #00BB00; font-weight: bold"&gt;size_t&lt;/span&gt; g &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;; g &lt;span style="color: #666666"&gt;&lt;&lt;/span&gt; sel_.size(); &lt;span style="color: #666666"&gt;++&lt;/span&gt;g)
+    {
+        fprintf(stderr, &lt;span style="color: #BB4444"&gt;"Average mean distance for '%s': %.3f nm&lt;/span&gt;&lt;span style="color: #BB6622; font-weight: bold"&gt;\n&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"&lt;/span&gt;,
+                sel_[g].name(), avem_&lt;span style="color: #666666"&gt;-&gt;&lt;/span&gt;average(&lt;span style="color: #666666"&gt;0&lt;/span&gt;, g));
+    }
+}
+&lt;/pre&gt;&lt;/div&gt;<p>在这里，我们使用<code>avem_</code>模块，我们在<code>initAnalysis()</code>中初始化它来聚合计算距离的平均值。</p>
+<h2>main()的定义</h2>
+<p>现在，唯一剩下的就是定义<code>main()</code>函数。 要实现命令行工具，它应该创建一个模块并使用<code>gmx::TrajectoryAnalysisCommandLineRunner</code>使用下面的样板代码运行它：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;
+&lt;span style="color: #00A000"&gt;main&lt;/span&gt;(&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; argc, &lt;span style="color: #00BB00; font-weight: bold"&gt;char&lt;/span&gt; &lt;span style="color: #666666"&gt;*&lt;/span&gt;argv[])
+{
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;return&lt;/span&gt; gmx&lt;span style="color: #666666"&gt;::&lt;/span&gt;TrajectoryAnalysisCommandLineRunner&lt;span style="color: #666666"&gt;::&lt;/span&gt;runAsMain&lt;span style="color: #666666"&gt;&lt;&lt;/span&gt;AnalysisTemplate&lt;span style="color: #666666"&gt;&gt;&lt;/span&gt;(argc, argv);
+}
+&lt;/pre&gt;&lt;/div&gt;<h2>GROMACS内置工具</h2>
+<p>使用模板实现的分析工具也可以轻松地包含在GROMACS库中。为此，请按照下列步骤操作：</p>
+<p><strong>1</strong>. 将您的工具源代码放入<code>src/gromacs/trajectoryanalysis/modules/</code>。</p>
+<p><strong>2</strong>. 删除<code>using namespace gmx;</code>, 并将所有代码包含在<code>gmx::analysismodules</code>命名空间中，并将工具类放入其中未命名的命名空间中。</p>
+<p><strong>3</strong>. 创建与您的工具对应的头文件，并使用<code>gmx::analysismodules</code>命名空间将以下类添加到其中（将<code>Template</code>替换为您的工具名称）：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;class TemplateInfo
+{
+    &lt;span style="color: #A0A000"&gt;public&lt;/span&gt;:
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;static&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; &lt;span style="color: #00BB00; font-weight: bold"&gt;char&lt;/span&gt; name[];
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;static&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; &lt;span style="color: #00BB00; font-weight: bold"&gt;char&lt;/span&gt; shortDescription[];
+        &lt;span style="color: #AA22FF; font-weight: bold"&gt;static&lt;/span&gt; TrajectoryAnalysisModulePointer &lt;span style="color: #00A000"&gt;create&lt;/span&gt;();
+};
+&lt;/pre&gt;&lt;/div&gt;<p><strong>4</strong>. 在源文件中，在未命名的命名空间之外添加这些项的定义（替换<code>Template</code>，<code>AnalysisTemplate</code>和具有正确值的字符串）：</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; &lt;span style="color: #00BB00; font-weight: bold"&gt;char&lt;/span&gt; TemplateInfo&lt;span style="color: #666666"&gt;::&lt;/span&gt;name[]             &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"template"&lt;/span&gt;;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;const&lt;/span&gt; &lt;span style="color: #00BB00; font-weight: bold"&gt;char&lt;/span&gt; TemplateInfo&lt;span style="color: #666666"&gt;::&lt;/span&gt;shortDescription[] &lt;span style="color: #666666"&gt;=&lt;/span&gt;
+    &lt;span style="color: #BB4444"&gt;"Compute something"&lt;/span&gt;;
+TrajectoryAnalysisModulePointer TemplateInfo&lt;span style="color: #666666"&gt;::&lt;/span&gt;create()
+{
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;return&lt;/span&gt; TrajectoryAnalysisModulePointer(new AnalysisTemplate);
+}
+&lt;/pre&gt;&lt;/div&gt;<p><strong>5</strong>. 在<code>src/gromacs/trajectoryanalysis/modules.cpp</code>中注册您的模块。</p>
+<p><strong>6</strong>. 完成。现在可以使用您指定的名称作为gmx模板调用您的工具。</p>
+<p>有关具体示例和文件的首选布局，请参阅<code>src/gromacs/trajectoryanalysis/modules/</code>中的现有工具。请使用现有文件中的Doxygen评论将自己记录为文件的作者。</p>

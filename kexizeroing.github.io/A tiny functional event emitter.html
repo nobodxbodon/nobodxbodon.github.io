@@ -1,0 +1,97 @@
+<h2>原文：<a href="https://kexizeroing.github.io/tiny-functional-event-emitter">A tiny functional event emitter</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "A tiny functional event emitter"
+slug: tiny-functional-event-emitter
+description: ""
+added: "May 31 2023"
+tags: [code]</p>
+<h2>updatedDate: "June 7 2023"</h2>
+<p><a href="https://github.com/developit/mitt">Mitt</a> is a tiny 200b functional event emitter / pubsub.</p>
+<blockquote><p>Compared with <code>CustomEvent</code>, mitt is not coupled with DOM. So that when writing unit tests for event-related logic, you don't have to involve DOM in the tests. Also, firing DOM events is generally slower than mitt.</p>
+</blockquote>
+<pre><code class="lang-js">export default function mitt(all = new Map()) {
+
+  return {
+    /**
+     * A Map of event names to registered handler functions.
+     */
+    all,
+
+    /**
+     * Register an event handler for the given type.
+     * @param {string|symbol} type Type of event to listen for, or `'*'` for all events
+     * @param {Function} handler Function to call in response to given event
+     */
+    on(type, handler) {
+      const handlers = all.get(type);
+      if (handlers) {
+        handlers.push(handler);
+      }
+      else {
+        all.set(type, [handler]);
+      }
+    },
+
+    /**
+     * Remove an event handler for the given type.
+     * If `handler` is omitted, all handlers of the given type are removed.
+     * @param {string|symbol} type Type of event to unregister `handler` from (`'*'` to remove a wildcard handler)
+     * @param {Function} [handler] Handler function to remove
+     */
+    off(type, handler) {
+      const handlers = all.get(type);
+      if (handlers) {
+        if (handler) {
+          // Using `&gt;&gt;&gt; 0` ensures you get an integer between 0 and 0xFFFFFFFF.
+          handlers.splice(handlers.indexOf(handler) &gt;&gt;&gt; 0, 1);
+        }
+        else {
+          all.set(type, []);
+        }
+      }
+    },
+
+    /**
+     * Invoke all handlers for the given type.
+     * If present, `'*'` handlers are invoked after type-matched handlers.
+     *
+     * Note: Manually firing '*' handlers is not supported.
+     *
+     * @param {string|symbol} type The event type to invoke
+     * @param {Any} [evt] Any value, passed to each handler
+     */
+    emit(type, evt) {
+      let handlers = all.get(type);
+      if (handlers) {
+        handlers.slice().map((handler) =&gt; {
+          handler(evt);
+        });
+      }
+
+      handlers = all.get('*');
+      if (handlers) {
+        handlers.slice().map((handler) =&gt; {
+          handler(type, evt);
+        });
+      }
+    }
+    };
+}
+
+
+// Usage (should use a signleton)
+const emitter = mitt()
+
+// listen to an event
+emitter.on('foo', e =&gt; console.log('foo', e) )
+
+// listen to all events
+emitter.on('*', (type, e) =&gt; console.log(type, e) )
+
+// fire an event
+emitter.emit('foo', { a: 'b' })
+
+// clearing all events
+emitter.all.clear()
+</code></pre>

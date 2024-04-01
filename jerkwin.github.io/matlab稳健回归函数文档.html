@@ -1,0 +1,117 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/06/14/matlab稳健回归函数文档">matlab稳健回归函数文档</a></h2>
+<hr/>
+<p>layout: post
+ title: matlab稳健回归函数文档
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>matlab
+math: true</li>
+</ul>
+<hr/>
+<ul>
+<li>2018-06-14 20:39:44</li>
+</ul>
+<p><code>regress</code>函数和<code>regstats</code>函数利用普通最小二乘法估计模型中的参数, 参数的估计值受异常值的影响比较大. <code>robustfit</code>函数采用加权最小二乘法估计模型中的参数, 受异常值的影响就比较小. <code>robustfit</code>函数可用来作稳健的多重线性或广义线性回归分析, 下面介绍<code>robustfit</code>函数的用法.</p>
+<h2>调用方法</h2>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;b = robustfit(X,y)
+b = robustfit(X,y,wfun,tune)
+b = robustfit(X,y,wfun,tune,const)
+[b,stats] = robustfit(&lt;span style="color: #008800; font-style: italic"&gt;...)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;<h2>使用说明</h2>
+<h3>1. <code>b = robustfit(X, y)</code></h3>
+<p>通过执行稳健回归来分析多元线性回归模型 $y= X \b$, 并返回系数向量 $\b$ 的估计值 $b$.</p>
+<p>输入参数 $X$ 为 $n \times p$ 的自变量矩阵(或称预测变量矩阵, 设计矩阵), 对应 $p$ 个预测因子对 $n$ 个观测值中每个的贡献. $y$ 是 $n \times 1$ 观测值向量(或称响应向量), 输出的 $b$ 为 $(p + 1) \times 1$ 向量.</p>
+<p>缺省情况下, 算法使用基于<code>bisquare</code>加权函数的迭代重加权最小二乘法.</p>
+<p><strong>注意</strong> 与<code>regress</code>函数不同的是, 默认情况下, <code>robustfit</code>函数会自动在 $X$ 第1列元素的左边加入一列<code>1</code>, 而不需要用户自己添加. 此列向量对应于模型中的常量项. 不要直接为 $X$ 添加一个全<code>1</code>的列向量, 你可以通过更改变量<code>const</code>的值来改变<code>robustfit</code>的默认行为.</p>
+<p><code>robustfit</code>会把 $X$ 或 $y$ 中的不确定数据<code>NaN</code>作为缺失数据, 并将其移除.</p>
+<h3>2. <code>b = robustfit(X, y, wfun, tune)</code></h3>
+<p>指定加权方法<code>wfun</code>和调节常数<code>tune</code>. 在计算权重之前<code>tune</code>会被划分到残差向量. 如果指定了<code>wfun</code>, 那么<code>tune</code>必不可少.</p>
+<p>加权方法<code>wfun</code>为字符串, 可以取下表中的任何一个.</p>
+&lt;table id='tab-0'&gt;&lt;caption&gt;robustfit支持的加权方法&lt;/caption&gt;
+&lt;tr&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;加权方法&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;权重函数&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;默认调节常数&lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'andrews'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = \sin(r)/r \;\;\text{if}\; \abs r &lt;\p$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;1.339&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'bisquare'(默认)&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = (1-r^2)^2 \;\;\text{if} \abs r&lt;1$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;4.685&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'cauchy'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = 1/(1 + r^2)$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;2.385&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'fair'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = 1/(1 + \abs r)$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;1.400&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'huber'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = 1/\max(1, \abs r)$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;1.345&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'logistic'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = \tanh(r)/r$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;1.205&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'ols'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;普通最小二乘法(无加权)&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;无&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'talwar'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = 1 \;\; \text{if}\; \abs r&lt;1$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;2.795&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;'welsch'&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;$w = \exp(-r^2)$&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;2.985&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;<p>若调用时没有指定调节常数<code>tune</code>, 则使用表中的默认值. 默认调节常数给出的系数估计值约为普通最小二乘估计的95%, 前提是响应服从正态分布且无异常值. 减小调节常数会增加分配给大残差的downweight; 增加调节常数会减少分配给大残差的downweight.</p>
+<p>权重函数中的 $r$ 值通过下式计算</p>
+<p>$$r = {\text{resid} \over \text{tune}<em>s</em>\sqrt{1-h}}$$</p>
+<p>其中 $\text{resid}$ 是上一次迭代中残差的向量, $h$ 是由最小二乘拟合得到的中心化杠杆值向量, $s$ 是误差项标准偏差的估计值, 计算公式为</p>
+<p>$s = \text{MAD}/0.6745$</p>
+<p>其中 $\text{MAD}$ 为残差绝对值的中位数. 常数0.6745保证了在正态分布下估计是无偏的. 如果 $X$ 中有 $p$ 列, 则在计算 $\text{MAD}$ 时会将残差绝对值向量的前 $p$ 个最小值舍去.</p>
+<p>用户可以自己定义权重函数. 该函数的输入必须是残差向量, 并输出权重向量. 在这种情况下, 调用<code>robustfit</code>函数时把自定义权重函数的句柄(形如<code>@myfun</code>)作为<code>wfun</code>参数传递给<code>robustfit</code>函数, 此时必须指定<code>tune</code>参数</p>
+<h3>3. <code>b = robustfit(X, y, wfun, tune, const)</code></h3>
+<p>用参数<code>const</code>来控制模型中是否包含常数项. 若const取值为<code>'on'</code>(默认值), 则模型中包含常数项, 此时会自动在 $X$ 第1列的左边加入一列<code>1</code>, $b$ 变为 $(p + 1) \times 1$ 向量. 若<code>const</code>取值为<code>'off'</code>, 模型中不包含常数项, 此时不改变X的值. 则 $b$ 为 $p \times 1$ 向量.</p>
+<h3>4. <code>[b, stats] = robustfit(...)</code></h3>
+<p>返回一个结构体变量<code>stats</code>, 其字段包含了用于模型诊断的统计量. <code>stats</code>的字段为:</p>
+<ul>
+<li><code>ols_s</code>: 普通最小二乘法得出的σ的估计(RMSE)</li>
+<li><code>robust_s</code>: σ的稳健估计</li>
+<li><code>mad_s</code>: 用残差绝对值的中位数计算σ的估计; 用于在迭代拟合过程中缩放残差</li>
+<li><code>s</code>: σ的最终估计, 是<code>ols_s</code>和<code>robust_s</code>加权平均值与<code>robust_s</code>值中的较大者</li>
+<li><code>resid</code>: 残差</li>
+<li><code>rstud</code>: 残差的t检验值(详细信息参见<code>regress</code>)</li>
+<li><code>se</code>: 系数估计的标准误差</li>
+<li><code>covb</code>: 系数向量协方差矩阵的估计</li>
+<li><code>coeffcorr</code>: 系数向量相关系数矩阵的估计</li>
+<li><code>t</code>: <code>b</code>与<code>se</code>的比值</li>
+<li><code>p</code> t检验的p值</li>
+<li><code>w</code>: 稳健拟合的权重向量</li>
+<li><code>R</code>: 矩阵X的QR分解中的R因子</li>
+<li><code>dfe</code>: 误差的自由度</li>
+<li><code>h</code>: 最小二乘拟合的中心化杠杆值向量</li>
+</ul>
+<p><code>robustfit</code>函数使用 <code>inv(X'*X)*stats.s^2</code>来计算系数估计值的方差协方差矩阵. 标准误差和相关性由此得出.</p>
+<h2>参考译文</h2>
+<ul>
+<li><a href="https://www.mathworks.com/help/stats/robustfit.html">官方文档</a></li>
+<li><a href="https://blog.csdn.net/kevin_hust/article/details/17605799">调用robustfit函数作稳健回归</a></li>
+<li><a href="http://www.cnblogs.com/xiongyunqi/p/3737323.html">【转】Robust regression（稳健回归）</a></li>
+</ul>

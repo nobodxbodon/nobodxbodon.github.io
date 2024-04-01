@@ -1,0 +1,257 @@
+<h2>原文：<a href="https://jerkwin.github.io/2016/10/05/使用bash编辑二进制文件：创建Origin调色板文件">使用bash编辑二进制文件：创建Origin调色板文件</a></h2>
+<hr/>
+<p>layout: post
+ title: 使用bash编辑二进制文件：创建Origin调色板文件
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>origin</li>
+<li>bash</li>
+</ul>
+<hr/>
+<ul>
+<li>2016-10-05 20:08:43</li>
+</ul>
+<p>我一直在使用自己<a href="http://jerkwin.github.io/2015/02/22/Origin7.5SR7%E4%B8%AD%E6%96%87%E7%89%88/">汉化的Origin 7.5版</a>, 因为程序小, 界面比较简洁. 功能虽然少一些, 但绝大多数时候都够用了, 所以也就没有升级. 最近遇到一个作图需求, 要在一张图上画出很多条线, 并对每条线使用特定的颜色来代表其对应的时间值. 7.5版本的Origin支持使用调色板来定义线条的颜色, 但软件自带的那些调色板文件不一定能满足需求, 所以如果要自己定义调色板, 就必须能创建自己的调色板文件.</p>
+<p>Origin的调色板文件放于<code>Origin安装路径/Palettes</code>中, 扩展名为<code>PAL</code>, 是一种二进制格式的文件, 所以你如果使用文本编辑器直接打开的话, 看到的是一堆乱码. 关于PAL文件格式的说明, 有份资料 <a href="http://worms2d.info/Palette_file">Palette file</a> 很详细, 还附有c#的示例代码. 网上还有一份matlab的转换代码 <a href="http://www.mathworks.com/matlabcentral/fileexchange/43114-cmap2pal-convert-matlab-colormap-to-binary-pal-format">cmap2pal - Convert matlab colormap to binary .pal format</a>, 也可参考.</p>
+<p>用c, perl, python之类的语言来处理二进制文件还是比较容易处理的, 但我觉得它们还是太重了, 就想试着用bash脚本来处理下. 查了一下资料, bash脚本确实可以处理二进制文件, 方法是基于文件的十六进制文本.</p>
+<p>Linux下处理二进制文件的工具主要有三个, <code>hexdump</code>, <code>od</code>和<code>xxd</code>, 前两个只能用于将二进制文件转化为十六进制文本进行查看, 而<code>xxd</code>即可用于查看, 也可用于将十六进制文本反向转换为二进制文件. 因此大多数时候只要使用<code>xxd</code>就能满足需要了. 还有一点需要注意的就是, <code>hexdump</code>和<code>xxd</code>显示二进制时, 大小端的顺序不同. 有人提到<code>xxd</code>显示时可以通过<code>-e</code>选项控制大小端的顺序, 但根据测试, 至少我安装的版本是不支持的, 可能只有打了补丁的才可以. 因此, 将十六进制文本转换为二进制文件时, 要注意字节的大小端顺序. 此外, <code>dd</code>可用于二进制文件的大小端反转, 有时也是一个解决方法.</p>
+<p>下面是一个例子, 将matlab默认的调色板parula文件转换为origin的PAL文件.</p>
+<p>parula调色板的定义如下</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;parula.dat&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2081&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1663&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5292&lt;/span&gt;
+&lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2116&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1898&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5777&lt;/span&gt;
+&lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2123&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2138&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6270&lt;/span&gt;
+&lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2081&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2386&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6771&lt;/span&gt;
+&lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1959&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2645&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7279&lt;/span&gt;
+&lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1707&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2919&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7792&lt;/span&gt;
+&lt;span style="color: #666666"&gt;6&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1253&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3242&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8303&lt;/span&gt;
+&lt;span style="color: #666666"&gt;7&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0591&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3598&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8683&lt;/span&gt;
+&lt;span style="color: #666666"&gt;8&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0117&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3875&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8820&lt;/span&gt;
+&lt;span style="color: #666666"&gt;9&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0060&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4086&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8828&lt;/span&gt;
+&lt;span style="color: #666666"&gt;10&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0165&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4266&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8786&lt;/span&gt;
+&lt;span style="color: #666666"&gt;11&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0329&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4430&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8720&lt;/span&gt;
+&lt;span style="color: #666666"&gt;12&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0498&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4586&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8641&lt;/span&gt;
+&lt;span style="color: #666666"&gt;13&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0629&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4737&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8554&lt;/span&gt;
+&lt;span style="color: #666666"&gt;14&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0723&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4887&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8467&lt;/span&gt;
+&lt;span style="color: #666666"&gt;15&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0779&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5040&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8384&lt;/span&gt;
+&lt;span style="color: #666666"&gt;16&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0793&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5200&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8312&lt;/span&gt;
+&lt;span style="color: #666666"&gt;17&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0749&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5375&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8263&lt;/span&gt;
+&lt;span style="color: #666666"&gt;18&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0641&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5570&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8240&lt;/span&gt;
+&lt;span style="color: #666666"&gt;19&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0488&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5772&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8228&lt;/span&gt;
+&lt;span style="color: #666666"&gt;20&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0343&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5966&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8199&lt;/span&gt;
+&lt;span style="color: #666666"&gt;21&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0265&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6137&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8135&lt;/span&gt;
+&lt;span style="color: #666666"&gt;22&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0239&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6287&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8038&lt;/span&gt;
+&lt;span style="color: #666666"&gt;23&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0231&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6418&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7913&lt;/span&gt;
+&lt;span style="color: #666666"&gt;24&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0228&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6535&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7768&lt;/span&gt;
+&lt;span style="color: #666666"&gt;25&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0267&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6642&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7607&lt;/span&gt;
+&lt;span style="color: #666666"&gt;26&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0384&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6743&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7436&lt;/span&gt;
+&lt;span style="color: #666666"&gt;27&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0590&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6838&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7254&lt;/span&gt;
+&lt;span style="color: #666666"&gt;28&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0843&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6928&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7062&lt;/span&gt;
+&lt;span style="color: #666666"&gt;29&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1133&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7015&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6859&lt;/span&gt;
+&lt;span style="color: #666666"&gt;30&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1453&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7098&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6646&lt;/span&gt;
+&lt;span style="color: #666666"&gt;31&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1801&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7177&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6424&lt;/span&gt;
+&lt;span style="color: #666666"&gt;32&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2178&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7250&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6193&lt;/span&gt;
+&lt;span style="color: #666666"&gt;33&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2586&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7317&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5954&lt;/span&gt;
+&lt;span style="color: #666666"&gt;34&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3022&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7376&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5712&lt;/span&gt;
+&lt;span style="color: #666666"&gt;35&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3482&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7424&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5473&lt;/span&gt;
+&lt;span style="color: #666666"&gt;36&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3953&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7459&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5244&lt;/span&gt;
+&lt;span style="color: #666666"&gt;37&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4420&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7481&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5033&lt;/span&gt;
+&lt;span style="color: #666666"&gt;38&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4871&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7491&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4840&lt;/span&gt;
+&lt;span style="color: #666666"&gt;39&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5300&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7491&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4661&lt;/span&gt;
+&lt;span style="color: #666666"&gt;40&lt;/span&gt; &lt;span style="color: #666666"&gt;0.5709&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7485&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4494&lt;/span&gt;
+&lt;span style="color: #666666"&gt;41&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6099&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7473&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4337&lt;/span&gt;
+&lt;span style="color: #666666"&gt;42&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6473&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7456&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4188&lt;/span&gt;
+&lt;span style="color: #666666"&gt;43&lt;/span&gt; &lt;span style="color: #666666"&gt;0.6834&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7435&lt;/span&gt; &lt;span style="color: #666666"&gt;0.4044&lt;/span&gt;
+&lt;span style="color: #666666"&gt;44&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7184&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7411&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3905&lt;/span&gt;
+&lt;span style="color: #666666"&gt;45&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7525&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7384&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3768&lt;/span&gt;
+&lt;span style="color: #666666"&gt;46&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7858&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7356&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3633&lt;/span&gt;
+&lt;span style="color: #666666"&gt;47&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8185&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7327&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3498&lt;/span&gt;
+&lt;span style="color: #666666"&gt;48&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8507&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7299&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3360&lt;/span&gt;
+&lt;span style="color: #666666"&gt;49&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8824&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7274&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3217&lt;/span&gt;
+&lt;span style="color: #666666"&gt;50&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9139&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7258&lt;/span&gt; &lt;span style="color: #666666"&gt;0.3063&lt;/span&gt;
+&lt;span style="color: #666666"&gt;51&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9450&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7261&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2886&lt;/span&gt;
+&lt;span style="color: #666666"&gt;52&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9739&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7314&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2666&lt;/span&gt;
+&lt;span style="color: #666666"&gt;53&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9938&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7455&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2403&lt;/span&gt;
+&lt;span style="color: #666666"&gt;54&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9990&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7653&lt;/span&gt; &lt;span style="color: #666666"&gt;0.2164&lt;/span&gt;
+&lt;span style="color: #666666"&gt;55&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9955&lt;/span&gt; &lt;span style="color: #666666"&gt;0.7861&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1967&lt;/span&gt;
+&lt;span style="color: #666666"&gt;56&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9880&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8066&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1794&lt;/span&gt;
+&lt;span style="color: #666666"&gt;57&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9789&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8271&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1633&lt;/span&gt;
+&lt;span style="color: #666666"&gt;58&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9697&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8481&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1475&lt;/span&gt;
+&lt;span style="color: #666666"&gt;59&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9626&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8705&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1309&lt;/span&gt;
+&lt;span style="color: #666666"&gt;60&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9589&lt;/span&gt; &lt;span style="color: #666666"&gt;0.8949&lt;/span&gt; &lt;span style="color: #666666"&gt;0.1132&lt;/span&gt;
+&lt;span style="color: #666666"&gt;61&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9598&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9218&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0948&lt;/span&gt;
+&lt;span style="color: #666666"&gt;62&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9661&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9514&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0755&lt;/span&gt;
+&lt;span style="color: #666666"&gt;63&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9763&lt;/span&gt; &lt;span style="color: #666666"&gt;0.9831&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0538&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>转换脚本</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;binPal.bsh&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;usage&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"\&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;    binPal      &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;    Jicun LI    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;     2016-10-04 10:17:36     &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;/span&gt;
+&lt;span style="color: #BB4444"&gt;&gt;&gt;   Usage: binPal &lt;File&gt;"&lt;/span&gt;
+
+[[ &lt;span style="color: #666666"&gt;$&lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;# -lt 1 ]] &amp;&amp; { echo "$usage"; exit; }&lt;/span&gt;
+
+File&lt;span style="color: #666666"&gt;=$1&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;# 获知数据行数&lt;/span&gt;
+Nrgb&lt;span style="color: #666666"&gt;=$&lt;/span&gt;(awk &lt;span style="color: #BB4444"&gt;'&lt;/span&gt;&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;1&lt;/span&gt;{N&lt;span style="color: #666666"&gt;++&lt;/span&gt;} &lt;span style="color: #AA22FF"&gt;END&lt;/span&gt;{&lt;span style="color: #AA22FF; font-weight: bold"&gt;print&lt;/span&gt; N}&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; &lt;span style="color: #666666"&gt;$&lt;/span&gt;File)
+
+awk &lt;span style="color: #666666"&gt;-&lt;/span&gt;v Nrgb&lt;span style="color: #666666"&gt;=$&lt;/span&gt;Nrgb &lt;span style="color: #BB4444"&gt;'&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;BEGIN&lt;/span&gt; {
+    &lt;span style="color: #008800; font-style: italic"&gt;# 计算文件长度, 数据长度&lt;/span&gt;
+    Nlen&lt;span style="color: #666666"&gt;=4&lt;/span&gt; &lt;span style="color: #666666"&gt;+&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;+&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;+&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;+&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;+&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;+&lt;/span&gt; Nrgb &lt;span style="color: #666666"&gt;*&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt;
+    Ndat&lt;span style="color: #666666"&gt;=8+&lt;/span&gt;Nrgb &lt;span style="color: #666666"&gt;*&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt;
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# RIFF&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%s"&lt;/span&gt;, &lt;span style="color: #BB4444"&gt;"52494646"&lt;/span&gt;
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# 文件长度, 大端小端转换&lt;/span&gt;
+    hex&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;sprintf&lt;/span&gt;(&lt;span style="color: #BB4444"&gt;"%08x"&lt;/span&gt;, Nlen)
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%s"&lt;/span&gt;, &lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;7&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)&lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;5&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)&lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;3&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)&lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;1&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# PAL data&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%s"&lt;/span&gt;, &lt;span style="color: #BB4444"&gt;"50414C2064617461"&lt;/span&gt;
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# 数据长度, 大端小端转换&lt;/span&gt;
+    hex&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;sprintf&lt;/span&gt;(&lt;span style="color: #BB4444"&gt;"%08x"&lt;/span&gt;, Ndat)
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%s"&lt;/span&gt;, &lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;7&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)&lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;5&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)&lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;3&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)&lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;1&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%s"&lt;/span&gt;, &lt;span style="color: #BB4444"&gt;"0003"&lt;/span&gt;
+
+    &lt;span style="color: #008800; font-style: italic"&gt;# 颜色长度, 大端小端转换&lt;/span&gt;
+    hex&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;sprintf&lt;/span&gt;(&lt;span style="color: #BB4444"&gt;"%04x"&lt;/span&gt;, Nrgb)
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%s"&lt;/span&gt;, &lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;3&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)&lt;span style="color: #AA22FF; font-weight: bold"&gt;substr&lt;/span&gt;(hex,&lt;span style="color: #666666"&gt;1&lt;/span&gt;,&lt;span style="color: #666666"&gt;2&lt;/span&gt;)
+}
+
+&lt;span style="color: #AA22FF"&gt;NF&lt;/span&gt;&lt;span style="color: #666666"&gt;&gt;3&lt;/span&gt; {
+    r&lt;span style="color: #666666"&gt;=$2*255&lt;/span&gt;
+    g&lt;span style="color: #666666"&gt;=$3*255&lt;/span&gt;
+    b&lt;span style="color: #666666"&gt;=$4*255&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;printf&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"%02x%02x%02x%02x"&lt;/span&gt;, r, g, b, &lt;span style="color: #666666"&gt;0&lt;/span&gt;
+}
+&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; &lt;span style="color: #666666"&gt;$&lt;/span&gt;File &lt;span style="color: #666666"&gt;&gt;&lt;/span&gt;_rgb.bin
+
+xxd &lt;span style="color: #666666"&gt;-&lt;/span&gt;r &lt;span style="color: #666666"&gt;-&lt;/span&gt;p _rgb.bin &lt;span style="color: #666666"&gt;&gt;$&lt;/span&gt;{File&lt;span style="color: #666666"&gt;%&lt;/span&gt;.&lt;span style="color: #666666"&gt;*&lt;/span&gt;}&lt;span style="color: #666666"&gt;~&lt;/span&gt;bin.pal
+
+rm &lt;span style="color: #666666"&gt;-&lt;/span&gt;rf _rgb.bin
+&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>执行脚本后, 将得到的<code>parula~bin.pal</code>文件复制到<code>Origin安装路径/Palettes</code>下, 作图时就可以直接使用了.</p>
+<p>可惜的是使用Origin7.5版本在做三维填色图时是没有办法直接使用这些调色板文件的, 只有通过originC代码才可以, 因此建议使用高版本的Origin来作这种图.</p>
+<h3>网络资料</h3>
+<ul>
+<li><a href="https://gaomf.cn/2016/07/06/Linux%E4%B8%8B%E6%9F%A5%E7%9C%8B%E7%BC%96%E8%BE%91%E4%BA%8C%E8%BF%9B%E5%88%B6%E6%96%87%E4%BB%B6/">Linux下查看编辑二进制文件</a></li>
+<li><a href="http://superuser.com/questions/315120/hexdump-vs-xxd-format-difference/647255">hexdump vs xxd format difference</a></li>
+<li><a href="http://www.johnloomis.org/cpe102/asgn/asgn1/riff.html">RIFF File Structure</a></li>
+<li><a href="http://originlab.com/forum/topic.asp?TOPIC_ID=4895">How to specify custom colormap?</a></li>
+</ul>

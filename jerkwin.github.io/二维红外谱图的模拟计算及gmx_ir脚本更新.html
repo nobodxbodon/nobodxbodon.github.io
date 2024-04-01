@@ -1,0 +1,41 @@
+<h2>原文：<a href="https://jerkwin.github.io/2023/03/07/二维红外谱图的模拟计算及gmx_ir脚本更新">二维红外谱图的模拟计算及gmx_ir脚本更新</a></h2>
+<hr/>
+<p>layout: post
+ title: 二维红外谱图的模拟计算及gmx_ir脚本更新
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<ul>
+<li>2023-03-07 22:17:45</li>
+</ul>
+<p>实验常用的谱图一般都有对应的二维谱, 如二维核磁, 二维红外等. 基于分子动力学模拟计算二维谱图并不容易, 涉及多方面的知识, 我涉足不多, 不敢妄议. 这里只将自己目前了解到的些许和想法随意放在这里, 或有所裨益, 或徒增误导, 自便.</p>
+<p>如果我们聚焦在红外谱图的分子动力学模拟计算上, 那么可以试试最近出的一个工具<a href="https://github.com/Kimvana/AIM"><code>AIM</code></a>, 论文见 Kim E. Van Adrichem, Thomas L. C. Jansen; AIM: A Mapping Program for Infrared Spectroscopy of Proteins; J. Chem. Theory Comput. 18(5): 3089-3098, 2022. 可以算一维和二维的红外谱图, 而且给出了GROMACS和NAMD示例. 但用起来还是有点麻烦的, 所以我也就没有测试.</p>
+<p>另一种获得二维谱图的方法是基于通用的相关光谱方法, 大致属于一种分析方法, 可用于任意的光谱, 任意的外界扰动, 具体理论和谱图解读可以参考:</p>
+<ul>
+<li>王梦吟, 二维相关光谱性质探索及其在复杂变化体系中的应用</li>
+<li>I. Noda, A. E. Dowrey, C. Marcott, G. M. Story, Y. Ozaki; Generalized Two-Dimensional Correlation Spectroscopy; Appl Spectrosc 54(7): 236A-248A, 2000</li>
+<li>Shigeaki Morita, Hideyuki Shinzawa, Isao Noda, Yukihiro Ozaki; Perturbation-Correlation Moving-Window Two-Dimensional Correlation Spectroscopy; Appl Spectrosc 60(4): 398-406, 2006</li>
+<li>Bai Xue, Jie Zhang, Lanxiang Ji, Zhihua Deng, Junhua Zhang;Perturbation-correlation moving-window two-dimensional correlation spectroscopic studies on the heat treatment of poly(vinyl alcohol)/silver nitrate film; J Polym Res 23(12): 252, 2016</li>
+</ul>
+<p>可用的程序比较简单, <a href="https://sites.google.com/view/shigemorita/home/2dshige?authuser=0"><code>2DShige</code></a>. 如果我们以时间作为参数, 计算不同时间段的红外, 或以温度为参数, 计算不同温度下的红外, 或者在非平衡模拟下计算不同时间段的红外, 都可以分析相应的二维相关图.</p>
+<p>这里我以TIP3P柔性水模型来测试一下. 计算方法类似<a href="https://jerkwin.github.io/2017/08/20/%E4%BD%BF%E7%94%A8GROMACS%E8%AE%A1%E7%AE%97%E7%BA%A2%E5%A4%96%E5%85%89%E8%B0%B1/">以前的设置</a>, NPT平衡模拟, 步长2 fs, 总时间100 ps, 保存每步的坐标和速度. 模拟完成后使用<code>gmx_ir.bsh</code>脚本计算每10 ps的红外谱图, 共10组, 0-10, 10-20, 20-30, ⋯, 90-100.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/2DIR-ir.png"/></p>
+<p>因为是平衡模拟, 所以这10组谱图并没有太大差距.</p>
+<p>将10组数据转换成csv格式(波数取到5000即可), 使用<code>2DShige</code>对这10组谱图进行二维相关分析</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/2DIR-data.png"/></p>
+<p>手动调整<code>Zmax</code>的值, 各种谱图如下:</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/2DIR-syn.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/2DIR-asyn.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/2DIR-mod.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/2DIR-arg.png"/></p>
+<p>说实话, 我没能力解读这些谱图所揭示的信息. 或许是因为平衡模拟的原因? 大致看来, 4000附近的OH振动与2000附近的剪式振动是正相关的, 而与1000附近的振动是负相关的? 或许, 用更复杂的分子, 用不同温度下的谱图进行分析能得到更容易解读的信息.</p>
+<p>这种相关分析方法可用于任意的数据分析, 鉴于MD模拟可以提供很多时间相关的数据, 或许可以将其用于更多的MD性质分析, 如残基运动分析, 相互作用分析等. 感兴趣的可以试试.</p>
+<h2><code>gmx_ir</code>脚本更新</h2>
+<ul>
+<li>为了更方便计算上面提到的不同时间段的光谱, 我更新了一下脚本, 支持使用<code>-b</code>, <code>-e</code>选项选择不同的时间段, 类似GROMACS的相应选项.</li>
+<li>脚本存在的另一个<a href="https://github.com/Jerkwin/gmxtools/issues/7">问题</a>是, 如果用于计算光谱的原子索引组的最后一个原子为虚拟位点, 则无法得到数据. 这是因为GROMACS在计算速度相关函数时不会考虑虚拟位点, 从而也就无法计算相应的光谱. 解决方法是调整拓扑中的原子顺序, 调整索引组的原子顺序, 或使用最后一个非虚拟位点粒子作为临时拓扑和轨迹的原子. 脚本使用了最后一种解决方法.</li>
+</ul>

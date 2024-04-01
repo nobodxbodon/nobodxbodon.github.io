@@ -1,0 +1,93 @@
+<h2>原文：<a href="https://jerkwin.github.io/2019/07/14/许楠：使用GAFF力场参数化小分子的自动化工具">许楠：使用GAFF力场参数化小分子的自动化工具</a></h2>
+<hr/>
+<p>layout: post
+ title: 许楠：使用GAFF力场参数化小分子的自动化工具
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>amber</li>
+</ul>
+<hr/>
+<ul>
+<li>2019-07-14 16:11:39 许楠</li>
+</ul>
+<p><strong>AMBER</strong> 系的 <strong>GAFF</strong> 力场参数化有机小分子很有优势, 但是处理流程稍显复杂, 如图1.</p>
+<p><img alt="flow1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jerkwin.github.io/amber/gaff/flow1.jpg"/></p>
+<p>笔者开发了用于自动化处理小分子残基的前处理与后处理脚本, 可以方便地进行小分子参数化.</p>
+<p>用户需要安装 <strong>Ambertools</strong> 套件和 <strong>gaussian</strong> 软件.</p>
+<p>下面将以两个例子简要介绍脚本的使用.</p>
+<h2>示例1: 单分子, 使用GAFF力场参数化乙酸乙酯</h2>
+<p>我们需要从头创建乙酸乙酯的坐标文件, 可以使用GaussView(收费)或者Avogadro(免费). 这里我们用免费的Avogadro. 首先选择 <strong>Draw Tools</strong> 模式(默认, <code>F8</code> 快捷键切换), 在屏幕上点击就会出现一个甲烷分子, 再从碳原子的位置点击并向旁边拖动光标就会自动出现乙烷分子, 坐标面板把元素调整为 <code>O</code>, 成键方式选择双键, 做类似的拖动操作就会出现一个乙醛分子. 再切换元素和成键方式绘出乙酸乙酯分子. 此时的结构显然不太合理, 我们可以使用Avogadro中的分子力场优化功能预优化分子结构. 依次点击菜单栏 <code>Extensions-Molecular Mechanics-Setup Force Field</code>, 选择 <code>MMFF94s</code> 力场, 然后点击 <code>Extensions-Optimize Geometry</code> 自动优化分子结构. 将优化后的结构导出为PDB文件 <code>ea.pdb</code>.</p>
+<p><img alt="mm" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jerkwin.github.io/amber/gaff/mm.jpg"/></p>
+<p><img alt="ea" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jerkwin.github.io/amber/gaff/ea.png"/></p>
+<p>在Linux服务器上运行以下命令(需安装 <strong>Ambertools</strong> 套件):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;python&lt;/span&gt; pre.py ea.pdb 0
+&lt;span style="color:#A2F"&gt;Please&lt;/span&gt; specify a residue name for the molecule,3 capital letter--&gt;ETA&lt;/pre&gt;&lt;/div&gt;<p>其中 <code>ea.pdb</code> 是PDB的名字, 0是分子的电荷. 程序会自动进行加氢操作, 本例中无任何氢原子丢失, 所以并未加任何氢原子. 接着程序会生程用于优化结构和静电势拟合的高斯输入 <code>gjf</code> 文件. 程序会提示给这个残基其一个三个大写字母的残基名, 这里叫它 <code>ETA</code>. <code>gjf</code> 文件生成后, 电荷, 残基名信息会保存在一个叫 <code>RESNAME.txt</code> 的文件夹内, (处理不同残基时不能混用！)</p>
+<p><code>gjf</code> 文件内容如下, <code>nproc</code> 是核心数, <code>mem</code> 是申请的内存数, 可以根据自己服务器的信息做适当修改, 但是内存不能超过服务器的物理内存. 计算静电势这里用的是比 <code>HF/6-31G* gas MK</code> 更好的 <code>B3LYP/6-311G(d,p) D3BJ 隐式溶剂模拟 CHELPG</code> 方法(参考 <a href="http://sobereva.com/441">http://sobereva.com/441</a>). 如果计算力不够, 可以考虑换成博文中的方法, 换成 <code>def2SVP</code> 优化再用 <code>def2TZVP</code> 基组计算静电势.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;ea.gjf&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #666666"&gt;%&lt;/span&gt;nproc&lt;span style="color: #666666"&gt;=2&lt;/span&gt;
+&lt;span style="color: #666666"&gt;%&lt;/span&gt;chk&lt;span style="color: #666666"&gt;=&lt;/span&gt;molecule
+&lt;span style="color: #666666"&gt;%&lt;/span&gt;mem&lt;span style="color: #666666"&gt;=1&lt;/span&gt;GB
+&lt;span style="color: #008800"&gt;#B3LYP/6-311G** em=GD3BJ opt scrf=solvent=water iop(6/33=2) pop=CHELPG&lt;/span&gt;
+
+remark line goes here
+
+&lt;span style="color: #666666"&gt;0&lt;/span&gt;   &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+    C   &lt;span style="color: #666666"&gt;-3.6000000000&lt;/span&gt;        &lt;span style="color: #666666"&gt;2.1470000000&lt;/span&gt;       &lt;span style="color: #666666"&gt;-0.0890000000&lt;/span&gt;
+    ....&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>使用Gaussian计算完成后, 可以执行以下命令:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;python&lt;/span&gt; post.py&lt;/pre&gt;&lt;/div&gt;<p>程序会自动调用Antechamber识别原子类型并拟合 <strong>RESP</strong> 电荷, 并输出在 <strong>LEaP</strong> 中载入该残基的语句. 最后程序还会调用 <code>parmchk2</code> 自动检查参数, 生成 <code>ETA.frcmod</code> 文件, 里面的力场参数是 <code>parmchk2</code> 根据半经验估算出来的, 需要我们判断是否合理.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;Fintting&lt;/span&gt; RESP charge...
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; parameters...
+&lt;span style="color:#A2F"&gt;Tleap&lt;/span&gt; sentences for your reference.
+
+&lt;span style="color:#A2F"&gt;source&lt;/span&gt; leaprc.gaff
+&lt;span style="color:#A2F"&gt;set&lt;/span&gt; default PBRadii mbondi3
+&lt;span style="color:#A2F"&gt;ETA=&lt;/span&gt; loadmol2 ETA_rename.mol2
+&lt;span style="color:#A2F"&gt;loadAmberParams&lt;/span&gt; ETA.frcmod
+
+&lt;span style="color:#A2F"&gt;No&lt;/span&gt; parameters are missing, but should be checked by yourself!&lt;/pre&gt;&lt;/div&gt;<p>我们在 <strong>Tleap</strong> 中加载这个残基就行了:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; source leaprc.gaff
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; set default PBRadii mbondi3
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; ETA= loadmol2 ETA_rename.mol2
+&lt;span style="color:#A2F"&gt;Loading&lt;/span&gt; Mol2 file: ./ETA_rename.mol2
+&lt;span style="color:#A2F"&gt;Reading&lt;/span&gt; MOLECULE named ETA
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; loadAmberParams ETA.frcmod
+&lt;span style="color:#A2F"&gt;Loading&lt;/span&gt; parameters: ./ETA.frcmod
+&lt;span style="color:#A2F"&gt;Reading&lt;/span&gt; force field modification type file (frcmod)
+&lt;span style="color:#A2F"&gt;Reading&lt;/span&gt; title:
+&lt;span style="color:#A2F"&gt;Remark&lt;/span&gt; line goes here
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; check ETA
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; 'ETA'....
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; parameters for unit 'ETA'.
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; for bond parameters.
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; for angle parameters.
+&lt;span style="color:#A2F"&gt;Unit&lt;/span&gt; is OK.
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; save ETA ETA.pdb&lt;/pre&gt;&lt;/div&gt;<p>至此乙酸乙酯残基已经参数化完成. 怎么生成系统的拓扑和坐标文件, 可以参考此博客内的其他教程<a href="http://jerkwin.github.io/">http://jerkwin.github.io/</a>.</p>
+<h2>示例2: 配体, 使用GAFF力场参数化HIV逆转录酶(HIV-RT)的抑制剂Sustiva</h2>
+<p>教程来源于 <a href="http://jerkwin.github.io/2018/01/03/Amber基础教程B4-使用antechamber和GAFF模拟药物分子">Amber基础教程B4-使用antechamber和GAFF模拟药物分子</a>. Sustiva是小分子, 也是非标准残基, 没有与蛋白质有连接作用.</p>
+<p>因为Sustiva是配体, 可以直接从RT-sustiva复合物的PDB文件(PDB编号: <a href="http://www.rcsb.org/pdb/explore/explore.do?structureId=1FKO">IFKO</a>)中抽取出来的. 把 <code>1fko.pdb</code> 文件最后EFZ(Efavirenz <a href="https://zh.wikipedia.org/wiki/%E4%BE%9D%E6%B3%95%E9%9F%A6%E4%BB%91">依法韦仑</a> )残基的原子提取出来(<code>HETATM</code>开头的行), 另存为<code>EFZ.pdb</code>. 接着执行与示例1一样的前处理, 后处理操作. <strong>提示我们输入残基名时一定要与原来PDB中的一致, 也就是EFZ.</strong> 与示例1不同的是, 我们需要用加载好的EFZ残基参数化 <code>1fko.pdb</code>(因为其中还有尚未处理的非标准残基, 因此只加载含有sustiva分子的PDB, <code>EFZ.pdb</code>), 也就是最终sustiva分子的坐标是其与蛋白复合时的结构, 而不是高斯优化的结构.</p>
+<p>参数化 <code>EFZ.pdb</code> 使用以下命令:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; source leaprc.gaff
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; set default PBRadii mbondi3
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; EFZ= loadmol2 EFZ_rename.mol2
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; loadAmberParams EFZ.frcmod
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; SUS=loadpdb EFZ.pdb
+&lt;span style="color:#A2F"&gt;Loading&lt;/span&gt; PDB file: ./EFZ.pdb
+  &lt;span style="color:#A2F"&gt;total&lt;/span&gt; atoms in file: 30
+&lt;span style="color:#A2F"&gt;&gt;&lt;/span&gt; check SUS
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; 'SUS'....
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; parameters for unit 'SUS'.
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; for bond parameters.
+&lt;span style="color:#A2F"&gt;Checking&lt;/span&gt; for angle parameters.
+&lt;span style="color:#A2F"&gt;Unit&lt;/span&gt; is OK.&lt;/pre&gt;&lt;/div&gt;<p>值得注意的是, 原来PDB中的分子加载加来时叫SUS, 这个不是残基名, 是这个单元的名字.</p>
+<p>脚本和测试例子均可在<a href="https://github.com/tamaswells/GMX/blob/master/gaff%E5%8F%82%E6%95%B0%E5%8C%96%E5%B7%A5%E5%85%B7.tgz">我的Github</a>上下载.</p>

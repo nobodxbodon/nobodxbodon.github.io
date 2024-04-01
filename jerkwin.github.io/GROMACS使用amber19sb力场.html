@@ -1,0 +1,585 @@
+<h2>原文：<a href="https://jerkwin.github.io/2022/09/24/GROMACS使用amber19sb力场">GROMACS使用amber19sb力场</a></h2>
+<hr/>
+<p>layout: post
+ title: GROMACS使用amber19sb力场
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+<li>amber</li>
+</ul>
+<hr/>
+<ul>
+<li>2022-09-24 22:21:36</li>
+</ul>
+<p>amber力场一直在更新, 目前最新的是amber19sb, 但gmx自带的amber力场却一直没有更新, 至今还是amber99sb. 虽然网上也有gmx格式的amber14sb力场(存在一个小问题, 但容易解决, 见<a href="https://zhuanlan.zhihu.com/p/389786141">amber14SB力场报错“No default Improper Dih. types”的解决办法</a>), 但gmx格式的amber19sb力场我暂时还没有看到. 如果要在gmx中使用这个力场, 我觉得可以先使用amber工具生成amber拓扑, 再使用acpype之类的工具将其转换为gmx格式的拓扑. 这种解决方法能否真正走通, 我没有测试, 无法作答. 但即便可行, 其中也还有一个很难解决的问题, 就是amber19sb中的蛋白残基使用了cmap二面角, 而且还基于残基名称匹配, 这违背了传统力场的常规作法, 导致很难兼容. 网上对此也有不少讨论, 可供参考.</p>
+<p>既然如此, 那就干脆放下那些投机取巧, 兜兜转转的作法吧, 暴虎冯河, 从根本上解决. 本质问题无非有两个:</p>
+<ol>
+<li>得到gmx格式的amber19sb力场;</li>
+<li>让gmx支持amber19sb力场的cmap.</li>
+</ol>
+<p>前一个问题容易解决, 无非是个格式转换问题; 但后一个问题, 在不修改gmx源码的情况下, 恕我愚钝, 能想到的可行方法是修改tpr文件. 这种作法很困难, 也很麻烦, 不易掌握, 通用性也不好. 所以我觉得虽然修改gmx源码也很困难, 但更值得一试, 只要处理好了, 一劳永逸. 代价就是这只能是个特制的gmx版本. 当然, 如果gmx官方版本支持这种作法并更新到新版本中, 那是最理想的.</p>
+<p>鉴于此, 我就自告奋勇, 试着创建一个gmx格式的amber19sb力场, 同时修改gmx源码以支持新型的cmap二面角.</p>
+<p>于个人而言, 目的如下:</p>
+<ul>
+<li>熟悉gmx力场目录的组织方式, rtp, hdb, cmap文件的创建方法</li>
+<li>编写一个比较通用的脚本, 用于转换amber19sb力场到gmx格式, 稍加修改也可用于一般的amber力场, 甚至其他力场</li>
+<li>阅读熟悉gmx源码, 尝试进行一些小的改动</li>
+</ul>
+<p>于他人而言, 主要益处则是提供了一个gmx使用amber19sb力场的简单方法, 而无需学习amber工具的使用(得承认, amber工具我用得也不是很熟).</p>
+<h2>创建gmx格式的amber19sb力场文件</h2>
+<p>我们这里只转换蛋白的amber19sb力场文件. 为此, 先看看amber的原始力场文件.</p>
+<p>如果安装了amber20, 打开<code>E:\amber20\dat\leap\cmd\leaprc.protein.ff19SB</code>(Windows下的路径, Linux下的类比可知), 这是amber19sb力场的调用文件, 内容如下:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;leaprc.protein.ff19SB&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+ 10
+ 11
+ 12
+ 13
+ 14
+ 15
+ 16
+ 17
+ 18
+ 19
+ 20
+ 21
+ 22
+ 23
+ 24
+ 25
+ 26
+ 27
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;logFile leap.log
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# ----- leaprc for loading the ff19SB force field&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# ----- NOTE: this is designed for PDB format 3!  用于 PDB 3 格式?&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#  load atom type hybridizations  原子类型&lt;/span&gt;
+addAtomTypes &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HO"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HS"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H1"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H2"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H3"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H4"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H5"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HW"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HC"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HA"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HP"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HZ"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"OH"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"OS"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"O2"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"OP"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"OW"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CT"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CX"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"XC"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C8"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"2C"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"3C"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CH"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CS"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CO"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C*"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CA"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CB"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CC"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CN"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CM"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CK"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CQ"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CD"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C5"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C4"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CP"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CI"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CJ"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CW"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CV"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CR"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CA"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CY"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C0"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"Ca"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"MG"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"Mg"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NA"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"N2"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"N*"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NP"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NQ"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NB"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NC"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NT"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NY"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp2"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"N3"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"S"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"S"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"SH"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"S"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"P"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"P"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"LP"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;""&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"EP"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;""&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"F"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"F"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Cl"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"Cl"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Br"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"Br"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"I"&lt;/span&gt;   &lt;span style="color: #BB4444"&gt;"I"&lt;/span&gt;  &lt;span style="color: #BB4444"&gt;"sp3"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+&lt;span style="color: #666666"&gt;}&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#  Load the main parameter set.  主参数集&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #AA22FF"&gt;set&lt;/span&gt; default cmap on                         &lt;span style="color: #008800; font-style: italic"&gt;# 启用了cmap, 转换时需要特殊处理&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;parm19&lt;/span&gt; &lt;span style="color: #666666"&gt;=&lt;/span&gt; loadamberparams parm19.dat         &lt;span style="color: #008800; font-style: italic"&gt;# 基本参数&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;frcmod19SB&lt;/span&gt; &lt;span style="color: #666666"&gt;=&lt;/span&gt; loadamberparams frcmod.ff19SB  &lt;span style="color: #008800; font-style: italic"&gt;# 修正参数, 覆盖基本参数&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#  Load main chain and terminating amino acid libraries&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+loadOff amino19.lib                         &lt;span style="color: #008800; font-style: italic"&gt;# 主链残基数据库&lt;/span&gt;
+loadOff aminoct12.lib                       &lt;span style="color: #008800; font-style: italic"&gt;# C端残基&lt;/span&gt;
+loadOff aminont12.lib                       &lt;span style="color: #008800; font-style: italic"&gt;# N端残基&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#  Define the PDB name map for the amino acids&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+addPdbResMap &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HYP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NHYP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HYP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CHYP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ALA"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NALA"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ALA"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CALA"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ARG"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NARG"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ARG"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CARG"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ASN"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NASN"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ASN"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CASN"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ASP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NASP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ASP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CASP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CYS"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NCYS"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CYS"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CCYS"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CYX"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NCYX"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CYX"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CCYX"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"GLN"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NGLN"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"GLN"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CGLN"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"GLU"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NGLU"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"GLU"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CGLU"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"GLY"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NGLY"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"GLY"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CGLY"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HID"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NHID"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HID"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CHID"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HIE"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NHIE"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HIE"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CHIE"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HIP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NHIP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HIP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CHIP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ILE"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NILE"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"ILE"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CILE"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"LEU"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NLEU"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"LEU"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CLEU"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"LYS"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NLYS"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"LYS"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CLYS"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"MET"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NMET"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"MET"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CMET"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"PHE"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NPHE"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"PHE"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CPHE"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"PRO"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NPRO"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"PRO"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CPRO"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"SER"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NSER"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"SER"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CSER"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"THR"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NTHR"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"THR"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CTHR"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"TRP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NTRP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"TRP"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CTRP"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"TYR"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NTYR"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"TYR"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CTYR"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"VAL"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NVAL"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"VAL"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CVAL"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+  &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HIS"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"NHIS"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HIS"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CHIS"&lt;/span&gt; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+&lt;span style="color: #666666"&gt;}&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# assume that most often proteins use HIE&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;NHIS&lt;/span&gt; &lt;span style="color: #666666"&gt;=&lt;/span&gt; NHIE
+&lt;span style="color: #B8860B"&gt;HIS&lt;/span&gt; &lt;span style="color: #666666"&gt;=&lt;/span&gt; HIE
+&lt;span style="color: #B8860B"&gt;CHIS&lt;/span&gt; &lt;span style="color: #666666"&gt;=&lt;/span&gt; CHIE&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<h3>力场参数文件</h3>
+<p>可以看到, 19sb中用于蛋白的原子类型并不多, 与99sb相比, 新增了几个原子类型, 如<code>CX</code>, <code>XC</code>, <code>C8</code>, <code>2C</code>, <code>3C</code>, <code>CO</code>等.</p>
+<p>根据这个文件中的调用说明, 我们很容易找到</p>
+<ul>
+<li><code>E:\amber20\dat\leap\parm\parm19.dat</code></li>
+<li><code>E:\amber20\dat\leap\parm\frcmod.ff19SB</code></li>
+</ul>
+<p>这两个文件中给出了原子类型, 成键, 非键, cmap参数, 需要将它们转换成相应的gmx的格式, 放到</p>
+<ul>
+<li><code>E:\GMX2019.6\share\gromacs\top\amber19sb.ff\atomtypes.atp</code></li>
+<li><code>E:\GMX2019.6\share\gromacs\top\amber19sb.ff\ffbonded.itp</code></li>
+<li><code>E:\GMX2019.6\share\gromacs\top\amber19sb.ff\ffnonbonded.itp</code></li>
+<li><code>E:\GMX2019.6\share\gromacs\top\amber19sb.ff\cmap.itp</code></li>
+</ul>
+<p>转换时注意单位, 公式系数, 二面角换算, cmap处理. 其中的二面角处理尤其需要仔细参考amber手册中的相关说明. 还有就是, 相同成键项存在多套参数时, 优先使用<code>frcmod.ff19SB</code>中的参数.</p>
+<h3>残基数据库</h3>
+<p>接下来, 处理氨基酸残基. 以主链残基为例吧, 末端残基处理方式相同. 根据调用说明, 查看<code>E:\amber20\dat\leap\lib\amino19.lib</code>:</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;amino19.lib&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
+  2
+  3
+  4
+  5
+  6
+  7
+  8
+  9
+ 10
+ 11
+ 12
+ 13
+ 14
+ 15
+ 16
+ 17
+ 18
+ 19
+ 20
+ 21
+ 22
+ 23
+ 24
+ 25
+ 26
+ 27
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;!!index array str 本文件中的所有残基, 28个&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ALA"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ARG"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ASH"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ASN"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ASP"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"CYM"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"CYS"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"CYX"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"GLH"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"GLN"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"GLU"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"GLY"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HID"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HIE"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HIP"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HYP"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ILE"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"LEU"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"LYN"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"LYS"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"MET"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"PHE"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"PRO"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"SER"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"THR"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"TRP"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"TYR"&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"VAL"&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.atoms table  str name  str type  int typex  int resx  int flags  int seq  int elmnt  dbl chg&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;! ALA 残基, 原子名称, 原子类型, 电荷&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;7&lt;/span&gt; &lt;span style="color: #666666"&gt;-0.415700&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.271900&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"CA"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"XC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt; &lt;span style="color: #666666"&gt;0.033700&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HA"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H1"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.082300&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"CB"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CT"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt; &lt;span style="color: #666666"&gt;-0.182500&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HB1"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.060300&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HB2"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;7&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.060300&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HB3"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;8&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.060300&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;9&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt; &lt;span style="color: #666666"&gt;0.597300&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;131072&lt;/span&gt; &lt;span style="color: #666666"&gt;10&lt;/span&gt; &lt;span style="color: #666666"&gt;8&lt;/span&gt; &lt;span style="color: #666666"&gt;-0.567900&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.atomspertinfo table  str pname  str ptype  int ptypex  int pelmnt  dbl pchg&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"N"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"CA"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"XC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HA"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"H1"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"CB"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"CT"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HB1"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HB2"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"HB3"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"HC"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"C"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"O"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;-1&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.boundbox array dbl&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;-1.000000&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.childsequence single int&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;2&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.connect array int&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;9&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.connectivity table  int atom1x  int atom2x  int flags&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;! 成键连接, 用于推断成键项&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;9&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;7&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;8&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;9&lt;/span&gt; &lt;span style="color: #666666"&gt;10&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.hierarchy table  str abovetype  int abovex  str belowtype  int belowx&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"U"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;5&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;7&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;8&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;9&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"R"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"A"&lt;/span&gt; &lt;span style="color: #666666"&gt;10&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.name single str&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ALA"&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.positions table  dbl x  dbl y  dbl z&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;! 每个原子的坐标, gmx不需要, 但可用于补全蛋白, 构建多肽&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3.325770&lt;/span&gt; &lt;span style="color: #666666"&gt;1.547909&lt;/span&gt; &lt;span style="color: #666666"&gt;-1.607204E-06&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3.909407&lt;/span&gt; &lt;span style="color: #666666"&gt;0.723611&lt;/span&gt; &lt;span style="color: #666666"&gt;-2.739882E-06&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3.970048&lt;/span&gt; &lt;span style="color: #666666"&gt;2.845795&lt;/span&gt; &lt;span style="color: #666666"&gt;-1.311163E-07&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3.671663&lt;/span&gt; &lt;span style="color: #666666"&gt;3.400129&lt;/span&gt; &lt;span style="color: #666666"&gt;-0.889820&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3.576965&lt;/span&gt; &lt;span style="color: #666666"&gt;3.653838&lt;/span&gt; &lt;span style="color: #666666"&gt;1.232143&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;3.877484&lt;/span&gt; &lt;span style="color: #666666"&gt;3.115795&lt;/span&gt; &lt;span style="color: #666666"&gt;2.131197&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;4.075059&lt;/span&gt; &lt;span style="color: #666666"&gt;4.623017&lt;/span&gt; &lt;span style="color: #666666"&gt;1.205786&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;2.496995&lt;/span&gt; &lt;span style="color: #666666"&gt;3.801075&lt;/span&gt; &lt;span style="color: #666666"&gt;1.241379&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;5.485541&lt;/span&gt; &lt;span style="color: #666666"&gt;2.705207&lt;/span&gt; &lt;span style="color: #666666"&gt;-4.398755E-06&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;6.008824&lt;/span&gt; &lt;span style="color: #666666"&gt;1.593175&lt;/span&gt; &lt;span style="color: #666666"&gt;-8.449768E-06&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.residueconnect table  int c1x  int c2x  int c3x  int c4x  int c5x  int c6x&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;9&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.residues table  str name  int seq  int childseq  int startatomx  str restype  int imagingx&lt;/span&gt;
+ &lt;span style="color: #BB4444"&gt;"ALA"&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;11&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"p"&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.residuesPdbSequenceNumber array int&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.solventcap array dbl&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;-1.000000&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ALA.unit.velocities table  dbl x  dbl y  dbl z&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+ &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt; &lt;span style="color: #666666"&gt;0.0&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;! ALA 结束, 开始下一个 ARG, 格式类似&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;!entry.ARG.unit.atoms table  str name  str type  int typex  int resx  int flags  int seq  int elmnt  dbl chg&lt;/span&gt;
+... ...&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>19sb中蛋白残基种类总数为28, 除20种天然氨基酸残基及其不同质子化状态外, 还有一个非标准残基<code>HYP</code>. 每种残基的所有信息都已列出, 只要将这些信息处理一下, 就可以将其转换成</p>
+<ul>
+<li><code>E:\GMX2019.6\share\gromacs\top\amber19sb.ff\aminoacids.rtp</code></li>
+<li><code>E:\GMX2019.6\share\gromacs\top\amber19sb.ff\aminoacids.hdb</code></li>
+</ul>
+<p>中的信息.</p>
+<p>将结果与gmx自带的99sb, 或网上的14sb对比一下, 可以看到大部分都是一样的, 只有少量不同.</p>
+<p>至于力场目录中的其他文件, 因为关系不大, 直接使用旧的就好了.</p>
+<p>19sb的推荐使用的水模型是4位点OPC, 所以最好把这个水模型也一起放到力场文件中以方便使用.</p>
+<h2>修改gmx源码以支持amber19sb的CMAP</h2>
+<blockquote><p>I have made this longer than usual because I have not had time to make it shorter.</p>
+<p>---- Blaise Pascal</p>
+</blockquote>
+<p>可行的修改方法无穷无尽, 我遵循最小改动原则, 改动越小越好, 因为改动越多越容易出bug, 也越容易引起兼容性问题. 可惜的是改动越小, 所花时间越多.</p>
+<blockquote><p>For the sake of brevity, I use the term "rays" and more especially "X rays" in order to distinguish them from others.</p>
+<p>---- Wilhelm Conrad Rontgen</p>
+</blockquote>
+<p>我就以自己熟悉并常用的gmx2019.6版本进行修改, 为避免与原始gmx想混淆, 我就称修改后的版本为<code>gromacsX</code>, 简写<code>gmxx</code>, 倒也合适, 因为我不知道后面还会有什么改动, 所以就留个未知数. 当然, 这个名称也有碰瓷的嫌疑.</p>
+<p>gmx对cmap的支持并不好, 如果够好的话, 我们也就不需要改源码了. 对于其他成键项, 拓扑处理时都是支持<code>#define</code>宏定义的, 但cmap什么都不支持, 只有一个函数类型, 默认为<code>1</code>, 处理拓扑时这个函数类型也没有用到. 不过这恰好给我们留下了可操作的空间. 我们可以将其改为支持任意数字, 并通过相应的数字对应到到不同的cmap数据就可以达到目的了. 这样修改的话, 对使用cmap的charmm力场文件也要做相应的调整.</p>
+<p>这样看下来, 要修改的源代码有两处:</p>
+<ul>
+<li><code>F:\gromacs2019.6\src\gromacs\gmxpreprocess\toputil.cpp</code>: pdb2gmx生成top时忽略自动添加的cmap类型1</li>
+<li><code>F:\gromacs2019.6\src\gromacs\gmxpreprocess\toppush.cpp</code>: 根据cmap类型确定要使用的cmap数据集</li>
+</ul>
+<h2>测试</h2>
+<p>准备好<code>amber19sb.ff</code>力场文件, 编译好<code>gmxx</code>, 之后用起来就和以前一样了. 当然, 将<code>gmxx</code>生成的tpr文件用于更高版本的gmx也是可行的.</p>
+<p>更严格的测试需要针对各种蛋白体系, 分别用<code>gmxx</code>和<code>amber</code>计算能量和力, 检查在误差范围内是否一致. 这就先缓一缓吧. 因为我有点累了.</p>

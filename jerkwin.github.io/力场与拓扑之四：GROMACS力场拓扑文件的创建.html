@@ -1,0 +1,128 @@
+<h2>原文：<a href="https://jerkwin.github.io/2015/12/12/力场与拓扑之四：GROMACS力场拓扑文件的创建">力场与拓扑之四：GROMACS力场拓扑文件的创建</a></h2>
+<hr/>
+<p>layout: post
+ title: 力场与拓扑之四：GROMACS力场拓扑文件的创建
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<h2>2015-12-08 22:45:52</h2>
+<h2>创建分子的拓扑文件: 理论考虑</h2>
+<p>在利用GROMACS模拟一些不常见的分子时, 首先要解决的一个问题就是如何得到分子的拓扑文件. 对于没有力场参数的分子, 这是一个难点. 只有理解了力场的概念, 明白了拓扑文件的结构, 清楚处理过程中每步的含义, 才不至于被网上众多的教程和工具弄糊涂.</p>
+<p>理论上说, 对每种分子我们都要发展一种特定的, 适用于这种分子的力场. 但发展力场并不简单, 也不是每个人都可以做好的, 因此在目前这种想法还不现实. 但随着理论与工具的成熟, 在可见的将来, 我认为可以实现这一点. 这就像量子化学计算一样, 开始时只有一些专业人士才能使用, 但现在已经基本普及了, 任何人都可以拿来算算. 将来的力场也必然是这样, 你无论做什么体系, 都可以自己先做一个合适的力场出来, 然后再去跑分子动力学模拟.</p>
+<p>本质上说, 无论哪个力场, 包含再多的原子类型, 都不可能描述所有可能的分子, 因为分子的数目, 连接方式几乎是无穷的. 在发展一种力场时, 最先要做的就是要确定力场所用的原子类型. 原子类型越多, 对分子的描述就越准确, 也越能用于更多种类的分子. 举个例子, OPLS-AA力场原子类型最多, 所以它能处理的分子类型远远多于AMBER等生物分子力场.</p>
+<p>对蛋白质和核酸来说, 其基本构建单元的数目有限, 氨基酸残基20种, 核苷酸5种, 所以在生物分子力场中甚至可以把每种原子的力场参数都列出来, 放在力场文件中, 这样对任意一个给定的残基序列或DNA序列, 都可以快速地从文件中找到相应的力场参数, 完成拓扑文件的创建. 这就是GROMACS的<code>pdb2gmx</code>模块所做的工作. 因此, <code>pdb2gmx</code>这种工具只适用于生物分子, 蛋白质, DNA, RNA等, 而不能用于有机分子(如各种配体)和周期性体系(如无机材料, 聚合物).</p>
+<p>对于有机分子来说, 不存在基本构建单元, 原子类型数目几乎是无限的, 所以不可能采用生物力场的的处理方式, 而是要采用一些近似, 把近似相同的原子基团当作基本的原子类型. 比如, 乙烷中的甲基原子, 乙醇中的甲基碳原子, 甲醇中的甲基碳原子, 这三种碳原子理论来说不可能完全相同, 但可以粗略地认为相同, 指定为同样的原子类型, 这就是OPLS-AA等力场采用的做法. 这些力场根据各种分子结构划分出很多基本原子类型, 希望能够利用这些原子类型来描述所有可能的有机分子. 这当然存在问题, 因为总有一些特殊的分子结构还没有被包含在力场的原子类型中.</p>
+<p>明白了上面的道理, 我们就可以手动创建分子的拓扑文件了. 怎么做呢? 很简单, 画出分子结构, 对照所选力场的原子类型表, 确定分子中每个原子(或原子基团)的原子类型, 然后根据原子类型及其相互作用参数写出拓扑文件. 当然, 在这过程中分子中的某些原子可能无法在所选力场中找到对应的原子类型, 那么就只能退而求其次, 选择一个(你认为或源于参考文献上)最接近的, 就可以了. 手动操作, 对含10几个原子的小分子还可以, 对包含更多原子的分子, 手动做起来就很耗时了, 也很麻烦, 还容易出错. 所以就有人写了一些程序或脚本来自动处理这个的问题, 但采用的方法是一样的, 就是先根据分子结构找到匹配的原子类型, 然后将相应的相互作用参数写为拓扑文件. PRODRG, ATB等程序或网站的处理过程就是这样. 由于是使用程序自动处理, 所以不可能像自己手动处理那样准确, 所以在得到这些程序给出的拓扑文件后, 自己一定要核查一下, 看是否存在错误. 另外有些程序无法给出原子类型对应的电荷, 这也需要单独处理.</p>
+<p>上面的方法也适用于周期性体系或是聚合物体系, 但由于这些体系是由一些基本单元重复而成的, 如果扩展到大的体系后, 还使用上面的方法就显得麻烦了, 况且还有周期性的问题, 很多程序无法处理. 为此, GROMACS提供了<code>x2top</code>模块, 它可以根据提供的构型文件, 设定的键长条件, 计算所有可能的键, 键角, 二面角, 并输出一个初步的拓扑文件, 将它加以修改, 加入自己需要的参数就能做成一个可以使用的拓扑文件了. 因此, <code>x2top</code>只用于创建初步的拓扑文件, 所用的力场和参数需要你自己处理, 不要直接使用它给出的拓扑文件去做模拟.</p>
+<p>这些辅助工具可以根据输入构型自动判断原子类型以及成键方式, 虽然很不错, 但却不能保证一定能找到最匹配的原子类型, 况且还有许多原子类型之间的键合参数缺失, 这时就需要我们自己根据情况来补充了. 我个人觉得, 可以参考构建分子的方式, 采用图形化的方式, 手动选择原子类型来创建分子, 这样既方便, 同时也能避免无法找到合适原子类型的问题. 可惜的是, 至今我还没有看到这样的软件. 有可能的话, 或许可以自己开发一个.</p>
+<p>实际上, 各种创建拓扑文件的网站或是程序都只是起着辅助作用, 得到拓扑文件后, 在做模拟之前一定要检查一下.</p>
+<p>下面是创建分子拓扑文件时要考虑的几点:</p>
+<ol>
+<li>对同一模拟体系中的不同分子, 尽量使用同一力场, 这样自洽性好. 比如, 如果对蛋白质, 核酸等生物大分子使用AMBER力场, 那么相应的配体小分子, 建议使用与此对应的GAFF力场. 这也是AMBER程序鼓励的作法.</li>
+<li>对一般有机分子溶液体系的模拟, 建议使用全原子的OPLS-AA力场, 这是专门针对有机溶液体系优化的力场, 原子类型最多, 实用性很强. 如果你想使用联合原子力场, 那么你可以试试GROMOS力场.</li>
+</ol>
+<h2>创建分子的拓扑文件: 各种工具</h2>
+<p>参考Sobereva的博文<a href="http://sobereva.com/266">几种生成有机分子Gromacs拓扑文件的工具</a>.</p>
+<p>使用时需要先清楚每种工具给出的是什么力场的拓扑文件, 这样才能选择合适的程序.</p>
+&lt;table id='tab-0'&gt;&lt;caption&gt;生成GROMACS拓扑文件的各种工具&lt;/caption&gt;
+&lt;tr&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;力场&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;工具&lt;/th&gt;
+  &lt;th rowspan="1" colspan="1" style="text-align:center;"&gt;说明&lt;/th&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="3" colspan="1" style="text-align:center;"&gt;AMBER GAFF&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href='http://ambermd.org/#AmberTools'&gt;AmberTools&lt;/a&gt;+&lt;a href="http://code.google.com/p/acpype/"&gt;ACPYPE&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;推荐的标准做法&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://www.aribeiro.net.br/mktop/"&gt;MKTOP&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;简单脚本, 需要提供电荷&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;amb2gmx&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;已废弃, 功能完全由acpype取代&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="2" colspan="1" style="text-align:center;"&gt;CHARMM&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://swissparam.ch/"&gt;SwissParam&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;待考&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://dx.doi.org/10.1002/jcc.21367"&gt;CGenFF&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;用于CHARMM的通用力场, 待考&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="2" colspan="1" style="text-align:center;"&gt;GROMOS&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://davapc1.bioch.dundee.ac.uk/prodrg"&gt;PRODRG&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;自动生成拓扑的网络服务器, 经典工具, 输出文件需要检查&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://compbio.biosci.uq.edu.au/atb/"&gt;ATB&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;自动生成拓扑的网络服务器, 可能更好, 输出文件仍需检查&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="4" colspan="1" style="text-align:center;"&gt;OPLS-AA&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://erg.biophys.msu.ru/erg/tpp/"&gt;TPPMKTOP&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;目前最好&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://www.aribeiro.net.br/mktop/"&gt;MKTOP&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;简单脚本, 需要提供电荷&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://www.gromacs.org/Downloads/User_contributions/Other_software"&gt;Topolbuild&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;将Tripos.mol2文件转换为拓扑, 功能简陋, 不建议使用&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://www.gromacs.org/Downloads/User_contributions/Other_software"&gt;TopolGen&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;将全原子的pdb文件转换为拓扑, 功能简陋, 不建议使用&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;UFF&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;&lt;a href="http://software-lisc.fbk.eu/obgmx/"&gt;OBGMX&lt;/a&gt;&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;近似UFF力场, 可作参考&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;生物分子力场&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;pdb2gmx&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;GROMACS通用工具, 只用于蛋白质, DNA, RNA的生物分子&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;所有力场&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:center;"&gt;x2top&lt;/td&gt;
+  &lt;td rowspan="1" colspan="1" style="text-align:left;"&gt;GROMACS通用工具, 一般用于周期性体系, 聚合物等, 只给出初步拓扑文件&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;<h2>创建分子的拓扑文件: 实例教程</h2>
+<h3>GAFF力场</h3>
+<ul>
+<li><a href="http://jerkwin.github.io/2015/12/08/%E4%BD%BF%E7%94%A8AmberTools+ACPYPE+Gaussian%E5%88%9B%E5%BB%BA%E5%B0%8F%E5%88%86%E5%AD%90GAFF%E5%8A%9B%E5%9C%BA%E7%9A%84%E6%8B%93%E6%89%91%E6%96%87%E4%BB%B6/">使用AmberTools+ACPYPE+Gaussian创建小分子GAFF力场的拓扑文件</a></li>
+</ul>
+<h3>OPLS-AA力场</h3>
+<ul>
+<li><a href="http://jerkwin.github.io/2015/12/13/TPPMKTOP-OPLS-AA%E5%85%A8%E5%8E%9F%E5%AD%90%E5%8A%9B%E5%9C%BA%E7%9A%84GROMACS%E6%8B%93%E6%89%91%E6%96%87%E4%BB%B6%E7%94%9F%E6%88%90%E5%99%A8/">TPPMKTOP：OPLS-AA全原子力场的GROMACS拓扑文件生成器</a></li>
+</ul>
+<h3>GROMOS力场</h3>
+<p>对小分子不建议使用GROMOS力场, 因为其计算电荷的过程不清楚. 但由于PRODRG网站很方便, 这里还是提供一个说明, 并结合Justin的论文说明如何修改.</p>
+<ul>
+<li>使用PRODRG或ATB创建</li>
+</ul>
+<h3>使用x2top并结合已知参数创建具有周期性体系的力场拓扑文件</h3>
+<ul>
+<li><a href="http://jerkwin.github.io/9999/10/31/GROMACS%E4%B8%AD%E6%96%87%E6%95%99%E7%A8%8B/#TOC1.7.9">创建周期性体系的拓扑文件: 以石墨烯为例</a></li>
+</ul>
+<h3>GROMACS使用CHARMM力场参数</h3>
+<h2>评论</h2>
+<ul>
+<li>2016-03-08 08:38:46 <code>阳光</code> 楼主你好，力场与拓扑之四：GROMACS力场拓扑文件的创建 中的 使用TPPMKTOP创建小分子的OPLS-AA力场拓扑文件链接打不开，这是什么原因，急请求楼主帮助。</li>
+<li>2016-03-08 12:45:10 <code>Jerkwin</code> 已经修正, 试试吧.</li>
+<li>2016-03-08 21:50:47 <code>阳光</code> 楼主你好，使用TPPMKTOP创建小分子的OPLS-AA力场拓扑文件，这个网络服务<a href="http://erg.biophys.msu.ru/tpp">http://erg.biophys.msu.ru/tpp</a>进不去，该如何是好？希望楼主在百忙之中解答！谢谢</li>
+<li><p>2016-03-08 22:04:00 <code>阳光</code> 已经可以了，谢谢了</p>
+</li>
+<li><p>2016-12-26 14:19:14 <code>黄建湘</code> 看了很多遍，值得学习，构建拓扑是个难点</p>
+</li>
+</ul>

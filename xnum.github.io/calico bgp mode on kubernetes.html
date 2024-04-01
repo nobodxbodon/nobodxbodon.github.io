@@ -1,0 +1,198 @@
+<h2>原文：<a href="https://xnum.github.io/2022/03/02/home-lab-k8s-calico-bgp">calico bgp mode on kubernetes</a></h2>
+<hr/>
+<p>layout: post
+title: calico bgp mode on kubernetes
+date: 2022-03-02 00:00 +0800
+categories:</p>
+<ul>
+<li>home_lab</li>
+<li>sys_admin</li>
+<li>networking</li>
+<li>k8s</li>
+</ul>
+<hr/>
+<h2>目標</h2>
+<p>利用BGP打通kubernetes內外網路流量交換，在cluster外也可以存取到cluster內的服務</p>
+<p>ECMP使得流量分散到多台機器上，而不會都經由同一個節點</p>
+<p>ingress-nginx的佈建也可以基於metalLB打通而不需要haproxy</p>
+<h2>配置</h2>
+<p>openwrt-gw =&gt; core-sw =&gt; kubernetes cluster CIDR</p>
+<table>
+<thead><tr>
+<th>hostname</th>
+<th>ip</th>
+<th>BGP asn</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>k8s-node1</td>
+<td>192.168.5.1</td>
+<td>65005</td>
+</tr>
+<tr>
+<td>k8s-node2</td>
+<td>192.168.5.2</td>
+<td>65005</td>
+</tr>
+<tr>
+<td>k8s-node3</td>
+<td>192.168.5.3</td>
+<td>65005</td>
+</tr>
+<tr>
+<td>core-sw</td>
+<td>192.168.5.254</td>
+<td>65005</td>
+</tr>
+<tr>
+<td></td>
+<td>192.168.2.253</td>
+<td></td>
+</tr>
+<tr>
+<td>openwrt-gw</td>
+<td>192.168.2.254</td>
+<td>65002</td>
+</tr>
+</tbody>
+</table>
+<h2>L3 router BGP setting</h2>
+<p>OpenWRT安裝FRR並開啟bgpd，用vtysh配置設定會比較方便</p>
+<p>/etc/frr/frr.conf</p>
+<p>(core-sw)</p>
+<pre><code>frr version 7.5
+frr defaults traditional
+hostname core-sw
+log syslog
+!
+password zebra
+!
+router bgp 65005
+ bgp router-id 192.168.2.253
+ no bgp ebgp-requires-policy
+ neighbor k8s peer-group
+ neighbor k8s remote-as 65005
+ neighbor 192.168.5.1 peer-group k8s
+ neighbor 192.168.5.2 peer-group k8s
+ neighbor 192.168.5.3 peer-group k8s
+ neighbor 192.168.5.4 peer-group k8s
+ neighbor 192.168.2.254 remote-as external
+ !
+ address-family ipv4 unicast
+  network 192.168.5.0/24
+ exit-address-family
+!
+access-list vty seq 5 permit 127.0.0.0/8
+access-list vty seq 10 deny any
+!
+line vty
+ access-class vty
+!
+</code></pre>
+<p>(gw)</p>
+<pre><code>frr version 7.5
+frr defaults traditional
+hostname gw
+log syslog
+!
+password zebra
+!
+router bgp 65002
+ bgp router-id 192.168.2.254
+ no bgp ebgp-requires-policy
+ neighbor 192.168.2.253 remote-as external
+!
+access-list vty seq 5 permit 127.0.0.0/8
+access-list vty seq 10 deny any
+!
+line vty
+ access-class vty
+!
+</code></pre>
+<h2>calico setting</h2>
+<p>需安裝calicoctl進行設定</p>
+<pre><code># Global BGP configuration. Disable node-to-node mesh
+
+apiVersion: projectcalico.org/v3
+kind: BGPConfiguration
+metadata:
+  name: default
+spec:
+  logSeverityScreen: Info
+  nodeToNodeMeshEnabled: false
+  # node local-as
+  asNumber: 65005
+  serviceExternalIPs:
+    - cidr: 10.222.111.0/24
+
+---
+apiVersion: projectcalico.org/v3
+kind: BGPPeer
+metadata:
+  name: my-global-peer
+spec:
+  peerIP: 192.168.5.254
+  # peer remote-as
+  asNumber: 65005
+</code></pre>
+<p>在Service上面手動新增<code>externalIPs</code>，修改為<code>NodePort</code>就可以使用該IP連線
+如果不想經過SNAT的話就要把externalTrafficPolicy設為Local</p>
+<pre><code>apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app: guestbook
+    tier: frontend
+spec:
+  type: NodePort
+  externalIPs:
+  - 10.222.111.187
+  externalTrafficPolicy: Local
+  ports:
+  - port: 80
+  selector:
+    app: guestbook
+    tier: frontend
+</code></pre>
+<h2>metalLB</h2>
+<p>如果想讓externalIP自動發放，可以安裝metalLB的controller，但不安裝speaker</p>
+<p>在apply metalLB的安裝yaml前先移除speaker相關資源設定</p>
+<p>並且指定網段，其中的protocol不重要，因為沒有speaker負責</p>
+<pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: default
+      protocol: layer2
+      addresses:
+      - 10.222.111.1-10.222.111.250
+</code></pre>
+<p>使用metalLB後需要額外在BGPConfiguration增加對應的設定</p>
+<pre><code>  serviceLoadBalancerIPs:
+    - cidr: 10.222.111.0/24
+</code></pre>
+<p>如果只有expose LoadBalancer IP的需要，可以直接安裝metalLB設定成BGP mode
+效果是一樣的，config如下</p>
+<pre><code>apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    peers:
+    - peer-address: 192.168.5.254
+      peer-asn: 65005
+      my-asn: 65005
+    address-pools:
+    - name: default
+      protocol: bgp
+      addresses:
+      - 10.222.111.1-10.222.111.250
+</code></pre>

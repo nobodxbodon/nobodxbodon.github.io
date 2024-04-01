@@ -1,0 +1,158 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/07/11/GROMACS团簇分析代码">GROMACS团簇分析代码</a></h2>
+<hr/>
+<p>layout: post
+ title: GROMACS团簇分析代码
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<ul>
+<li>2018-07-11 20:41:53</li>
+</ul>
+<p>以前简单说过<a href="http://jerkwin.github.io/2017/11/11/%E4%BD%BF%E7%94%A8GROMACS%E8%BF%9B%E8%A1%8C%E5%9B%A2%E7%B0%87%E5%88%86%E6%9E%90/">使用GROMACS进行团簇分析的方法</a>, 是利用脚本组合<code>mdmat</code>和<code>cluster</code>这两个工具完成的. 最近又需要进行团簇分析, 就把这两部分的代码整理了一下, 组合成一个新程序<code>mdcluster</code>, 并将其编译为GROMACS的内置模块, 这样就可以直接<code>gmx mdcluster</code>调用了, 更方便, 速度也更快了.</p>
+<p>编写GROMACS分析程序涉及到的知识在前两篇文档中有说明, 但对于不熟悉C++的人来说, 还是很难看明白的. 所以我这里就具体地说下我的作法, 供参考.</p>
+<ol>
+<li><p>在<code>src\gromacs\gmxana\gmx_ana.h</code>中定义要添加的程序</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; &lt;span style="color: #00A000"&gt;gmx_mdcluster&lt;/span&gt;(&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; argc, &lt;span style="color: #00BB00; font-weight: bold"&gt;char&lt;/span&gt; &lt;span style="color: #666666"&gt;*&lt;/span&gt;argv[]);&lt;/pre&gt;&lt;/div&gt;</li>
+<li><p>在<code>src\programs\legacymodules.cpp</code>中的<code>// Modules from gmx_ana.h.</code>部分注册模块, 这样才能在<code>gmx</code>主程序中调用</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;registerModule(manager, &lt;span style="color: #666666"&gt;&amp;&lt;/span&gt;gmx_mdcluster, &lt;span style="color: #BB4444"&gt;"mdcluster"&lt;/span&gt;,
+                &lt;span style="color: #BB4444"&gt;"md Cluster structures"&lt;/span&gt;);&lt;/pre&gt;&lt;/div&gt;</li>
+<li><p>将<code>src\gromacs\gmxana\gmx_mdmat.cpp</code>和<code>src\gromacs\gmxana\gmx_cluster.cpp</code>两个文件合并, 命名为<code>mdcluster.cpp</code></p>
+</li>
+<li><p>整理<code>mdcluster.cpp</code>的头文件, 修改主函数的名称为<code>mdcluster</code></p>
+</li>
+<li><p>试着进行编译. 遇到函数重定义的错误, 就修改函数名称. 直到编译通过, 执行<code>gmx mdcluster</code>成功</p>
+</li>
+<li><p>根据需要编写需要的功能. 主要是弄明白<code>mdmat</code>函数输出的距离矩阵, 并在<code>cluster</code>函数中调用它.</p>
+</li>
+<li><p>根据需要, 添加其他需要的功能. 必要时可参考GROMACS自带的其他分析程序.</p>
+</li>
+</ol>
+<p>步骤说起来并不复杂, 但实际做起来还是有点难度的, 虽然不需要你熟悉C++, 但至少需要要像我一样, 学过基本的C, 否则很多语句会看不懂, 也就无从修改了.</p>
+<p>另外, 我的做法比较脏快, 好在也能解决问题, 所以我也就不再考虑更优雅的作法了.</p>
+<h2>代码</h2>
+<p>测试GROMACS 2016.5和2018版本, 都正常通过.</p>
+<h2>使用方法</h2>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; mdcluster &lt;span style="color:#666"&gt;-f&lt;/span&gt; &lt;span style="color:#666"&gt;-s&lt;/span&gt; &lt;span style="color:#666"&gt;-n&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;<p>选项</p>
+<ul>
+<li><code>-f</code>: 默认<code>traj.trr</code>, 要分析的轨迹文件</li>
+<li><code>-s</code>: 默认<code>topol.tpr</code>, 运行输入文件</li>
+<li><code>-n</code>: 默认<code>index.ndx</code>, 可选索引文件</li>
+<li><code>-g</code>: 默认<code>cluster.log</code>, 输出文件, 包含每个时刻的团簇信息</li>
+<li><code>-num</code>: 默认<code>clust-num.xvg</code>, 可选输出xvg文件, 每个时刻的团簇数目</li>
+<li><code>-xyz</code>: 默认<code>clust-xyz.pdb</code>, 可选输出xyz格式的坐标文件, 列出每个团簇的坐标. 之所以扩展名为pdb, 是因为GROMACS不支持指定xyz格式的输出文件, 只能使用pdb代替了.</li>
+<li>其他涉及团簇分析的选项没有改变, 参考<code>cluster</code>的文档.</li>
+</ul>
+<h2>输出文件</h2>
+<h3>log文件</h3>
+<p>按时间顺序列出团簇数目, 距离矩阵的简单信息, 以及每个团簇包含的残基的编号.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;Time: 7.4    Clusters: 3
+Distance: 0.168967 to 1.00864 nm    Average: 0.473927
+Energy of the matrix: 2.95684
+&lt;span style="color: #008800; font-style: italic"&gt;#cluster | members(#res)&lt;/span&gt;
+       &lt;span style="color: #666666"&gt;1&lt;/span&gt; | &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;7&lt;/span&gt; 9
+       &lt;span style="color: #666666"&gt;2&lt;/span&gt; | &lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt; 10
+       &lt;span style="color: #666666"&gt;3&lt;/span&gt; | &lt;span style="color: #666666"&gt;3&lt;/span&gt; 8
+
+Time: 7.6    Clusters: 4
+Distance: 0.171863 to 1.03121 nm    Average: 0.462375
+Energy of the matrix: 2.8525
+&lt;span style="color: #008800; font-style: italic"&gt;#cluster | members(#res)&lt;/span&gt;
+       &lt;span style="color: #666666"&gt;1&lt;/span&gt; | &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;4&lt;/span&gt; &lt;span style="color: #666666"&gt;5&lt;/span&gt; &lt;span style="color: #666666"&gt;7&lt;/span&gt; 9
+       &lt;span style="color: #666666"&gt;2&lt;/span&gt; | 2
+       &lt;span style="color: #666666"&gt;3&lt;/span&gt; | &lt;span style="color: #666666"&gt;3&lt;/span&gt; &lt;span style="color: #666666"&gt;6&lt;/span&gt; 10
+       &lt;span style="color: #666666"&gt;4&lt;/span&gt; | 8
+
+Time: 7.8    Clusters: 6
+Distance: 0.176229 to 1.07498 nm    Average: 0.472193
+Energy of the matrix: 3.18141
+&lt;span style="color: #008800; font-style: italic"&gt;#cluster | members(#res)&lt;/span&gt;
+       &lt;span style="color: #666666"&gt;1&lt;/span&gt; | &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;7&lt;/span&gt; 9
+       &lt;span style="color: #666666"&gt;2&lt;/span&gt; | 2
+       &lt;span style="color: #666666"&gt;3&lt;/span&gt; | &lt;span style="color: #666666"&gt;3&lt;/span&gt; 8
+       &lt;span style="color: #666666"&gt;4&lt;/span&gt; | 4
+       &lt;span style="color: #666666"&gt;5&lt;/span&gt; | 5
+       &lt;span style="color: #666666"&gt;6&lt;/span&gt; | &lt;span style="color: #666666"&gt;6&lt;/span&gt; 10&lt;/pre&gt;&lt;/div&gt;<h3>团簇数目</h3>
+<p>很简单的xvg文件, 无需多说</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #008800; font-style: italic"&gt;# This file was created Fri Jul  6 09:24:17 2018&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# Created by:&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#           :-) GROMACS - gmx mdcluster, 2016.5 (double precision) (-:&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# Executable:   C:\Users\Jicun\Downloads\GMX2016.5\bin\Release\gmx_d.exe&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# Data prefix:  C:\Program Files\Gromacs&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# Working dir:  C:\Users\Jicun\Downloads\GMX2016.5\bin\Release&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# Command line:&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#   gmx_d mdcluster -g -no -cutoff .2 -xyz&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# gmx mdcluster is part of G R O M A C S:&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# Great Red Owns Many ACres of Sand&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;#&lt;/span&gt;
+@    title &lt;span style="color: #BB4444"&gt;"Cluster Numbers"&lt;/span&gt;
+@    xaxis  label &lt;span style="color: #BB4444"&gt;"Time (ps)"&lt;/span&gt;
+@    yaxis  label &lt;span style="color: #BB4444"&gt;"Cluster Number"&lt;/span&gt;
+@TYPE xy
+@g0 &lt;span style="color: #AA22FF"&gt;type&lt;/span&gt; bar
+  0.000000        9
+  0.200000       10
+  0.400000       10
+  0.600000        9
+  0.800000        8
+  1.000000        8
+  1.200000        9
+  1.400000        9
+  1.600000        9
+  1.800000        9&lt;/pre&gt;&lt;/div&gt;<h3>团簇结构</h3>
+<p>列出每个时刻下每个团簇中所有原子的名称及其xyz坐标, 是常用的xyz格式, 标题行中还给出时刻, 团簇编号以及盒子大小的信息. 对团簇进行后处理的时候需要这些信息.</p>
+<p>值得注意的是:</p>
+<ul>
+<li>这些坐标是原始轨迹中的坐标, 没有经过PBC处理, 所以有些构型看起来好像不正确.</li>
+<li>不要使用VMD来查看xyz文件, 因为VMD要求每个构型的原子数目是固定的, 但团簇分析结果显然无法满足这个条件, 所以VMD显示出来会有错误. 我一般用JMOL来查看这种文件.</li>
+</ul>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;9
+t: 20.000000    cl: &lt;span style="color: #666666"&gt;1&lt;/span&gt;    box: 1.959580 0.000000 0.000000 0.000000 1.959580 0.000000 0.000000 0.000000 1.959580
+      OW  16.299245  17.166265   7.652279 &lt;span style="color: #008800; font-style: italic"&gt;#res:1&lt;/span&gt;
+     HW1  17.101772  16.680043   7.841409 &lt;span style="color: #008800; font-style: italic"&gt;#res:1&lt;/span&gt;
+     HW2  16.426502  17.503887   6.765685 &lt;span style="color: #008800; font-style: italic"&gt;#res:1&lt;/span&gt;
+      OW  13.016180  17.398965   3.690518 &lt;span style="color: #008800; font-style: italic"&gt;#res:3&lt;/span&gt;
+     HW1  13.727098  17.004212   3.185545 &lt;span style="color: #008800; font-style: italic"&gt;#res:3&lt;/span&gt;
+     HW2  13.171825  17.110682   4.589906 &lt;span style="color: #008800; font-style: italic"&gt;#res:3&lt;/span&gt;
+      OW  13.643707  16.886055   6.493071 &lt;span style="color: #008800; font-style: italic"&gt;#res:6&lt;/span&gt;
+     HW1  13.265058  16.279565   7.129487 &lt;span style="color: #008800; font-style: italic"&gt;#res:6&lt;/span&gt;
+     HW2  14.567202  16.945082   6.737825 &lt;span style="color: #008800; font-style: italic"&gt;#res:6&lt;/span&gt;
+9
+t: 20.000000    cl: &lt;span style="color: #666666"&gt;2&lt;/span&gt;    box: 1.959580 0.000000 0.000000 0.000000 1.959580 0.000000 0.000000 0.000000 1.959580
+      OW  12.382308   0.610490   3.052188 &lt;span style="color: #008800; font-style: italic"&gt;#res:2&lt;/span&gt;
+     HW1  12.713196  -0.143198   3.540757 &lt;span style="color: #008800; font-style: italic"&gt;#res:2&lt;/span&gt;
+     HW2  11.454754   0.658140   3.283711 &lt;span style="color: #008800; font-style: italic"&gt;#res:2&lt;/span&gt;
+      OW  11.333401   1.919177   0.772347 &lt;span style="color: #008800; font-style: italic"&gt;#res:7&lt;/span&gt;
+     HW1  11.814307   1.534172   1.504967 &lt;span style="color: #008800; font-style: italic"&gt;#res:7&lt;/span&gt;
+     HW2  11.917793   2.596026   0.430886 &lt;span style="color: #008800; font-style: italic"&gt;#res:7&lt;/span&gt;
+      OW  14.576921   0.086829   1.378225 &lt;span style="color: #008800; font-style: italic"&gt;#res:8&lt;/span&gt;
+     HW1  13.888679   0.222418   2.029508 &lt;span style="color: #008800; font-style: italic"&gt;#res:8&lt;/span&gt;
+     HW2  14.172984  -0.473075   0.715220 &lt;span style="color: #008800; font-style: italic"&gt;#res:8&lt;/span&gt;
+6
+t: 20.000000    cl: &lt;span style="color: #666666"&gt;3&lt;/span&gt;    box: 1.959580 0.000000 0.000000 0.000000 1.959580 0.000000 0.000000 0.000000 1.959580
+      OW  16.912391  17.797985   2.399200 &lt;span style="color: #008800; font-style: italic"&gt;#res:4&lt;/span&gt;
+     HW1  17.057798  17.103391   1.756840 &lt;span style="color: #008800; font-style: italic"&gt;#res:4&lt;/span&gt;
+     HW2  16.319146  18.408840   1.961993 &lt;span style="color: #008800; font-style: italic"&gt;#res:4&lt;/span&gt;
+      OW  16.936209  18.858645   4.993168 &lt;span style="color: #008800; font-style: italic"&gt;#res:10&lt;/span&gt;
+     HW1  16.868745  19.803851   4.858015 &lt;span style="color: #008800; font-style: italic"&gt;#res:10&lt;/span&gt;
+     HW2  16.985083  18.492818   4.109984 &lt;span style="color: #008800; font-style: italic"&gt;#res:10&lt;/span&gt;
+3
+t: 20.000000    cl: &lt;span style="color: #666666"&gt;4&lt;/span&gt;    box: 1.959580 0.000000 0.000000 0.000000 1.959580 0.000000 0.000000 0.000000 1.959580
+      OW  13.452642  17.216688   0.500806 &lt;span style="color: #008800; font-style: italic"&gt;#res:5&lt;/span&gt;
+     HW1  12.790335  17.045542   1.170352 &lt;span style="color: #008800; font-style: italic"&gt;#res:5&lt;/span&gt;
+     HW2  12.953310  17.324260  -0.308717 &lt;span style="color: #008800; font-style: italic"&gt;#res:5&lt;/span&gt;
+3
+t: 20.000000    cl: &lt;span style="color: #666666"&gt;5&lt;/span&gt;    box: 1.959580 0.000000 0.000000 0.000000 1.959580 0.000000 0.000000 0.000000 1.959580
+      OW  16.102296   1.618148   3.075337 &lt;span style="color: #008800; font-style: italic"&gt;#res:9&lt;/span&gt;
+     HW1  15.229665   1.230862   3.144304 &lt;span style="color: #008800; font-style: italic"&gt;#res:9&lt;/span&gt;
+     HW2  16.380787   1.424401   2.180275 &lt;span style="color: #008800; font-style: italic"&gt;#res:9&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;<h2>未完成</h2>
+<ul>
+<li>团簇分析时采用的截断距离只有一个, 这对复杂的体系可能不合适. 可扩展一下, 对不同的原子使用不同的截断值.</li>
+<li>输出构型使用pdb格式可能更好, 虽然文件大些</li>
+<li>可换用另外的团簇分析算法</li>
+</ul>

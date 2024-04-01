@@ -1,0 +1,164 @@
+<h2>原文：<a href="https://jerkwin.github.io/2017/01/30/GMX_QMMM教程1：QMMM方法的实现">GROMACS QM/MM教程1：QM/MM方法的实现</a></h2>
+<hr/>
+<p>layout: post
+ title: GROMACS QM/MM教程1：QM/MM方法的实现
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>gmx</li>
+</ul>
+<hr/>
+<ul>
+<li><p>原始文档:</p>
+<ul>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm.html">QM/MM implementation in Gromacs</a></li>
+<li><a href="http://www.gromacs.org/Documentation/How-tos/QMMM">GROMACS How-tos: QMMM</a></li>
+<li><a href="http://www.gromacs.org/Documentation/Installation_Instructions_4.5/compiling_QMMM">GROMACS Installation Instructions 4.5: compiling QMMM</a></li>
+</ul>
+</li>
+<li><p>2017年01月30日 19:54:21 翻译: 洪巢升; 校对: 李继存</p>
+</li>
+</ul>
+<p>【李继存 注】此文档年代久远, 且与现行GROMACS版本有所脱节, 但其中所述原理仍有参考价值, 故在此整理, 以为备份.</p>
+<p>在QM/MM方法中, 一部分体系使用量子力学(QM, quantum mechanical)方法进行处理(非常耗时), 另一部分体系使用基于力场的标准分子力学(MM, molecular mechanics)方法进行处理. GROMACS通过提供与外部QM程序的接口支持这种杂化的量子力学/分子力学方法.</p>
+<p>GROMACS目前提供了与GAMESS-UK, Gaussian0X, mopac7以及ORCA四种量化计算软件的QM/MM接口. 这里我们将简单概述GROMACS的QM/MM功能, 几个示例以及相关源代码的修改及编译. GROMACS的QM/MM仍处于开发阶段, 这里的说明可能需要更新. 因此, 本文档只适用于那些愿意尝试和测试的用户.</p>
+<h2>GROMACS的QM/MM功能概述</h2>
+<h3>QM方法</h3>
+<ul>
+<li>AM1</li>
+<li>PM3</li>
+<li>RHF</li>
+<li>UHF</li>
+<li>CASSCF</li>
+<li>MP2</li>
+<li>DFT</li>
+</ul>
+<h3>QM基组</h3>
+<ul>
+<li>所有基组</li>
+</ul>
+<h3>优化类型(<strong>需要测试</strong>)</h3>
+<ul>
+<li>能量极小值(<code>integrator=OPT</code>)</li>
+<li>过渡态(<code>integrator=LT</code>)</li>
+</ul>
+<h3>动力学类型</h3>
+<ul>
+<li>基态模拟</li>
+<li>激发态模拟</li>
+<li>系间穿跃: 模拟由激发态向基态的转换</li>
+</ul>
+<h3>QM/MM边界类型</h3>
+<ul>
+<li>标准QM/MM模型</li>
+<li>ONIOM模型</li>
+<li>多层ONIOM模型</li>
+</ul>
+<h2>GROMACS的QM/MM示例</h2>
+<ul>
+<li><p><a href="http://wwwuser.gwdg.de/~ggroenh/EMBO2004/html/qmmmvacuum.html#qmmmhowto">如何在GROMACS中实现QM/MM计算</a></p>
+</li>
+<li><p>用QM/MM动力学模拟研究光敏黄蛋白的激发态非绝热系间穿跃性质, 论文见<a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/papers/groenhof04.pdf">JACS 126 (2004), 4228-4233</a></p>
+<ul>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/examples/pyp.mdp">pyp.mdp</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/examples/pyp.ndx">pyp.ndx</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/examples/pyp.top">pyp.top</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/examples/pyp.gro">pyp.gro</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/examples/input.chk.Z">input.chk.Z</a>(CASSCF波函数分子轨道系数的检查点文件)</li>
+</ul>
+</li>
+<li><p><a href="http://wwwuser.gwdg.de/~ggroenh/EMBO2004/html/tutorial.html">对Diels-Alderase蛋白中发生的Diels-Alder反应进行过渡态优化</a>(EMBO课程中蛋白质建模的一部分, 中国上海, 2004年9月)</p>
+</li>
+<li><p><a href="http://wwwuser.gwdg.de/~ggroenh/SaoCarlos2008/html/tutorial.html">DNA中胸腺嘧啶二聚体的修复</a>(前沿模拟研讨会的部分内容, 巴西圣卡洛斯, 2008年9月)</p>
+</li>
+<li><p><a href="http://cbp.cfn.kit.edu/joomla/index.php/downloads/18-gromacs-with-qm-mm-using-dftb3">使用GROMACS和DFTB3进行QM/MM模拟</a></p>
+</li>
+</ul>
+<h2>源代码修改及编译</h2>
+<p>自3.3版本起, GROMACS默认支持QM/MM功能, 可以访问<a href="https://www.gwdg.de/">我们的GROMACS网页</a>下载. 下面给出的是非常古老的版本, 我们不再支持. 强烈推荐使用官方新发布的版本.</p>
+<ul>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/gmx/gmx3.2/gmx.tar.gz">qmx.tar.gz(GROMACS 3.2版本, 支持QM/MM)</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/gmx/gmx3.3/gmx.tar.gz">qmx.tar.gz(GROMACS 3.3版本CVS, 支持QM/MM)</a></li>
+</ul>
+<p>为激活GROMACS与量化程序的QM/MM接口, <code>configure</code>时需要使用<code>--with-qmmm-&lt;QM PROGRAM NAME&gt;</code>选项.</p>
+<p>在编译GROMACS的时候你同样需要ORCA, mopac7, gaussian0X和/或GAMESS-UK的源代码. 由于这些源代码各自属于他们的版权持有人, 我们不能在这里发布它们, 因此你必须自己想办法得到它们. 下面是它们各自的网址</p>
+<ul>
+<li><a href="http://gaussian.com/">Gaussian</a></li>
+<li><a href="http://www.stfc.ac.uk/">GAMESS-UK</a></li>
+<li><a href="https://sourceforge.net/projects/mopac7/">MOPAC7</a>或者<a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/mopac/SGI/mopac7.tar.gz">mopac7.tar.gz</a></li>
+<li><a href="http://www.thch.uni-bonn.de/tc/orca">ORCA</a></li>
+</ul>
+<p>另外, 可以通过下面的这些方法将GROMACS的<code>mdrun</code>和量化程序连接起来.</p>
+<h3>ORCA</h3>
+<p>下载并按照官网说明安装好ORCA, 然后在安装GROMACS的时候加上<code>--with-qmmm-orca</code>选项.</p>
+<p>当使用ORCA运行QM/MM工作时, 需要设置以下环境变量</p>
+<ul>
+<li><code>BASENAME</code>: <code>tpr</code>文件的名称, 不包括后缀<code>.tpr</code></li>
+<li><code>ORCA_PATH</code>: ORCA可执行文件的路径</li>
+</ul>
+<p>此外, 你还需要创建一个这样的文件<code>&lt;BASENAME&gt;.ORCAINFO</code>. 比如, 你要计算的是<code>test2.tpr</code>, 那这个文件的名称为<code>test2.ORCAINFO</code>.</p>
+<p>在ORCAINFO文件中必须给出计算方法, 基组以及其他所有适用于ORCA的关键词(这意味着mdp文件中的<code>QMmethod</code>和<code>QMbasis</code>都会被忽略). 如果需要进行更加深入的了解, 请查询<a href="http://www.thch.uni-bonn.de/tc/?section=downloads">ORCA官网</a>.</p>
+<h3>Mopac7</h3>
+<p>下载下面的文件</p>
+<ul>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/mopac/gmxmop.f">gmx.mop.f</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/mopac/dcart.f">dcart.f</a>, 取代默认的<code>dcart.f</code></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/mopac/libmopac.a.gz">libmopac.a.gz</a>(Linux下预编译的mopac库文件)</li>
+</ul>
+<p>编译所有的mopac文件, 但<code>mopac.f</code>, <code>moldat.f</code>, <code>deriv.f</code>除外, 因为这些都被<code>gmxmop.f</code>代替了.</p>
+<pre><code>f77 -O2 -c *.f
+</code></pre>
+<p>然后将所有的目标文件(<code>*.o</code>)打包成库文件</p>
+<pre><code>ar rcv libmopac.a *.o
+ranlib libmopac.a
+</code></pre>
+<p>如果你使用Linux系统, 也可以简单地下载上面的<code>libmopac.a</code>.</p>
+<p>注意, 对于SGI内核, 你需要使用这个<a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/mopac/SGI/gmxmop.f">gmxmop.f文件</a>并替换原先的文件. 我不知道具体原因, 在该构架下FORTRAN common公共块的处理方式似乎与通常方式不同.</p>
+<p>然后编译GROMACS, 使用下面的选项</p>
+<pre><code>LIBS=-lmopac
+LDFLAGS=-L&lt;libmopac.a文件的位置&gt;
+./configure --with-qmmm-mopac
+</code></pre>
+<p>或者, 也可以修改<code>Makefile</code>里面的<code>LIBS</code>行(快但不优雅)</p>
+<pre><code>LIBS= ... -lmopac -lm ...
+</code></pre>
+<h3>GAMESS-UK</h3>
+<p>下载需要的文件</p>
+<ul>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/GAMESS-UK/ver_c.f">ver_c.f</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/GAMESS-UK/gamess.m">gamess.m</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/GAMESS-UK/gmx.m">gmx.m</a></li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/GAMESS-UK/parallel.m">parallel.m</a>(如果需要并行计算)</li>
+<li><a href="http://wwwuser.gwdg.de/~ggroenh/qmmm/GAMESS-UK/Makefile">Makefile</a></li>
+</ul>
+<p>将以上文件添加到<code>GAMESS-UK/m4</code>子目录, 更新<code>Makefile</code>使其与你的系统配置相匹配, 然后编译代码.</p>
+<p>接着编译GROMACS, 使用下列选项</p>
+<pre><code>LDFLAGS=-L&lt;libgamess.a文件的位置&gt;
+LIBS='-lgamess -lg2c -lm'
+./configure --with-qmmm-gamess
+</code></pre>
+<p>或者, 也可以修改<code>Makefile</code>里面的<code>LIBS</code>行(快但不优雅)</p>
+<pre><code>LIBS= ... -lgamess -lg2c -lm ...
+</code></pre>
+<h3>Gaussian03/09</h3>
+<p>使用GROMACS和高斯进行QM/MM计算有两种方法.</p>
+<p>一种方法是使用我们提供的一个脚本<a href="http://wwwuser.gwdg.de/~ggroenh/gau">gau</a>(你可能要对脚本稍加修改). 这个脚本首先读取并修改GROMACS生成的输入文件, 然后调用高斯程序进行计算, 最后提取相应的能量和梯度信息, 并将其写入一个文件供GROMACS读取. 对那些无法获得高斯源代码, 且不熟悉编程的用户, 推荐使用这种方法. 尽管如此, 理解这个脚本的处理步骤和含义仍然很有必要. 因为根据操作系统的不同, 你可能需要对脚本进行少量调整才能顺利地使用它进行QM/MM计算.</p>
+<p>&lt;del&gt;要使用这个脚本, 需要将环境变量`GAUSS_DIR`设置为这个脚本所在的目录, 还需要将环境变量`GAUSS_EXE`设置为这个脚本的名称. 另外, GROMACS还需要设置`DEVEL_DIR`环境变量, 但这个环境变量一般会被忽略.&lt;/del&gt;【李继存 注】此段论述不适用于GROMACS的新版本, 具体设置参考后续博文<a href="">GROMACS QM/MM教程2: 编译设置及简单运行</a>.</p>
+<p>另一种方法需要对高斯的301, 510, 701和9999链接进行修改. 由于不能在这里发布高斯的相应源代码, 我们在下面给出一些说明以便让那些拥有高斯源代码的用户可以自己进行修改和编译. 注意在包含所需的修改前, 二进制的高斯程序不能使用.</p>
+<p>高斯提供了一种便捷的方法来构建和使用修改后的链接. 首先创建一个子目录, 例如命名为<code>modlinks</code>, 以便在里面建立所有需要修改链接的目录. 然后从高斯源代码树中提取出那些需要修改的函数, 并将其放入相应的目录, 最后将你的目标文件和高斯的原始目标文件进行连接, 建立一个新的可执行文件. 这样如果输入文件中有类似<code>%subst lxxx /home/user/modlinks/lxxx</code>的命令, 高斯就会忽略原本的<code>lxxx.exe</code>而使用你修改后的文件.</p>
+<p>GROMACS需要使用点电荷上的梯度, 所以需要对<code>1701.exe</code>进行修改. 同时为了GROMACS能使用这些梯度, 控制高斯输出的<code>l9999.exe</code>也需要进行修改. 此外, 也需要对<code>l301.exe</code>稍加修改, 以便忽略点电荷之间的相互作用. 最后, 如果进行激发态动力学模拟, 还需要修改控制MCSCF的<code>l510</code>链接.</p>
+<p><code>modlinks</code>目录中为这些链接创建目录:</p>
+<pre><code>~/modlinks/l301
+~/modlinks/l510
+~/modlinks/l701
+~/modlinks/l999
+</code></pre>
+<p>必须构建修改后的可执行程序, 所以, 每个<code>lxxx</code>子目录下都需要一个makefile文件. 这里有一个<a href="http://wwwuser.gwdg.de/~ggroenh/l301.make"><code>1301.make</code>的例子</a>.</p>
+<p>使用高斯的<code>gau-fsplit</code>命令可以很方便地提取需要修改的子程序:</p>
+<pre><code>gau-fsplit -e dle $GAUSS_DIR/1701.F
+</code></pre>
+<p>可以使用<code>grep</code>命令找到含有需要修改函数的FORTRAN源文件.</p>
+<pre><code>grep –I dle $GAUSS_DIR/*.F
+</code></pre>
+<p>这里有一个关于哪些函数需要修改, 如何修改的介绍<a href="http://wwwuser.gwdg.de/~ggroenh/roadmap.pdf">roadmap.pdf</a>. 修改完链接后, 通过<code>--with-qmmm-gaussian</code>重新编译GROMACS, 并将<code>DEVEL_DIR</code>环境变量设置为<code>modlinks</code>子目录, GROMACS就可以和高斯联用进行QM/MM模拟了.</p>

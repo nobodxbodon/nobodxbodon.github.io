@@ -1,0 +1,316 @@
+<h2>原文：<a href="https://xnum.github.io/2018/09/09/gophercon2018">gophercon2018 心得整理</a></h2>
+<hr/>
+<p>layout: post
+title: gophercon2018 心得整理</p>
+<h2>date: 2018-09-09 16:05 +0800</h2>
+<p>紀錄一些我覺得不錯的重點</p>
+<p>From <a href="https://github.com/duffn/gophercon2018">https://github.com/duffn/gophercon2018</a></p>
+<hr/>
+<h2>Design Guidelines</h2>
+<h3>Interface And Composition Design</h3>
+<p><strong>Design Philosophy:</strong></p>
+<ul>
+<li>Interfaces give programs structure.</li>
+<li>Interfaces encourage design by composition.</li>
+<li>Interfaces enable and enforce clean divisions between components.<ul>
+<li>The standardization of interfaces can set clear and consistent expectations.</li>
+</ul>
+</li>
+<li>Decoupling means reducing the dependencies between components and the types they use.<ul>
+<li>This leads to correctness, quality and performance.</li>
+</ul>
+</li>
+<li>Interfaces allow you to group concrete types by what they do.<ul>
+<li>Don't group types by a common DNA but by a common behavior.</li>
+<li>Everyone can work together when we focus on what we do and not who we are.</li>
+</ul>
+</li>
+<li>Interfaces help your code decouple itself from change.<ul>
+<li>You must do your best to understand what could change and use interfaces to decouple.</li>
+<li>Interfaces with more than one method have more than one reason to change.</li>
+<li>Uncertainty about change is not a license to guess but a directive to STOP and learn more.</li>
+</ul>
+</li>
+<li>You must distinguish between code that:<ul>
+<li>defends against fraud vs protects against accidents</li>
+</ul>
+</li>
+</ul>
+<p><strong>Validation:</strong></p>
+<p>Use an interface when:</p>
+<ul>
+<li>users of the API need to provide an implementation detail.</li>
+<li>API’s have multiple implementations they need to maintain internally.</li>
+<li>parts of the API that can change have been identified and require decoupling.</li>
+</ul>
+<p>Don't use an interface:</p>
+<ul>
+<li>for the sake of using an interface.</li>
+<li>to generalize an algorithm.</li>
+<li>when users can declare their own interfaces.</li>
+<li>if it's not clear how the interface makes the code better.</li>
+</ul>
+<p><strong>Resources:</strong></p>
+<p><a href="https://www.goinggo.net/2014/05/methods-interfaces-and-embedded-types.html">Methods, interfaces and Embedding</a> - William Kennedy<br/>
+<a href="https://www.goinggo.net/2015/09/composition-with-go.html">Composition with Go</a> - William Kennedy<br/>
+<a href="https://www.goinggo.net/2016/10/reducing-type-hierarchies.html">Reducing type hierarchies</a> - William Kennedy<br/>
+<a href="https://medium.com/@rakyll/interface-pollution-in-go-7d58bccec275">Interface pollution in Go</a> - Burcu Dogan<br/>
+<a href="https://www.goinggo.net/2016/11/application-focused-api-design.html">Application Focused API Design</a> - William Kennedy<br/>
+<a href="https://www.goinggo.net/2016/10/avoid-interface-pollution.html">Avoid interface pollution</a> - William Kennedy</p>
+<h3>Concurrent Software Design</h3>
+<p>Concurrency is about managing multiple things at once. Like one person washing the dishes while they are also cooking dinner. You're making progress on both but you're only ever doing one of those things at the same time. Parallelism is about doing multiple things at once. Like one person cooking and placing dirty dishes in the sink, while another washes the dishes. They are happening at the same time.</p>
+<p>Both you and the runtime have a responsibility in managing the concurrency of the application. You are responsible for managing these three things when writing concurrent software:</p>
+<p><strong>Design Philosophy:</strong></p>
+<ul>
+<li>The application must startup and shutdown with integrity.<ul>
+<li>Know how and when every goroutine you create terminates.</li>
+<li>All goroutines you create should terminate before main returns.</li>
+<li>Applications should be capable of shutting down on demand, even under load, in a controlled way.<ul>
+<li>You want to stop accepting new requests and finish the requests you have (load shedding).</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Identify and monitor critical points of back pressure that can exist inside your application.<ul>
+<li>Channels, mutexes and atomic functions can create back pressure when goroutines are required to wait.</li>
+<li>A little back pressure is good, it means there is a good balance of concerns.</li>
+<li>A lot of back pressure is bad, it means things are imbalanced.</li>
+<li>Back pressure that is imbalanced will cause:<ul>
+<li>Failures inside the software and across the entire platform.</li>
+<li>Your application to collapse, implode or freeze.</li>
+</ul>
+</li>
+<li>Measuring back pressure is a way to measure the health of the application.</li>
+</ul>
+</li>
+<li>Rate limit to prevent overwhelming back pressure inside your application.<ul>
+<li>Every system has a breaking point, you must know what it is for your application.</li>
+<li>Applications should reject new requests as early as possible once they are overloaded.<ul>
+<li>Don’t take in more work than you can reasonably work on at a time.</li>
+<li>Push back when you are at critical mass. Create your own external back pressure.</li>
+</ul>
+</li>
+<li>Use an external system for rate limiting when it is reasonable and practical.</li>
+</ul>
+</li>
+<li>Use timeouts to release the back pressure inside your application.<ul>
+<li>No request or task is allowed to take forever.</li>
+<li>Identify how long users are willing to wait.</li>
+<li>Higher-level calls should tell lower-level calls how long they have to run.</li>
+<li>At the top level, the user should decide how long they are willing to wait.</li>
+<li>Use the <code>Context</code> package.<ul>
+<li>Functions that users wait for should take a <code>Context</code>.<ul>
+<li>These functions should select on &lt;-ctx.Done() when they would otherwise block indefinitely.</li>
+</ul>
+</li>
+<li>Set a timeout on a <code>Context</code> only when you have good reason to expect that a function's execution has a real time limit.</li>
+<li>Allow the upstream caller to decide when the <code>Context</code> should be canceled.</li>
+<li>Cancel a <code>Context</code> whenever the user abandons or explicitly aborts a call.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Architect applications to:<ul>
+<li>Identify problems when they are happening.</li>
+<li>Stop the bleeding.</li>
+<li>Return the system back to a normal state.</li>
+</ul>
+</li>
+</ul>
+<h3>Channel Design</h3>
+<p>Channels allow goroutines to communicate with each other through the use of signaling semantics. Channels accomplish this signaling through the use of sending/receiving data or by identifying state changes on individual channels. Don't architect software with the idea of channels being a queue, focus on signaling and the semantics that simplify the orchestration required.</p>
+<p><strong>Language Mechanics:</strong></p>
+<ul>
+<li>Use channels to orchestrate and coordinate goroutines.<ul>
+<li>Focus on the signaling semantics and not the sharing of data.</li>
+<li>Signaling with data or without data.</li>
+<li>Question their use for synchronizing access to shared state.<ul>
+<li><em>There are cases where channels can be simpler for this but initially question.</em></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Unbuffered channels:<ul>
+<li>Receive happens before the Send.</li>
+<li>Benefit: 100% guarantee the signal has been received.</li>
+<li>Cost: Unknown latency on when the signal will be received.</li>
+</ul>
+</li>
+<li>Buffered channels:<ul>
+<li>Send happens before the Receive.</li>
+<li>Benefit: Reduce blocking latency between signaling.</li>
+<li>Cost: No guarantee when the signal has been received.<ul>
+<li>The larger the buffer, the less guarantee.</li>
+<li>Buffer of 1 can give you one delayed send of guarantee.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Closing channels:<ul>
+<li>Close happens before the Receive. (like Buffered)</li>
+<li>Signaling without data.</li>
+<li>Perfect for signaling cancellations and deadlines.</li>
+</ul>
+</li>
+<li>NIL channels:<ul>
+<li>Send and Receive block.</li>
+<li>Turn off signaling</li>
+<li>Perfect for rate limiting or short term stoppages.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Design Philosophy:</strong></p>
+<p>Depending on the problem you are solving, you may require different channel semantics. Depending on the semantics you need, different architectural choices must be taken.</p>
+<ul>
+<li>If any given Send on a channel <code>CAN</code> cause the sending goroutine to block:<ul>
+<li>Not allowed to use a Buffered channel larger than 1.<ul>
+<li>Buffers larger than 1 must have reason/measurements.</li>
+</ul>
+</li>
+<li>Must know what happens when the sending goroutine blocks.</li>
+</ul>
+</li>
+<li>If any given Send on a channel <code>WONT</code> cause the sending goroutine to block:<ul>
+<li>You have the exact number of buffers for each send.<ul>
+<li>Fan Out pattern</li>
+</ul>
+</li>
+<li>You have the buffer measured for max capacity.<ul>
+<li>Drop pattern</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>Less is more with buffers.<ul>
+<li>Don’t think about performance when thinking about buffers.</li>
+<li>Buffers can help to reduce blocking latency between signaling.<ul>
+<li>Reducing blocking latency towards zero does not necessarily mean better throughput.</li>
+<li>If a buffer of one is giving you good enough throughput then keep it.</li>
+<li>Question buffers that are larger than one and measure for size.</li>
+<li>Find the smallest buffer possible that provides good enough throughput.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>From: <a href="https://github.com/ardanlabs/gotraining/blob/master/topics/go/README.md">https://github.com/ardanlabs/gotraining/blob/master/topics/go/README.md</a></p>
+<hr/>
+<h1>Scheduler</h1>
+<p>切換時機</p>
+<ul>
+<li>goroutine creation</li>
+<li>goroutine blocking</li>
+<li>blocking system call</li>
+</ul>
+<p>key point</p>
+<ul>
+<li>reuse threads</li>
+<li>limit goroutine running threads to number of CPU cores</li>
+<li>distributed runqueues with <strong>stealing</strong> and <strong>handoff</strong><ul>
+<li>handoff: no parked threads -&gt; starts a new thread</li>
+</ul>
+</li>
+<li>cooperative preemption</li>
+<li>global runqueue as lower priority runqueue</li>
+</ul>
+<p>thread spinning</p>
+<ul>
+<li>check global runqueue</li>
+<li>poll the network</li>
+<li>attempt to run gc tasks</li>
+<li>work-steal</li>
+</ul>
+<p>limitations</p>
+<ul>
+<li>FIFO runqueues -&gt; no priority</li>
+<li>No strong preemption -&gt; no fairness or latency guarantees</li>
+<li>no real locality -&gt; cache miss</li>
+</ul>
+<p>From: <a href="https://speakerdeck.com/kavya719/the-scheduler-saga">https://speakerdeck.com/kavya719/the-scheduler-saga</a></p>
+<hr/>
+<h1>Patterns</h1>
+<p><strong>DONT</strong> use callback:</p>
+<pre><code class="lang-go">func Fetch(name string, f func(string)) {
+    go func() {
+        ...
+        f(s)
+    } ()
+}
+</code></pre>
+<p><strong>DO</strong> use Future:</p>
+<pre><code class="lang-go">func Fetch(name string) &lt;-chan string {
+    ch := make(chan string, 1)
+    go func() {
+        ...
+        c &lt;- s
+    } ()
+    return c
+}
+
+func main() {
+    a := Fetch("a")
+    b := Fetch("b")
+    consume(&lt;-a, &lt;-b)
+}
+</code></pre>
+<p><strong>DO</strong> use producer-consumer queue:</p>
+<pre><code class="lang-go">func Glob(pat string) &lt;-chan string {
+    ch := make(chan string)
+    go func() {
+        defer close(ch)
+        for ... {
+            ...
+            ch &lt;- s
+        }
+    }
+    return ch
+}
+
+func main() {
+    for s := range Glob("a*") {
+        ...
+    }
+}
+</code></pre>
+<ul>
+<li>hard to handle error, so</li>
+<li>write sync API, let caller site handles concurrency.</li>
+<li>make concurrency an internal detail.</li>
+</ul>
+<p>From: <a href="https://drive.google.com/file/d/1nPdvhB0PutEJzdCq5ms6UI58dp50fcAN/view">https://drive.google.com/file/d/1nPdvhB0PutEJzdCq5ms6UI58dp50fcAN/view</a></p>
+<hr/>
+<h1>Allocation</h1>
+<ul>
+<li>heap is divided into<ul>
+<li>arenas (64MB each)<ul>
+<li>spans<ul>
+<li>flexible</li>
+<li>fixed size for small object(&lt;= 32KB)</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>maintain local caches</li>
+<li>GC is concurrent, but write barriers and mark assists can slow a program</li>
+</ul>
+<pre><code>curl localhost:6060/debug/pprof/trace?seconds=5 &gt; trace.out
+go tool trace trace.out
+</code></pre>
+<p>memory allocation analysis
+<a href="https://github.com/loov/view-annotated-file">https://github.com/loov/view-annotated-file</a></p>
+<p>reduce allocation times because we need to do on every allocation:</p>
+<ul>
+<li>prevent preempted</li>
+<li>check assist GC</li>
+<li>find the next free slot</li>
+<li>set heap bitmap bits</li>
+</ul>
+<p>recycle allocation: sync.Pool</p>
+<ul>
+<li>maintains slices of recycled objects</li>
+<li>allows lockfree get/put</li>
+<li>remember to clear recycled memory by ourselves</li>
+</ul>
+<p>From: <a href="https://speakerdeck.com/emfree/allocator-wrestling">https://speakerdeck.com/emfree/allocator-wrestling</a></p>

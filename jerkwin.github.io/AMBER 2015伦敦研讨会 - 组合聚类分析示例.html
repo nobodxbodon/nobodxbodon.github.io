@@ -1,0 +1,119 @@
+<h2>原文：<a href="https://jerkwin.github.io/2018/10/14/AMBER_2015伦敦研讨会_-_组合聚类分析示例">AMBER 2015伦敦研讨会 - 组合聚类分析示例</a></h2>
+<hr/>
+<p>layout: post
+ title: AMBER 2015伦敦研讨会 - 组合聚类分析示例
+ categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>amber</li>
+</ul>
+<hr/>
+<ul>
+<li>作者: Daniel R. Roe, <a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/Cluster/">原文地址</a></li>
+<li>2018-10-14 17:15:49 翻译: 刘恒江; 校对: 李继存</li>
+</ul>
+<h2>使用CPPTRAJ进行聚类/团簇分析</h2>
+<p>从分子动力学模拟中确定结构布居数目(structure populations)的一种方法是聚类/团簇分析. 聚类/团簇化是一种对数据进行分区的方法, 也就是将部分具有相似性的数据点从其他数据点中区分出来形成一个群集/团簇, 这样群集内数据点之间的相似性要比它们与群集外数据点之间的相似性更大. 在分子模拟的背景下, 这意味着将相似的构象分组在一起. 其间的相似性由一个距离标准来度量——距离越小, 结构越相似. 一种常用的距离度量便是基于坐标的RMSD.</p>
+<p>值得注意的是, 并没有一种所谓"正确"的方法来进行聚类/团簇分析. 有许多不同的算法和距离度量可用, 并且不同的方法组合对于某些系统可能有更好的效果. 聚类/团簇分析往往需要不断地试错才能获得满意的结果. 本教程只是聚类/团簇分析的一个示例. 如需更深入地讨论MD轨迹的聚类/团簇分析, 可以阅读Shao等人2007年关于这一主题的<a href="http://pubs.acs.org/doi/abs/10.1021/ct700119m?journalCode=jctcce">论文</a>.</p>
+<p>在此示例中, 我们将使用<a href="http://pubs.acs.org/doi/abs/10.1021/ct400341p"><code>CPPTRAJ</code></a>进行聚类/团簇分析以及组合的聚类/团簇分析(作为确定收敛性的一种手段). <code>CPPTRAJ</code>支持多种聚类/团簇算法, 距离度量, 聚类/团簇度量和输出选项. 该示例将使用四核苷酸rGACC的轨迹, 它是由多维副本交换动力学(MREMD, 24个Temperture, 8个aMD)产生的. 尽管最初的轨迹中包含了显式的TIP3P水分子, 但我们将去除溶剂分子以减小轨迹的大小. 该数据和分析首先(部分地)由Roe等人发表在<a href="http://pubs.acs.org/doi/abs/10.1021/jp4125099">J. Phys. Chem. B, 2014, 118(13), pp 2543-3552</a></p>
+<h2>文件</h2>
+<ul>
+<li><a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/Cluster/rGACC.nowat.parm7">rGACC.nowat.parm7</a>: 拓扑文件, rGACC和3个Na+离子.</li>
+<li><a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/Cluster/rGACC.MREMD1.nowat.nc.40">rGACC.MREMD1.nowat.nc.40</a>: rGACC M-REMD 轨迹, 300 K, 运行1.</li>
+<li><a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/Cluster/rGACC.MREMD2.nowat.nc.40">rGACC.MREMD2.nowat.nc.40</a>: rGACC M-REMD 轨迹, 300 K, 运行2.</li>
+<li><a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/Cluster/cpptraj.cluster.in">cpptraj.cluster.in</a>: 用于单轨迹聚类/团簇分析的<code>CPPTRAJ</code>输入文件</li>
+<li><a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/Cluster/cpptraj.combined.cluster.in">cpptraj.combined.cluster.in</a>: 用于组合聚类/团簇分析的<code>CPPTRAJ</code>输入文件</li>
+</ul>
+<p>请注意, 虽然提供了输入文件, 我们仍鼓励用户使用命令行输入命令以便更好地熟悉<code>CPPTRAJ</code>工作流程和命令选项.</p>
+<h2>使用<code>CPPTRAJ</code>进行聚类/团簇分析</h2>
+<h3>第一步: 加载拓扑与轨迹文件</h3>
+<p>我们将首先对单个轨迹进行聚类/团簇分析. 在终端中输入<code>cpptraj</code>, 并输入以下命令加载拓扑与轨迹文件:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;Parm&lt;/span&gt; rGACC.nowat.parm7
+&lt;span style="color:#A2F"&gt;Trajin&lt;/span&gt; rGACC.MREMD1.nowat.nc.40&lt;/pre&gt;&lt;/div&gt;<p>由于这些轨迹中包含离子, 而我们只对rGACC本身感兴趣, 因此我们可以使用<code>strip</code>命令删除离子(确保它们不会出现在任何输出结构中). 我们还将使用<code>outprefix</code>关键字, 以便将去除离子后相应的拓扑文件命名为<code>noions.rGACC.nowat.parm7</code>. 请注意, 这是可选步骤, 并不是后续聚类/团簇分析所必需的.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;strip&lt;/span&gt; :Na+ outprefix noions&lt;/pre&gt;&lt;/div&gt;<h3>第二步: <code>Clustering</code>命令</h3>
+<p>接下来我们说明一下<code>Clustering</code>命令, 该命令下有许多选项, 主要分为四大类: 聚类/团簇算法, 距离度量, 输出以及坐标输出.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;cluster&lt;/span&gt; C0 \
+        &lt;span style="color:#A2F"&gt;dbscan&lt;/span&gt; minpoints 25 epsilon 0.9 sievetoframe \
+        &lt;span style="color:#A2F"&gt;rms&lt;/span&gt; :1@N2,O6,C1',P,:2@H2,N6,C1',P,:3@O2,H5,C1',P,:4@O2,H5,C1',P \
+        &lt;span style="color:#A2F"&gt;sieve&lt;/span&gt; 10 random \
+        &lt;span style="color:#A2F"&gt;out&lt;/span&gt; cnumvtime.dat \
+        &lt;span style="color:#A2F"&gt;sil&lt;/span&gt; Sil \
+        &lt;span style="color:#A2F"&gt;summary&lt;/span&gt; summary.dat \
+        &lt;span style="color:#A2F"&gt;info&lt;/span&gt; info.dat \
+        &lt;span style="color:#A2F"&gt;cpopvtime&lt;/span&gt; cpopvtime.agr normframe \
+        &lt;span style="color:#A2F"&gt;repout&lt;/span&gt; rep repfmt pdb \
+        &lt;span style="color:#A2F"&gt;singlerepout&lt;/span&gt; singlerep.nc singlerepfmt netcdf \
+        &lt;span style="color:#A2F"&gt;avgout&lt;/span&gt; Avg avgfmt restart&lt;/pre&gt;&lt;/div&gt;<p>我们将简要介绍一下各选项的一些细节:</p>
+<ul>
+<li><code>C0</code>: 聚类/团簇输出数据集合的名称.</li>
+</ul>
+<h4>聚类/团簇选项</h4>
+<ul>
+<li><code>dbscan</code>: 使用DBSCAN(基于密度)的团簇算法</li>
+<li><code>minpoints</code>: 形成聚类/团簇的最小点数</li>
+<li><code>epsilon</code>: 形成聚类/团簇的截断距离</li>
+<li><code>sievetoframe</code>: 通过与所有聚类/团簇帧(而不仅仅是质心)进行比较来恢复经过筛选的帧.</li>
+</ul>
+<h4>距离度量选项</h4>
+<ul>
+<li><code>rms</code>: 使用原子的RMSD作为距离度量</li>
+<li><code>sieve 10</code>: 通常情况下, 生成成对距离矩阵(每帧到其他帧的距离)是聚类/团簇计算中非常耗时耗力的部分. "筛分"是一种通过使用<code>total/10</code>帧进行初始聚类的方法, 可以减少此步骤的开销. 然后将筛分后的帧添加到那些簇中, 作为附加步骤. 请注意, 在大多数情况下, 您还需要使用<code>random</code>关键字来使用随机(而不是有序)筛选; 为保证可重复性, 本教程中并没有使用这个关键词.</li>
+</ul>
+<h4>输出选项</h4>
+<ul>
+<li><code>out &lt;file&gt;</code>: 将聚类/团簇数量随时间的变化写入<code>file</code>文件. 注意, 由于DBSCAN算法具有"噪声"概念, 因此任何噪声帧都将分配给簇-1(无团簇).</li>
+<li><code>summary &lt;file&gt;</code>: 将全部聚类/团簇计算摘要写入<code>file</code></li>
+<li><code>info &lt;file&gt;</code>: 将详细的聚类/团簇结果(包括DBI, pSF等)写入<code>file</code></li>
+<li><code>cpopvtime &lt;file&gt; normframe</code>: 将聚类/团簇布居数目随时间的变化写入<code>file</code>, 布局数目根据总帧数进行归一化.</li>
+</ul>
+<h4>坐标输出选项</h4>
+<ul>
+<li><code>repout &lt;prefix&gt; repfmt pdb</code>: 将聚类/团簇代表以pdb的格式写入<code>prefix.cX.fmt</code>, 其中X为聚类/团簇编号, <code>fmt</code>为默认格式拓展名</li>
+<li><code>singlerepout &lt;file&gt; singlerepfmt netcdf</code>: 以NetCDF格式将所有聚类/团簇代表写入<code>file</code></li>
+<li><code>avgout &lt;prefix&gt; avgfmt restart</code>: 以Amber重启文件格式将每个聚类/团簇中所有帧的平均值写入<code>prefix.cX.fmt</code></li>
+</ul>
+<p>当读入输入文件后, 输入<code>run</code>命令开始对轨迹进行处理与分析. 即便对相当先进的CPU来说, 这个过程也将运行大约一分钟, 所以请保持耐心. 当聚类/团簇分析结束后可以输入<code>quit</code>来退出<code>CPPTRAJ</code>. 现在你便得到了许多包含聚类结果的输出文件. 检查<code>summary.dat</code>文件便可发现共有16个聚类/团簇. 有关输出选项的更详细介绍参见Amber手册.</p>
+<p>通常我们最感兴趣的输出是<code>cpopvtime.arg</code>(xmgrace格式)文件中聚类/团簇布居数目随时间的变化. 可以看到, 在轨迹的开始阶段聚类/团簇布居随时间快速变化, 随后, 聚类/团簇布居逐渐趋于稳定, 最终达到约为70000帧. 这表明聚类/团簇布居达到了平衡, 其结果可能适用于热力学等方面的分析. 不过, 确定这一点的更好方法是将当下结果与独立运行的其他结果进行比较.</p>
+<h2>使用<code>CPPTRAJ</code>进行组合聚类/团簇分析</h2>
+<p>"收敛"是分子模拟中的一个重要概念, 它是一种衡量构象势能面采样有效性的方法. 从单个点(即构象)开始的模拟在一段时间后, 动力学上可能会陷于某个局部能量极小点, 从单次模拟中, 我们很难确定这种情况是否发生. 然而, 如果以不同的初始条件和/或不同的初始构象(理想情况下两者都不同)对体系进行其他模拟, 最终应该会对相同的构象进行采样, 并得到相同的布局分布. 一旦发生这种情况, 我们便认为模拟已经"收敛". 当两个或多个模拟已经收敛且结构布居不再发生显著变化时, 我们便可以从中计算具有一定确定性的热力学量.</p>
+<p>聚类/团簇分析可以被用来比较不同运行模拟结果的结构布居, 并作为确定是否收敛的判据. 但比较不同轨迹之间的聚类/团簇分析结果是项较有挑战性的工作. 不同轨迹中可能存在完全不同的布居, 有些特殊构象也可能只存在于某一轨迹中. 为了便于比较不同轨迹之间的聚类/团簇, CPPTARJ程序提供了"组合聚类/团簇分析"功能, 其中聚类/团簇分析可以在两个(或者更多)组合轨迹上进行, 随后基于原始轨迹对结果进行划分.</p>
+<h3>第一步: 载入拓扑与轨迹文件</h3>
+<p>由于我们在聚类/团簇分析之前需要将两个轨迹组合在一起, 因此我们需要知道每个轨迹中分别有多少帧, 以便使<code>cluster</code>命令明确何处去划分聚类/团簇分析的结果. 这可以通过一下命令实现:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;cpptraj&lt;/span&gt; &lt;span style="color:#666"&gt;-p&lt;/span&gt; rGACC.nowat.parm7 &lt;span style="color:#666"&gt;-y&lt;/span&gt; rGACC.MREMD1.nowat.nc.40 &lt;span style="color:#666"&gt;-tl&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;<p>这里<code>-p</code>选项载入拓扑文件, <code>-y</code>选项载入轨迹文件, <code>-tl</code>选项用以输出帧数. 此处的输出显示为:</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;Frames:&lt;/span&gt; 83843&lt;/pre&gt;&lt;/div&gt;<p>所以我们应该在组合轨迹的第83843帧处将其划分开.</p>
+<p>在命令行中再次输入<code>cpptraj</code>启动<code>CPPTRAJ</code>. 显示交互信息后, 按照之前同样的方式载入拓扑与轨迹文件(并去除离子):</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parm&lt;/span&gt; rGACC.nowat.parm7
+&lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; rGACC.MREMD1.nowat.nc.40
+&lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; rGACC.MREMD2.nowat.nc.40
+&lt;span style="color:#A2F"&gt;strip&lt;/span&gt; :Na+ outprefix noions&lt;/pre&gt;&lt;/div&gt;<p>请注意, 这是可选步骤, 并不是后续聚类/团簇分析中所必需的.</p>
+<h3>第二步: 组合聚类/团簇分析中的<code>Clustering</code>命令</h3>
+<p>现在开始输入<code>clustering</code>命令选项, 大部分与之前的相同, 除了我们加入了进行组合分析的关键词.</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;cluster&lt;/span&gt; C1 \
+        &lt;span style="color:#A2F"&gt;dbscan&lt;/span&gt; minpoints 25 epsilon 0.9 sievetoframe \
+        &lt;span style="color:#A2F"&gt;rms&lt;/span&gt; :1@N2,O6,C1',P,:2@H2,N6,C1',P,:3@O2,H5,C1',P,:4@O2,H5,C1',P \
+        &lt;span style="color:#A2F"&gt;sieve&lt;/span&gt; 20 \
+        &lt;span style="color:#A2F"&gt;out&lt;/span&gt; combined.cnumvtime.dat \
+        &lt;span style="color:#A2F"&gt;info&lt;/span&gt; combined.info.dat \
+        &lt;span style="color:#A2F"&gt;summarysplit&lt;/span&gt; split.dat splitframe 83843&lt;/pre&gt;&lt;/div&gt;<p>这里有两个新的关键词:</p>
+<ul>
+<li><code>summarysplit &lt;file&gt;</code>: 将分割的聚类/团簇信息写入文件<code>file</code></li>
+<li><code>splitframe 83843</code>: 将聚类/团簇信息于83843帧处分割(即第一段轨迹结束的地方)
+当读入输入文件后, 输入<code>run</code>命令开始对轨迹进行处理与分析. 保持耐心, 这将比之前的分析花费更多的时间. 当聚类/团簇分析结束后可以输入<code>quit</code>来退出<code>CPPTRAJ</code>.</li>
+</ul>
+<p>组合聚类/团簇分析的主要输出信息在<code>split.dat</code>文件中, 文件首两行说明了组合轨迹是如何被分割的以及每部分的总帧数.</p>
+<pre><code># 1st &lt;= 83843 &lt; 2nd
+# 1st= 83843  2nd= 108887
+</code></pre>
+<p>接下来几列分别为:</p>
+<ul>
+<li><code>#Cluster</code>: 聚类/团簇数</li>
+<li><code>Total</code>: 聚类/团簇中的总帧数</li>
+<li><code>Frac</code>: 聚类/团簇的帧数占总帧数的比例</li>
+<li><code>C#</code>: <code>Grace</code>程序可兼容的聚类/团簇的颜色代码, 从1开始, 14及以上的聚类/团簇都被指定为颜色15</li>
+<li><code>Color</code>: <code>Grace</code>程序兼容的颜色名称(使用<code>Grace</code>默认方案)</li>
+<li><code>NumIn1st NumIn2nd</code>: 分别落入第一轨迹和第二轨迹的聚类/团簇的帧数</li>
+<li><code>Frac1 Frac2</code>: 分别落入第一轨迹和第二轨迹的聚类/团簇的比例</li>
+<li><code>First1 First2</code>: 最先在第一轨迹或第二轨迹中形成聚类/团簇的帧</li>
+</ul>
+<p>第一和第二轨迹之间的聚类/团簇布居非常一致(布居分数的最大绝对差值约为0.015), 表明两个轨迹收敛得相对较好.</p>

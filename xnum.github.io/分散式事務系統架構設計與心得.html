@@ -1,0 +1,64 @@
+<h2>原文：<a href="https://xnum.github.io/2017/10/26/dts">分散式事務系統架構設計與心得</a></h2>
+<hr/>
+<p>layout: post
+title: 分散式事務系統架構設計與心得
+categories:</p>
+<h2>- 筆記</h2>
+<h2>前言</h2>
+<p>本文所研究之系統，應用場景為需要高度正確性、一致性、低故障後恢復時間的交易系統、金融系統</p>
+<p>與需要高並發，低延時的網站系統、訂票系統，著重的特點略有不同</p>
+<h2>Intro.</h2>
+<p><a href="https://en.wikipedia.org/wiki/Distributed_transaction">分散式事務</a> Distributed transaction 或稱分佈式事務</p>
+<p>一個<a href="https://en.wikipedia.org/wiki/Database_transaction">資料庫事務</a>通常包含了一個序列的對資料庫的讀/寫操作。它的存在包含有以下兩個目的：
+為資料庫操作序列提供了一個從失敗中恢復到正常狀態的方法，同時提供了資料庫即使在異常狀態下仍能保持一致性的方法。
+當多個應用程式在並發訪問資料庫時，可以在這些應用程式之間提供一個隔離方法，以防止彼此的操作互相干擾。</p>
+<p>一個分散式應用系統(如交易系統、網站系統、網路遊戲系統等)內通常包含運算、傳輸、資料數據記錄等功能，其中對於資料數據的紀錄操作通常交由資料庫系統處理，即<a href="https://en.wikipedia.org/wiki/Database_transaction">資料庫事務</a>(database transaction)。在中小型系統架構中，可能以資料庫提供之資料表分表、資料庫叢集等功能以滿足系統的scalability和availability，即依賴的是資料儲存層。而一個大型系統可能橫跨多種資料庫系統或外部系統，這時就有在業務層自行實作分散式事務系統的需求性。</p>
+<h2>剛性事務 vs 柔性事務</h2>
+<p>剛性事務：必須滿足ACID理論，即事務進行期間，資源被鎖定，其他事務不能存取該資源
+柔性事務：滿足BASE理論，相對於剛性事務，分為幾種類型</p>
+<ol>
+<li>補償型</li>
+<li>二階段型</li>
+<li>異步確認型</li>
+<li>最大努力通知型</li>
+</ol>
+<p>ref: <a href="http://kaimingwan.com/post/fen-bu-shi/fen-bu-shi-shi-wu-de-dian-xing-chu-li-fang-shi-2pc-tcc-yi-bu-que-bao-he-zui-da-nu-li-xing">http://kaimingwan.com/post/fen-bu-shi/fen-bu-shi-shi-wu-de-dian-xing-chu-li-fang-shi-2pc-tcc-yi-bu-que-bao-he-zui-da-nu-li-xing</a></p>
+<p>對事務特性分類，有助於尋找不同使用情境下適合的演算法</p>
+<h2>一致性</h2>
+<h4>強一致性</h4>
+<p>數據一旦更新後，任何讀取都能馬上返回剛剛更新的結果</p>
+<h4>弱一致性</h4>
+<p>不保證馬上更新，盡量在某個時間點後保證返回更新的結果</p>
+<h4>最終一致性</h4>
+<h2>分散式事務的幾種可能作法</h2>
+<h4>TCC事務 try/confirm/cancel (補償型)</h4>
+<p>對已提交的事務有取消後的補償回滾機制，適用此方法</p>
+<h4>2PC 二階段提交 (二階段型)</h4>
+<p>全局寫日誌以進行重建或回復</p>
+<p>master發送訊息給所有slave，確認皆可完成後才提交</p>
+<p>效能影響較大 (request次數、等待最慢slave)</p>
+<p>延伸有3PC 三階段提交</p>
+<h4>消息狀態確認系統</h4>
+<p>發起方重送請求
+接收方透過滿足冪等性，解決重複請求問題</p>
+<p>ref: <a href="http://www.cnblogs.com/LBSer/p/4715395.html">http://www.cnblogs.com/LBSer/p/4715395.html</a></p>
+<p><a href="http://www.cnblogs.com/xybaby/p/7465816.html">http://www.cnblogs.com/xybaby/p/7465816.html</a></p>
+<p><a href="http://www.cnblogs.com/xybaby/p/6871764.html">http://www.cnblogs.com/xybaby/p/6871764.html</a></p>
+<p><a href="http://www.infoq.com/cn/articles/cap-twelve-years-later-how-the-rules-have-changed">http://www.infoq.com/cn/articles/cap-twelve-years-later-how-the-rules-have-changed</a></p>
+<p>ref: 上海交易所的技術主管 <a href="http://blog.sina.com.cn/drwjf">http://blog.sina.com.cn/drwjf</a></p>
+<h1>以下待補</h1>
+<h2>Paxos Raft, Message Queue</h2>
+<h3>消息隊列系統 Message Queue</h3>
+<h4>Quorum(NRW)算法</h4>
+<p>對數據分散式儲存如果利用多台機器允餘的作法</p>
+<p>需要對所有機器寫入成功後從任一台讀取</p>
+<p>而NRW算法透過鴿籠原理，減少寫入需要的機器數，增加讀取需要的機器數滿足</p>
+<p>但內部仍然會維持所有機器數據相同</p>
+<p><a href="https://juejin.im/entry/5a1549786fb9a0451b0431ea">https://juejin.im/entry/5a1549786fb9a0451b0431ea</a></p>
+<h4>Software Transactional Memory</h4>
+<p>STM依賴語言或lib層面的支援，做於lock-free算法使用</p>
+<p>保證變數存取間就算無鎖，也會讓多執行緒看起來不是交錯執行</p>
+<p>從而保證修改前後的一致性(不會觀察到修改中的數值)</p>
+<p><a href="http://blog.yoco.io/2012/09/transaction-memory.html">http://blog.yoco.io/2012/09/transaction-memory.html</a></p>
+<h1>相關文章</h1>
+<p><a href="http://www.iocoder.cn/Sharding-JDBC/transaction-bed/?csdn&amp;2017-10-31">Sharding-JDBC 源码分析 —— 分布式事务（一）之最大努力型</a></p>

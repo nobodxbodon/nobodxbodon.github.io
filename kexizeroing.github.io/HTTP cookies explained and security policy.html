@@ -1,0 +1,77 @@
+<h2>原文：<a href="https://kexizeroing.github.io/http-cookies-explained-and-security">HTTP cookies explained and security policy</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "HTTP cookies explained and security policy"
+slug: http-cookies-explained-and-security
+description: ""
+added: "Nov 16 2022"
+tags: [web]</p>
+<h2>updatedDate: "Mar 5 2024"</h2>
+<p>An HTTP cookie is a small piece of data that a server sends to the user's web browser. The browser may store it and send it back with later requests to the same server. Typically, it's used to tell if two requests came from the same browser — keeping a user logged-in, for example. It remembers stateful information for the stateless HTTP protocol.</p>
+<p>After receiving an HTTP request, a server can send one or more <code>Set-Cookie</code> headers with the response. The cookie is stored by the browser, and then the cookie is sent with requests inside a <code>Cookie</code> HTTP header. An expiration date or duration can be specified, after which the cookie is no longer sent. Additional restrictions to a specific domain and path can be set, limiting where the cookie is sent.</p>
+<pre><code>HTTP/2.0 200 OK
+Content-Type: text/html
+Set-Cookie: yummy_cookie=choco
+Set-Cookie: tasty_cookie=strawberry
+
+GET /sample_page.html HTTP/2.0
+Host: www.example.org
+Cookie: yummy_cookie=choco; tasty_cookie=strawberry
+</code></pre>
+<h3>Cookie restrictions</h3>
+<pre><code>Set-Cookie: &lt;cookie-name&gt;=&lt;cookie-value&gt;; Max-Age=&lt;number&gt;; Domain=&lt;domain-value&gt;; Secure; HttpOnly
+
+Set-Cookie: sessionId=38afes7a8
+Set-Cookie: id=a3fWa; Expires=Wed, 21 Oct 2015 07:28:00 GMT
+Set-Cookie: mykey=myvalue; SameSite=Strict
+</code></pre>
+<p>The lifetime of a cookie can be defined in two ways:</p>
+<ul>
+<li><strong>Session cookies</strong> are deleted when the current session ends. (Some browsers have a session restore feature that will save all tabs and restore them next time the browser is used. Session cookies will also be restored, as if the browser was never closed, which can cause session cookies to last indefinitely long).</li>
+<li><strong>Permanent cookies</strong> are deleted at a date specified by the <code>Expires</code> attribute, or after a period of time in seconds specified by the <code>Max-Age</code> attribute. If both <code>Expires</code> and <code>Max-Age</code> are set, <code>Max-Age</code> has precedence.</li>
+</ul>
+<p>A cookie with the <code>Secure</code> attribute is sent to the server only over the HTTPS protocol, never with unsecured HTTP (except on localhost). Insecure sites <code>http:</code> cannot set cookies with the <code>Secure</code> attribute. A cookie with the <code>HttpOnly</code> attribute is inaccessible to the JavaScript <code>document.cookie</code> API; it is sent only to the server.</p>
+<blockquote><p>Normally localhost should be treated as a secure origin even if not HTTPs. Both Chrome (<a href="https://bugs.chromium.org/p/chromium/issues/detail?id=1056543">https://bugs.chromium.org/p/chromium/issues/detail?id=1056543</a>) and Firefox (<a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1648993">https://bugzilla.mozilla.org/show_bug.cgi?id=1648993</a>) fixed issues to allow Secure cookies for localhost. The <code>https:</code> requirements are ignored when the <code>Secure</code> attribute is set by localhost since Firefox 75 and Chrome 89. However, Safari doesn’t set Secure cookies on localhost, as Firefox and Chrome do.</p>
+</blockquote>
+<p>The <code>Domain</code> attribute specifies which hosts are allowed to receive the cookie. If unspecified, defaults to the host of the current document URL, <strong>not including subdomains</strong>. If <code>Domain</code> is specified, then <strong>subdomains are always included</strong>. For example, if the value of the <code>Domain</code> attribute is "example.com", the user agent will include the cookie in the Cookie header when making HTTP requests to <code>example.com</code>, <code>www.example.com</code>, and <code>www.corp.example.com</code>. If the server omits the <code>Domain</code> attribute, the user agent will return the cookie only to the origin server.</p>
+<p>The <code>Path</code> attribute indicates a URL path that must exist in the requested URL in order to send the Cookie. For example, if <code>Path=/docs</code> is set, <code>/docs</code>, <code>/docs/Web/</code>, <code>/docs/Web/HTTP</code> are all matched.</p>
+<p>The <code>SameSite</code> attribute lets servers require that a cookie shouldn't be sent with cross-origin requests. It takes three possible values: <code>Strict</code>, <code>Lax</code>, and <code>None</code>. With <code>Strict</code>, the cookie is sent only to the same site as the one that originated it. In user terms, the cookie will only be sent if the site for the cookie matches the site currently shown in the browser's URL bar. <code>Lax</code> is similar, with an exception for when the user navigates to a URL from an external site, such as by following a link. <strong>This is the default behavior if the <code>SameSite</code> attribute is not specified.</strong> <code>None</code> has no restrictions on cross-site requests, but requires that the <code>Secure</code> attribute must be used: <code>SameSite=None; Secure</code>.</p>
+<h3>Cross-Site Request Forgery (CSRF) attacks</h3>
+<p>These attacks are possible because web browsers send authentication tokens automatically with every request to the server. It takes advantage of the user's previously authenticated session. An example of a CSRF attack:</p>
+<ol>
+<li>A user signs into <code>www.good-banking-site.com</code>. The server authenticates the user and issues a response that includes an authentication cookie. The site is vulnerable to attack because it trusts any request that it receives with a valid authentication cookie.</li>
+<li>The user visits a malicious site <code>www.bad-crook-site.com</code>. It contains an HTML form similar to the following:<pre><code class="lang-html">&lt;h1&gt;Congratulations! You're a Winner!&lt;/h1&gt;
+&lt;form action="http://good-banking-site.com/api/account" method="post"&gt;
+ &lt;input type="hidden" name="Transaction" value="withdraw"&gt;
+ &lt;input type="hidden" name="Amount" value="1000000"&gt;
+ &lt;input type="submit" value="Click to collect your prize!"&gt;
+&lt;/form&gt;
+</code></pre>
+</li>
+<li>The user clicks the submit button. The browser makes the request and automatically includes the authentication cookie for the requested domain <code>www.good-banking-site.com</code>. The server has the user's authentication context and can perform any action that an authenticated user is allowed to perform.</li>
+</ol>
+<p><strong>How to prevent CSRF:</strong></p>
+<ul>
+<li>Use <code>sameSite</code> Cookie</li>
+<li>Determine the origin of the request is coming from. It can be done via <code>Origin</code> or <code>Referer</code> header.</li>
+<li>Include a CSRF token as a hidden field when the form is submitted. This token is a unique, secret, unpredictable value generated by the server-side and transmitted to the client in such a way that it is included in a subsequent HTTP request made by the client.</li>
+</ul>
+<h3>Cross-site scripting</h3>
+<p>Cross-site scripting (XSS) is a security bug that can affect websites. This bug can allow an attacker to add their own malicious JavaScript code onto the HTML pages displayed to the users. The vulnerabilities most often happen when user input is sent to the server, and the server responds back to the user by displaying a page that includes the user input without validation. XSS also can occur entirely in the client-side without data being sent back and forth between the client and server.</p>
+<p>A common technique for preventing XSS vulnerabilities is "escaping". The purpose of character and string escaping is to make sure that every part of a string is interpreted as a string primitive, not as a control character or code. Escape certain characters (like <code>&lt;</code>, <code>&gt;</code>, <code>&amp;</code>, and <code>"</code>) with HTML entity to prevent them being executed.</p>
+<p>A good test string is <code>&gt;'&gt;"&gt;&lt;img src=x onerror=alert(0)&gt;</code>. If your application doesn't correctly escape this string, you will see an alert and will know that something went wrong. <a href="https://github.com/minimaxir/big-list-of-naughty-strings">The Big List of Naughty Strings</a> is a list of strings which have a high probability of causing issues when used as user-input data.</p>
+<blockquote><p>We do not recommend that you manually escape user-supplied data. Instead, we strongly recommend that you use a templating system or web development framework that provides context-aware auto-escaping. If this is impossible for your website, use existing libraries (e.g., <a href="https://github.com/cure53/DOMPurify">DOMPurify</a>, <a href="https://github.com/component/escape-html">escape-html</a>) that are known to work, and apply them consistently to all user-supplied data.</p>
+</blockquote>
+<p>It’s recommended to avoid storing any sensitive information in local storage where authentication would be assumed. You can trivially read all data stored in local storage with <code>Object.entries(localStorage)</code>. This means if your website is vulnerable to XSS attacks, where a third party can run arbitrary scripts, your users’ tokens can be easily stolen. Cookies, on the other hand, can’t be read by client-side JS if you add the <code>HttpOnly</code> flag.</p>
+<h2>Content Security Policy</h2>
+<p>Configuring Content Security Policy involves adding the <code>Content-Security-Policy</code> HTTP header to a web page and giving it values to control what resources the user agent is allowed to load for that page. If the site doesn't offer the CSP header, browsers likewise use the standard same-origin policy. A properly designed Content Security Policy helps protect a page against a cross-site scripting attack. There are specific directives for a wide variety of types of items, so that each type can have its own policy, including fonts, frames, images, audio and video media, scripts, and workers.</p>
+<p><a href="https://github.com/helmetjs/helmet">Helmet</a> helps secure Express apps by setting HTTP response headers including <code>Content-Security-Policy</code>.</p>
+<pre><code>Content-Security-Policy: default-src 'self'; script-src 'self' cdn.example.com; img-src 'self' img.example.com; style-src 'self';
+</code></pre>
+<p>The above policy permits:</p>
+<ul>
+<li>All content to be loaded only from the site's own origin.</li>
+<li>Scripts to be loaded from the site's own origin and <code>cdn.example.com</code>.</li>
+<li>Images from the site's own origin and <code>img.example.com</code></li>
+<li>Styles only from the site's origin.</li>
+</ul>

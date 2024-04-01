@@ -1,0 +1,178 @@
+<h2>原文：<a href="https://kexizeroing.github.io/swr-swc-msw">SWR, SWC, and MSW</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "SWR, SWC, and MSW"
+slug: swr-swc-msw
+description: ""
+added: "Oct 25 2023"
+tags: [web]</p>
+<h2>updatedDate: "Mar 11 2024"</h2>
+<p>SWR, SWC, and MSW, three similar names, are always mentioned in the context of web development, but they are totally different things. In this article, we will learn each of them and where they are used.</p>
+<h2>SWR - React Hooks for Data Fetching</h2>
+<p>The name “SWR” is derived from <code>stale-while-revalidate</code>, a HTTP cache invalidation strategy. SWR is created by the same team behind Next.js.</p>
+<pre><code class="lang-jsx">import useSWR from 'swr'
+// you can use the native fetch or tools like Axios
+const fetcher = (...args) =&gt; fetch(...args).then(res =&gt; res.json())
+
+function Profile () {
+  const { data, error, isLoading } = useSWR('/api/user/123', fetcher)
+
+  if (error) return &lt;div&gt;failed to load&lt;/div&gt;
+  if (isLoading) return &lt;div&gt;loading...&lt;/div&gt;
+
+  return &lt;div&gt;hello {data.name}!&lt;/div&gt;
+}
+</code></pre>
+<p>When building a web app, you might need to reuse the data in many places of the UI. It is incredibly easy to create reusable data hooks on top of SWR:</p>
+<pre><code class="lang-jsx">function useUser (id) {
+  const { data, error, isLoading } = useSWR(`/api/user/${id}`, fetcher)
+
+  return {
+    user: data,
+    isLoading,
+    isError: error
+  }
+}
+
+// use it in your components
+function Content () {
+  const { user, isLoading } = useUser()
+  if (isLoading) return &lt;Spinner /&gt;
+  return &lt;h1&gt;Welcome back, {user.name}&lt;/h1&gt;
+}
+
+function Avatar () {
+  const { user, isLoading } = useUser()
+  if (isLoading) return &lt;Spinner /&gt;
+  return &lt;img src={user.avatar} alt={user.name} /&gt;
+}
+</code></pre>
+<p>By adopting this pattern, you can forget about fetching data in the imperative way: start the request, update the loading state, and return the final result. Instead, your code is more declarative: you just need to specify what data is used by the component.</p>
+<p>The most beautiful thing is that there will be only 1 request sent to the API, because they use the same SWR key (normally the API URL) and the request is cached and shared automatically. Also, the application now has the ability to refetch the data on user focus or network reconnect.</p>
+<h3>Automatic Revalidation</h3>
+<ul>
+<li>When you re-focus a page or switch between tabs, SWR automatically revalidates data.</li>
+<li>SWR will give you the option to automatically refetch data on interval.</li>
+<li>It's useful to also revalidate when the user is back online.</li>
+</ul>
+<h3>Mutation - manually revalidate the data</h3>
+<p>There're 2 ways to use the mutate API to mutate the data, the global mutate API which can mutate any key and the bound mutate API which only can mutate the data of corresponding SWR hook.</p>
+<p>When you call <code>mutate(key)</code> (or just <code>mutate()</code> with the bound mutate API) without any data, it will trigger a revalidation (mark the data as expired and trigger a refetch) for the resource.</p>
+<pre><code class="lang-jsx">// an example of bound mutate 
+function Profile () {
+  const { data, mutate } = useSWR('/api/user', fetcher)
+
+  return (
+    &lt;div&gt;
+      &lt;h1&gt;My name is {data.name}.&lt;/h1&gt;
+      &lt;button onClick={async () =&gt; {
+        const newName = data.name.toUpperCase()
+        await requestUpdateUsername(newName)
+        // update the local data immediately and revalidate (refetch)
+        mutate({ ...data, name: newName })
+      }}&gt;Uppercase my name!&lt;/button&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<h3>React Query</h3>
+<p>SWR and React Query (new name: TanStack Query) are the two most popular libraries that can be used to manage data fetching in a React application. SWR is a smaller library that focuses on providing a simple way to fetch and cache data, while React Query is a more comprehensive library that offers a wider range of features.</p>
+<pre><code class="lang-jsx">// Standard fetch in useEffect example
+function Bookmarks({ category }) {
+  const [data, setData] = useState([])
+  const [error, setError] = useState()
+
+  useEffect(() =&gt; {
+    fetch(`${endpoint}/${category}`)
+      .then(res =&gt; res.json())
+      .then(d =&gt; setData(d))
+      .catch(e =&gt; setError(e))
+  }, [category])
+
+  // Return JSX based on data and error state
+}
+</code></pre>
+<p>Bugs from the above code:</p>
+<ol>
+<li>Race Condition. Network responses can arrive in a different order than you sent them. So if you change the <code>category</code> from <code>books</code> to <code>movies</code> and the response for <code>movies</code> arrives before the response for <code>books</code>, you'll end up with the wrong data in your component. See <a href="https://maxrozen.com/race-conditions-fetching-data-react-with-useeffect">https://maxrozen.com/race-conditions-fetching-data-react-with-useeffect</a> to know how to fix the <code>useEffect</code> race condition.</li>
+<li>Both data and error are separate state variables, and they don't get reset when <code>category</code> changes. If we check for error first, we'll render the error UI with the old message even though we have valid data. If we check data first, we have the same problem if the second request fails.</li>
+<li>If your app is wrapped in <code>&lt;React.StrictMode&gt;</code>, React will intentionally call your effect twice in development mode to help you find bugs like missing cleanup functions.</li>
+<li><code>fetch</code> doesn't reject on HTTP errors, so you'd have to check for <code>res.ok</code> and throw an error yourself.</li>
+</ol>
+<p>With React Query, the above code becomes:</p>
+<pre><code class="lang-jsx">function Bookmarks({ category }) {
+  const { isLoading, data, error } = useQuery({
+    // Treat parameters as dependencies
+    queryKey: ['bookmarks', category],
+    queryFn: () =&gt;
+      fetch(`${endpoint}/${category}`).then((res) =&gt; {
+        if (!res.ok) {
+          throw new Error('Failed to fetch')
+        }
+        return res.json()
+      }),
+  })
+
+  // Return JSX based on data and error state
+}
+</code></pre>
+<p>React Query, as an async state manager, works with any function that returns a Promise and embraces the stale-while-revalidate caching strategy. The library tries to keep your data as fresh as possible while at the same time showing data to the user as early as possible.</p>
+<blockquote><p>TanStack Query is a server-state library, responsible for managing asynchronous operations between your server and client. Vuex, Pinia, Zustand, etc. are client-state libraries that can be used to store asynchronous data.</p>
+</blockquote>
+<p><code>staleTime</code> is the duration until a query transitions from fresh to stale. As long as the query is fresh, data will always be read from the cache only - no network request will happen. If the query is stale (which per default is: instantly), you will still get data from the cache, but a background refetch can happen.</p>
+<p>Stale queries are refetched automatically in the background when:</p>
+<ul>
+<li>Its corresponding component mounts (<code>refetchOnMount</code>)</li>
+<li>The window is refocused (<code>refetchOnWindowFocus</code>)</li>
+<li>The network is reconnected (<code>refetchOnReconnect</code>)</li>
+<li>The query is optionally configured with a refetch interval (<code>refetchInterval</code>)</li>
+</ul>
+<h2>SWC - Rust-based platform for the Web</h2>
+<p>SWC (stands for Speedy Web Compiler) is a super-fast TypeScript / JavaScript compiler written in Rust, and can be used for both compilation and bundling. SWC is 20x faster than babel on a single-core benchmark, 68x faster than babel on a multicore benchmark.</p>
+<pre><code class="lang-sh">npm i -D @swc/cli @swc/core
+
+# Transpile one file and emit to stdout
+npx swc ./file.js
+
+# Transpile one file and emit to `output.js`
+npx swc ./file.js -o output.js
+</code></pre>
+<p>SWC is able to bundle multiple JavaScript or TypeScript files into one. This feature is currently named <code>spack</code>. ——This feature is still under construction. Also, the main author of SWC works for Turbopack by Vercel, so this feature is not a something that will be actively developed.</p>
+<p>SWC is now a mature replacement for Babel, which was used in Vite 3.0. Vite 4.0 adds support for SWC. From Vite 4, two plugins are available for React projects with different tradeoffs.</p>
+<ul>
+<li><code>@vitejs/plugin-react</code> is the default Vite plugin for React projects, which uses esbuild and Babel.</li>
+<li><code>@vitejs/plugin-react-swc</code> uses SWC to transform your code.</li>
+</ul>
+<blockquote><ol>
+<li>SWC is a compiler, whereas esbuild is a bundler. SWC has limited bundling capabilities, so if you're looking for something to traverse your code and generate a single file, esbuild is what you want.</li>
+<li><code>tsup</code> is the simplest way to bundle your TypeScript libraries with no config, powered by esbuild. It can bundle anything that's supported by Node.js natively, namely <code>.js</code>, <code>.json</code>, <code>.mjs</code>, and TypeScript <code>.ts</code>, <code>.tsx</code>.</li>
+</ol>
+</blockquote>
+<h3>Oxc - The JavaScript Oxidation Compiler</h3>
+<p>Oxc is building a parser, linter, formatter, transpiler, minifier, resolver ... all written in Rust. This project shares the same philosophies as Biome. JavaScript tooling could be rewritten in a more performant language.</p>
+<p><a href="https://oxc-project.github.io/docs/guide/usage/linter.html">Oxlint</a> is a JavaScript linter designed to catch erroneous or useless code without requiring any configurations by default. It is generally available at December 12, 2023.</p>
+<h3>Biome - Toolchain of the web</h3>
+<ul>
+<li>Biome is a fast formatter that scores 96% compatibility with Prettier.</li>
+<li>Biome is a performant (and pre-configured) linter that features more than 170 rules from ESLint, TypeSCript ESLint, and other sources.</li>
+<li>Biome is designed from the start to be used interactively within an editor. It can format and lint malformed code as you are writing it.</li>
+</ul>
+<pre><code class="lang-sh">npx @biomejs/biome init
+
+npx @biomejs/biome format path/to/file
+npx @biomejs/biome lint
+npx @biomejs/biome check
+</code></pre>
+<h2>MSW - API mocking library</h2>
+<p>Mock Service Worker is an API mocking library for browser and Node.js that uses a Service Worker to intercept requests that actually happened. Developers come to MSW for various reasons: to establish proper testing boundaries, to prototype applications, debug network-related issues, or monitor production traffic.</p>
+<p>Mock Service Worker intercepts requests on the network level. It respects the Fetch API specification, which means that the mocked responses you construct are the same responses you would receive when making a fetch call.</p>
+<pre><code class="lang-js">// MSW 2.0 new syntax
+import { http, HttpResponse } from 'msw'
+
+export const handlers = [
+  http.get('/resource', () =&gt; {
+    return HttpResponse.text('Hello world!')
+  }),
+]
+</code></pre>
+<p>With MSW, we no longer need to worry about mocking specific libraries like Axios or the fetch method. It provides a library-agnostic solution, enabling consistent tests regardless of the underlying HTTP library used in our projects.</p>
