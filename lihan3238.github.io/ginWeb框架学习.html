@@ -1,0 +1,1584 @@
+<h2>原文：<a href="https://lihan3238.github.io/index">ginWeb框架学习</a></h2>
+<hr/>
+<p>title: ginWeb框架学习
+description: ginWeb框架基础学习（VScode+golang+ubuntu22.04.3LTS）
+slug: ginWebStudy
+date: 2023-09-11 13:40:00+0800
+image: gin.png
+categories:</p>
+<pre><code>- techStudy
+</code></pre>
+<p>tags:</p>
+<pre><code>- gin
+- go    
+</code></pre>
+<h1>weight: 1       # You can add weight to some posts to override the default sorting (date descending)</h1>
+<p>comments: true</p>
+<h1>license: flase</h1>
+<h1>math: true</h1>
+<h1>toc: true</h1>
+<h1>style:</h1>
+<h1>keywords:</h1>
+<h1>readingTime:</h1>
+<hr/>
+<h1>ginWeb框架学习(ubuntu22.04.3)</h1>
+<ul>
+<li><a href="https://github.com/lihan3238/ginWebStudy">代码仓库</a></li>
+</ul>
+<h2>gin</h2>
+<ul>
+<li><a href="https://gin-gonic.com/zh-cn/">gin官网</a></li>
+<li><a href="https://gin-gonic.com/zh-cn/docs/">gin中文文档</a></li>
+</ul>
+<h3>gin安装与环境配置</h3>
+<ol>
+<li>安装gin</li>
+</ol>
+<pre><code class="lang-shell"># 切换国内代理
+GOPROXY=https://goproxy.cn,direct
+# 安装gin
+go get -u github.com/gin-gonic/gin
+</code></pre>
+<ol>
+<li>安装postman</li>
+</ol>
+<p><a href="https://www.postman.com/">postman官网</a>
+用于调试post请求接口用</p>
+<ol>
+<li>测试gin是否安装成功</li>
+</ol>
+<pre><code class="lang-go">package main
+
+import "github.com/gin-gonic/gin"
+
+func main() {
+    router := gin.Default()
+    router.GET("/index", func(context *gin.Context) {
+        context.String(200, "Hello lihan!")
+    })
+    router.Run(":8080")
+}
+</code></pre>
+<pre><code class="lang-shell"># 运行
+go run main.go
+# 访问[主机地址]:8080/index
+# 例如 127.0.0.1:8080/index
+# 显示 Hello World! 则安装成功
+</code></pre>
+<h3>gin教程</h3>
+<h4>gin启动方式</h4>
+<pre><code class="lang-go">package main
+
+import (
+    "github.com/gin-gonic/gin"
+)
+
+func Index2(context *gin.Context) {
+    context.String(200, "Hello lihan2!")
+}
+
+func main() {
+
+    //创建一个默认路由引擎
+    router := gin.Default()
+
+    //注册一个路由和处理函数，访问/index的路由时，会执行后面的匿名函数
+    router.GET("/index", func(context *gin.Context) {
+        context.String(200, "Hello lihan!")
+    })
+
+    //另一种方法，可以直接使用已经声明的函数
+    router.GET("/index2", Index2)
+
+    //启动HTTP服务,gin会默认把web服务器运行在本机的0.0.0.0:8080端口上(即所有网卡IP的8080端口)
+    router.Run(":8080")
+    //第二种启动方式，用原生http服务的方式启动，这种方式可以实现更多的自定义配置
+    //http.ListenAndServe(":8080", router)
+}
+</code></pre>
+<h4>gin视图 view</h4>
+<h5>响应 response</h5>
+<ol>
+<li>状态码</li>
+</ol>
+<ul>
+<li><a href="https://zh.wikipedia.org/zh-hans/HTTP%E7%8A%B6%E6%80%81%E7%A0%81">状态码</a><pre><code class="lang-go">200 表示正常响应 http.StatusOk
+//常见状态码
+200 - 请求成功
+301 - 资源（网页等）被永久转移到其它URL
+404 - 请求的资源（网页等）不存在
+500 - 内部服务器错误
+//状态码分类
+1** 信息，服务器收到请求，需要请求者继续执行操作
+2** 成功，操作被成功接收并处理
+3** 重定向，需要进一步的操作以完成请求
+4** 客户端错误，请求包含语法错误或无法完成请求
+5** 服务器错误，服务器在处理请求的过程中发生了错误
+</code></pre>
+</li>
+</ul>
+<ol>
+<li>返回字符串</li>
+</ol>
+<pre><code class="lang-go">router.GET("/", func(c *gin.Context) {
+        c.String(200, "你好啊！")
+    })
+</code></pre>
+<ol>
+<li>返回json <strong>重点</strong></li>
+</ol>
+<pre><code class="lang-go">//main.go
+router.GET("/json", ginJson)
+//ginJson函数
+func ginJson(c *gin.Context) {
+    //json响应结构体
+    type UserInfo struct {
+        UserName string `json:"username-json"` //返回给前端的字段名
+        Age      int    `json:"age_json"`
+        PassWord string `json:"-"` //"-"不会返回给前端
+    }
+    //user := UserInfo{"lihan", 32, "123456"}
+    //c.JSON(200, user)
+
+    //json响应map
+    //userMap := map[string]string{
+    //  "user_name": "lihan",
+    //  "age":       "32",
+    //}
+    //c.JSON(200, userMap)
+
+    //直接响应json
+    c.JSON(200, gin.H{"user_name": "lihan", "age": 32})
+}
+</code></pre>
+<ol>
+<li>返回xml和yaml</li>
+</ol>
+<pre><code class="lang-go">//main.go
+router.GET("/xml", ginXml)
+router.GET("/yaml", ginYaml)
+
+//ginXml、ginYaml函数
+func ginXml(c *gin.Context) {
+    c.XML(200, gin.H{"user_name": "lihan", "age": 32, "status": http.StatusOK, "data": gin.H{"id": 1, "name": "lihan"}})
+}
+
+func ginYaml(c *gin.Context) {
+    c.YAML(200, gin.H{"user_name": "lihan", "age": 32, "status": http.StatusOK, "data": gin.H{"id": 1, "name": "lihan"}})
+}
+</code></pre>
+<ol>
+<li>返回html</li>
+</ol>
+<pre><code class="lang-go">//main.go
+router.LoadHTMLGlob("templates/*")
+router.GET("/html", ginHtml)
+
+//ginHtml函数
+func ginHtml(c *gin.Context) {
+    type UserInfo struct {
+        UserName string
+        Age      int
+        PassWord string
+    }
+    user := UserInfo{"lihan", 32, "123456"}
+    c.HTML(200, "index.html", user)
+
+    //c.HTML(200, "index.html", gin.H{"user_name": "lihan", "age": 32, "status": http.StatusOK, "data": gin.H{"id": 1, "name": "lihan"}})
+} //gin.H()可以向html传参
+</code></pre>
+<pre><code class="lang-html">{{/*  templates/index.html  */}}
+&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;title&gt;首页&lt;/title&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+    &lt;h1&gt;响应html {{ .UserName}}&lt;/h1&gt;
+    {{/* &lt;h1&gt;响应html {{ .data.name}}&lt;/h1&gt; */}}
+&lt;/body&gt;
+
+&lt;/html&gt;
+</code></pre>
+<ol>
+<li>响应文件</li>
+</ol>
+<pre><code class="lang-go">//main.go
+    //golang中，没有相对文件的路径，只有相对项目的路径
+
+    //配置单个文件，网页请求的路由，文件路径
+    router.StaticFile("/downloads/lihan.png", "static/lihan.png")
+    //配置文件夹，网页请求的路由，文件夹路径
+    router.StaticFS("/downloads/files", http.Dir("static/texts"))
+    //配置js、css、图片等资源
+    router.Static("/static", "static")
+    //html中引用资源
+        &lt;img src="/static/resource/baidu.png" alt="baidu"&gt;
+        &lt;link rel="stylesheet" href="/static/css/style.css"&gt;
+</code></pre>
+&lt;!-- 项目目录结构 --&gt;
+- 项目文件夹[gowebstudy]
+  - static
+    - texts
+      - test.txt
+    - lihan.png
+    - pwd.txt
+  - 2.gin_view视图
+    - 2.1response响应.go
+
+7. redirect 重定向
+- HTTP 301 Moved Permanently (永久重定向):
+    当服务器返回HTTP状态码301时，它告诉客户端请求的资源已永久移动到一个新的URL。
+    浏览器（或其他HTTP客户端）会记住这个永久重定向，以后的请求都会直接转向新的URL，而不再请求原始URL，可缓存。
+
+- HTTP 302 Found (临时重定向):
+    当服务器返回HTTP状态码302时，它告诉客户端请求的资源已临时移动到一个新的URL。
+    浏览器会将这个重定向视为临时性质，因此不会记住新的URL，每次都需要重新请求原始URL，不可缓存
+
+```go
+//main.go
+router.GET("/lihan", ginRedirect)
+//ginRedirect函数
+func ginRedirect(c *gin.Context) {
+    c.Redirect(301, "https://lihan3238.github.io/")
+}
+```
+
+##### 请求 request
+
+1. Query 查询参数
+
+```go
+//main.go
+func _query(c *gin.Context) {
+    fmt.Println(c.Query("username"))
+    //c.GetQuery仅判断是否存在，不判断是否为空
+    fmt.Println(c.GetQuery("username"))
+    //c.QueryArray获取全部username的值，返回一个切片
+    fmt.Println(c.QueryArray("username"))
+    //c.DefaultQuery获取username的值，如果为空则返回默认值
+    fmt.Println(c.DefaultQuery("id","default_id"))
+}
+//?id=2&amp;username=lihan&amp;username=op
+
+func main() {
+    router := gin.Default()
+    router.GET("/query", _query)
+
+    router.Run(":8080")
+}
+
+//访问：http://192.168.56.105:8080/query?id=2&amp;username=lihan&amp;username=op
+//返回：
+lihan
+lihan true
+[lihan op]
+
+``` 
+
+2. Param 动态参数
+
+```go
+//main.go
+router.GET("/param/:user_id", _param)
+router.GET("/param/:user_id/:book_id", _param)
+
+//_param函数
+func _param(c *gin.Context) {
+    fmt.Println(c.Param("user_id"))
+    fmt.Println(c.Param("book_id"))
+}
+//http://192.168.56.105:8080/param/user1/book2
+```
+
+3. PostForm 表单参数
+
+- 要使用Post而非Get请求
+- 可以接收 multipart/form-data 和 application/x-www-form-urlencoded 类型的数据
+
+```go
+//main.go
+router.POST("/form", _form)
+
+//_form函数
+func _form(c *gin.Context) {
+    fmt.Println(c.PostForm("username"))
+    fmt.Println(c.PostFormArray("id"))
+    fmt.Println(c.DefaultPostForm("addr", "default_addr"))
+}
+```
+
+![postman](postman1.png)
+```shell
+# 返回
+lihan
+[123456 88888]
+default_addr
+```
+
+4. GetRawData 获取原始参数
+
+```go
+//main.go
+router.POST("/rawdata", _rawData)
+//_rawData函数
+func _rawData(c *gin.Context) {
+    //fmt.Println(c.GetRawData())
+    body, _ := c.GetRawData()
+    fmt.Println(string(body))
+}
+```
+&lt;!-- x-www-form-urlencoded --&gt;
+![postman](postman2.png)
+```shell
+# 返回
+name=abcde
+```
+
+&lt;!-- form-data --&gt;
+![postman](postman3.png)
+```shell
+Content-Disposition: form-data; name="name"
+
+abcd
+----------------------------609676969091043609505229--
+```
+
+5. GetRawData 序列化Json与类型绑定
+
+```go
+//main.go
+router.POST("/rawdata2", _rawData2)
+
+//_rawData2函数
+
+func _rawData2(c *gin.Context) {
+    body, _ := c.GetRawData()
+    contentType := c.GetHeader("Content-Type")
+    switch contentType {
+    case "application/json":
+        type User struct {
+            Username string `json:"name"`
+            Password int    `json:"pwd"`
+        }
+        var user User
+        err := json.Unmarshal(body, &amp;user)
+        if err != nil {
+            fmt.Println(err.Error())
+        }
+        fmt.Println(user)
+    }
+}
+```
+![postman](postman4.png)
+```shell
+{lihan 123456}
+```
+
+&lt;!-- 封装绑定json到任意类型（结构体为例） --&gt;
+
+<pre><code class="lang-go">func bandJson(c *gin.Context, obj any) (err error) {
+    body, _ := c.GetRawData()
+    contentType := c.GetHeader("Content-Type")
+    switch contentType {
+    case "application/json":
+        err := json.Unmarshal(body, obj)
+        if err != nil {
+            fmt.Println(err.Error())
+            return err
+        }
+    }
+    return nil
+}
+
+func _rawData2(c *gin.Context) {
+    type User struct {
+        Username string `json:"name"`
+        Password int    `json:"pwd"`
+    }
+    var user User
+    err := bandJson(c, &amp;user)
+    if err != nil {
+        fmt.Println(err.Error())
+    }
+    fmt.Println(user)
+}
+</code></pre>
+<ol>
+<li>四大请求方式 </li>
+</ol>
+<p>Restful风格指的是网络应用中资源定位和资源操作的风格。
+不是标准，只是一种风格。</p>
+<ul>
+<li>GET : 从服务器取出资源（一项或多项）</li>
+<li>POST : 在服务器新建一个资源</li>
+<li>PUT : 在服务器更新资源（客户端提供改变后的完整资源）</li>
+<li>PATCH(少) : 在服务器更新资源（客户端提供改变的属性）</li>
+<li>DELETE : 从服务器删除资源</li>
+</ul>
+<pre><code class="lang-go">//以文字资源为例
+
+//GET       /articles       列出所有文章
+//GET       /articles/:id   获取文章详情
+//POST      /articles       新建一篇文章
+//PUT       /articles/:id   更新某篇文章的信息
+//DELETE    /articles/:id   删除某篇文章
+
+//main.go
+    router.GET("/articles", _getList)       // 文章列表
+    router.GET("/articles/:id", _getDetail) // 文章详情
+    router.POST("/articles", _create)       // 新建文章
+    router.PUT("/articles/:id", _update)    // 修改文章
+    router.DELETE("/articles/:id", _delete) // 删除文章
+
+    //函数
+    type ArticleModel struct {
+    Title   string `json:"title"`
+    Content string `json:"content"`
+}
+
+type Response struct {
+    Code int    `json:"code"`
+    Data any    `json:"data"`
+    Msg  string `json:"msg"`
+}
+
+func _bandJson(c *gin.Context, obj any) (err error) {
+    body, _ := c.GetRawData()
+    contentType := c.GetHeader("Content-Type")
+    switch contentType {
+    case "application/json":
+        err := json.Unmarshal(body, obj)
+        if err != nil {
+            fmt.Println(err.Error())
+            return err
+        }
+    }
+    return nil
+}
+
+func _getList(c *gin.Context) {
+    //包含搜索、分页等功能
+    articleList := []ArticleModel{
+        {Title: "Go语言入门", Content: "本文是Go语言入门指南"},
+        {Title: "Stellarise群星攻略", Content: "本文是Stellarise群星攻略"},
+        {Title: "马克思主义学习指南", Content: "本文是马克思注意学习指南"},
+        {Title: "李寒个人介绍", Content: "本文是李寒个人介绍"},
+    }
+
+    //c.JSON(200, articleList)
+    //接口封装
+    c.JSON(200, Response{0, articleList, "success"})
+}
+func _getDetail(c *gin.Context) {
+    //获取params中的id
+    fmt.Println(c.Param("id"))
+    //省略查询数据库的过程
+    article := ArticleModel{Title: "李寒个人介绍", Content: "本文是李寒个人介绍"}
+    c.JSON(200, Response{0, article, "success"})
+}
+
+func _create(c *gin.Context) {
+//接受前端传来的JSON数据
+    var article ArticleModel
+
+    err := _bandJson(c, &amp;article)
+    if err != nil {
+        c.JSON(200, Response{1, nil, "参数错误"})
+        return
+    }
+//省略插入数据库的过程
+
+    c.JSON(200, Response{0, article, "success"})
+}
+func _update(c *gin.Context) {
+    //获取params中的id
+    fmt.Println(c.Param("id"))
+    //省略查询数据库的过程
+    //接受前端传来的JSON数据
+    var article ArticleModel
+
+    err := _bandJson(c, &amp;article)
+    if err != nil {
+        c.JSON(200, Response{1, nil, "参数错误"})
+        return
+    }
+    //省略插入数据库的过程
+    c.JSON(200, Response{0, article, "success"})
+}
+func _delete(c *gin.Context) {
+    //省略查询数据库的过程
+    //获取params中的id
+    fmt.Println(c.Param("id"))
+    //省略删除数据库的过程
+    c.JSON(200, Response{0, map[string]string{}, "success"})
+}
+</code></pre>
+<h4>请求头与响应头</h4>
+<ol>
+<li>Request Header 请求头</li>
+</ol>
+<p>请求头参数获取</p>
+<pre><code class="lang-go">//获取请求头
+    router.GET("/", func(c *gin.Context) {
+        //单词首字母大小写不区分，单词之间用"-"分割
+        //用于获取一个请求头
+        fmt.Println(c.GetHeader("User-Agent"))
+        fmt.Println(c.Request.Header.Get("User-Agent"))
+        //fmt.Println(c.GetHeader("user-agent"))
+        //fmt.Println(c.GetHeader("user-Agent"))
+
+        //Header是一个map[string][]string类型
+        fmt.Println(c.Request.Header)
+        //获取所有请求头,区分大小写
+        fmt.Println(c.Request.Header["User-Agent"])
+
+        c.JSON(200, gin.H{"msg": "ok"})
+    })
+</code></pre>
+<p>利用请求头，将爬虫和用户区别对待</p>
+<pre><code class="lang-go">    //利用请求头，将爬虫和用户区别对待
+    //
+    router.GET("/index", func(c *gin.Context) {
+        userAgent := c.GetHeader("User-Agent")
+        //方法一 正则去匹配
+        //字符串的包含匹配
+        if strings.Contains(userAgent, "python") {
+            //爬虫来了
+            c.JSON(200, gin.H{"data": "这是一个爬虫"})
+            return
+
+        }
+        c.JSON(200, gin.H{"data": "这是一个用户"})
+    })
+</code></pre>
+<ol>
+<li>Response Header 响应头</li>
+</ol>
+<pre><code class="lang-go">    //设置响应头
+    router.GET("/res", func(c *gin.Context) {
+        c.Header("Content-Type", "application/text; charset=utf-8")
+        c.JSON(200, gin.H{"data": "看看响应头"})
+    })
+</code></pre>
+<p><img alt="postman" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./postman5.png"/></p>
+<h4>bind绑定参数</h4>
+<p>gin中bind可以很方便地将前端传递来的数据与 结构体 进行 参数绑定 以及 参数校验。</p>
+<h5>参数绑定</h5>
+<pre><code class="lang-go">//ShouldBindJSON
+type UserInfo struct {
+    Name string `json:"name"`
+    Age  int    `json:"age"`
+    Sex  string `json:"sex"`
+}
+router.POST("/", func(c *gin.Context) {
+    var userInfo UserInfo
+    err := c.ShouldBindJSON(&amp;userInfo)
+    if err != nil {
+        c.JSON(200, gin.H{"msg": "你错"})
+        return
+    }
+    c.JSON(200, userInfo)
+})
+</code></pre>
+<p><img alt="postman" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./postman6.png"/></p>
+<pre><code class="lang-go">//ShouldBindQuery
+//tag对应为form
+type UserInfo struct {
+    Name string `json:"name" form:"name"`
+    Age  int    `json:"age" form:"age"`
+    Sex  string `json:"sex" form:"sex"`
+}
+router.POST("/query", func(c *ginContext) {
+    var userInfo UserInfo
+    err := c.ShouldBindQuery(&amp;userInfo)
+    if err != nil {
+        c.JSON(200, gin.H{"msg": "你错"})
+        return
+    }
+    c.JSON(200, userInfo)
+})
+</code></pre>
+<p><img alt="postman" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./postman7.png"/></p>
+<pre><code class="lang-go">//ShouldBindUri
+//tag对应为uri
+type UserInfo struct {
+    Name string `json:"name" form:"name" uri:"name"`
+    Age  int    `json:"age" form:"age" uri:"age"`
+    Sex  string `json:"sex" form:"sex" uri:"sex"`
+}
+router.POST("/uri/:name/:age/:sex", func(c *gin.Context) {
+    var userInfo UserInfo
+    err := c.ShouldBindUri(&amp;userInfo)
+    if err != nil {
+        c.JSON(200, gin.H{"msg": "你错了"})
+        return
+    }
+    c.JSON(200, userInfo)
+})
+</code></pre>
+<p><img alt="postman" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./postman8.png"/></p>
+<pre><code class="lang-go">//ShouldBind
+//会根据请求头中的content-type去自动绑定
+//form-data的参数也用这个，tag用form
+//默认的tag就是form,可以绑定json，query，param，yaml，xml
+
+type UserInfo struct {
+    Name string `form:"name"`
+    Age  int    `form:"age"`
+    Sex  string `form:"sex"`
+}
+
+    router.POST("/form", func(c *gin.Context) {
+        var userInfo UserInfo
+        err := c.ShouldBind(&amp;userInfo)
+        if err != nil {
+            c.JSON(200, gin.H{"msg": "你错了"})
+            return
+        }
+        c.JSON(200, userInfo)
+    })
+</code></pre>
+<p><img alt="postman" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./postman9.png"/></p>
+<h5>参数验证</h5>
+<ol>
+<li>常用验证器
+```go
+// 不能为空，并且不能没有这个字段
+required: 必填字段，如: binding:"required"
+// 针对字符串的长度
+min 最小长度，如: binding:"min=5"
+max 最大长度，如: binding:"max=18"
+len 长度，如: binding:"en=6"
+// 针对数字的大小
+eg 等于，如: binding:"eg=3"
+ne 不等于，如: binding:"ne=12"
+gt 大于，如: binding:"gt=18"
+gte 大于等于，如: binding:"gte=18"
+lt 小于，如:binding:"lt=18"
+lte 小于等于，如: binding:"lte=18"
+// 针对同级字段的
+eqfield 等于其他字段的值，如: PassWord string binding:"eqfield=Password"
+nefield 不等于其他字段的值
+忽略字段，如: binding:"_"</li>
+</ol>
+<p>type SignUserInfo struct {
+    // binding:"required"不能为空或不传
+    Name string <code>json:"name" binding:"required"</code> //用户名
+    Mail string <code>json:"mail"</code>                    //邮箱
+    // binding:"min=6,max=12"最小长度6，最大长度12
+    Password   string <code>json:"password" binding:"min=6,max=12"</code>        //密码
+    RePassword string <code>json:"re_password" binding:"eqfield=Password"</code> //确认密码
+}</p>
+<pre><code>
+2. gin内置验证器
+```go
+// 枚举 只能是red 或green
+oneof=red green
+// 字符串
+contains=fengfeng // 包含fengfeng的字符串
+excludes // 不包含
+startswith // 字符串前缀
+endswith // 字符串后缀
+// 数组
+dive // dive后面的验证就是针对数组中的每一个元素
+
+// 网络验证
+ip
+ipv4
+ipv6
+uri
+url
+// uri 在于I(Identifier)是统一资源标示符，可以唯一标识一个资源
+// url 在于Locater，是统一资源定位符，提供找到该资源的确切路径
+// 日期验证 1月2号下午3点4分5秒在2006年
+datetime=2006-1-2
+</code></pre>
+<pre><code class="lang-go">type SignUserInfo struct {
+    Sex        string   `json:"sex" binding:"oneof=男 女"`                             //性别
+    HobbyList  []string `json:"hobby_list" binding:"required,dive,startswith=ilove"` //爱好
+    IP         string   `json:"ip" binding:"ip"`                                     //ip地址
+    //必须用datetime=2006-01-02 15:04:05这个时间，不能换成别的时间
+    //1月2号下午3点4分5秒2006年
+    Date string `json:"date" binding:"datetime=2006-01-02 15:04:05"` //日期
+    }
+</code></pre>
+<ol>
+<li>自定义验证器错误信息</li>
+</ol>
+<pre><code class="lang-go">//main.go
+router.POST("/", func(c *gin.Context) {
+        type User struct {
+            Name string `json:"name" binding:"required" msg:"用户名校验失败"`
+            Age  int    `json:"age" binding:"required,gt=10" msg:"年龄校验失败"`
+        }
+        var user User
+        err := c.ShouldBindJSON(&amp;user)
+        if err != nil {
+            //c.JSON(200, gin.H{"msg": err.Error()})
+            c.JSON(200, gin.H{"msg": GetValidMsg(err, &amp;user)})
+            return
+        }
+        c.JSON(200, gin.H{"data": user})
+    })
+//GetValidMsg函数
+func GetValidMsg(err error, obj any) string {
+    // 将err接口断言为具体类型
+    //使用的时候传文件指针
+    getObj := reflect.TypeOf(obj)
+    if errs, ok := err.(validator.ValidationErrors); ok {
+        //断言成功
+        //循环每一个错误信息
+        for _, e := range errs {
+            if f, exist := getObj.Elem().FieldByName(e.Field()); exist {
+                msg := f.Tag.Get("msg")
+                return msg
+            }
+        }
+    }
+
+    return err.Error()
+}
+</code></pre>
+<ol>
+<li>自定义验证器</li>
+</ol>
+<pre><code class="lang-go">//main
+    //自定义验证器 sign
+    if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+        v.RegisterValidation("sign", signValid)
+    }
+    router.POST("/", func(c *gin.Context) {
+        var user User
+        err := c.ShouldBind(&amp;user)
+        if err != nil {
+            c.JSON(200, err.Error())
+            return
+        }
+        c.JSON(200, gin.H{"data": user})
+        return
+    })
+//signValid函数和user结构体
+
+type User struct {
+    //自定义验证器 sign
+    Name string `form:"name" binding:"required,sign" msg:"请输入名字"`
+    Age  int    `form:"age" binding:"required,gt=10" msg:"请输入年龄"`
+}
+
+func signValid(fl validator.FieldLevel) bool {
+    //不允许name为nameList中的值
+    var nameList []string = []string{"lihan", "lihan3238", "Lihan"}
+    for _, nameStr := range nameList {
+        name := fl.Field().Interface().(string)
+        if name == nameStr {
+            return false
+        }
+    }
+    return true
+
+}
+</code></pre>
+<h4>上传下载文件</h4>
+<h5>上传文件</h5>
+<ol>
+<li><p>单文件</p>
+<pre><code class="lang-go"> // 为 multipart forms 设置较低的内存限制 (默认是 32 MiB)
+ // 单位是字节，&lt;&lt; 是左移预算符号，等价于 8 * 2^20
+ // gin对文件上传大小的默认值是32MB
+ router.MaxMultipartMemory = 8 &lt;&lt; 20 // 8 MiB
+ router.POST("/upload", func(c *gin.Context) {
+     file, _ := c.FormFile("file")
+     fmt.Println(file.Filename)
+     fmt.Println(file.Size / 1024) //单位为KB
+     //保存文件到本地
+     c.SaveUploadedFile(file, "uploads/"+file.Filename)
+     c.JSON(200, gin.H{"msg": "上传成功"})
+ })
+</code></pre>
+</li>
+<li><p>服务器保存文件的几种方式</p>
+</li>
+</ol>
+<ul>
+<li><p>SaveUploadedFile 保存文件到本地</p>
+<pre><code class="lang-go">SaveUploadedFile(file, "uploads/"+file.Filename)
+//文件对象,文件路径:注意要从项目根路径开始写
+</code></pre>
+</li>
+<li><p>读取文件内容</p>
+<pre><code class="lang-go">  router.POST("/upload", func(c *gin.Context) {
+      file, _ := c.FormFile("file")
+      readerFile, _ := file.Open()
+      data, _ := io.ReadAll(readerFile)
+      fmt.Println(string(data))
+
+      c.JSON(200, gin.H{"msg": "上传成功"})
+  })
+</code></pre>
+<p><img alt="postman" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./postman10.png"/></p>
+</li>
+<li><p>Create+Copy</p>
+<pre><code class="lang-go">
+  router.POST("/upload", func(c *gin.Context) {
+      file, _ := c.FormFile("file")
+      readerFile, _ := file.Open()
+      writerFile, _ := os.Create("uploads/" + file.Filename)
+      defer readerFile.Close()
+      defer writerFile.Close()
+      n, _ := io.Copy(writerFile, readerFile)
+      fmt.Println(n)
+      c.JSON(200, gin.H{"msg": "上传成功！"})
+  })
+</code></pre>
+</li>
+<li><p>上传多个文件</p>
+<pre><code class="lang-go">  router.POST("/uploads", func(c *gin.Context) {
+      form, _ := c.MultipartForm()
+      files := form.File["file"]
+      for _, file := range files {
+          c.SaveUploadedFile(file, "uploads/"+file.Filename)
+      }
+      c.JSON(200, gin.H{"msg": fmt.Sprintf("上传成功%d个文件!", len(files))})
+  })
+</code></pre>
+</li>
+</ul>
+<h5>下载文件</h5>
+<pre><code class="lang-go">router.GET("/download", func(c *gin.Context) {
+
+    //c.File("uploads/logo.png")
+    //有些响应，比如图片，浏览器就会显示这图片，而不是下载，所以我们需要使浏览器起下载行为
+    c.Header("Content-Type", "applicationoctet-stream")
+    //一定要指定下载文件名（可以与源文件名同），不然默认download无后缀名
+    c.Header("Content-Disposition","attachment; filename=1.png")
+    //设置文件传输方式为二进制（乱码问题关）
+    c.Header("Content-Transfer-Encoding","binary")
+    //指定源文件
+    c.File("uploads/logo.png")
+}
+</code></pre>
+<p>如果是前后端模式下，后端就只需要响应一个文件数据
+文件名和其他信息就写在请求头中</p>
+<pre><code class="lang-go">c.Header("fileName","xxx .png")
+c.Header("msg"，"文件下载成功")
+c.File("uploads/12 .png")
+</code></pre>
+<p><img alt="js" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./js1.png"/></p>
+<h4>中间件和路由</h4>
+<h5>中间件</h5>
+<ol>
+<li>单个路由的中间件</li>
+</ol>
+<pre><code class="lang-go">//main.go
+    router.GET("/", m1, func(c *gin.Context) {
+        fmt.Println("index...")
+        c.JSON(200, gin.H{"msg": "index"})
+    })//执行顺序：m1-&gt;index
+
+    //m1中间件
+    func m1(c *gin.Context) {
+    fmt.Println("m1...")
+    c.JSON(200, gin.H{"msg": "m1"})
+    c.Abort() //阻止后续的处理函数执行
+}
+</code></pre>
+<ol>
+<li><pre><code class="lang-go">//main.go
+ router.GET("/", m1, func(c *gin.Context) {
+
+     c.JSON(200, gin.H{"msg": "index"})
+     fmt.Println("index...in")
+     //next前是请求
+     //Abort后不会执行之后的请求和响应，但是会执行已执行过请求的响应
+     c.Next()
+     //next后是响应
+     fmt.Println("index...out")
+ })
+
+ //m1
+ func m1(c *gin.Context) {
+
+ c.JSON(200, gin.H{"msg": "m1"})
+ fmt.Println("m1...in")
+ c.Next()
+ fmt.Println("m1...out")
+}
+</code></pre>
+<pre><code class="lang-shell">#返回
+m1...in
+index...in
+index...out
+m1...out
+</code></pre>
+</li>
+</ol>
+<ol>
+<li>全局注册中间件</li>
+</ol>
+<pre><code class="lang-go">//main.go
+    router.Use(m10, m11) // 全局注册中间件
+
+    router.GET("/1", func(c *gin.Context) {
+        fmt.Println("index1......in")
+        c.JSON(200, gin.H{"msg": "index1"})
+        c.Next()
+        fmt.Println("index1......out")
+    })
+    router.GET("/2", func(c *gin.Context) {
+        fmt.Println("index2......in")
+        c.JSON(200, gin.H{"msg": "index2"})
+        c.Next()
+        fmt.Println("index2......out")
+    })
+//中间件
+func m10(c *gin.Context) {
+    fmt.Println("m10......in")
+    c.Next()
+    fmt.Println("m10......out")
+}
+func m11(c *gin.Context) {
+    fmt.Println("m11......in")
+    c.Next()
+    fmt.Println("m11......out")
+}
+</code></pre>
+<pre><code class="lang-shell">m10......in
+m11......in
+index2......in
+index2......out
+m11......out
+m10......out
+</code></pre>
+<ol>
+<li>中间件传递数据</li>
+</ol>
+<pre><code class="lang-go">//main.go
+    router.GET("/", func(c *gin.Context) {
+        name, _ := c.Get("name")
+        fmt.Println(name)
+
+        _user, _ := c.Get("user")
+        user, ok := _user.(Person) // 使用类型断言
+        if !ok {
+            fmt.Println("类型断言失败")
+        } else {
+            fmt.Println(user.Name, user.Age)
+        }
+
+        c.JSON(200, gin.H{"msg": "index1"})
+
+    })
+    //中间件
+    func m10(c *gin.Context) {
+    fmt.Println("m10......in")
+    c.Set("name", "lihan")
+    c.Set("user", Person{
+        Name: "lihan",
+        Age:  18,
+    })
+}
+</code></pre>
+<h5>路由分组</h5>
+<ol>
+<li>路由分组</li>
+</ol>
+<pre><code class="lang-go">package main
+
+import (
+    "github.com/gin-gonic/gin"
+)
+
+type UserInfo struct {
+    Name string `json:"name"`
+    Age  int    `json:"age"`
+}
+
+type ArticleInfo struct {
+    Title string `json:"title"`
+    Id    int    `json:"id"`
+}
+type Response struct {
+    Code int    `json:"code"`
+    Data any    `json:"data"`
+    Msg  string `json:"msg"`
+}
+
+func UserListView(c *gin.Context) {
+    var userList []UserInfo = []UserInfo{
+        {"lihan", 18},
+        {"李寒", 22},
+        {"op", 28},
+    }
+    c.JSON(200, Response{200, userList, "success"})
+}
+
+func ArticleListView(c *gin.Context) {
+    var articleList []ArticleInfo = []ArticleInfo{
+        {"gin", 1},
+        {"go", 2},
+        {"vue", 3},
+    }
+    c.JSON(200, Response{200, articleList, "success"})
+}
+
+func UserRouterInit(api *gin.RouterGroup) {
+    api1 := api.Group("api_1")
+    {
+        api1.GET("/users1", UserListView)
+        api1.POST("/users2", UserListView)
+    }
+}
+
+func ArticleRouterInit(api *gin.RouterGroup) {
+    api2 := api.Group("api_2")
+    {
+        api2.GET("/users3", ArticleListView)
+        api2.POST("/users4", ArticleListView)
+    }
+}
+
+func main() {
+    router := gin.Default()
+    api := router.Group("api")
+
+    UserRouterInit(api)
+    ArticleRouterInit(api)
+    router.GET("/users", UserListView)
+    router.Run(":8080")
+
+}
+</code></pre>
+<ol>
+<li>路由分组中间件</li>
+</ol>
+<pre><code class="lang-go">package main
+
+import "github.com/gin-gonic/gin"
+
+type Res struct {
+    Code int    `json:"code"`
+    Data any    `json:"data"`
+    Msg  string `json:"msg"`
+}
+
+func _UserListView(c *gin.Context) {
+    type UserInfo struct {
+        Name string `json:"name"`
+        Age  int    `json:"age"`
+    }
+    var userList []UserInfo = []UserInfo{
+        {Name: "张三", Age: 18},
+        {Name: "李四", Age: 19},
+        {Name: "王五", Age: 20},
+    }
+    c.JSON(200, Res{200, userList, "success"})
+}
+
+func Middleware(c *gin.Context) {
+    token := c.GetHeader("token")
+    if token == "3238" {
+        c.Next()
+        return
+    }
+    c.JSON(200, Res{401, nil, "token error"})
+    c.Abort()
+} //中间件
+
+func _UserRouterInit(router *gin.RouterGroup) {
+    userManager := router.Group("user_manager")
+    userManager.Use(Middleware)
+    {
+        userManager.GET("/users", _UserListView) // api/user_manager/users
+    }
+}
+
+func main() {
+    router := gin.Default()
+
+    api := router.Group("api")
+
+    api.GET("/login", func(c *gin.Context) {
+        c.JSON(200, Res{200, nil, "login success"})
+    }) //不在中间件中的路由，不需要验证
+
+    _UserRouterInit(api)
+
+    router.Run(":8080")
+
+}
+</code></pre>
+<p><img alt="postman" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/./postman11.png"/></p>
+<p>闭包：</p>
+<pre><code class="lang-go">func Middleware(c *gin.Context) {
+    token := c.GetHeader("token")
+    if token == "3238" {
+        c.Next()
+        return
+    }
+    c.JSON(200, Res{401, nil, "token error"})
+    c.Abort()
+} //中间件
+//_UserRouterInit
+userManager.Use(Middleware)
+
+可写为：
+func Middleware(msg string) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        token := c.GetHeader("token")
+        if token == "3238" {
+            c.Next()
+            return
+        }
+        c.JSON(200, Res{401, nil, msg})
+        c.Abort()
+    }
+} //中间件
+//_UserRouterInit
+userManager.Use(Middleware("token error"))
+</code></pre>
+<ul>
+<li>优点：可以传参，自定义，闭包</li>
+</ul>
+<p>gin.Default()中间件
+等于gin.New()加上Logger(), Recovery()若干中间件</p>
+<h4>gin log日志</h4>
+<ul>
+<li>记录bug</li>
+<li>记录用户操作，猜测用户行为</li>
+</ul>
+<h5>gin内置日志</h5>
+<pre><code class="lang-go">func main() {
+    file, _ := os.Create("gin.log")
+    gin.DefaultWriter = io.MultiWriter(file, os.Stdout) //同时写入文件和控制台
+    router := gin.Default()
+
+    router.GET("/index", func(c *gin.Context) {
+        c.String(200, "hello world")
+    })
+
+    router.Run(":8080")
+}
+//在项目目录下生成gin.log文件
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:   export GIN_MODE=release
+ - using code:  gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] GET    /index                    --&gt; main.main.func1 (3 handlers)
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8080
+[GIN] 2023/09/22 - 13:33:20 | 200 |      16.375µs |    192.168.56.1 | GET      "/index"
+[GIN] 2023/09/22 - 13:33:20 | 404 |         506ns |    192.168.56.1 | GET      "/favicon.ico"
+</code></pre>
+<h5>定义格式</h5>
+<ol>
+<li><p>定义路由格式</p>
+<pre><code class="lang-go"> gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, numHandlers int) {
+     log.Printf(
+         "[lihan] %s %s %s %d\n",
+         httpMethod,
+         absolutePath,
+         handlerName,
+         numHandlers,
+     )
+ }
+ file, _ := os.Create("gin.log")
+ gin.DefaultWriter = io.MultiWriter(file, os.Stdout) //同时写入文件和控制台
+ router := gin.Default()
+
+ router.GET("/index", func(c *gin.Context) {
+     c.String(200, "hello world")
+ })
+
+ router.Run(":8080")
+</code></pre>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/log_1.png"/></p>
+</li>
+</ol>
+<ul>
+<li>查看路由:<pre><code class="lang-go">router.Routes() // 它会返回已注册的路由列表
+</code></pre>
+</li>
+<li>环境切换(去掉debug日志)<pre><code class="lang-go">gin.SetMode(gin.ReleaseMode)
+router := gin.Default()
+</code></pre>
+</li>
+</ul>
+<ol>
+<li>定义日志格式
+```go
+package main</li>
+</ol>
+<p>import (
+    "fmt"
+    "io"
+    "log"
+    "os"</p>
+<pre><code>"github.com/gin-gonic/gin"
+</code></pre>
+<p>)</p>
+<p>func myLogFormat(param gin.LogFormatterParams) string {</p>
+<pre><code>// 你的自定义格式
+return fmt.Sprintf(
+    "[lihan]    %s  |%d|    %s%s%s  %s\n",
+    param.TimeStamp.Format("2006-01-02 15:04:05"),
+    param.StatusCode,
+    //param.Method,
+    param.MethodColor(), param.Method, param.ResetColor(), //根据不同的请求类型输出不同颜色
+    param.Path,
+)
+</code></pre>
+<p>}</p>
+<p>func main() {
+    gin.SetMode(gin.ReleaseMode)
+    gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, numHandlers int) {
+        log.Printf(
+            "[lihan] %s %s %s %d\n",
+            httpMethod,
+            absolutePath,
+            handlerName,
+            numHandlers,
+        )
+    }
+    file, _ := os.Create("gin.log")
+    gin.DefaultWriter = io.MultiWriter(file, os.Stdout) //同时写入文件和控制台
+    router := gin.New()
+    //router.Use(gin.LoggerWithFormatter(myLogFormat))
+    router.Use(gin.LoggerWithConfig(gin.LoggerConfig{Formatter: myLogFormat}))</p>
+<pre><code>router.GET("/index", func(c *gin.Context) {
+    c.String(200, "hello world")
+})
+
+router.Run(":8080")
+</code></pre>
+<p>}</p>
+<pre><code>
+修改前：
+![](log_2.png)
+修改后：
+![](log_3.png)
+
+##### 第三方日志 logrus
+
+1. 下载
+```bush
+go get github.com/sirupsen/logrus
+</code></pre>
+<ol>
+<li>日志等级</li>
+</ol>
+<pre><code class="lang-go">    logrus.SetLevel(logrus.DebugLevel)
+
+    logrus.Error("出错了")
+    logrus.Warnln("警告")
+    logrus.Infof("信息")
+    logrus.Debugf("debug")
+    logrus.Println("打印")
+    fmt.Println(logrus.GetLevel())
+</code></pre>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/logrus_1.png"/></p>
+<p>更改日志级别</p>
+<ul>
+<li>日志只会显示大于等于设置的日志级别的日志</li>
+<li>默认日志级别为info</li>
+<li>日志级别一般是和系统挂钩，开发环境一般是debug，线上环境可能是warning。<pre><code class="lang-go">logrus.SetLevel(logrus.DebugLevel)
+</code></pre>
+</li>
+</ul>
+<p>日志等级</p>
+<pre><code class="lang-go">PanicLevel// 会抛一个异常
+FatalLevel// 打印日志之后就会退出
+ErrorLevel
+WarnLevel
+InfoLevel
+DebugLevel
+TraceLevel// 低级别
+</code></pre>
+<ol>
+<li>设置特定字段
+```go
+package main</li>
+</ol>
+<p>import "github.com/sirupsen/logrus"</p>
+<p>func main() {
+    log_1 := logrus.WithField("app", "4.3logrus设置特定字段").WithField("service", "logrus")
+    log_2 := logrus.WithFields(logrus.Fields{
+        "user_id": "22",
+        "ip":      "192.168.56.105",
+    })
+    log_3 := log_1.WithFields(logrus.Fields{
+        "user_id": "22",
+        "ip":      "192.168.56.105",
+    })</p>
+<pre><code>log_1.Errorf("出错了")
+log_2.Errorf("出错了")
+log_3.Errorf("出错了")
+</code></pre>
+<p>}</p>
+<pre><code>
+设置输出格式
+- ForceColors: 是否强制使用额色输出。
+- DisableColors: 是否禁用额色输出。
+- ForceQuote: 是否强制引用所有值。
+- DisableQuote: 是否禁用引用所有值。
+- DisableTimestamp: 是否禁用时间戳记录
+- FullTimestamp:是否在连接到 TTY 时输出完整的时间戳
+- TimestampFormat: 用于输出完整时间戳的时间戳格式。
+```go
+    //输出行号
+
+
+    //设置输出格式为json格式
+    logrus.SetFormatter(&amp;logrus.JSONFormatter{})
+
+    //设置输出时间戳
+    logrus.SetFormatter(&amp;logrus.TextFormatter{
+        ForceColors:     true,
+        TimestampFormat: "2006-01-02 15:04:05",
+        FullTimestamp:   true,
+    })
+</code></pre>
+<ol>
+<li>控制台颜色
+```go
+package main</li>
+</ol>
+<p>import "fmt"</p>
+<p>func main() {
+    // 前景色
+    fmt.Println("\033[30m 黑色 \033[0m")
+    fmt.Println("\033[31m 红色 \033[0m")
+    fmt.Println("\033[32m 绿色 \033[0m")
+    fmt.Println("\033[33m 黄色 \033[0m")
+    fmt.Println("\033[34m 蓝色 \033[0m")
+    fmt.Println("\033[35m 紫色 \033[0m")
+    fmt.Println("\033[36m 青色 \033[0m")
+    fmt.Println("\033[37m 灰色 \033[0m")
+    // 背景色
+    fmt.Println("\033[40m 黑色 \033[0m")
+    fmt.Println("\033[41m 红色 \033[0m")
+    fmt.Println("\033[42m 绿色 \033[0m")
+    fmt.Println("\033[43m 黄色 \033[0m")
+    fmt.Println("\033[44m 蓝色 \033[0m")
+    fmt.Println("\033[45m 紫色 \033[0m")
+    fmt.Println("\033[46m 青色 \033[0m")
+    fmt.Println("\033[47m 灰色 \033[0m")
+}</p>
+<pre><code>![](logrus_2.png)
+
+5. Hook
+
+
+例如实现一个名称写入日志都加一个 field
+我们需要实现两个方法以实现 Hook 接口
+```go
+type MyHook struct {
+}
+
+func (hook MyHook) Levels() []logrus.Level {
+    return logrus.AllLevels
+}
+
+func (hook MyHook) Fire(entry *logrus.Entry) error {
+    entry.Data["app"] = "lihan"
+    return nil
+}
+
+func main() {
+    logrus.AddHook(&amp;MyHook{})
+
+    logrus.Warnln("warning")
+    logrus.Error("error")
+}
+</code></pre>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/hook_1.png"/></p>
+<p>logrus hook 是一个值得深入学习的设计，你可以轻易适用 hook 来实现多文件写入。
+比如，warn&amp;error 级别的日志独立输出到 error_warn.log 文件里，其他都放在一起。</p>
+<pre><code class="lang-go">package main
+
+import (
+    "os"
+
+    "github.com/sirupsen/logrus"
+)
+
+type MyHook struct {
+}
+
+func (hook MyHook) Levels() []logrus.Level {
+    return []logrus.Level{logrus.WarnLevel, logrus.ErrorLevel}
+}
+
+func (hook MyHook) Fire(entry *logrus.Entry) error {
+    //entry.Data["app"] = "lihan"
+    //fmt.Println(entry.Level)
+
+    file, _ := os.OpenFile("4.日志log/error_warn.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+    line, _ := entry.String()
+
+    file.Write([]byte(line + "\n"))
+    return nil
+}
+
+func main() {
+    logrus.AddHook(&amp;MyHook{})
+
+    logrus.Warnln("warning")
+    logrus.Error("error")
+    logrus.Debug("debug")
+    logrus.Infoln("info")
+}
+</code></pre>
+<ol>
+<li>日志分割
+按照时间分割
+```go
+package main</li>
+</ol>
+<p>import (
+    "fmt"
+    "os"
+    "time"</p>
+<pre><code>"github.com/sirupsen/logrus"
+</code></pre>
+<p>)</p>
+<p>type FileDateHook struct {
+    file     *os.File
+    logPath  string
+    fileDate string //判断日期切换目录
+    appName  string
+}</p>
+<p>func (hook FileDateHook) Levels() []logrus.Level {
+    return []logrus.Level{logrus.WarnLevel, logrus.ErrorLevel}
+}</p>
+<p>func (hook FileDateHook) Fire(entry *logrus.Entry) error {
+    timer := entry.Time.Format("2006-01-02<em>15-04")
+    line, </em> := entry.String()
+    if hook.fileDate == timer {
+        hook.file.Write([]byte(line))
+        return nil
+    }
+    //有新时间
+    hook.file.Close()
+    os.MkdirAll(fmt.Sprintf("%s/%s", hook.logPath, timer), os.ModePerm)</p>
+<pre><code>filename := fmt.Sprintf("%s/%s/%s.log", hook.logPath, timer, hook.appName)
+hook.file, _ = os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+hook.fileDate = timer
+hook.file.Write([]byte(line))
+return nil
+</code></pre>
+<p>}</p>
+<p>func InitFile(logPath, appName string) {</p>
+<pre><code>fileDate := time.Now().Format("2006-01-02_15-04")
+//创建目录
+err := os.MkdirAll(fmt.Sprintf("%s/%s", logPath, fileDate), os.ModePerm)
+if err != nil {
+    logrus.Error(err)
+    return
+}
+
+filename := fmt.Sprintf("%s/%s/%s.log", logPath, fileDate, appName)
+file, err := os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+if err != nil {
+    logrus.Error(err)
+    return
+}
+filehook := FileDateHook{file, logPath, fileDate, appName}
+logrus.AddHook(&amp;filehook)
+</code></pre>
+<p>}</p>
+<p>func main() {
+    InitFile("4.日志log/logs_1", "lihan_log")
+    for {
+        time.Sleep(20 * time.Second)
+        logrus.GetLevel()
+        logrus.Warnln("warning")</p>
+<pre><code>    logrus.Error("error")
+    logrus.Infoln("info")
+}
+</code></pre>
+<p>}</p>
+<pre><code>按照等级分割
+err,warn,info,all.log
+```go
+package main
+
+import (
+    "fmt"
+    "os"
+
+    "github.com/sirupsen/logrus"
+)
+
+const (
+    alllog  = "all"
+    errlog  = "err"
+    warnlog = "warn"
+    infolog = "info"
+)
+
+type FileLevelHook struct {
+    file     *os.File
+    errFile  *os.File
+    warnFile *os.File
+    infoFile *os.File
+    logPath  string
+}
+
+func (hook FileLevelHook) Levels() []logrus.Level {
+    return logrus.AllLevels
+}
+
+func (hook FileLevelHook) Fire(entry *logrus.Entry) error {
+    line, _ := entry.String()
+    switch entry.Level {
+    case logrus.ErrorLevel:
+        hook.errFile.Write([]byte(line))
+    case logrus.WarnLevel:
+        hook.warnFile.Write([]byte(line))
+    case logrus.InfoLevel:
+        hook.infoFile.Write([]byte(line))
+
+    }
+
+    hook.file.Write([]byte(line))
+    return nil
+}
+
+func InitLevel(logPath string) {
+
+    err := os.MkdirAll(fmt.Sprintf("%s", logPath), os.ModePerm)
+    if err != nil {
+        logrus.Error(err)
+        return
+    }
+
+    allFile, _ := os.OpenFile(fmt.Sprintf("%s/%s.log", logPath, alllog), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+    errFile, _ := os.OpenFile(fmt.Sprintf("%s/%s.log", logPath, errlog), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+    warnFile, _ := os.OpenFile(fmt.Sprintf("%s/%s.log", logPath, warnlog), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+    infoFile, _ := os.OpenFile(fmt.Sprintf("%s/%s.log", logPath, infolog), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+
+    filehook := FileLevelHook{allFile, errFile, warnFile, infoFile, logPath}
+    logrus.AddHook(&amp;filehook)
+
+}
+
+func main() {
+    InitLevel("4.日志log/log_level")
+    logrus.Error("error")
+    logrus.Warnln("warning")
+    logrus.Infoln("info")
+    logrus.Println("print")
+}
+</code></pre>
+<ol>
+<li>gin集成logrus<pre><code class="lang-go">看不下去了呜哇哇哇！！！
+</code></pre>
+</li>
+</ol>

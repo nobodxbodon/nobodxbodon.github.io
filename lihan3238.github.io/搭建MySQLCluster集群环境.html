@@ -1,0 +1,662 @@
+<h2>原文：<a href="https://lihan3238.github.io/index">搭建MySQLCluster集群环境</a></h2>
+<hr/>
+<p>title: 搭建MySQLCluster集群环境
+slug: mysqlCluster
+date: 2023-11-07 10:30:00+0800
+image: mysql.png
+categories:</p>
+<pre><code>- cucStudy
+</code></pre>
+<p>tags:</p>
+<pre><code>- mysql
+- Ubuntu
+- docker
+</code></pre>
+<h1>weight: 1       # You can add weight to some posts to override the default sorting (date descending)</h1>
+<p>comments: true</p>
+<h1>license: flase</h1>
+<h1>math: true</h1>
+<h1>toc: true</h1>
+<h1>style:</h1>
+<h1>keywords:</h1>
+<h1>readingTime:</h1>
+<hr/>
+<h2>环境</h2>
+<ul>
+<li>windows11上的ubuntu22.04的wsl2</li>
+<li>ubuntu20.04</li>
+<li>mysql-cluster_8.0.35-1ubuntu20.04_amd64 </li>
+</ul>
+<h2>配置环境</h2>
+<ul>
+<li>sql0 192.168.50.100 管理节点</li>
+<li>sql1 192.168.50.128 数据节点[11] sql节点</li>
+<li>sql2 192.168.50.129 数据节点[12] sql节点</li>
+</ul>
+<h2>成品镜像</h2>
+<ul>
+<li><p><a href="https://hub.docker.com/layers/lihan3238/mysql_ndb_cluster-ubuntu/lihan_ndbmgm/images/sha256-7e4af2fbe74d193d1f5f393b3ed213a729dc4a2f8cb8cc7705439f33a587389d?context=repo">lihan_ndbmgm</a>      管理节点
+<code>docker pull lihan3238/mysql_ndb_cluster-ubuntu:lihan_ndbmgm</code></p>
+</li>
+<li><p><a href="https://hub.docker.com/layers/lihan3238/mysql_ndb_cluster-ubuntu/lihan_ndbd_sql/images/sha256-6a3252896a5d10fd8a6f7ba675f9647b4b4235d3b71c04d4a74b93bfd2030216?context=repo">lihan_ndbd_sql</a>    数据节点 sql节点
+<code>docker pull lihan3238/mysql_ndb_cluster-ubuntu:lihan_ndbd_sql</code></p>
+</li>
+</ul>
+<h3>docker容器配置</h3>
+<ul>
+<li>windows11上的ubuntu22.04的wsl2</li>
+</ul>
+<ol>
+<li>下载镜像</li>
+</ol>
+<pre><code class="lang-shell">docker pull ubuntu:20.04
+docker pull jrei/systemd-ubuntu:20.04
+</code></pre>
+<ol>
+<li>创建网络</li>
+</ol>
+<pre><code class="lang-shell">docker network create --driver bridge --subnet 192.168.50.0/24 --gateway 192.168.50.1 mysqlBridge
+</code></pre>
+<ol>
+<li>创建容器</li>
+</ol>
+<pre><code class="lang-shell"># sql0
+docker run -di --name sql0 -v /home/lihan/sqlStudy:/home/shareFiles --net mysqlBridge --ip 192.168.50.100 ubuntu:20.04
+</code></pre>
+<ol>
+<li>下载<code>mysql-cluster-community-server</code>安装包</li>
+</ol>
+<ul>
+<li><a href="https://dev.mysql.com/get/Downloads/MySQL-Cluster-8.0/mysql-cluster_8.0.35-1ubuntu20.04_amd64.deb-bundle.tar">/mysql-cluster_8.0.35-1ubuntu20.04_amd64.deb-bundle.tar</a></li>
+</ul>
+<p>将下载好的安装包放在宿主机挂载的目录下</p>
+<ol>
+<li>安装<code>mysql-cluster-community-server</code></li>
+</ol>
+<ul>
+<li>sql0</li>
+</ul>
+<pre><code class="lang-shell"># 进入容器
+docker exec -it sql0 /bin/bash
+
+# 创建mysql用户
+adduser mysql 
+# 密码123456
+usermod -aG sudo mysql
+
+# 解压文件到install目录
+mkdir install
+tar -xvf /home/shareFiles/mysql-cluster_8.0.35-1ubuntu20.04_amd64.deb-bundle.tar  -C install/
+cd install
+</code></pre>
+<ul>
+<li>缺少依赖<code>libssl1.1</code></li>
+<li><a href="http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1-1ubuntu2.1~18.04.23_amd64.deb">libssl1.1_1.1.1-1ubuntu2.1~18.04.23_amd64</a></li>
+</ul>
+<pre><code class="lang-shell"># 下载依赖包`libssl1.1`后，复制到宿主机挂载目录下
+
+dpkg -i /home/shareFiles/libssl1.1_1.1.1-1ubuntu2.1~18.04.23_amd64.deb
+
+# 更新修复`libssl1.1`
+
+apt update
+apt upgrade
+</code></pre>
+<ol>
+<li>制作镜像并创建<code>sql1</code>和<code>sql2</code>容器</li>
+</ol>
+<ul>
+<li>sql0</li>
+</ul>
+<pre><code class="lang-shell"># 下点需要的东西
+apt install vim sudo dialog net-tools iputils-ping
+
+# 退出容器
+exit
+
+docker stop sql0
+
+docker commit sql0 lihansql:1.0
+
+docker start sql0
+# (可选)镜像保存为文件
+docker save -o lihansql_1.0.tar lihansql:1.0
+
+# 根据镜像创建容器sql1 sql2
+
+# sql1
+docker run -di --name sql1 -v /home/lihan/sqlStudy:/home/shareFiles --net mysqlBridge --ip 192.168.50.128 lihansql:1.0
+# sql2
+docker run -di --name sql2 -v /home/lihan/sqlStudy:/home/shareFiles --net mysqlBridge --ip 192.168.50.129 lihansql:1.0
+</code></pre>
+<h3>配置集群管理器(Cluster Manager服务器)</h3>
+<ul>
+<li>sql0 192.168.50.100</li>
+</ul>
+<ol>
+<li>安装<code>ndb_mgmd</code></li>
+</ol>
+<pre><code class="lang-shell"># 解压安装install目录下的依赖包
+dpkg -i install/mysql-cluster-community-management-server_8.0.35-1ubuntu20.04_amd64.deb
+
+dpkg -i install/mysql-common_8.0.35-1ubuntu16.04_amd64.deb
+
+dpkg -i install/mysql-cluster-community-client-plugins_8.0.35-1ubuntu20.04_amd64.deb 
+
+# 安装提示缺少依赖`libgssapi-krb5-2` `libkrb5-3` `libsasl2-2`
+apt --fix-broken install
+
+# 继续安装
+dpkg -i install/mysql-cluster-community-client-plugins_8.0.35-1ubuntu20.04_amd64.deb 
+
+dpkg -i install/mysql-cluster-community-client-core_8.0.35-1ubuntu20.04_amd64.deb
+
+dpkg -i install/mysql-cluster-community-client_8.0.35-1ubuntu20.04_amd64.deb
+</code></pre>
+<ol>
+<li>配置<code>ndb_mgmd</code></li>
+</ol>
+<pre><code class="lang-shell"># 创建配置文件
+mkdir /var/lib/mysql-cluster
+vim /var/lib/mysql-cluster/config.ini
+</code></pre>
+<ul>
+<li>config.ini</li>
+</ul>
+<pre><code class="lang-ini">[ndbd default]
+# Options affecting ndbd processes on all data nodes:
+NoOfReplicas=2  
+# Number of replicas
+
+[ndb_mgmd]
+# Management process options:
+hostname=192.168.50.100  
+# Hostname of the manager
+datadir=/var/lib/mysql-cluster  
+# Directory for the log files
+
+[ndbd]
+hostname=192.168.50.128 
+# Hostname/IP of the first data node
+NodeId=11            
+# Node ID for this data node
+datadir=/usr/local/mysql/data   
+# Remote directory for the data files
+
+[ndbd]
+hostname=192.168.50.129 
+# Hostname/IP of the second data node
+NodeId=12            
+# Node ID for this data node
+datadir=/usr/local/mysql/data   
+# Remote directory for the data files
+
+[mysqld]
+# SQL node options:
+hostname=192.168.50.128 
+# MySQL server/client i manager
+
+[mysqld]
+# SQL node options:
+hostname=192.168.50.129 
+# MySQL server/client i manager
+</code></pre>
+<ol>
+<li>启动<code>ndb_mgmd</code></li>
+</ol>
+<pre><code class="lang-shell">ndb_mgmd -f /var/lib/mysql-cluster/config.ini
+</code></pre>
+<p>显示以下信息</p>
+<pre><code class="lang-shell">MySQL Cluster Management Server mysql-8.0.35 ndb-8.0.35
+2023-11-07 08:24:08 [MgmtSrvr] INFO     -- The default config directory '/usr/mysql-cluster' does not exist. Trying to create it...
+2023-11-07 08:24:08 [MgmtSrvr] INFO     -- Sucessfully created config directory
+</code></pre>
+<ol>
+<li>(非必须)配置<code>ndb_mgmd</code>开机启动</li>
+</ol>
+<ul>
+<li>docker的官方<code>Ubuntu20.04</code>镜像不带init，不支持systemd，因此跳过这个开机启动</li>
+</ul>
+<pre><code class="lang-shell"># 杀死进程
+pkill -f ndb_mgmd
+
+# 创建启动脚本
+vim /etc/systemd/system/ndb_mgmd.service
+
+# 编辑ndb_mgmd.service
+
+[Unit]
+Description=MySQL NDB Cluster Management Server
+After=network.target auditd.service
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/ndb_mgmd -f /var/lib/mysql-cluster/config.ini
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
+# 采用daemon-reload重新加载配置
+systemctl daemon-reload
+
+# 启动ndb_mgmd开机运行
+systemctl enable ndb_mgmd
+
+# 启动ndb_mgmd
+systemctl start ndb_mgmd
+
+# 验证ndb_mgmd是否正在执行
+systemctl status ndb_mgmd
+
+# 应该输出类似信息
+ndb_mgmd.service - MySQL NDB Cluster Management Server
+    Loaded: loaded (/etc/systemd/system/ndb_mgmd.service, enabled)
+    Active: active (running)
+</code></pre>
+<ol>
+<li>管理<code>ndb_mgmd</code></li>
+</ol>
+<pre><code class="lang-shell">
+# 设置允许其他MySQL Cluster节点接入，如无`ufw`等防火墙，可以跳过这一步
+ufw allow from 192.168.50.100
+ufw allow from 192.168.50.128
+ufw allow from 192.168.50.129
+</code></pre>
+<h3>配置数据节点(Data Nodes)</h3>
+<ul>
+<li>sql1 192.168.50.128</li>
+</ul>
+<ol>
+<li>安装<code>ndbd</code></li>
+</ol>
+<pre><code class="lang-shell"># 安装依赖
+sudo apt-get -f install 
+sudo apt install libclass-methodmaker-perl
+
+# 安装ndbd
+dpkg -i install/mysql-cluster-community-data-node_8.0.35-1ubuntu20.04_amd64.deb
+</code></pre>
+<ol>
+<li>创建并配置 配置文件</li>
+</ol>
+<pre><code class="lang-shell"># 创建配置文件
+vim /etc/my.cnf
+
+# 编辑my.cnf
+
+[mysql_cluster]
+# Options for NDB Cluster processes:
+ndb-connectstring=192.168.50.100  
+# location of cluster manager
+
+# 创建数据目录
+mkdir -p /usr/local/mysql/data
+</code></pre>
+<ol>
+<li>启动<code>ndbd</code></li>
+</ol>
+<pre><code class="lang-shell"># 启动
+ndbd
+
+# 输出类似信息
+2023-11-08 00:47:06 [ndbd] INFO     -- Angel connected to '192.168.50.100:1186'
+2023-11-08 00:47:07 [ndbd] INFO     -- Angel allocated nodeid: 11
+
+# 如果出现连接问题，请打开防火墙
+ufw allow from 192.168.50.100
+ufw allow from 192.168.50.128
+ufw allow from 192.168.50.129
+</code></pre>
+<ol>
+<li>(非必须)配置<code>ndbd</code>开机启动</li>
+</ol>
+<ul>
+<li>docker的官方<code>Ubuntu20.04</code>镜像不带init，不支持systemd，因此跳过这个开机启动</li>
+</ul>
+<pre><code class="lang-shell"># 杀死进程
+pkill -f ndbd
+
+# 创建启动脚本
+vim /etc/systemd/system/ndbd.service
+
+# 编辑ndbd.service
+
+[Unit]
+Description=MySQL NDB Data Node Daemon
+After=network.target auditd.service
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/ndbd
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
+
+# 采用daemon-reload重新加载配置
+systemctl daemon-reload
+
+# 启动ndb_mgmd开机运行
+systemctl enable ndbd
+
+# 启动ndb_mgmd
+systemctl start ndbd
+
+# 验证ndb_mgmd是否正在执行
+systemctl status ndbd
+
+# 应该输出类似信息
+ndbd.service - MySQL NDB Data Node Daemon
+    Loaded: loaded (/etc/systemd/system/ndbd.service, enabled)
+    Active: active (running)
+</code></pre>
+<h3>配置SQL节点(配置并运行MySQL Server 和 Client)</h3>
+<ul>
+<li>sql1</li>
+<li>标准的MySQL server不支持 MySQL Cluster 引擎 NDB. 这意味着我们需要安装含有定制的SQL服务器 MySQL Cluster软件.</li>
+</ul>
+<ol>
+<li>安装依赖</li>
+</ol>
+<pre><code class="lang-shell"># 安装联网依赖
+apt update
+apt install libaio1 libmecab2
+
+# 解压安装install目录下的依赖包
+dpkg -i install/mysql-common_8.0.35-1ubuntu16.04_amd64.deb
+
+dpkg -i install/mysql-cluster-community-client-plugins_8.0.35-1ubuntu20.04_amd64.deb 
+
+# 安装提示缺少依赖`libgssapi-krb5-2` `libkrb5-3` `libsasl2-2`
+apt --fix-broken install
+
+# 继续安装
+dpkg -i install/mysql-cluster-community-client-plugins_8.0.35-1ubuntu20.04_amd64.deb 
+
+dpkg -i install/mysql-cluster-community-client-core_8.0.35-1ubuntu20.04_amd64.deb
+
+dpkg -i install/mysql-cluster-community-client_8.0.35-1ubuntu20.04_amd64.deb
+
+dpkg -i install/mysql-client_8.0.35-1ubuntu20.04_amd64.deb
+
+dpkg -i install/mysql-cluster-community-server-core_8.0.35-1ubuntu20.04_amd64.deb
+# 安装提示缺少依赖`libnuma1`
+apt --fix-broken install
+
+# 继续安装
+dpkg -i install/mysql-cluster-community-server-core_8.0.35-1ubuntu20.04_amd64.deb
+
+dpkg -i install/mysql-cluster-community-server_8.0.35-1ubuntu20.04_amd64.deb
+# 安装提示缺少依赖`libnuma1`
+apt --fix-broken install
+
+# 继续安装
+dpkg -i install/mysql-cluster-community-server_8.0.35-1ubuntu20.04_amd64.deb
+
+#提示设置root密码
+123456
+
+# 重新安装
+dpkg -i install/mysql-cluster-community-server_8.0.35-1ubuntu20.04_amd64.deb
+
+dpkg -i install/mysql-server_8.0.35-1ubuntu20.04_amd64.deb
+</code></pre>
+<ol>
+<li>配置<code>MySQL server</code></li>
+</ol>
+<pre><code class="lang-shell"># MySQL Server 配置文件默认为 /etc/mysql/my.cnf
+vim /etc/mysql/my.cnf
+
+# 编辑my.cnf
+[mysqld]
+# Options for mysqld process:
+ndbcluster                      
+# run NDB storage engine
+ndb-connectstring=192.168.50.100 
+
+# default engine
+default_storage_engine=ndbcluster
+
+[mysql_cluster]
+# Options for NDB Cluster processes:
+ndb-connectstring=192.168.50.100  
+# location of management server
+
+
+# 重启
+#systemctl restart mysql
+
+# 开机启动
+#systemctl enable mysql
+</code></pre>
+<ol>
+<li>启动<code>MySQL server</code></li>
+</ol>
+<pre><code class="lang-shell"># 启动mysql数据库
+mysqld --user=root &amp;
+# 进入mysql数据库
+mysql --socket=/run/mysqld/mysqld.sock -u root -p
+# 小tips：这里用了sudo 记得可能第一遍输入电脑的root密码，第二次输入mysql密码
+</code></pre>
+<h3>验证MySQL Cluster安装</h3>
+<ul>
+<li>sql0 192.168.50.100</li>
+</ul>
+<p>启动<code>ndb_mgmd</code></p>
+<pre><code class="lang-shell">
+ndb_mgmd -f /var/lib/mysql-cluster/config.ini
+</code></pre>
+<ul>
+<li>sql1 192.168.50.128</li>
+</ul>
+<p>启动<code>ndbd</code></p>
+<pre><code class="lang-shell">ndbd
+</code></pre>
+<ol>
+<li>连接MySQL Server</li>
+</ol>
+<pre><code class="lang-shell">mysql -u root -p
+</code></pre>
+<ul>
+<li><p>报错1：</p>
+</li>
+<li><ul>
+<li>运行<code>service mysql(d) start</code>，报错<code>unrecognized service</code></li>
+</ul>
+</li>
+<li><ul>
+<li>运行<code>mysql</code>，报错<code>Connection error: Can't connect to local MySQL server through ***.sock</code></li>
+</ul>
+</li>
+<li><p>解决1：</p>
+</li>
+</ul>
+<p>mysqld是用来启动mysql数据库的命令，mysql是打开并执行sql语句的命令。mysql.sock是随每一次 mysql server启动生成的。因此在未启动服务的情况下，直接运行mysql命令，会报错找不到*.sock</p>
+<pre><code class="lang-bash"># mysqld启动mysql数据库 --user=mysql 指定mysql用户 &amp; 后台运行
+mysqld --user=root &amp;
+
+# 关闭mysql数据库
+mysqladmin -u root -p shutdown
+</code></pre>
+<ul>
+<li><p>报错2：</p>
+</li>
+<li><ul>
+<li><code>[ERROR] Fatal error: Please read “Security” section of the manual to find out how to run mysqld as root</code></li>
+</ul>
+</li>
+<li><p>解决2：</p>
+</li>
+</ul>
+<p>一般情况下，mysql禁止root用户登陆数据库</p>
+<ul>
+<li>以其他用户登陆mysql</li>
+<li>在命令行上添加参数<code>--user=root</code>，这样每次都要添加，有点麻烦</li>
+<li><p>编辑/etc/my.cnf，对对应标签（[mysql]/[mysqld]）添加<code>user=root</code>的设置</p>
+</li>
+<li><p>报错3：</p>
+</li>
+<li><ul>
+<li><code>mysql -u root -p</code>输入密码后，卡死或提示权限问题</li>
+</ul>
+</li>
+<li><p>解决3：</p>
+</li>
+</ul>
+<p>权限问题，使用<code>sudo mysql -u root -p</code>，输入密码后，可以正常登陆</p>
+<ul>
+<li><p>报错3：</p>
+</li>
+<li><ul>
+<li><code>mysql -u root -p</code>输入密码后，报错<code>Connection error: Can't connect to local MySQL server through ***.sock</code></li>
+</ul>
+</li>
+<li><p>解决3：</p>
+</li>
+</ul>
+<p><code>find / -name *.sock</code>查找.sock文件，启动时添加参数<code>--socket=/run/mysqld/mysqld.sock</code>，根据查找到的路径指定.sock文件</p>
+<ul>
+<li><code>mysql --socket=/run/mysqld/mysqld.sock -u root -p</code></li>
+</ul>
+<ol>
+<li>查看NDB引擎的相关信息</li>
+</ol>
+<pre><code class="lang-sql">SHOW ENGINES NDB STATUS \G
+</code></pre>
+<ul>
+<li>输出类似信息</li>
+</ul>
+<p><img alt="1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/lihan3238.github.io/content/post/1.png"/></p>
+<pre><code class="lang-sql">quit
+</code></pre>
+<ol>
+<li>集群管理器控制台上查看集群信息</li>
+</ol>
+<ul>
+<li>sql0 192.168.50.100</li>
+</ul>
+<pre><code class="lang-shell">ndb_mgm
+# 进入ndb_mgm控制台
+SHOW
+# 查看集群信息
+# 显示如下信息
+Cluster Configuration
+---------------------
+[ndbd(NDB)]     2 node(s)
+id=11   @192.168.50.128  (mysql-8.0.35 ndb-8.0.35, starting, Nodegroup: 0)
+id=12 (not connected, accepting connect from 192.168.50.129)
+
+[ndb_mgmd(MGM)] 1 node(s)
+id=1    @192.168.50.100  (mysql-8.0.35 ndb-8.0.35)
+
+[mysqld(API)]   2 node(s)
+id=13 (not connected, accepting connect from 192.168.50.128)
+id=14 (not connected, accepting connect from 192.168.50.129)
+</code></pre>
+<ul>
+<li>问题1</li>
+</ul>
+<p>发现ndbd正常连接，但是mysql无法连接</p>
+<ul>
+<li>解决1</li>
+</ul>
+<p>不知道为什么，一定要将集群的所有其他节点配置连接好后，才能连接上<code>mysql</code>节点。
+吧<code>sql2</code>的<code>ndbd</code>配置好后，<code>sql1</code>和<code>sql2</code>的<code>mysql</code>就可以连接上了。</p>
+<ol>
+<li>制作镜像并创建<code>sql2</code>容器</li>
+</ol>
+<ul>
+<li>sql1 192.168.50.128</li>
+</ul>
+<pre><code class="lang-bash">
+# 退出容器
+exit
+
+docker stop sql1
+
+docker commit sql1 lihan_ndbd_sql:1.0
+
+docker start sql1
+# (可选)镜像保存为文件
+docker save -o lihan_ndbd_sql.tar lihan_ndbd_sql:1.0
+
+# 根据镜像创建容器sql1 sql2
+
+# sql2
+docker run -di --name sql2 -v /home/lihan/sqlStudy:/home/shareFiles --net mysqlBridge --ip 192.168.50.129 lihan_ndbd_sql:1.0
+
+docker exec -it sql2 /bin/bash
+
+ndbd
+
+mysqld --user=root &amp;
+</code></pre>
+<ol>
+<li>验证连接</li>
+</ol>
+<ul>
+<li>sql0 192.168.50.100</li>
+</ul>
+<pre><code class="lang-shell">ndb_mgm
+# 进入ndb_mgm控制台
+SHOW
+# 查看集群信息
+# 显示如下信息
+Cluster Configuration
+---------------------
+[ndbd(NDB)]     2 node(s)
+id=11   @192.168.50.128  (mysql-8.0.35 ndb-8.0.35, Nodegroup: 0, *)
+id=12   @192.168.50.129  (mysql-8.0.35 ndb-8.0.35, Nodegroup: 0)
+
+[ndb_mgmd(MGM)] 1 node(s)
+id=1    @192.168.50.100  (mysql-8.0.35 ndb-8.0.35)
+
+[mysqld(API)]   2 node(s)
+id=13   @192.168.50.128  (mysql-8.0.35 ndb-8.0.35)
+id=14   @192.168.50.129  (mysql-8.0.35 ndb-8.0.35)
+</code></pre>
+<h3>向MySQL集群插入数据</h3>
+<ul>
+<li>注意为了使用集群功能, 必须使用NDB数据库引擎. 如果使用InnoDB (default)或其他引擎,将不能使用集群.</li>
+</ul>
+<pre><code class="lang-sql">
+-- 首先, 在一个sql节点创建数据库clustertest:
+CREATE DATABASE clustertest;
+
+-- 其次转到新数据库:
+USE clustertest;
+
+-- 再次，创建表test_table:
+CREATE TABLE test_table (name VARCHAR(20), value VARCHAR(20)) ENGINE=ndbcluster;
+
+-- 如果`my.cnf`中没有设置，这里需要显式规定ndbcluster引擎. 
+-- 现在可以插入数据了:
+INSERT INTO test_table (name,value) VALUES('some_name','some_value');
+
+-- 最后在另一个sql节点验证数据插入：
+SELECT * FROM test_table;
+</code></pre>
+<ul>
+<li>思考：在本例中，数据被插入到了哪个机器？</li>
+</ul>
+<ul>
+<li>问题：</li>
+<li><ul>
+<li>1 通过实验，你对一个分布式数据库系统有何理解？分布式数据库系统预计有何优越性？</li>
+</ul>
+</li>
+<li><ul>
+<li>2 你能设计一个方案验证集群系统在可靠性上优于集中式数据库系统吗？</li>
+</ul>
+</li>
+<li><ul>
+<li>3 同样是插入数据，你觉得MySQL Cluster和myCAT 在实体完整性保持方面是否可能会有不同？为什么？</li>
+</ul>
+</li>
+</ul>
