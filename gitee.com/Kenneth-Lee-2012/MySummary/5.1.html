@@ -1,0 +1,69 @@
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux主线内核跟踪/5.1.rst">5.1</a></h2>
+<p>5.1</p>
+<hr/>
+<h1>io_uring</h1>
+<p>AIO的升级，用户态的库在这里：<a href="http://git.kernel.dk/cgit/liburing">http://git.kernel.dk/cgit/liburing</a></p>
+<p>原来是aio_read, aio_write，这两个函数进去一个控制结构，可以设定信号，然后等信号来再做出响应。
+这个接口问题很多：</p>
+<ol>
+<li>只支持O_DIRECT</li>
+<li>metadata不足的时候，还是会等待</li>
+<li>API需要不小的拷贝</li>
+</ol>
+<p>新的接口是个ringbuffer，靠mmap做共享内存，然后做通讯。</p>
+<h1>fanotify增强</h1>
+<p>这个特性2.6.36加入，比inotify scales更好，这个版本支持super block root watch.</p>
+<h1>pidfd_sned_signal</h1>
+<p>用pidfd_send_signal代替原来直接基于pid发signal的形式，这样就不会因为pid重用杀错
+人。</p>
+<h1>把持久内存真当内存用</h1>
+<p>Intel的人做的，好像是把qemu的内存整个放在这个内存上，然后用来离线迁移？驱动更新
+在drivers/dax/pmem.c中，DAX：direct access to differentialed memory，这个东西通
+过mmap到/dev/daxX.Y来实现的。</p>
+<h1>TEO</h1>
+<p>在原来的两个Idle Governor：Menu和Ladder外，增加了一个TEO，Timer Events Oriented
+Governor。Ladder（一点点休眠下去，缺点是要深睡很慢）Menu（根据任务数合作激活历
+史来猜）TEO（基于始终中断的激活历史来猜，因为如果是tickless内核，不考虑IO，我们
+知道什么时候才需要醒）</p>
+<h1>2038年问题的最后准备</h1>
+<p>把所有time_t，无论在32位还是64位机器上，都改成了64bit，相关API，比如futex在32位
+上变成futex_time32，64位上叫futex_time64。</p>
+<p>这样的接口包括： adjtimex(), clock_adjtime(), clock_getres(), clock_gettime(),
+clock_nanosleep(), clock_settime(), futex(), io_getevents(), io_pgetevents(),
+mq_timedsend(), mq_timedreceive(), nanosleep(), ppoll(), pselect6(),
+recvmmsg(), rt_sigtimedwait(), sched_rr_get_interval(), semtimedop(),
+timer_gettime(), timer_settime(), timerfd_gettime(), timerfd_settime(), and
+utimensat()</p>
+<p>这些是大方向修改，但其实我们不知道还有多少小地方还会有问题。</p>
+<h1>直接使用dm-crypt的分区启动</h1>
+<p>它包括两个改进：</p>
+<ol>
+<li><p>提前dm-crypt的初始化时间</p>
+</li>
+<li><p>通过模块参数直接开始启动分区（取代dm-setup)：</p>
+<pre><code> ::
+ dm-mod.create=&lt;name&gt;,&lt;uuid&gt;,&lt;minor&gt;,&lt;flags&gt;,&lt;table&gt;[,&lt;table&gt;+][;&lt;name&gt;,&lt;uuid&gt;,&lt;minor&gt;,&lt;flags&gt;,&lt;table&gt;[,&lt;table&gt;+]+]
+</code></pre>
+</li>
+</ol>
+<h1>LivePatch支持replace和积累（Cumulative）补丁</h1>
+<p>LivePatch依赖三个特性：</p>
+<ol>
+<li>kprobe</li>
+<li>ftrace（function trace要开了）</li>
+<li>livepatch</li>
+<li>支持模块（查看：/proc/sys/kernel/modules_disabled）</li>
+</ol>
+<p>控制点：/sys/kernel/livepatch</p>
+<p>打了Patch，这里会有tained标记：/proc/sys/kernel/tainted</p>
+<h1>其他</h1>
+<ol>
+<li><p>/proc/stat本来是在读的时候累加的，为了做优化，现在变成直接统计的时候就加在一个变量上，加快速度。</p>
+</li>
+<li><p>Socinext的SC2000加进来了</p>
+</li>
+<li><p>海思相关的就两个，一个sas加debugfs，一个是k3升级dma引擎</p>
+</li>
+</ol>
+<h1>参考</h1>
+<p>[1] <a href="https://kernelnewbies.org/LinuxChanges">https://kernelnewbies.org/LinuxChanges</a></p>

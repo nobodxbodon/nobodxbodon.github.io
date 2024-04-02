@@ -1,0 +1,35 @@
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/软件构架设计/硬编码Tag方案.rst">硬编码Tag方案</a></h2>
+<p>.. Kenneth Lee 版权所有 2022</p>
+<p>:Authors: Kenneth Lee
+:Version: 0.1
+:Date: 2022-04-27
+:Status: Draft</p>
+<p>硬编码Tag方案</p>
+<hr/>
+<p>这里给做某个实现的同事提供一个在自定义指令中实现硬编码一个Tag的软件实现技巧。</p>
+<p>问题是这样的：我需要在一个CPU上增加一个调试指令，以便调用这个指令可以在一个端口
+上打一个点，这样我调试初始化代码的时候就可以看到启动的过程了。</p>
+<p>问题是现在我不想修改编译器，所以我需要在我的程序中硬编码这段代码，比如汇编上我
+可以写：::</p>
+<p>.2byte OPCODE
+  .2byte tag</p>
+<p>这样我在CPU中译码匹配到这个指令，我就可以把tag输出到某条总线上。现在的问题是，
+这个代码怎么写?我才能实现这样的代码效果？：::</p>
+<p>...
+  debug_reach(tag);
+  ...</p>
+<p>这肯定不能是个函数，因为tag必须硬编码到指令中。那就只能让它是个宏了，是个宏，那
+我的汇编就只能是嵌入式汇编了。所以应该这样弄：</p>
+<p>.. code-block:: c</p>
+<h1>define OPCODE 0xdeb0</h1>
+<h1>define stringify(str) #str</h1>
+<h1>define debug_reach(TAG) asm( \</h1>
+<pre><code>      " .4byte " stringfy(OPCODE) "\n" \
+      " .4byte " stringfy(TAG) "\n")
+</code></pre>
+<p>int test(void) {
+          ... 
+      debug_reach(0x1111);
+          ...<br/>
+  }</p>
+<p>这样，就可以在启动代码中大量打点，而不需要动态传递参数到指令中。</p>

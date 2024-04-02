@@ -1,0 +1,359 @@
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux主线内核跟踪/6.1.rst">6.1</a></h2>
+<p>.. Kenneth Lee 版权所有 2022</p>
+<p>:Authors: Kenneth Lee
+:Version: 0.1
+:Date: 2022-12-21
+:Status: Draft</p>
+<p>6.1</p>
+<hr/>
+<p>这个系列的文档是我用来强迫自己保持对Kernel版本变化的敏感而写的。它主要基于
+kernelnewbies.org\ [1]_\ 的基础信息，加上查阅相关感兴趣的文档和代码补充而成。</p>
+<p>Linux Kernel 6.1版本发布时间：2022年12月11日。</p>
+<h1>大特性</h1>
+<h2>Rust支持</h2>
+<p>内核开始支持Rust了！</p>
+<p>相关代码在rust目录中。根据文档，现在只有x86支持。编译器用的是LLVM的，以后要扩展
+更多功能，估计也会依赖LLVM，这意味这未来编译内核不能仅有GCC了。</p>
+<p>我简单编译了一下，在我的机器可以运行rustc和cargo的情况下，make menuconfig中无法
+使能RUST支持。而按文档的说法执行make LLVM=1 rustavailable失败。我懒得一点点跟踪
+具体是什么地方有问题了。反正感觉整个特性还有不少工作要做的。</p>
+<p>看补丁本身，当下的工作主要是把一些最基本的Kernel服务，比如alloc等，封装成rust的
+crate（相当于库，不过rust的应用程序也叫crate）。现在封装的接口很有限，用来写驱
+动肯定是不行的。只能说工作刚刚开始，可以慢慢观察后续发展。</p>
+<h2>Multi-Gen LRU</h2>
+<p>这是一个新的LRU算法，配置项是CONFIG_LRU_GEN和CONFIG_LRU_GEN_ENABLE。算法的参数
+在/sys/kernel/mm/lru_gen/中。调试信息在/sys/kernel/debug/lru_gen_full中。作者是
+Google的Zhao Yu。补丁上提到一些用户提到在高内存压力下这个性能比原来好很多。</p>
+<p>在我的双核虚拟机中这配置和调试文件默认呈现是这样的： ::</p>
+<p>root@debian:/sys/kernel/mm/lru_gen# cat enabled
+  0x0007                                                 &lt;--- 三个配置选项都是enable
+  root@debian:/sys/kernel/mm/lru_gen# cat min_ttl_ms
+  0
+  root@debian:/sys/kernel/debug# cat lru_gen
+  memcg     0                                            &lt;--- control group
+   node     0                                            &lt;--- NUMA node
+            0     130465          0       10326          &lt;--- tie - age_in_ms - nr_anon_pages nr_file_pages
+            1     130465        228           0
+            2     130465          0           0
+            3     130465       9997       22724</p>
+<p>root@debian:/sys/kernel/debug# cat lru_gen_full
+  memcg     0
+   node     0
+            0     204104          0       10332
+                       0          0r          0e          0p          0r          0e          0p
+                       1          0r          0e          0p          0r          0e          0p
+                       2          0r          0e          0p          0r          0e          0p
+                       3          0r          0e          0p          0r          0e          0p
+                                  0l          0o          0y          0n          0f          0a
+            1     204104        228           0
+                       0          0r          0e          0p          0r          0e          0p
+                       1          0r          0e          0p          0r          0e          0p
+                       2          0r          0e          0p          0r          0e          0p
+                       3          0r          0e          0p          0r          0e          0p
+                                  0l          0o          0y          0n          0f          0a
+            2     204104          0           0
+                       0          0r          0e          0p          0r          0e          0p
+                       1          0r          0e          0p          0r          0e          0p
+                       2          0r          0e          0p          0r          0e          0p
+                       3          0r          0e          0p          0r          0e          0p
+                                  0l          0o          0y          0n          0f          0a
+            3     204104      10001       22724
+                       0          0R          0T          0           0R          0T          0
+                       1          0R          0T          0           0R          0T          0
+                       2          0R          0T          0           0R          0T          0
+                       3          0R          0T          0           0R          0T          0
+                                  0           0           0           0           0           0</p>
+<p>算法的特征就是名字是说的Multi-Generational LRU。原来的LRU只有两层（tier），
+active和inactive，少用的页就慢慢退火成为Inactive的，然后清掉，多用的就继续保持
+在active里面。Multi-Gen LRU算法提供更多的层（上面这个例子是4层），给定独立的退
+火时间，具体怎么样的我没有看了。</p>
+<p>老实说，我一看到这个cg就头大。这些配置基本上没有什么规律，只能就事论事。对于我
+这种做平台的人来说，这种很难在平台层总结规律的事情都是很恶心的。我觉得未来这个
+地方应该有所改变才对。CG这个问题基本上是这样的：我有很多很多的，不同类别的资源，
+我又想共享它们，又想保证某些人总是有实际的资源可用。所以就给不同的维度设置不同
+的cg类型，每种类型分成不同的cg，每个cg设定不同的不同层面的limit（比如简单的soft
+limit和hardlimit），硬的就必须预留，软一些的就可以一定程度分出去，等有的时候再
+给你。</p>
+<p>为了能够一层层分配下去，它还把cg分成了很多的层，每层还可以向下分配。</p>
+<p>但这只是从提供者的角度说的，提供者是很容易做了，但综合起来能否解决问题呢？就很
+难说了，因为使用者会被提供设置在不同的提供者的cg中，我可能永远不知道我的需求是
+否得到满足。这个问题就好像你发烧了去看医生，医生告诉你“发烧不是正常提问”，“物理
+降温有80%可能降低温度”，但就是不回答你“我该吃药还是多喝水？”。你说他没给你治也
+不对，你说他治了，好像也说不过去。</p>
+<p>所以，我觉得这应该有一个更好的使用者的角度，比如说，我们不应该有那么多的CG，而
+应该是一组使用对象，我们单独设置这些使用对象的每种资源的分配数量，该几个CPU就几
+个CPU，你被给我搞什么先切割CPU的百分比，你就告诉我给某个使用这硬的CPU的百分比和
+软的百分比就好了。我没兴趣先给你调好分配然后再去想使用者怎么用这个分配。这样组
+合的逻辑我们才知道我们的需求被满足了没有。</p>
+<p>算法分析
+^^^^^^^^</p>
+<p>说远了，我们还是回到算法本身吧。</p>
+<p>LRU算法主要用于自动判断页未来还要用的记录有多大。如果页已经被应用程序标记有多
+大机会使用了，这就不需要LRU算法了。比如madvice的MADV_SEQUENTIAL和MADV_RANDOM
+（对应内核的VM_SEQ_READ和VM_RAND_READ等参数），我们不需要LRU算法，因为丢弃算法
+本身就知道这些页面具有局部性或者不具有局部性。</p>
+<p>如果没有这种来自应用层的主动说明，平台只能通过对页面DA bit的扫描，以及文件读写
+的通道，来决定是否某个页面是否热。</p>
+<p>MG-LRU不是一个可选的算法，它对回收流程的修改是推翻式的，现在的扫描流程走的是这
+样一个过程：::</p>
+<p><strong>alloc_pages()
+   +-&gt;</strong>alloc_pages_slowpath() &lt;-- 在这之前会尝试走get_page_from_freelist()这个快速通道
+       +-&gt;<strong>alloc_pages_direct_reclaim()
+           +-&gt;</strong>perform_reclaim()
+               +-&gt;try_to_free_pages()
+                   +-&gt;do_try_to_free_pages()
+                       +-&gt;shrink_zones()
+                           +-&gt;shrink_node()
+                               +-&gt;shrink_node_memcgs()
+                                   +-&gt;shrink_lruvec()
+                                       +-&gt;shrink_list()
+                                           +-&gt;shrink_active_list()   &lt;-- folio_check_references()也会走后面的流程
+                                               +-&gt;folio_referenced()
+                                                   +-&gt;folio_referenced_one()
+                                                       +-&gt;lru_gen_look_around()</p>
+<p>可以和看到，回收流程被控制在try_to_free_pages()流程内部了。算法独立根据收集的
+数据决定页的热度，在不同的冷热页链表上移动。</p>
+<p>算法在每个NUMA Node的memcg（mem_cgroup_per_node）上设置一个lruvec，然后分有名
+和无名页各创建active和inactive链表，这个分类我觉得有助于分离多个要素在算法上不
+同的期望：</p>
+<ol>
+<li>不同node独立跟踪，避免高成本抛弃了本地页面</li>
+<li>不同memcg独立跟踪，因为memcg的要求是不同的</li>
+<li>有名和无名页独立跟踪，因为有名页没有访问局部性，而无名页有。</li>
+</ol>
+<p>在每个lruvec上，再用一个很复杂的matrix（所谓的MG算法主要体现在这里），我们可以
+简单看看它的数据结构：</p>
+<p>.. code-block:: C</p>
+<p>struct lru_gen_folio {
+    /<em> the aging increments the youngest generation number </em>/
+    unsigned long max_seq;
+    /<em> the eviction increments the oldest generation numbers </em>/
+    unsigned long min_seq[ANON_AND_FILE];
+    /<em> the birth time of each generation in jiffies </em>/
+    unsigned long timestamps[MAX_NR_GENS];
+    /<em> the multi-gen LRU lists, lazily sorted on eviction </em>/
+    struct list_head folios[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
+    /<em> the multi-gen LRU sizes, eventually consistent </em>/
+    long nr_pages[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
+    /<em> the exponential moving average of refaulted </em>/
+    unsigned long avg_refaulted[ANON_AND_FILE][MAX_NR_TIERS];
+    /<em> the exponential moving average of evicted+protected </em>/
+    unsigned long avg_total[ANON_AND_FILE][MAX_NR_TIERS];
+    /<em> the first tier doesn't need protection, hence the minus one </em>/
+    unsigned long protected[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS - 1];
+    /<em> can be modified without holding the LRU lock </em>/
+    atomic_long_t evicted[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS];
+    atomic_long_t refaulted[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS];
+    /<em> whether the multi-gen LRU is enabled </em>/
+    bool enabled;
+        ...
+  }</p>
+<p>注意一下中间的几个三维数组，这个算法不是简单的逻辑模型，已经有ML的成分了。没到
+要改算法前，我就不深入进去看了，它跟踪的参数可不少，而且这显然不是局限在一个
+NUMA Node上的（虽然数据结构属于某个NUMA节点）。反正旧的页不是一次跳到inactive
+上的，而是随着一个age的变化在多个层级间逐步退火的。</p>
+<p>其他的不看了。</p>
+<h2>KMSAN</h2>
+<p>Kernel Memory SANitizer。用来查变量未初始化用的，成本比较高，只适合在测试环境里
+面用。配置项是CONFIG_KMSAN。使能后运行过程中发现有变量未初始化会在内核打印中直
+接用BUG打印打印出来。在函数前面加上<strong>no_kmsan_checks可以关闭对这个函数的检查。
+也可以用</strong>no_kmsam_memory直接要求编译器不产生检查代码（避免影响汇编逻辑）。
+Makefile中还可以通过KMSAN_SANITIZE_xxxx:=n关掉对xxxx文件的检查。也可以用
+KMSAN_SANITIZE:=n关掉整个目录的检查。</p>
+<p>工作原理是给每个变量都分配一个影子变量，如果变量没有初始化就设置为一个特定的状
+态。这称为Poison，如果初始化了，这个状态清掉，称为一次unpoison。编译器和内核配
+合，在分配变量，分配内存的时候把变量poison了，初始化的时候就unpoison了。编译器
+在使用变量的时候插入代码检查变量是不是poison的，如果是，就报错。</p>
+<p>这个功能在用户态已经支持了，只是把一样的功能移到内核而已。</p>
+<h2>VMS改用Maple Tree</h2>
+<p>Maple tree开始大规模上传（原来在这里介绍过：\ :ref:<code>kernel_maple_tree</code>\ ），补
+丁来自Oracle。而且这个版本的接口不再使用mt_前缀，而改成了mas_前缀。并且从这个版
+本开始，VMS换用Maple Tree管理了。比如现在vma_find函数已经实现成了mas_find()了。</p>
+<h2>BPF专用内存分配器</h2>
+<p>BPF实现了自己专用的内存分配器，用于处理复杂的运行环境问题（比如正在处理中断上下
+文，特别是被NMI中断影响的时候，还有内存缺页需要分配的时候等等）。算法类似
+mempoll，函数名字也类似，叫bpf_mem_cache_alloc/free()。基本原理大概就是为不同上
+下文，不同CPU创建不同的对象独立分配。所以这个东西不好做内存统计的，在补丁的讨论
+中有人提到这一点了，我还没有深入看现在的版本这个问题是否解决了。</p>
+<p>其实我不怎么关心BPF的发展，我总觉得这个东西很破坏架构。因为它在内核中创建了很多
+额外的逻辑，而这些逻辑没法作为一个逻辑闭包单独得到一个扇出比较小的总结性理解。
+所以很难判断整个逻辑有没有错。这样给内核的逻辑引入了很多的可能性，降低了逻辑的
+可靠性，我个人是不喜欢这样的设计的。我把逻辑都放在同一个空间里，穷举它的所有可
+能性，而不想老去想“这里加进来一个变数，那里加进来一个变数，整个逻辑又变成什么样
+了。”</p>
+<p>但我还是把这个特性作为一个大特性放到单独的一个小节中（而不是作为一个列表条目放
+到下一章的简单特性列表中），主要是因为最近和人讨论把缺页的动作做到硬件上的可能
+性，我想就着对这个特性的讨论，独立讨论用硬件来做缺页的难点在什么地方。</p>
+<p>做硬件的同学看了OS补页的原理，总是觉得“我也行”，觉得有必要代替OS来做完成这个工
+作。而且在他们看来这个事情是顺理成章的：我发现你缺页了，我还要告诉你，你其实也
+没有干什么，就是找了一个空的页，又填到我的数据结构（页表）中，这不是多余的通讯
+吗？你把这些页给我，我来给你填，这不是好好的吗？这为什么不行？</p>
+<p>这个问题从软件的角度不好回答，因为要素太多了。我简单想想，大概会有这么一些：</p>
+<ol>
+<li><p>你怎么知道我是不是想补页？你至少得知道我的VMA信息才能肯定这一点，而且，你还
+不能只知道我的范围，你还要知道我的属性，因为我可能不但是要补页，我还可能需要
+COW，只读，fixup或者其他的属性。这意味着，我软件要改什么补页策略，也要改你的
+硬件逻辑。</p>
+</li>
+<li><p>提前把一些页给硬件，让硬件按需补充。NUMA等考量要不要也告诉硬件？硬件怎么知道
+我的意图？这些信息要不要告诉你硬件？你硬件有能力处理这么多逻辑，你还是硬件么？</p>
+</li>
+<li><p>Midgard就多几个VMA硬件都觉得非定长多个段不好处理，现在那么多复杂逻辑都让硬件
+处理，硬件就能搞定？</p>
+</li>
+<li><p>有虚拟化以后，我硬件要不要告诉你两层翻译的逻辑？但两层软件属于两个特权级，统
+一到一个硬件对象上，这不合理吧？那两级需要两个硬件对象，供给两个特权级？但分
+配是两个软件的分配，物理页是同一个物理页啊，这个协议很不好写吧？</p>
+</li>
+<li><p>每个软件对象，每个CPU，都需要独立的预分配的自由页，这些自由页还需要在有大页
+机会的时候可以自由合并，但一旦分离给了硬件，硬件没法针对全系统做这种调度吧？
+联系到社区对这个BPF分配器的质疑，这个页的Accounting怎么做？Accounting要算到
+每个进程里的，你硬件难道要每个进程给我单独统计数字？</p>
+</li>
+<li><p>页都有backlog file，只要backlog file uptodate，对应的page我软件说释放就释放
+了，这件事情你硬件怎么处理？而且，如果你的硬件可以修改页表，我软件也可以修改
+页表，双方在内存上就得有个互斥算法，这个怎么保证效率。再说了，如果这个缺的页
+是swap出去的，你补页的时候还要给我把backlog file加载回来，你硬件怎么做这个事
+情？</p>
+<p>这个问题在共享VMA属性的时候同样存在，我们前面已经看到VMA为了减少锁的使用，改
+用了锁冲突更少的Maple Tree了，VMA的信息怎么和你的硬件互斥，也会成为一个很难
+处理的问题。</p>
+</li>
+<li><p>LRU算法怎么做？6.1开始提供新的Multi-gen LRU了，那个页更热，谁应该退下去，硬
+件可以取代软件来做吗？</p>
+</li>
+<li><p>硬件能知道我这个页是代码吗？知道需要刷新对应的icache吗？</p>
+</li>
+</ol>
+<p>1-4这些我都可以退化为“正好要无脑补页的地方才使能这个功能”，但5-7是没法这么搞的，
+8我猜通过复杂的逻辑组合可以知道，但如果软件写得技巧性一点，硬件也是判断不出来的。
+而且“正好要无脑补页的地方才使能这个功能”，这是否实际能做出效果，这要试过才知道。</p>
+<p>由于有这么多逻辑都需要在细节上试过才知道，像这类的问题，软件工程师通常就不敢轻
+易回答这个问题。说“行”和“不行”，都可能是不正确的。</p>
+<p>总的来说，页表分配这件事是个复杂的软件逻辑，而不是无脑的硬件行为。你当然可以把
+所有事情都接管过去，因为本来软硬件都是逻辑处理，要做总是可以做到的。但我们一般
+都是把复杂逻辑给软件（以便修改），把粗暴逻辑给硬件，如果真要做硬件加速，我们首
+先应该把软件的逻辑写出来，看到暴露出来的软件逻辑可以简单粗暴用硬件搞定了，再硬
+化。这比较靠谱一点。但看到软件某个流程比较曲折，就想整个用硬件行为取代，我觉得
+是没有前途的。</p>
+<h2>PSI功能增强</h2>
+<p>写这一段不是为了看这个增强，而是之前就不知道有PSI这个特性。这个特性叫Pressure
+Stall Information，配置项是CONFIG_PSI（默认不开）。接口在/proc/pressure目录中，
+就三个文件：::</p>
+<p>cpu  io  memory
+  kenny@lklp02:/proc/pressure$ cat cpu
+  some avg10=0.00 avg60=0.07 avg300=0.28 total=246159824
+  full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+  kenny@lklp02:/proc/pressure$ cat io
+  some avg10=0.00 avg60=1.46 avg300=5.10 total=77138440
+  full avg10=0.00 avg60=1.44 avg300=5.02 total=74947845
+  kenny@lklp02:/proc/pressure$ cat memory
+  some avg10=0.00 avg60=0.00 avg300=0.00 total=1507395
+  full avg10=0.00 avg60=0.00 avg300=0.00 total=1491067</p>
+<p>应用程序通过写一个门限到文件中，然后poll里面的变动，查看什么当前的计算认为是被
+什么资源拦住了。some和full是两个不同的跟踪算法，前者跟踪等待资源的任务，后者加
+上等待资源但本身并没有停下的任务（调度去干其他工作了）。</p>
+<p>门限的写法类似这样：::</p>
+<p>&lt;some|full&gt; &lt;stall amount in us&gt; &lt;time window in us&gt;</p>
+<p>后一个时间是跟踪窗口，前一个时间是这个窗口中的等待时间。</p>
+<p>新版本增加了一些对SOFTIRQ的跟踪内容，但接口没有改变。</p>
+<h1>Memory Tiering</h1>
+<p>IBM的Aneesh Kumar上传了一个特性叫mm/demotion，这个特性开始建立memory-tiering的
+概念。</p>
+<p>相关的抽象在mm/memory-tiers.c中实现，数据结构这样抽象的：::</p>
+<p>struct memory_tier {
+      struct list_head list; // tier链表
+      struct list_head memory_types; // 多个类型
+      int adistance_start; //距离
+      struct device dev; //支持设备
+      nodemask_t lower_tier_mask; //下一层tier的node
+  };</p>
+<p>这个模块有自己独立的subsys_initcall(memory_tier_init)，注册了一个
+memory_tie_subsys（可以从/sys/device/virtual/memory_tiering访问），然后把上面的
+数据结构加入到NUMA的node中。初始化的时候然后按每个内存节点的属性决定它和CPU的距
+离，比如属于CPU+DRAM的就认为距离比较近，单独只有内存的节点（很可能是远端的内存）
+就认为距离比较远。建立一个降级的表，在vmscan里面根据这张表对内存进行降级，新分
+配的内存就在距离近的节点中分配，时间长了没有使用，就开始向距离远的节点上迁移。</p>
+<p>具体算法我就不看了，反正遇到新的情形总是要变的。</p>
+<p>代码中举了三个例子做为场景的参考，我直接拷贝出来帮助理解：::</p>
+<p>例一：Node 0 &amp; 1 are CPU + DRAM nodes, node 2 &amp; 3 are PMEM nodes.
+ node   0    1    2    3
+    0  10   20   30   40
+    1  20   10   40   30
+    2  30   40   10   40
+    3  40   30   40   10</p>
+<p>例二：Node 0 &amp; 1 are CPU + DRAM nodes, node 2 is memory-only DRAM node.
+ node   0    1    2
+    0  10   20   30
+    1  20   10   30
+    2  30   30   10</p>
+<p>例三：Node 0 is CPU + DRAM nodes, Node 1 is HBM node, node 2 is PMEM node.</p>
+<p>node   0    1    2
+    0  10   20   30
+    1  20   10   40
+    2  30   40   10</p>
+<h1>其他有趣的东西</h1>
+<ol>
+<li><p>KCFI支持。之前的CFI（Control-Flow Integrity，）支持是ARM加的，只有ARM平台支
+持了，现在加入了x86支持，叫KCFI。我以为这个特性是Intel做的，但实际上是Google
+的人做的。</p>
+</li>
+<li><p>Intel的Huangying在NUMA平衡算法上一些调整，优化在多种不同速度内存的时候，慢速
+内存的热点的迁移策略，把pmbench的不同测试项有不同程度的提升，部分可以达到25%
+以上。</p>
+</li>
+<li><p>madvise()增加了一个参数MADV_COLLAPSE，用于主动把进程的一段变成了大页。这个修
+改让我想到了：页对应用程序，越来越不是透明的了。调用原型如下：::</p>
+<p>int madvise(void *begin, size_t length, MADV_COLLAPSE);</p>
+</li>
+<li><p>BTRFS针对io_uring对异步调用进行了一些优化，据说有大幅的提升。我这里看到两个东西：
+其一，大家的都在针对io_uring做各种优化。其二，磁盘这里用dbench来做性能测试基准。
+我去看了一下dbench，它包含两个测试套，测试磁盘的dbench和测试socket的tbench。测试
+结果大致是这个样子的：::</p>
+<pre><code> 8    118098    37.77 MB/sec  execute  16 sec  latency 17.757 ms
+ 8    119059    37.63 MB/sec  execute  17 sec  latency 21.373 ms
+ 8    119910    37.90 MB/sec  execute  18 sec  latency 17.226 ms
+ 8    120816    39.00 MB/sec  execute  19 sec  latency 16.190 ms
+ 8    121634    37.83 MB/sec  execute  20 sec  latency 22.284 ms
+ 8    122437    37.68 MB/sec  execute  21 sec  latency 19.729 ms
+ 8    123077    36.64 MB/sec  execute  22 sec  latency 20.686 ms
+ 8    123937    37.55 MB/sec  execute  23 sec  latency 17.622 ms
+ 8    125054    37.77 MB/sec  execute  24 sec  latency 19.385 ms
+ 8    125846    37.74 MB/sec  execute  25 sec  latency 18.987 ms
+</code></pre>
+</li>
+<li><p>最后一个a.out用户退出，Linux从此不再支持a.out。</p>
+</li>
+<li><p>fortify功能在继续增强（原来在这里跟踪过：\ :ref:<code>linux_fortify</code>\ )。</p>
+</li>
+<li><p>共享内存，Swap等相关的模块的页语义修改成\ :ref:<code>folio &lt;linux-folios&gt;</code>\ 的语
+义。很多函数在改名（page以后称为folio），换底层调用接口等。</p>
+</li>
+<li><p>中兴的人在KSM（把相同内容的页合并）中增加了一个统计接口/proc/&lt;pid&gt;/ksm_stat，
+用于统计这个算法的实际效果。</p>
+</li>
+<li><p>kvm升级了一个dirty ring对于弱内存序支持的特性。这个其实我不是特别关心，我只
+是看到作者是Marc Zyngier，他现在不再使用ARM的帐号了，用的是kernel.org的帐号
+了。所以我记录一下。</p>
+</li>
+<li><p>龙芯继续在补平台相关的基础设施，比如qspinlock，kdump等。我也不知道这是不是
+一个独立的团队在玩的，反正在我的机器上就是一直不能编译。</p>
+</li>
+<li><p>RISCV有一个补丁在修改EFI的启动特性，看来这个平台开始有UEFI支持了。</p>
+</li>
+<li><p>海思鲲鹏的几个修改：</p>
+<ol>
+<li><p>海思鲲鹏的DMA引擎加了一组新硬件支持，我猜这是1630的代码，和1620并线处理
+了。</p>
+</li>
+<li><p>加密引擎的QM中引入了一个feature寄存器，从那里读相关寄存器（新硬件特性）。</p>
+</li>
+<li><p>PCIe流量跟踪器（PTT，PCIe Tune&amp;Trace Device）驱动第一次上传，属于
+drivers/hwtracing目录，功能注册给PMU子系统。这样一个特性，居然没有写用户
+文档？这个说不过去啊。</p>
+</li>
+</ol>
+</li>
+</ol>
+<h1>参考</h1>
+<p>.. [1] <a href="https://kernelnewbies.org/LinuxChanges">https://kernelnewbies.org/LinuxChanges</a></p>

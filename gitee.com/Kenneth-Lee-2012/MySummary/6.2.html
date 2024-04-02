@@ -1,0 +1,276 @@
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux主线内核跟踪/6.2.rst">6.2</a></h2>
+<p>.. Kenneth Lee 版权所有 2023</p>
+<p>:Authors: Kenneth Lee
+:Version: 1.0
+:Date: 2023-04-21
+:Status: Release</p>
+<p>6.2</p>
+<hr/>
+<p>这个系列的文档是我用来强迫自己保持对Kernel版本变化的敏感而写的。它主要基于
+kernelnewbies.org\ [1]_\ 的基础信息，加上查阅相关感兴趣的文档和代码补充而成。</p>
+<p>Linux Kernel 6.2版本发布时间：2023年2月19日</p>
+<h1>大特性</h1>
+<h2>RetBleed防攻击</h2>
+<p>RetBleed是一种去年苏黎世联邦理工学院发布的Cache侧信道攻击漏洞，它攻击Google原
+来使用的Retpline方法来修复Spectre侧信道方法（参考：
+:doc:<code>../软件构架设计/给程序员解释Spectre和Meltdown漏洞</code>
+），这个方案依赖返回指令是不做分支预测的。但前面提到的研究表明，在特定的情况下，
+Intel和AMD都有预测的情况发生，导致攻击者可以通过系统调用构造攻击（AMD CPU
+family 0x15–0x17和an Intel Core generation 6–8都发现了相关攻击的可能性，比如
+Intel有一个Return Stack Buffer的硬件在做这种预测执行）。</p>
+<p>攻击发生在RSB溢出的时候，Linux现在的预防手段大致是在RSB超出一定的范围的时候就
+通过特定的行为清掉它，这种修复纯是个就事论事的代码调整，我不是做安全的，就不考
+虑它了。</p>
+<p>我只能说，以后我们做预测执行的时候，好好多推理几种场景，能少点漏洞就少点吧。</p>
+<h2>Runtime Verification工具</h2>
+<p>这个特性6.0引入的，我之前没有跟踪到，在这个版本中对整个特性做一个初步认识。</p>
+<p>从文档（内核Documentation/trace/rc）上来说，这是个穷举式的形式验证工具，用执行
+的trace去和一个标准的定义模型做比较，验证代码执行的正确性。实现代码在
+kernel/trace/rv目录中，其中核心是两个角色：</p>
+<ul>
+<li>Monitor实现特定的场景的时间跟踪</li>
+<li>Reaction实现Monitor的跟踪事件输出（主要是一个tracefs的文件）</li>
+</ul>
+<p>用户接口通过在sysfs的tracing接口上提供，和ftrace的tracer功能完全是一样的使用模式：</p>
+<ol>
+<li><p>available_monitor中给出一组monitor的名字，可以把名字echo到enable_monitor中
+（和tracer不同的是它可以设置多个monitor），从而激活不同的monitor。</p>
+</li>
+<li><p>提供monitor_on, reactor_on两个控制文件用于功能临时开启和关闭。</p>
+</li>
+<li><p>monitors目录下可以对每种monitor单独进行参数控制。</p>
+</li>
+</ol>
+<p>现在实现了两个monitor：</p>
+<ol>
+<li>wip：Wakeup In Preemptive</li>
+<li>wwnr：Wakeup While Not Running monitor</li>
+</ol>
+<p>两个功能都非常简单，前面就是跟踪prompt_enable和prompt_disable两个行为，后面也
+只是跟踪调度的进入和退出的行为。我基本上看不懂这是在搞什么。</p>
+<p>然后文档中还提到一个这个论文：
+<code>A Taxonnomy for Classifying Runtime Verification Tools</code>_
+不过这东西要给钱看，我没到要给这个钱的时候。所以从搜索结果中还找到这两个来自
+Redhat的介绍文档：</p>
+<p>.. _<code>A Taxonnomy for Classifying Runtime Verification Tools</code>: 
+   <a href="https://research.manchester.ac.uk/en/publications/a-taxonomy-for-classifying-runtime-verification-tools">https://research.manchester.ac.uk/en/publications/a-taxonomy-for-classifying-runtime-verification-tools</a></p>
+<ul>
+<li><code>A Thread Model for the Real Time Linux Kernel</code>_</li>
+<li><code>Efficient Runtime Verification for Linux Kernel</code>_</li>
+</ul>
+<p>.. _<code>A Thread Model for the Real Time Linux Kernel</code>:
+   <a href="https://research.redhat.com/blog/article/a-thread-model-for-the-real-time-linux-kernel/">https://research.redhat.com/blog/article/a-thread-model-for-the-real-time-linux-kernel/</a></p>
+<p>.. _<code>Efficient Runtime Verification for Linux Kernel</code>:
+   <a href="https://research.redhat.com/blog/article/efficient-runtime-verification-for-the-linux-kernel/">https://research.redhat.com/blog/article/efficient-runtime-verification-for-the-linux-kernel/</a></p>
+<p>这样这个拼图才比较完整了：首先这个东西不是一个功能的形式化验证工具，它的目的是
+用来通过比如汽车的安全（Safty不是Security）验证要求，而且专门是针对实时性的。</p>
+<p>传统的实时性测试工具主要就是一组测试用例来运行系统，然后跟踪这组用例消耗的时延
+的统计来看实际的效果，但这样的测试没法证明是完整的。RV的方法是先用数学（离散事
+件仿真，Discrete Event System）方法定义RTLinux的状态级模型（包含9千多个状态和2
+万多条边），然后用.dot的格式画出来，再生成可能造成所有跳转的内核模块，在内核中
+运行的时候通过perf/ftrace跟踪所有的切换过程，从而判断所有的状态切换是否在定义
+的范围内。这个定义的算法本身我还没有深入了解，但原理基本上就是这么个原理了。所
+以，内核的拼图是不够的，实际上这个方案还有用户态的部分，在
+tools/verification的部分，而且这里好像还不包括全部的模型。wip和wwnr仅仅是其中
+两个最简单的状态级。我本来想编译一下这个工具运行一下看看的，但它在我的Ubuntu
+22.04上编译不了，需要更新版本的libtraceevent和libtracefs（1.5vs1.3,
+1.3vs1.2.5），我懒得另外装版本了，就看到这个程度吧，更多的信息，找其他同事帮我
+看。</p>
+<p>作者提交补丁的时候倒是提供了一个rv运行的效果，是这样的：::</p>
+<h1>rv mon wwnr --trace</h1>
+<pre><code>      &lt;TASK&gt;-PID      [CPU]  TYPE       ID                    STATE x EVENT                    -&gt; NEXT_STATE               FINAL
+          |   |          |     |        |                        |     |                           |                       |
+          rv-3613     [001] event     3613                  running x switch_out               -&gt; not_running              Y
+        sshd-1248     [005] event     1248                  running x switch_out               -&gt; not_running              Y
+      &lt;idle&gt;-0        [005] event       71              not_running x wakeup                   -&gt; not_running              Y
+      &lt;idle&gt;-0        [005] event       71              not_running x switch_in                -&gt; running                  N
+  kcompactd0-71       [005] event       71                  running x switch_out               -&gt; not_running              Y
+      &lt;idle&gt;-0        [000] event      860              not_running x wakeup                   -&gt; not_running              Y
+      &lt;idle&gt;-0        [000] event      860              not_running x switch_in                -&gt; running                  N
+systemd-oomd-860      [000] event      860                  running x switch_out               -&gt; not_running              Y
+      &lt;idle&gt;-0        [000] event      860              not_running x wakeup                   -&gt; not_running              Y
+      &lt;idle&gt;-0        [000] event      860              not_running x switch_in                -&gt; running                  N
+systemd-oomd-860      [000] event      860                  running x switch_out               -&gt; not_running              Y
+      &lt;idle&gt;-0        [005] event       71              not_running x wakeup                   -&gt; not_running              Y
+      &lt;idle&gt;-0        [005] event       71              not_running x switch_in                -&gt; running                  N
+  kcompactd0-71       [005] event       71                  running x switch_out               -&gt; not_running              Y
+      &lt;idle&gt;-0        [000] event      860              not_running x wakeup                   -&gt; not_running              Y
+      &lt;idle&gt;-0        [000] event      860              not_running x switch_in                -&gt; running                  N
+systemd-oomd-860      [000] event      860                  running x switch_out               -&gt; not_running              Y
+      &lt;idle&gt;-0        [001] event     3613              not_running x wakeup                   -&gt; not_running              Y
+</code></pre>
+<p>这个和ftrace非常接近，我估计就是ftrace输出的导出。从这个结果看，它就是在两个状
+态之间切换，和整个方案提到的八千多个状态还差很多monitor。</p>
+<h2>NV在把VFIO和IOMMUFD连起来</h2>
+<p>这个不算大特性，但这个进展让我有写紧迫感，我觉得到了需要跟踪一下IOMMUFD的进展
+的时候了。</p>
+<p>IOMMUFD在内核中有文档，在Documentation/userspace-api/iommufd.rst里面。按这个文
+档，这个特性的主要目的是把IOMMU直接封装到用户态的一个文件上。它包含如下概念：</p>
+<p>IOAS
+        这表示一个设备看到的内存地址空间，对应的VA称为IOVA。注意：这个空间包含
+        多个进程空间。</p>
+<p>DEVICE
+        这表示iommufd看到的那个需要看到IOAS的设备。</p>
+<p>HW_PAGETABLE
+        这是DEVICE针对这个IOAS的页表，对于IOMMU设备上的一个iommu_domain。一个
+        IOAS包含多个HW_PAGETABLE。</p>
+<p>三个概念对应内核中的iommufd_ioas, iommufd_device，iommufd_hw_pagetable三个数据
+结构。再用这些数据结构和iommu框架配合。本质上，每个独立的页表关注的是：什么设
+备的什么进程的地址空间，所以，这里没有对ioas的需求，这个对象对应的就是iommufd
+这个对象本身。</p>
+<p>进程通过iommufd文件接口创建一个或者多个IOAS，然后在IOAS上绑定DEVICE，之后可以在
+设备上设置HW_PAGETABLE。</p>
+<p>这个数据关系是把所有功能都公开给了用户态，就是针对虚拟化去的。但我心目中的
+IOMMU不是干这个的，我要的是：进程和设备（很可能是多个设备）建立一个回话，进程
+把自己的地址空间全部拿出来和设备共享，我不要这么自由的数据结构，我要申请设备资
+源和IOMMU的管理直接配合，进程的设备申请已经关联上IOMMU，然后我们之间共享所有的
+设备，这才是uacce要达成的目的，我指望用这种方法把GPU，TPU，加解密引擎，调度引
+擎全部连接成一个应用，这个框架不能拦了我们的路线。</p>
+<h2>osnoice tracer增加了一个配置文件</h2>
+<p>增加什么配置文件倒是其次，这里跟踪的主要是osnoice这个特性。作为一个tracer，它
+主要跟踪硬件引发的OS噪声。它在内核创建了一个hwlat_detector（Hardware Latency
+Detector），本质上是一个叫hwlatd的内核线程（但运行起来ps看到的叫osnoise），这
+个线程定期关闭中断然后开始读两次时钟，检查两次读中间有没有发生NMI或者被其他硬
+件波动影响，从而知道有没有因为硬件干扰造成执行波动。</p>
+<p>跟踪的结果是这样的：::</p>
+<h1>tracer: osnoise</h1>
+<p>#</p>
+<h1>_-----=&gt; irqs-off</h1>
+<h1>/ _----=&gt; need-resched</h1>
+<h1>| / _---=&gt; hardirq/softirq</h1>
+<h1>|| / _--=&gt; preempt-depth</h1>
+<h1>||| / _-=&gt; migrate-disable                         MAX</h1>
+<h1>|||| /     delay                                   SINGLE      Interference counters:</h1>
+<h1>|||||               RUNTIME      NOISE  %% OF CPU  NOISE    +-----------------------------+</h1>
+<h1>TASK-PID      CPU# |||||   TIMESTAMP    IN US       IN US  AVAILABLE  IN US     HW    NMI    IRQ   SIRQ THREAD</h1>
+<h1>| |         |   |||||      |           |             |    |            |      |      |      |      |      |</h1>
+<pre><code>         &lt;...&gt;-439     [000] .....   289.610370: 1000000       2308  99.76920     418     38      0   1004     36      8
+         &lt;...&gt;-440     [001] .....   289.610827: 1000000       4259  99.57410    1609     55      0   1004     30      6
+         &lt;...&gt;-439     [000] .....   290.610387: 1000000       2620  99.73800     493     24      0   1008     40     11
+         &lt;...&gt;-440     [001] .....   290.610830: 1000000       2248  99.77520     241     40      0   1004     27      8
+         &lt;...&gt;-439     [000] .....   291.610410: 1000000       2330  99.76700     181     22      0   1020     58     27
+         &lt;...&gt;-440     [001] .....   291.610832: 1000000       3495  99.65050    1340     53      0   1010     31      3
+         &lt;...&gt;-439     [000] .....   292.610413: 1000000       2439  99.75610     248     21      0   1016     59     25
+         &lt;...&gt;-440     [001] .....   292.610833: 1000000       2713  99.72870     500     55      0   1007     32      5
+         &lt;...&gt;-439     [000] .....   293.610415: 1000000       2965  99.70350     338     22      0   1027     66     37
+         &lt;...&gt;-440     [001] .....   293.610835: 1000000       4421  99.55790    1563     45      0   1013     45      5
+         &lt;...&gt;-439     [000] .....   294.610417: 1000000       1808  99.81920     272     16      0   1003     37      7
+         &lt;...&gt;-440     [001] .....   294.610837: 1000000       2764  99.72360     952     33      0   1001     25      5
+         &lt;...&gt;-439     [000] .....   295.610419: 1000000       2614  99.73860     118     15      0   1033     71     47
+         &lt;...&gt;-440     [001] .....   295.610838: 1000000       2238  99.77620      53     56      0   1016     34      4
+</code></pre>
+<p>那两个线程是这样的：::</p>
+<p>root@debian:/sys/kernel/tracing# ps -ef |grep osnoise
+  root         439       2 99 14:14 ?        00:03:39 [osnoise/0]
+  root         440       2 99 14:14 ?        00:03:40 [osnoise/1]</p>
+<p>tracer启动以后，两个线程会占满全部CPU，所以只能用来测试，不能一直开着。</p>
+<p>这个分析没有看代码，只是运行了一下看看功能的呈现是什么样的。</p>
+<h2>ARM64增加动态阴影调用堆栈支持</h2>
+<p>Dynamic Shadow Call Stack是一种防ROP（Return Origin Programming）攻击的手段。
+ROP这个名字叫得神秘兮兮的，其实就是攻击堆栈里面的返回值指针。如果修改这个返回
+值指针，就修改了程序的流程，就可以形成攻击。</p>
+<p>这个DSCS（内核的缩写是Dynamic_SCS）的保护方法也很粗暴，就是在把返回地址压栈的
+时候，自动在另一个Dynamic Shadow Call Stack里面给你另外压一份，返回的时候如果
+发现两份不一致，就给你报错。</p>
+<p>内核把这个作为通用功能支持，但现在只上传了ARM64实现，我看了一下ARM64这个补丁，
+它的方式似乎是在启动阶段在unwind库里面（只支持llvm）查找所有的PAC（监权指针）
+指令对，把PACIASP-AUTIASP对换成SCS_PUSH/POP。这些指令的细节我没有细看。得个知
+字，要用再说。</p>
+<h1>其他有趣的东西</h1>
+<ol>
+<li><p>增加对IPv6 Protective Load Balance，这是Google用于数据中心的的一个包调度协
+议，其实我不关心，不过它是个大特性，就记录一下吧。</p>
+</li>
+<li><p>BPF支持定义用户对象，这个事情我其实也不关心，只是作为大特性记录一下。提交者
+用的gmail，叫Kumar，应该是个印度人。</p>
+</li>
+<li><p>Rust支持还在改进中，我打算等它到一个阶段点再去看进展。相关补丁都是Miguel
+Ojeda提交的，我查不到他的单位信息，似乎是一个独立软件工程师：
+<a href="https://ojeda.dev/\">https://ojeda.dev/\</a> 。</p>
+</li>
+<li><p>这个版本合入了一个stdz算法到内核中，我突然有点好奇往内核合这东西干嘛用的，
+所以查了一下，发现它是ko的一个子特性，可以选择一种算法压缩ko文件，现在已经
+支持GZIP, XZ, ZSTD三种算法了，make menuconfig的时候选择某种压缩算法，输出
+的ko文件会变成ko.gz，ko.xz这样的形式，应该可以直接插入到内核中。这次修改的
+作者来自FB。</p>
+</li>
+<li><p>Google有人提交了一个补丁，加了一个控制文件/proc/sys/kernel/oops_limits，控
+制发生多少次oop后就panic，说是一个安全手段。得个知字。我看了一下，默认值是
+一万。</p>
+</li>
+<li><p>这个版本有人提交了一个OrangeFS的ACL支持补丁，我从来没有看过这个文件系统，所
+以去看了一下，这是一个类似PVFS那样的分布式网络文件系统，用于高性能计算。还
+是得个知字。</p>
+</li>
+<li><p>ftrace就改进了一下符号查找，原来只调用
+kallsyms_on_each_symbol()，现在在找不到的时候会再调用
+module_kallsyms_on_each_symbol()，从而可以输出模块里面的符号。Trace Trigger
+现在可以通过内核命令行指定，类似这样：::</p>
+<p>trace_trigger="sched_switch.stacktrace if prev_state == 2"</p>
+<p>其他的小修改我不是特别关心，就不记了。</p>
+</li>
+<li><p>perf改进了一些内容输出上的内容，比如perf list可以输出为json格式，perf stat
+可以保持同一个输出页面（不会滚动）之类的。perf script多了一个tasks_analyzer，
+可以跟踪整个切换的过程，这个东西我原来每次都要用ftrace的函数跟踪来干的，有
+了这个功能以后省事多了。它看起来是这样的：::</p>
+<p>$ perf script report tasks-analyzer</p>
+<pre><code>   Switched-In      Switched-Out CPU      PID      TID             Comm    Runtime     Time Out-In
+</code></pre>
+<p>15576.658891407   15576.659156086   4     2412     2428            gdbus        265            1949
+   15576.659111320   15576.659455410   0     2412     2412      gnome-shell        344            2267
+   15576.659491326   15576.659506173   2       74       74      kworker/2:1         15           13145
+   15576.659506173   15576.659825748   2     2858     2858  gnome-terminal-        320           63263
+   15576.659871270   15576.659902872   6    20932    20932    kworker/u16:0         32         2314582
+   15576.659909951   15576.659945501   3    27264    27264               sh         36              -1
+   15576.659853285   15576.659971052   7    27265    27265             perf        118         5050741
+   [...]</p>
+<p>不过老实说，这东西在我和的x86和arm虚拟机上都跑不起来，报“Failed to collect
+'cycles' for the 'tasks-analyzer' workload: No such file or directory”我还
+没有查为什么，但反正预计它还需要时间成熟。</p>
+</li>
+<li><p>有一个提交西班牙语翻译的补丁，我一直没有认真去看内核的多语言版本的文档，所
+以我去看了一下中文的翻译。发现已经翻译的量已经很可观了，肉眼看能看到龙芯，
+中兴等公司在投入，但我觉得你让我看我肯定是不看的，基本上看不懂。Linux内核文
+档本身已经写得不怎么样了，大部分都点到为止，但因为用词和内核的变量语义接近，
+还勉强能看懂在说了，如果再翻译一下，就不用看了。我个人不看好这个投入，宁愿
+基于主题重新写都比翻译好。</p>
+</li>
+<li><p>海思这个版本提的东西很少，主要就是Shameer提交的一个vfio驱动的功能，我没有
+细看具体是干什么的，代码表面上都是解决热迁移的时候的虚拟设备的状态控制问题。
+有一个补丁是对华为Watch的支持的（Watch上跑Linux，不是连接Watch的驱动），这
+个有趣，而且补丁还不是华为提供的。</p>
+</li>
+<li><p>virtio_console增加了一个补丁，用ida_alloc_min分配console id。还是那句话，
+我不关心这个补丁，我关心virtio_console这个特性。我看了一下
+drivers/char/virtio_console.c的提交记录，其实这个特性2007就有了，只是平时
+我用virtio很少用于控制台这种低速设备而已。我想去查一下这东西怎么用的，但网
+上几乎找不到关心的人，有一个redhat提供的2013年的基于这样的配置的方法：::</p>
+<pre><code>-device virtio-serial \
+-chardev socket,path=/tmp/foo,server,nowait,id=foo \
+-chardev socket,path=/tmp/bar,server,nowait,id=bar \
+-device virtioconsole,chardev=foo,name=org.fedoraproject.console.foo \
+-device virtioconsole,chardev=bar,name=org.fedoraproject.console.bar \
+</code></pre>
+<p>说到底就是Guest创建一个前端串口设备，host用一个backend和它匹配的套路。简单
+找一个qemu运行还不认识这个virtioconsole device，懒得细看了，就这么着吧。</p>
+</li>
+<li><p>有人提交了一个从UEFI的变量中读BIOS的随机数的补丁。把保存在BIOS才能访问的存
+储中的随机数种子暴露到efivarfs文件系统中，我觉得这样使用这个接口很有趣，记
+录一下。</p>
+</li>
+<li><p>Intel在CPUID（相当于Capabilities）里面加一种capa：CMPccXADD（Compare and
+Add if Condition is Met）。这个功能是一组指令，我查了一下资料，这是一组解
+决类似LL/SC（Load-Linked/Store Conditionally）问题的方案，但它是在一条指令
+里面吧LL和SC都做了，比较后根据结果加，不用你自己循环。现在大家在这种多核同
+步上也是够拼的。</p>
+</li>
+<li><p>龙芯加代码的记录挺多的，但怎么我手上的龙芯桌面就是没法编译一个标准的内核呢？</p>
+</li>
+<li><p>TI达芬奇平台的最后一个驱动删除了，内核不再有达芬奇的痕迹了。</p>
+</li>
+<li><p>这个版本突然多了很多iio的补丁，我腹黑地好奇：是Jonathan之前窝工没处理补丁
+的原因吗？;)</p>
+</li>
+</ol>
+<h1>参考</h1>
+<p>.. [1] <a href="https://kernelnewbies.org/LinuxChanges">https://kernelnewbies.org/LinuxChanges</a></p>
