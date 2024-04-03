@@ -1,4 +1,4 @@
-<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/概念空间分析/qemu.rst">qemu</a></h2>
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E6%A6%82%E5%BF%B5%E7%A9%BA%E9%97%B4%E5%88%86%E6%9E%90/qemu.rst">qemu</a></h2>
 <p>.. Kenneth Lee 版权所有 2020-2021</p>
 <p>:Authors: Kenneth Lee
 :Version: 0.3</p>
@@ -8,24 +8,23 @@
 <h1>介绍</h1>
 <p>最近修改qemu的东西越来越多，很多原来可以忽略的概念都不得不去面对了，基于这个初
 始文档把内容扩展为一个完整的概念空间分析：</p>
-<pre><code>    :doc:`../软件构架设计/在qemu中模拟设备`
-</code></pre>
+<pre><code>    :doc:`../软件构架设计/在qemu中模拟设备`</code></pre>
 <p>这个文档当前的版本还在不断更新中，后面根据需要会慢慢补充更多的内容。等我觉得补充
 的内容足够多了，我会把版本升级到1.0以上。</p>
 <h1>基础名称空间</h1>
 <p>我们先定义一些基本的名称以便后面容易说清楚各种概念：</p>
 <p>Host
-        Host表示模拟虚拟机的那个平台。这个概念比较模糊，可以表示Qemu这个程序，
-        也可以表示运行Qemu的那个操作系统，反正不是被虚拟的那个平台。</p>
+Host表示模拟虚拟机的那个平台。这个概念比较模糊，可以表示Qemu这个程序，
+也可以表示运行Qemu的那个操作系统，反正不是被虚拟的那个平台。</p>
 <p>VM/Guest
-        这表示被模拟的那个平台。如果我们在X86上模拟一个RISCV的机器，X86就是Host
-        ，而RISCV是VM或者Guest。如果我们说Host的CPU，那么这个CPU是X86的，而如果
-        我们说Guest的CPU，那么这个CPU是RISCV的。</p>
+这表示被模拟的那个平台。如果我们在X86上模拟一个RISCV的机器，X86就是Host
+，而RISCV是VM或者Guest。如果我们说Host的CPU，那么这个CPU是X86的，而如果
+我们说Guest的CPU，那么这个CPU是RISCV的。</p>
 <p>Backend
-        这是Host中模拟Guest中某种行为的那些代码。比如我们用Qemu模拟了一张e1000
-        网卡，在Guest中我们要“看到”这张网卡，我们需要在Guest的OS中装e1000的
-        驱动，这个驱动是Guest中的。但为了模拟e1000的行为，我们也需要在qemu装
-        一个驱动，这个驱动我们称为这个e1000的backend，它是Qemu概念上的。</p>
+这是Host中模拟Guest中某种行为的那些代码。比如我们用Qemu模拟了一张e1000
+网卡，在Guest中我们要“看到”这张网卡，我们需要在Guest的OS中装e1000的
+驱动，这个驱动是Guest中的。但为了模拟e1000的行为，我们也需要在qemu装
+一个驱动，这个驱动我们称为这个e1000的backend，它是Qemu概念上的。</p>
 <p>Qemu使用glib作为基础设施，所以，读者如果需要和代码细节进行对应，最好对GLib的数
 据结构有基本的了解，Glib提供基本的内存，线程，链表，事件调度等基础设施的封装，
 本文本身不会深入到这些概念上。</p>
@@ -33,17 +32,17 @@
 <p>整个qemu软件的执行模型用Pyhton作为伪码可以表达如下：</p>
 <p>.. code-block:: python</p>
 <p>def run_a_guest():
-     vm = create_vm()
-     vm.create_cpu_object()
-     vm.create_device_object()
-     for cpu in cpus:
-       create_thread(cpu_thread, cpu)</p>
+vm = create_vm()
+vm.create_cpu_object()
+vm.create_device_object()
+for cpu in cpus:
+create_thread(cpu_thread, cpu)</p>
 <p>def cpu_thread(cpu):
-     while true:
-       try:
-         cpu.run(vm)
-       except EIO eio:
-         find_device(eio.io_address).handle_io();</p>
+while true:
+try:
+cpu.run(vm)
+except EIO eio:
+find_device(eio.io_address).handle_io();</p>
 <p>Qemu是Host上的一个进程，它模拟了一个VM，这是我们理解Qemu的基础。</p>
 <p>一个VM是一组被模拟对象（Object）的组合体，Qemu的模拟过程就是模拟这些对象在时间
 的发展过程中的状态变化，以及它们之间的互相影响，从而模拟整个VM的行为。</p>
@@ -54,10 +53,10 @@
 <p>Device当然也可以创建自己的线程，但更多时候，是它被动地被CPU的行为所控制。</p>
 <p>.. note::</p>
 <p>这里特别提醒一句：概念空间分析要重视名称空间的“空间”概念，这里说“qemu为每个
-   cpu创建一个线程”，其中的CPU是被模拟的系统空间中的“CPU”，而不是Host中的“CPU”
-   ，而线程，是Host中的线程，而不是被模拟系统中的线程。进行概念空间分析的时候，
-   我们常常不得不跨越这些独立空间之间的交叉空间，请读者特别注意分清楚这些概念属
-   于哪个概念空间。</p>
+cpu创建一个线程”，其中的CPU是被模拟的系统空间中的“CPU”，而不是Host中的“CPU”
+，而线程，是Host中的线程，而不是被模拟系统中的线程。进行概念空间分析的时候，
+我们常常不得不跨越这些独立空间之间的交叉空间，请读者特别注意分清楚这些概念属
+于哪个概念空间。</p>
 <p>上面代码中的cpu.run(vm)，有不同的cpu backend。比如，对于KVM backend，这本质是一
 个系统调用，用户进程进入Hypervisor，由Hypervisor决定如何实际执行相关代码，而用
 户进程自身则等待在系统调用上。而对于TCG backend，TCG程序会直接使用当前线程去翻
@@ -74,12 +73,12 @@
 个vCPU模拟一个线程，在每个vCPU线程中的循环变成这样：</p>
 <p>.. code-block:: python</p>
 <p>def run_user():
-     load_elf()
-     while true:
-       try:
-         cpu.run(vm)
-       except SysCall:
-         do_local_syscall()</p>
+load_elf()
+while true:
+try:
+cpu.run(vm)
+except SysCall:
+do_local_syscall()</p>
 <p>如果程序中发起创建新线程的系统调用，Qemu会创建新的线程去做一个新的循环。这种模
 拟模拟器里面再也不用做设备处理了，因为那些都是内核的事情，内核也不用通知Guest，
 所以只要模拟系统调用的行为就可以了，很多时候这种模拟的速度会快很多，如果要在一
@@ -90,45 +89,44 @@
 模拟的对象，都通过这种对象管理。</p>
 <p>QOM是一个粗封装的面向对象模型，它包含这样一些子概念：</p>
 <p>Type
-        类型。每种类型用TypeInfo描述。请注意了：类型是类的描述，在实现的时候，
-        它本质是一个用名称（字符串）索引的一个全局列表的成员，包含父类的索引（
-        也是通过字符串索引），class_size，instance_size，以及各种回调等信息。它
-        不代表那个类，它是说明类的相关信息的对象，通过type_register_xxx()系列函
-        数全局注册。</p>
+类型。每种类型用TypeInfo描述。请注意了：类型是类的描述，在实现的时候，
+它本质是一个用名称（字符串）索引的一个全局列表的成员，包含父类的索引（
+也是通过字符串索引），class_size，instance_size，以及各种回调等信息。它
+不代表那个类，它是说明类的相关信息的对象，通过type_register_xxx()系列函
+数全局注册。</p>
 <p>Class
-        类。这个才是类本身，这个概念类似Java中的class和object的关系：class的静
-        态数据全局唯一，被所有同一类型共享，而object是实例，每个class可以创建
-        很多实例（比如在Java中通过New创建的对象）。类自己的数据（类似Java中类的
-        静态数据），保存在class_size的空间中，这个size必须包含父类的空间。在操
-        作上，通常是在定义TypeInfo.class_size的时候，让它等于你的私有数据结构，
-        并保证这个数据结构的第一个成员等于父类的私有数据结构。这样的结果就是父
-        类拿到这个指针也可以直接索引到自己的数据结构。</p>
+类。这个才是类本身，这个概念类似Java中的class和object的关系：class的静
+态数据全局唯一，被所有同一类型共享，而object是实例，每个class可以创建
+很多实例（比如在Java中通过New创建的对象）。类自己的数据（类似Java中类的
+静态数据），保存在class_size的空间中，这个size必须包含父类的空间。在操
+作上，通常是在定义TypeInfo.class_size的时候，让它等于你的私有数据结构，
+并保证这个数据结构的第一个成员等于父类的私有数据结构。这样的结果就是父
+类拿到这个指针也可以直接索引到自己的数据结构。</p>
 <pre><code>    类有abstract这个概念，和其他语言的abstract的概念相识，表示这个对象不能
     被实例化。
 
     Class的继承树的根是ClassObject。
-</code></pre>
+    </code></pre>
 <p>Object/Instance
-        实例。通过object_new()等方法创建，当我们执行qemu -device xxxx的时候，本
-        质就是在创建实例。它的数据保存在instance_size的空间中，原理和Class一样，
-        需要为父类留空间。</p>
+实例。通过object_new()等方法创建，当我们执行qemu -device xxxx的时候，本
+质就是在创建实例。它的数据保存在instance_size的空间中，原理和Class一样，
+需要为父类留空间。</p>
 <pre><code>    Object可以通过类型转换（使用类似OBJECT_CHECK这样的函数）转换为父类来使
     用，这种转换的本质是把父类的Class指针找出来，放在Object的Cache中，然后
     用这些指针来操作这个类的数据结构（如前所述，子类的数据结构本来就包含了
     父类的数据结构）。
 
-    Instance的继承树的根是Object。
-</code></pre>
+    Instance的继承树的根是Object。</code></pre>
 <p>Interface
-        一种特殊的类。不用于继承，用于实现。类不能有多个父类，但可以有多个
-        Interface。它的基本原理和父类本质上是一样的，只是只有函数指针而没有数
-        据结构而已。</p>
+一种特殊的类。不用于继承，用于实现。类不能有多个父类，但可以有多个
+Interface。它的基本原理和父类本质上是一样的，只是只有函数指针而没有数
+据结构而已。</p>
 <p>State
-        一个纯概念的东西，表示类或者类实例的数据。呈现为TypeInfo的class_size和
-        instance_size，子类的State必须包含父类的数据本身。</p>
+一个纯概念的东西，表示类或者类实例的数据。呈现为TypeInfo的class_size和
+instance_size，子类的State必须包含父类的数据本身。</p>
 <p>props
-        DeviceClass的一组属性，每个成员叫Property，包含一对set/get函数，从而可
-        以呈现为命令行的-device driver-name的参数。</p>
+DeviceClass的一组属性，每个成员叫Property，包含一对set/get函数，从而可
+以呈现为命令行的-device driver-name的参数。</p>
 <pre><code>    （qemu -device driver-name,help 可以直接查询device的属性）
 
     一个非常重要的Property是realized，表示这个类创建以后真正被初始化。作为
@@ -136,15 +134,14 @@
     设备，我们都通过设置它的realize和unrealize函数来支持这个属性，从而让设
     备被创建以后，可以统一进行初始化。这个初始化和instance_init的区别在于
     ：前者初始化的时候，其他对象的数据结构可能还没有初始化，所以只适合用于
-    和别人没有关系的初始化，后者是在所有静态对象初始化后才被调用的。
-</code></pre>
+    和别人没有关系的初始化，后者是在所有静态对象初始化后才被调用的。</code></pre>
 <p>在内存上的理解用下面这张图表达：</p>
 <p>.. figure:: _static/qom_mem_model.svg</p>
 <p>QoM可以动态构架，只要内存中有对应的函数，class和instance的空间，相关的设施就可
 以成立。</p>
 <p>下面是一些常用的全局的类：</p>
 <p>.. list-table::
-   :header-rows: 1</p>
+:header-rows: 1</p>
 <ul>
 <li><ul>
 <li>类</li>
@@ -183,42 +180,41 @@
 <p>我们看一个简单的例子对类建立感性认识：</p>
 <p>.. code-block:: C</p>
 <p>typedef DeviceClass MyDeviceClass;
-   typedef struct MyDeviceState { //这个定义类的实例的数据
-          DeviceState parent; //包含父类的State数据，而且必须保证在第一个位置上
-          int my_own_data;
-          ...
-   } MyDevice;</p>
-<p>static void mydevice_class_init(ObjectClass <em>oc, void </em>data) {
-        DeviceClass *dc = DEVICE_CLASS(oc);</p>
+typedef struct MyDeviceState { //这个定义类的实例的数据
+DeviceState parent; //包含父类的State数据，而且必须保证在第一个位置上
+int my_own_data;
+...
+} MyDevice;</p>
+<p>static void mydevice_class_init(ObjectClass *oc, void *data) {
+DeviceClass *dc = DEVICE_CLASS(oc);</p>
 <pre><code>    dc-&gt;realize = mydevice_realize;
-    dc-&gt;unrealize = mydevice_unrealize;
-</code></pre>
+    dc-&gt;unrealize = mydevice_unrealize;</code></pre>
 <p>}</p>
 <p>static const TypeInfo my_device_info = {
-          .name = "mydevice",
-          .parent = TYPE_DEVICE, // "device"
-          .instance_size = SIZEOF(MyDevice);  //State数据的大小
-          .instance_init = mydevice_init,
-          .class_init    = mydevice_class_init,
-          .interfaces = (InterfaceInfo[]) {  //一组接口
-              { TYPE_HOTPLUG_HANDLER },
-              { TYPE_ACPI_DEVICE_IF },
-              { }
-            }
-   };</p>
+.name = "mydevice",
+.parent = TYPE_DEVICE, // "device"
+.instance_size = SIZEOF(MyDevice);  //State数据的大小
+.instance_init = mydevice_init,
+.class_init    = mydevice_class_init,
+.interfaces = (InterfaceInfo[]) {  //一组接口
+{ TYPE_HOTPLUG_HANDLER },
+{ TYPE_ACPI_DEVICE_IF },
+{ }
+}
+};</p>
 <p>static void my_device_register_types(void) {
-          type_register_static(&amp;my_device_info);
-   }
-   type_init(my_device_register_types)
-   //这一段可以通过提供一个TypeInfo的数组这样定义:
-   //DEFINE_TYPES((devinfo_array)</p>
+type_register_static(&amp;my_device_info);
+}
+type_init(my_device_register_types)
+//这一段可以通过提供一个TypeInfo的数组这样定义:
+//DEFINE_TYPES((devinfo_array)</p>
 <p>在这个例子中，我们首先用type_register_static注册了一个叫“mydevice”的TypeInfo，
 父类是“device”，没有定义class_size（表示这个类没有自己的静态数据），instance的
 私有数据由MyDviceState定义，这个数据结构的第一个成员是DeviceState，保存了自己的
 父类的instance的State。</p>
 <p>.. note::</p>
 <p>type_register_static()用的是类似Linux Kernel中module_init()的技术，把一组函
-   数指针放到同一个数组中，让整个程序可以初始化的时候自动调用而已。</p>
+数指针放到同一个数组中，让整个程序可以初始化的时候自动调用而已。</p>
 <p>然后我们提供了两个初始化函数mydevice_init和mydevice_class_init，分别对实例和类
 对象进行初始化。</p>
 <p>在这个class的init里面我们用OBJECT_CLASS_CHECK把父类转换为子类，然后设置了
@@ -236,7 +232,7 @@ child&lt;...&gt;或者link&lt;...&gt;，和手工创建一个这样的属性也�
 <p>child的主要作用是可以枚举，比如：</p>
 <p>.. code-block:: C</p>
 <p>object_child_foreach();
-   object_child_foreach_recursive();</p>
+object_child_foreach_recursive();</p>
 <p>利用这个机制，比如你模拟一个SAS卡，上面有多个端口，端口就可以创建为SAS的一个
 child，而端口复位的时候就可以用这种方法找到所有的子端口进行通知。</p>
 <p>实际上，整个机器的对象machine就是根对象的一个child。下面是qemu控制台下运行
@@ -255,8 +251,7 @@ qom-list的一个实例：::</p>
     peripheral-anon (child&lt;container&gt;)
     peripheral (child&lt;container&gt;)
     virt.flash0 (child&lt;cfi.pflash01&gt;)
-    ...
-</code></pre>
+    ...</code></pre>
 <p>我们简单解释一下这个list的含义：</p>
 <ol>
 <li><p>/是整个被实例化的而对象的根，下面是它的所有属性。</p>
@@ -284,35 +279,34 @@ object_property_set_link()去设置。这两个步骤相当于在一个接口中
 的CPU或者设备访问，我们还需要Host中有backend去支撑这个访问，所以，qemu有Host视
 角中的内存。Qemu使用MemoryRegion描述这个视角的内存。它包含如下一些子概念：</p>
 <p>MemoryRegion
-        这表示一个面向VM的内存区，以下简称MR。请注意了，MR是一片内存区的描述，
-        而不是那片内存本身。MR的要素是base_address, size这些信息，而不是void
-        *ptr这样的内存本身。整个系统的所有内存就是一个MR，整个系统的所有IO空间
-        （不是说mmio，是说x86的LPC的IO）也是一个MR。MR内部包含多个不同设备的
-        mmio也是一个MR。</p>
+这表示一个面向VM的内存区，以下简称MR。请注意了，MR是一片内存区的描述，
+而不是那片内存本身。MR的要素是base_address, size这些信息，而不是void
+*ptr这样的内存本身。整个系统的所有内存就是一个MR，整个系统的所有IO空间
+（不是说mmio，是说x86的LPC的IO）也是一个MR。MR内部包含多个不同设备的
+mmio也是一个MR。</p>
 <pre><code>    但部分基础的内存层是真的分配和Host一侧用于支持前端的backend内存的，这个
-    这个真正的内存指针在MR-&gt;ram_block中。
-</code></pre>
+    这个真正的内存指针在MR-&gt;ram_block中。</code></pre>
 <p>RAMBlock
-        这是MR的ram_block的类型，表示一段真实的Host一侧的内存，它可以是创建的
-        时候就分配的，也可能是用Lazy算法动态一点点增加的。</p>
+这是MR的ram_block的类型，表示一段真实的Host一侧的内存，它可以是创建的
+时候就分配的，也可能是用Lazy算法动态一点点增加的。</p>
 <p>MemoryRegionSection
-        MR中的一个分段，简称MRS。当多个MR叠在一起的时候，MR会被隔离成一段一段，
-        每段就是一个MRS。MRS的行为决定于它所在的MR。</p>
+MR中的一个分段，简称MRS。当多个MR叠在一起的时候，MR会被隔离成一段一段，
+每段就是一个MRS。MRS的行为决定于它所在的MR。</p>
 <p>Container
-        包含其他MR的MR叫Container。没有RAM或者IO属性的Container叫纯Container，
-        不影响理解的时候也可以简单叫Container。纯Container是透明的，要判断一段
-        MRS的行为，如果它属于纯Container，就要看它上一层MR的定义了。</p>
+包含其他MR的MR叫Container。没有RAM或者IO属性的Container叫纯Container，
+不影响理解的时候也可以简单叫Container。纯Container是透明的，要判断一段
+MRS的行为，如果它属于纯Container，就要看它上一层MR的定义了。</p>
 <p>AddressSpace
-        这表示一个地址空间，以下简称AS。一个地址空间可以包含多个不同属性的MR，
-        MR可以包含其他MR，这些MR互相覆盖，最终层叠在一起，所以AS是MR的层叠表述。</p>
+这表示一个地址空间，以下简称AS。一个地址空间可以包含多个不同属性的MR，
+MR可以包含其他MR，这些MR互相覆盖，最终层叠在一起，所以AS是MR的层叠表述。</p>
 <p>FlatView
-        这表示看到的地址空间，本文简称FV。这个概念比较绕。我们这样说：AS是立体
-        的，里面的MR是相互独立的，他们可以交叠，转义，动态开关等。但当你去访问
-        的时候，某个时刻，某个物理地址总是对应着某个MR中（某段MRS）的地址，
-        FlatView用来表示层叠的结果。另外它也提供多个访问源互斥的锁。</p>
+这表示看到的地址空间，本文简称FV。这个概念比较绕。我们这样说：AS是立体
+的，里面的MR是相互独立的，他们可以交叠，转义，动态开关等。但当你去访问
+的时候，某个时刻，某个物理地址总是对应着某个MR中（某段MRS）的地址，
+FlatView用来表示层叠的结果。另外它也提供多个访问源互斥的锁。</p>
 <p>MemoryRegionCache
-        IO MR中访问过的数据可以放在Cache中，这个Cache简称MRC，现在主要就是给
-        virtio用。</p>
+IO MR中访问过的数据可以放在Cache中，这个Cache简称MRC，现在主要就是给
+virtio用。</p>
 <p>综合来说，我们用MR定义一个有特定属性的内存区（比如RAM或者IO），然后把它们叠起来
 构成一个AS，backend用这个AS去访问内存，首先压平为一个FV，然后匹配到一个MRS，最终
 用这个MRS所在MR决定如何访问。</p>
@@ -328,15 +322,15 @@ object_property_set_link()去设置。这两个步骤相当于在一个接口中
 <p>RISCV的系统RAM是这样创建的：</p>
 <p>.. code-block: C</p>
 <p>memory_region_init_ram(main_mem, NULL, "riscv_virt_board.ram",
-                           machine-&gt;ram_size, &amp;error_fatal);
-   memory_region_add_subregion(system_memory, memmap[VIRT_DRAM].base,
-        main_mem);</p>
+machine-&gt;ram_size, &amp;error_fatal);
+memory_region_add_subregion(system_memory, memmap[VIRT_DRAM].base,
+main_mem);</p>
 <p>原理是：你创建一个RAM的MR，然后根据位置，加到全系统的MR（system_memory）中。
 MMIO空间的MR一般由设备创建，通常长这样：</p>
 <p>.. code-block: C</p>
 <p>memory_region_init_io(&amp;ar-&gt;pm1.evt.io, memory_region_owner(parent),
-                         &amp;acpi_pm_evt_ops, ar, "acpi-evt", 4);
-   memory_region_add_subregion(parent, 0, &amp;ar-&gt;pm1.evt.io);</p>
+&amp;acpi_pm_evt_ops, ar, "acpi-evt", 4);
+memory_region_add_subregion(parent, 0, &amp;ar-&gt;pm1.evt.io);</p>
 <p>同样是创建MR，然后作为一个子region加到上一级的MR中。这样最后在系统的AS中，看到
 的就是一个叠起来的AS了。</p>
 <p>Guest访问的时候有两种可能，一种是Guest的CPU直接做地址访问，这会变成TLB的访问过
@@ -345,48 +339,47 @@ MMIO空间的MR一般由设备创建，通常长这样：</p>
 <p>另一种是backend的设备直接调函数去访问地址了，这样的调用：</p>
 <p>.. code-block: C</p>
 <p>dma_memory_rw(&amp;address_space_memory, pa, buf, size, direction);
-   pci_dma_rw(pdev, addr, buffer, len, direction);</p>
+pci_dma_rw(pdev, addr, buffer, len, direction);</p>
 <p>pci的调用本质还是对dma_memory_rw的封装，只是有可能用比如iommu这样的手段做一个地
 址转换而已。</p>
 <p>这个实现和前面CPU的访问没有什么区别，仍从AS开始，从AS得到FV，然后定位MRS，最终
 找到MR。之后作为RAM处理还是IO处理，就由MR的属性决定了。这个代码是这样的：</p>
 <p>.. code-block: C</p>
-<p>static MemTxResult flatview_write(FlatView <em>fv, hwaddr addr, MemTxAttrs attrs,
-                                  const void </em>buf, hwaddr len)
-   {
-       ...
-       mr = flatview_translate(fv, addr, &amp;addr1, &amp;l, true, attrs);
-       result = flatview_write_continue(fv, addr, attrs, buf, len,
-                                     addr1, l, mr);
-       ...
-   }</p>
+<p>static MemTxResult flatview_write(FlatView *fv, hwaddr addr, MemTxAttrs attrs,
+const void *buf, hwaddr len)
+{
+...
+mr = flatview_translate(fv, addr, &amp;addr1, &amp;l, true, attrs);
+result = flatview_write_continue(fv, addr, attrs, buf, len,
+addr1, l, mr);
+...
+}</p>
 <p>还有一种Device Backend的DMA访问路径是这样的：</p>
 <p>.. code-block: C</p>
 <pre><code>    dma_memory_map(address_space, pa, len, direction);
-    dma_memory_unmap(address_space, buffer, len, direction, access_len);
-</code></pre>
+    dma_memory_unmap(address_space, buffer, len, direction, access_len);</code></pre>
 <p>这有两种实现策略：如果这片MR背后有直接分配的内存，那最好办，直接把本地内存的指
 针拿过来就可以了，unmap的时候保证发起相关的通知即可。如果没有，那可以使用Bounce
 DMA Buffer机制。也就是说，直接另外分配一片内存，到时映射过来就是了。</p>
 <p>MR有很多类型，比如RAM，ROM，IO等，本质都是io，ram和container的变体：</p>
 <p>.. code-block: C</p>
 <p>memory_region_init(mr, owner, name, size);
-   memory_region_init_alias(mr, owner, name, orig, offset, size);
-   memory_region_init_io(mr, owner, ops, opaque, name, size);
-   memory_region_init_iommu(_iommu_mr, instance_size, mrtypename, owner, name, size);
-   memory_region_init_ram_nomigrate(mr, owner, name, size, errp);
-   memory_region_init_ram_shared_nomigrate(mr, owner, name, size, share, errp);
-   memory_region_init_ram_shared_nomigrate(mr, owner, name, size, share, errp);
-   memory_region_init_ram(mr, owner, name, size, errp);
-   memory_region_init_ram_ptr(mr, owner, name, size, ptr);
-   memory_region_init_ram_device_ptr(mr, owner, name, size, ptr);
-   memory_region_init_ram_from_fd(mr, owner, name, size, share, fd, errp);
-   memory_region_init_ram_from_file(mr, owner, name, size, align, ram_flags, path, errp);
-   memory_region_init_rom(mr, owner, name, size, errp);
-   memory_region_init_rom_device(mr, owner, ops, opaque, name, size, errp);
-   memory_region_init_rom_device(mr, owner, ops, opaque, name, size, errp);
-   memory_region_init_rom_device_nomigrate(mr, owner, ops, opaque, name, size, errp);
-   memory_region_init_rom_device_nomigrate(mr, owner, ops, opaque, name, size, errp);</p>
+memory_region_init_alias(mr, owner, name, orig, offset, size);
+memory_region_init_io(mr, owner, ops, opaque, name, size);
+memory_region_init_iommu(_iommu_mr, instance_size, mrtypename, owner, name, size);
+memory_region_init_ram_nomigrate(mr, owner, name, size, errp);
+memory_region_init_ram_shared_nomigrate(mr, owner, name, size, share, errp);
+memory_region_init_ram_shared_nomigrate(mr, owner, name, size, share, errp);
+memory_region_init_ram(mr, owner, name, size, errp);
+memory_region_init_ram_ptr(mr, owner, name, size, ptr);
+memory_region_init_ram_device_ptr(mr, owner, name, size, ptr);
+memory_region_init_ram_from_fd(mr, owner, name, size, share, fd, errp);
+memory_region_init_ram_from_file(mr, owner, name, size, align, ram_flags, path, errp);
+memory_region_init_rom(mr, owner, name, size, errp);
+memory_region_init_rom_device(mr, owner, ops, opaque, name, size, errp);
+memory_region_init_rom_device(mr, owner, ops, opaque, name, size, errp);
+memory_region_init_rom_device_nomigrate(mr, owner, ops, opaque, name, size, errp);
+memory_region_init_rom_device_nomigrate(mr, owner, ops, opaque, name, size, errp);</p>
 <p>其中，iommu是最特别的一种MR，它一般用于实现IOMMU，放在设备视角的MR和AS中（而不
 放在系统MR和AS中）。</p>
 <h2>IOMMU MR</h2>
@@ -396,52 +389,52 @@ DMA Buffer机制。也就是说，直接另外分配一片内存，到时映射�
 为PCI子系统定制的，我们在例子中把两个模块中的流程进行了组合和化简，突出关键逻辑）：</p>
 <p>.. code-block: C</p>
 <p>// 为设备创建设备自己的AS，包含一个代表物理空间的container
-   memory_region_init(&amp;dev-&gt;bus_master_container_region, OBJECT(dev),
-                       "bus master container", UINT64_MAX);
-   address_space_init(&amp;dev-&gt;bus_master_as,
-                       &amp;dev-&gt;bus_master_container_region, dev-&gt;name);</p>
+memory_region_init(&amp;dev-&gt;bus_master_container_region, OBJECT(dev),
+"bus master container", UINT64_MAX);
+address_space_init(&amp;dev-&gt;bus_master_as,
+&amp;dev-&gt;bus_master_container_region, dev-&gt;name);</p>
 <p>// 创建一个设备的iommu，TYPE_SMMUV3_IOMMU_MEMORY_REGION是iommu的类型名称
-   memory_region_init_iommu(&amp;dev-&gt;iommu_mr, sizeof(dev-&gt;iommu_mr),
-                            TYPE_SMMUV3_IOMMU_MEMORY_REGION,
-                            OBJECT(s), name, 1ULL &lt;&lt; SMMU_MAX_VA_BITS);</p>
+memory_region_init_iommu(&amp;dev-&gt;iommu_mr, sizeof(dev-&gt;iommu_mr),
+TYPE_SMMUV3_IOMMU_MEMORY_REGION,
+OBJECT(s), name, 1ULL &lt;&lt; SMMU_MAX_VA_BITS);</p>
 <p>// 创建iommu MR的别名，以便可以动态开启和关闭
-   memory_region_init_alias(&amp;dev-&gt;bus_master_enable_region,
-                            OBJECT(dev), "bus master",
-                            dev-&gt;iommu_mr, 0, memory_region_size(dev-&gt;iommu_mr));</p>
+memory_region_init_alias(&amp;dev-&gt;bus_master_enable_region,
+OBJECT(dev), "bus master",
+dev-&gt;iommu_mr, 0, memory_region_size(dev-&gt;iommu_mr));</p>
 <p>// 初始化的时候先关掉iommu，等设备启动的时候再让它生效
-   // 对于PCI设备来说，通常是设备被下了PCI_COMMAND_BUS_MASTER命令的时候，才会开启
-   memory_region_set_enabled(&amp;dev-&gt;bus_master_enable_region, false);</p>
+// 对于PCI设备来说，通常是设备被下了PCI_COMMAND_BUS_MASTER命令的时候，才会开启
+memory_region_set_enabled(&amp;dev-&gt;bus_master_enable_region, false);</p>
 <p>// 加到设备的container MR中
-   memory_region_add_subregion(&amp;dev-&gt;bus_master_container_region, 0,
-                               &amp;dev-&gt;bus_master_enable_region);</p>
+memory_region_add_subregion(&amp;dev-&gt;bus_master_container_region, 0,
+&amp;dev-&gt;bus_master_enable_region);</p>
 <p>这样创建出来的dev-&gt;bus_master_as就是可以用于dma_memory_rw()访问的AS了。有人可能
 奇怪，为什么这个AS中没有包含system MR。答案在translate的实现中可以找到：</p>
 <p>.. code-block:: C</p>
 <p>static IOMMUTLBEntry smmuv3_translate(IOMMUMemoryRegion *mr, hwaddr addr,
-                                         IOMMUAccessFlags flag, int iommu_idx)
-   {
-       ..
-       IOMMUTLBEntry entry = {
-           .target_as = &amp;address_space_memory,
-           .iova = addr,
-           .translated_addr = addr,
-           .addr_mask = ~(hwaddr)0,     //地址空间长度掩码，如果要求的读写范围超过这个限度，会分多次翻译
-           .perm = IOMMU_NONE,
-       };
-       ...
-       return entry;
-   }</p>
-<p>static void smmuv3_iommu_memory_region_class_init(ObjectClass <em>klass, void </em>data)
-   {
-       ...
-       imrc-&gt;translate = smmuv3_translate;
-       imrc-&gt;notify_flag_changed = smmuv3_notify_flag_changed;
-   }</p>
+IOMMUAccessFlags flag, int iommu_idx)
+{
+..
+IOMMUTLBEntry entry = {
+.target_as = &amp;address_space_memory,
+.iova = addr,
+.translated_addr = addr,
+.addr_mask = ~(hwaddr)0,     //地址空间长度掩码，如果要求的读写范围超过这个限度，会分多次翻译
+.perm = IOMMU_NONE,
+};
+...
+return entry;
+}</p>
+<p>static void smmuv3_iommu_memory_region_class_init(ObjectClass *klass, void *data)
+{
+...
+imrc-&gt;translate = smmuv3_translate;
+imrc-&gt;notify_flag_changed = smmuv3_notify_flag_changed;
+}</p>
 <p>static const TypeInfo smmuv3_iommu_memory_region_info = {
-      .parent = TYPE_IOMMU_MEMORY_REGION,
-      .name = TYPE_SMMUV3_IOMMU_MEMORY_REGION,
-      .class_init = smmuv3_iommu_memory_region_class_init,
-   };</p>
+.parent = TYPE_IOMMU_MEMORY_REGION,
+.name = TYPE_SMMUV3_IOMMU_MEMORY_REGION,
+.class_init = smmuv3_iommu_memory_region_class_init,
+};</p>
 <p>所以答案是，iommu自己提供目标AS是什么（这个例子中就是address_space_memory）。</p>
 <p>在qemu的当前实现中，大部分iommu都作为PCI的总线属性的一部分来设计，当你创建一个
 iommu设备的时候，通过primary_master属性（一个link）指定所述的PCI总线，从而调用
@@ -473,18 +466,18 @@ qdev），具体怎么做完全是实现者的自由度。</p>
 比如RISCV就是这样的：</p>
 <p>.. code-block:: C</p>
 <p>static void sifive_plic_irq_request(void *opaque, int irq, int level) {
-        plic_dev = opaque;
-        ...
-        cpu_interrupt(); //给对应的CPU发中断，是哪个CPU看plic算法了
-        ...
-   }
-   qdev_init_gpio_in(plic_dev, sifive_plic_irq_request, plic-&gt;num_sources);</p>
+plic_dev = opaque;
+...
+cpu_interrupt(); //给对应的CPU发中断，是哪个CPU看plic算法了
+...
+}
+qdev_init_gpio_in(plic_dev, sifive_plic_irq_request, plic-&gt;num_sources);</p>
 <p>这样组织一下，给中断控制器加下级中断的方法就变成一套统一的函数：</p>
 <p>.. code-block:: C</p>
 <p>qdev_init_gpio_in_xxx(plic, callback, num_irqs);
-   qemu_irq qdev_get_gpio_in(plic, n);
-   qdev_connect_gpio_in_xxx(cpu, n, qemu_irq);
-   sysbus_connect_irq(dev, n, qemu_irq);</p>
+qemu_irq qdev_get_gpio_in(plic, n);
+qdev_connect_gpio_in_xxx(cpu, n, qemu_irq);
+sysbus_connect_irq(dev, n, qemu_irq);</p>
 <p>这里的in可以换成out，是gpio的片信号标记，对于模拟来说我觉得关系不大，都用同一
 种就好了。qemu_irq是表示中断的控制结构，包含中断控制器的信息，n是中断控制器内
 的下标。sysbus_开头的接口是对qdev接口的封装，把处理中断的设备作为参数传递进去
@@ -508,8 +501,7 @@ qdev），具体怎么做完全是实现者的自由度。</p>
     void qemu_irq_pulse(qemu_irq irq);
     void pci_irq_assert(PCIDevice *pci_dev);
     void pci_irq_deassert(PCIDevice *pci_dev);
-    void pci_irq_pulse(PCIDevice *pci_dev);
-</code></pre>
+    void pci_irq_pulse(PCIDevice *pci_dev);</code></pre>
 <p>如果用的是PCI MSI/MSI-X，则中断触发通过msi_notify()来做。按MSI/MSI-X的原理，这
 个行为实际上就是根据MSX PCI配置，在对应的内存地址中写入要求的参数，这个内存地
 址写入的过程通过MR的翻译，最终会匹配到中断控制器的io写上，最后还是那组
@@ -541,8 +533,8 @@ qemu_set_irq()调用。</p>
 <p>.. note::</p>
 <p>我们这里快速补充一下PCI/PCIE上的基本概念：</p>
 <p>在谈PCI/PCIE的时候，Host表示CPU子系统，Host Bridge表示把CPU和PCI/PCIE总线连
-   起来的那个IP。这个IP包括三个功能：Bus Master，Bus Target，以及Configure
-   Access Generation。</p>
+起来的那个IP。这个IP包括三个功能：Bus Master，Bus Target，以及Configure
+Access Generation。</p>
 <p>TYPE_GPEX_HOST的继承树结构：::</p>
 <p>DEVICE &lt;- SYS_BUS_DEVICE &lt;- PCI_HOST_BRIDAGE &lt;- PCIE_HOST_BRIDGE &lt;- GPEX_HOST</p>
 <p>中断的行为类似，先为整个RP分配中断，然后用gpex_set_irq_num()建立PCIE局部irq和全
@@ -550,28 +542,27 @@ qemu_set_irq()调用。</p>
 <h2>PCI/PCI-E驱动</h2>
 <p>前面是全系统的PCI桥的概念，我们用一个PCI设备的backend来看具体的backend的写法：</p>
 <p>.. code-block:: C</p>
-<p>static void my_class_init(ObjectClass <em>oc, void </em>data) {
-     PCIDeviceClass *k = PCI_DEVICE_CLASS(oc);
-     k-&gt;realize = my_realize;
-     k-&gt;vendor_id = MY_VENDOR_ID;
-     k-&gt;device_id = MY_DEVICE_ID;
-     k-&gt;revision = MY_REVISION;
-     k-&gt;class_id = PCI_CLASS_XXXX;
-   }</p>
+<p>static void my_class_init(ObjectClass *oc, void *data) {
+PCIDeviceClass *k = PCI_DEVICE_CLASS(oc);
+k-&gt;realize = my_realize;
+k-&gt;vendor_id = MY_VENDOR_ID;
+k-&gt;device_id = MY_DEVICE_ID;
+k-&gt;revision = MY_REVISION;
+k-&gt;class_id = PCI_CLASS_XXXX;
+}</p>
 <p>static const TypeInfo my_pci_device_info = {
-     .name          = "my-pci-device"
-     .parent        = TYPE_PCI_DEVICE,
-     .class_init    = my_class_init,
-     .interfaces    = {
-       { INTERFACE_CONVENTIONAL_PCI_DEVICE },
-       { },
-     };
-   };</p>
+.name          = "my-pci-device"
+.parent        = TYPE_PCI_DEVICE,
+.class_init    = my_class_init,
+.interfaces    = {
+{ INTERFACE_CONVENTIONAL_PCI_DEVICE },
+{ },
+};
+};</p>
 <p>这个和其他类没有什么区别，只是父类设置成了TYPE_PCI_DEVICE，在类初始化的时候把
 父类的基本属性都设置类（vendor id等），realize中可以调用pci模块提供的比如::</p>
 <pre><code>pci_config_set_interrupt_pin()/msi_init(),
-pci_register_bar()
-</code></pre>
+pci_register_bar()</code></pre>
 <p>这些函数，创建相应的pci资源，剩下的工作，留给父类去做就可以了。</p>
 <h1>virtio</h1>
 <p>virtio是OASIS的标准，我没有调查它的背景，应该是Redhat和IBM等发起的组织吧，它的
@@ -582,13 +573,13 @@ guest感知host的存在，让guest上的模拟变成一种guest和host通讯的
 <p>virtio现在支持三种传输层，virtio的语义可以建立在任一种传输层上，只要传输层能满
 足这些语义的表达就可以了：</p>
 <p>PCI
-        这是较通用的方式，设备可以通过PCI协议自动发现，Host-Guest之间也可以直接
-        模拟成PCI/PCI接口进行相互访问。</p>
+这是较通用的方式，设备可以通过PCI协议自动发现，Host-Guest之间也可以直接
+模拟成PCI/PCI接口进行相互访问。</p>
 <p>MMIO
-        这用于平台设备，需要通过devtree一类的方式进行设备枚举。Host-Guest间通过
-        一般的MMIO方式进行通讯。</p>
+这用于平台设备，需要通过devtree一类的方式进行设备枚举。Host-Guest间通过
+一般的MMIO方式进行通讯。</p>
 <p>Channel I/O
-        这是IBM S/390的通用IO接口，我们有两种方式做分析就够了，这种忽略。</p>
+这是IBM S/390的通用IO接口，我们有两种方式做分析就够了，这种忽略。</p>
 <p>所谓传输层，本质是用什么语义来提供guest一侧的接口。我们前面已经看到了，host有
 办法访问guest的所有内存，但Guest还得做出一副“我是个正经的系统”的样子，表明什么
 数据是打算让Host去访问的，把这个仪式封装成一个协议，就是virtio的传输层。比如说
@@ -635,7 +626,6 @@ Used Buffer更改
 断，但这个不是根本性的要求。
 
 virtqueue
-`
 </code></pre>
 <p>virtqueue是Host和Guest的通道，目标是要建立一个两者间的基于共享内存的通讯通道，
 后面把它简称为vq。和其他共享内存的通讯方式一样，vq通过环状队列协议来实现。队列
@@ -660,16 +650,15 @@ packed vq，其原理是把Available和Used队列合并，Buffer下去一个处�
     TYPE_DEVICE -&gt; TYPE_VIRTIO_DEVICE -&gt; TYPE_VIRTIO_XXXXX
     TYPE_PCI_DEVICE -&gt; TYPE_VIRTIO_PCI -&gt; TYPE_VIRTIO_PCI_XXXX_BASE -&gt; TYPE_VIRTIO_PCI_XXXX
                                                                     -&gt; TRANSITIONAL_DEV
-                                                                    -&gt; NON_TRANSITIONAL_DEV
-</code></pre>
+                                                                    -&gt; NON_TRANSITIONAL_DEV</code></pre>
 <p>总线类用于设备的总线注册，属于辅助性质的，重点的是设备本身。在设备中，PCI这里比
 较特别，分了两层，下面有多种设备的类型的变体，这涉及VIRTIO不同版本的兼容性问题
 ，这里不深入讨论，我们下面的讨论聚焦在TYPE_VIRTIO_DEVICE的通用概念上，PCI设备可以
 类比。但我们还是给出这个概念的定义：</p>
 <p>TRANSITIONAL_DEV
-        这个概念现在仅针对PCI virtio设备，表示这个设备是否支持新旧接口的过渡。
-        NON_TRANSITIONAL_DEV就支持一种接口，TRANSITIONAL_DEV支持多个版本接口的
-        协商。</p>
+这个概念现在仅针对PCI virtio设备，表示这个设备是否支持新旧接口的过渡。
+NON_TRANSITIONAL_DEV就支持一种接口，TRANSITIONAL_DEV支持多个版本接口的
+协商。</p>
 <p>TYPE_VIRTIO_XXXXX</p>
 <pre><code>TYPE_VIRTIO_XXXX实现一个具体的设备，这层实现主要通过virtio接口建立通讯通道，原
 理大致是：
@@ -744,14 +733,13 @@ get_features()用于guest和host协商协议，当这个函数被调用的时候
         VIRTIO_CONFIG_S_ACKNOWLEDGE     1
         VIRTIO_CONFIG_S_DRIVER          2
         VIRTIO_CONFIG_S_DRIVER_OK       4
-        VIRTIO_CONFIG_S_FEATURES_OK 8
+        VIRTIO_CONFIG_S_FEATURES_OK	8
 
 特定的设备可以有更多的Status位。
 
 最后reset()用于设备复位到原始状态。
 
 TYPE_VIRTIO_DEVICE
-``
 </code></pre>
 <p>TYPE_VIRTIO_DEVICE一层提供基本的virtio功能（由TYPE_VIRTIO_XXXX继承），并对外部
 提供公共的操作接口，这一层对上一层的接口在分析上一层的使用接口时已经可以看到了。
@@ -793,8 +781,7 @@ TYPE_VIRTIO_DEVICE
 
     // snapshot管理
     virtio_save(vdev, file);
-    virtio_load(vdev, file, ...);
-</code></pre>
+    virtio_load(vdev, file, ...);</code></pre>
 <p>这一层之后下面提供了Host的直接访问接口层：::</p>
 <pre><code>    /*
      * 注1：X是字长后缀
@@ -815,8 +802,7 @@ TYPE_VIRTIO_DEVICE
     virtio_set_status(vdev, ...);
     virtio_reset(vdev);
     virtio_update_irq(vdev);
-    virtio_set_features(vdev, feature);
-</code></pre>
+    virtio_set_features(vdev, feature);</code></pre>
 <h2>PCI传输层</h2>
 <p>TYPE_VIRTIO_DEVICE只封装了virtio核心接口，但没有包含传输层的封装，我们用一种传
 输层(PCI)来感知加上传输层后的概念空间。</p>
@@ -825,19 +811,19 @@ TYPE_VIRTIO_DEVICE
 现起来是这样的：</p>
 <p>.. code:: c</p>
 <p>static VirtioPCIDeviceTypeInfo my_virtio_pci_proxy_info = {
-     .base_name     = MY_PROXY_TYPE_NAME "-base",
-     .generic_name  = MY_PROXY_TYPE_NAME,
-     .transitional_name      = MY_PROXY_TYPE_NAME "-transitional",
-     .non_transitional_name  = MY_PROXY_TYPE_NAME "-non-transitional",
-     .instance_size = sizeof(struct BBoxProxyState),
-     .instance_init = my_proxy_init,
-     .class_init    = my_proxy_class_init,
-   };</p>
+.base_name     = MY_PROXY_TYPE_NAME "-base",
+.generic_name  = MY_PROXY_TYPE_NAME,
+.transitional_name      = MY_PROXY_TYPE_NAME "-transitional",
+.non_transitional_name  = MY_PROXY_TYPE_NAME "-non-transitional",
+.instance_size = sizeof(struct BBoxProxyState),
+.instance_init = my_proxy_init,
+.class_init    = my_proxy_class_init,
+};</p>
 <p>static void my_register_types(void)
-   {
-     virtio_pci_types_register(&amp;my_virtio_pci_proxy_info);
-   }
-   type_init(my_register_types)</p>
+{
+virtio_pci_types_register(&amp;my_virtio_pci_proxy_info);
+}
+type_init(my_register_types)</p>
 <p>virtio_pci_types_register()是register_type_static的封装，同时注册了多个相互继
 承的对象，但基本可以认为主要名字是.gnereric_name的类的封装，下面的那些回调函数
 这是针对这个类的，我们这里不深入细节。</p>
@@ -845,29 +831,26 @@ TYPE_VIRTIO_DEVICE
 驱动要做的是把这个PCI设备的行为代理到一个真正的TYPE_VIRTIO_DEVICE设备，像这样
 ：</p>
 <p>.. code-block:: c</p>
-<p>static void my_proxy_realize(VirtIOPCIProxy <em>vpci_dev, Error **errp) {
-     MyProxyState </em>dev = BBOX_PROXY(vpci_dev);
-     DeviceState *vdev = DEVICE(&amp;dev-&gt;the_real_virtio_device);</p>
-<pre><code> qdev_realize(vdev, BUS(&amp;vpci_dev-&gt;bus), errp);
-</code></pre>
+<p>static void my_proxy_realize(VirtIOPCIProxy *vpci_dev, Error **errp) {
+MyProxyState *dev = BBOX_PROXY(vpci_dev);
+DeviceState *vdev = DEVICE(&amp;dev-&gt;the_real_virtio_device);</p>
+<pre><code> qdev_realize(vdev, BUS(&amp;vpci_dev-&gt;bus), errp);</code></pre>
 <p>}</p>
-<p>static void my_proxy_init(Object <em>obj)
-   {
-      MyProxyState </em>s = MY_PROXY(obj);</p>
+<p>static void my_proxy_init(Object *obj)
+{
+MyProxyState *s = MY_PROXY(obj);</p>
 <pre><code>  virtio_instance_init_common(obj, &amp;s-&gt;impl, sizeof(s-&gt;impl), BBOX_TYPE_NAME);
-}
-</code></pre>
-<p>static void my_proxy_class_init(ObjectClass <em>klass, void </em>data)
-   {
-     DeviceClass <em>dc = DEVICE_CLASS(klass);
-     PCIDeviceClass </em>pcidev_k = PCI_DEVICE_CLASS(klass);
-     VirtioPCIClass *vpci_k = VIRTIO_PCI_CLASS(klass);</p>
+}</code></pre>
+<p>static void my_proxy_class_init(ObjectClass *klass, void *data)
+{
+DeviceClass *dc = DEVICE_CLASS(klass);
+PCIDeviceClass *pcidev_k = PCI_DEVICE_CLASS(klass);
+VirtioPCIClass *vpci_k = VIRTIO_PCI_CLASS(klass);</p>
 <pre><code> pcidev_k-&gt;vendor_id = ...;
  pcidev_k-&gt;device_id = ...;
  pcidev_k-&gt;revision = ...;
  pcidev_k-&gt;class_id = ...;
- vpci_k-&gt;realize = my_proxy_realize;
-</code></pre>
+ vpci_k-&gt;realize = my_proxy_realize;</code></pre>
 <p>}</p>
 <p>在这个proxy的class_init中，我们原样设置pci的vendor_id等信息，但如果你的Guest中
 需要用Linux的virtio-pci驱动，你这里的vendor_id就需要匹配redhat的PCI驱动，
@@ -890,13 +873,13 @@ device_id表一样的virtio_device_id表来匹配具体的设备，其他行为�
 <p>这个驱动主要包含这些回调：</p>
 <p>.. code-block:: c</p>
 <p>static struct virtio_driver kenny_bbox_drv = {
-       ...
-       .id_table = id_table,
-       .validate = my_validate,
-       .probe = my_probe,
-       .remove = my_remove,
-       .config_changed = my_config_changed,
-   };</p>
+...
+.id_table = id_table,
+.validate = my_validate,
+.probe = my_probe,
+.remove = my_remove,
+.config_changed = my_config_changed,
+};</p>
 <p>其中validate是给驱动一个机会判断是否支持这个设备，config_changed用于对端通知配
 置更改，而关键的probe主要就是用virtio_cread()读配置，创建vq，并在初始化成功后
 ，通过virtio_device_read()把这个设备的status设置到DRIVER_OK的状态，两端的状态
@@ -909,8 +892,7 @@ softirq来读。</p>
 <h1>CPU模拟</h1>
 <h2>CPU对象</h2>
 <p>和其他设备一样，CPU也是一种QoM，继承树是：::</p>
-<pre><code>    TYPE_DEVICE &lt;- TYPE_CPU &lt;- TYPE_MY_CPU
-</code></pre>
+<pre><code>    TYPE_DEVICE &lt;- TYPE_CPU &lt;- TYPE_MY_CPU</code></pre>
 <p>CPU有自己的as，mr，如果是全系统模拟，这当然就是system_as这些东西了。</p>
 <p>CPU对象的模拟使用不同的算法，在CPU的概念中称为一种加速器，Accelerator。TCG，KVM
 都是Accelerator。</p>
@@ -935,8 +917,7 @@ Cache存在，如果指令跳回到到翻译过的地方，可以直接复用这
 <p>.. note::</p>
 <pre><code>    如果运气好（通常Qemu很容易有这种运气），每段代码在Qemu中都只会被翻译一
     次，之后基本上Qemu就在TB之间流转，而不再进入翻译。这在实际应用中，可以
-    成百倍提高Qemu的模拟速度。
-</code></pre>
+    成百倍提高Qemu的模拟速度。</code></pre>
 <p>我们Review一下前面这个过程，这里其实有三个程序上下文：</p>
 <ol>
 <li>Guest的执行上下文，我们简称G。</li>
@@ -953,7 +934,7 @@ Cache存在，如果指令跳回到到翻译过的地方，可以直接复用这
 helper函数，这样生成程序才能把这些函数链接进去。</p>
 <p>.. note::</p>
 <p>如果用User模式运行Qemu模拟程序，并用perf record跟踪这个程序，perf会报告部分
-   时间消耗在JIT中，这个JIT就是T上下文消耗的时间。</p>
+时间消耗在JIT中，这个JIT就是T上下文消耗的时间。</p>
 <p>在TB之外还有一个BB，Basic Block，的概念，它的定义是一个中间没有跳转的TB中的一段
 代码。这是一个逻辑上的概念，主要用于QOP变量的生命周期管理，后面我们讲TCGv的时候
 单独讨论。</p>
@@ -969,8 +950,7 @@ helper函数，这样生成程序才能把这些函数链接进去。</p>
 <li>跳入TB中执行本地代码</li>
 </ol>
 <p>这个跳入的过程对Q上下文来说，就是一个函数调用：::</p>
-<pre><code>    tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)
-</code></pre>
+<pre><code>    tcg_qemu_tb_exec(CPUArchState *env, uint8_t *tb_ptr)</code></pre>
 <p>T上下文根据这个调用的要求更新CPU的状态（即CPUArchState对象中相应的内存）就可以
 了。</p>
 <p>北向模块接口</p>
@@ -1014,7 +994,7 @@ tcg_gen_xxxx()函数来完成。
    movi_i64 tmp3,imm
    add_i64 tmp2,tmp2,tmp3
    mov_i64 x12/a2,tmp2
-
+  
 这是因为tcg_gen_addi_i64()实际上把那个立即数也换成了一个TB上的临时变量。
 
 Qemu优化器合并临时变量，4条TCG指令优化成2条：::
@@ -1164,152 +1144,197 @@ tcg_out_op()函数。实际工作就是根据tcg中间指令，决定如何映�
 tcg_qemu_tb_exec()这个函数输入，设置生成代码的工作环境，比如保存callee-saved寄
 存器，这样就可以让出所有的寄存器给目标代码使用了。</p>
 <p>而tcg_out_op()就是一条条tcg指令的映射实现，这完全是个体力活了。</p>
-<p>TCG的线程模型
-`````````````</p>
-<p>如前所述，Qemu为每个vcpu创建了一个线程。而main函数所在的线程称为iothread。由于
+<p>TCG的线程模型</p>
+<pre><code>
+如前所述，Qemu为每个vcpu创建了一个线程。而main函数所在的线程称为iothread。由于
 qemu原来设计是单线程的（称为STTCG，Single-threaded TCG），升级到多线程后（称为
 MTTCG，Multi-threaded TCG），很多传统的代码并不能处理多线程。所以Qemu设计了
-:ref:<code>BQL&lt;bql&gt;</code>
+:ref:`BQL&lt;bql&gt;`
 机制：除了vcpu翻译执行和iothread polling，其他处理的进入都是加上BQL的，所以，
-vcpu的中断异常处理，一般设备程序的事件处理，都是串行的，不需要额外的锁保护。</p>
-<p>iothread机制后来升级了，除了main线程天然是个iothread外，用户可以通过iothread命
+vcpu的中断异常处理，一般设备程序的事件处理，都是串行的，不需要额外的锁保护。
+
+iothread机制后来升级了，除了main线程天然是个iothread外，用户可以通过iothread命
 令创建更多的io线程。（todo：其他iothread的BQL原理待分析）iothread使用glib的main
 loop机制进行事件处理，简单说就是所有的外部事件监控都封装成文件，然后对文件组进
 行polling，来一个事件用本线程处理一个事件，相当于所有io行为都在本线程上排队。这
-些我文件可以是字符设备，socket，eventfd，signalfd等等。</p>
-<p>原子操作模拟
+些我文件可以是字符设备，socket，eventfd，signalfd等等。
+
+原子操作模拟
 ````````````
 如前所述，每个Guest的CPU对应的就是Host的一个线程，所以要模拟Guest CPU的原子操作
 ，只要用Host的原子仿存就可以了。但如果要模拟的平台没有对应的Host原子仿存怎么办？
-比如我们要在没有Transaction Memory的系统上模拟Transcation Memory怎么做？</p>
-<p>最粗暴的方法是用锁。但这样效率最低，因为每个访存操作都要上锁，而且你不可能每个
-内存单元都上锁，这样，只要访存，撞上的机会都会很高。</p>
-<p>一种可能的优化是对内存分段上锁，但这个算法成本也很高。由于\ :ref:<code>BQL&lt;bql&gt;</code>\ 的
+比如我们要在没有Transaction Memory的系统上模拟Transcation Memory怎么做？
+
+最粗暴的方法是用锁。但这样效率最低，因为每个访存操作都要上锁，而且你不可能每个
+内存单元都上锁，这样，只要访存，撞上的机会都会很高。
+
+一种可能的优化是对内存分段上锁，但这个算法成本也很高。由于\ :ref:`BQL&lt;bql&gt;`\ 的
 存在，TCG选择了另一个成本更低的算法：互斥区。这个执行区域通过start_exclusive()
 和end_exclusive()制造，它通过pthread_cond一类的接口，等待所有vcpu都离开翻译执行
 区以后，上锁，不让它们再进入执行，这样，成功进入start_exclusive()的vcpu就可以在
-其他vcpu停下的情况下执行了。</p>
-<p>在遇到需要翻译这种复杂的原子操作的时候，让翻译程序在TB中调用一个
+其他vcpu停下的情况下执行了。
+
+在遇到需要翻译这种复杂的原子操作的时候，让翻译程序在TB中调用一个
 helper，helper_exit_atomic()，像发生异常一样离开TB，然后进入互斥区，在互斥区中完成
 原子功能，这种情况下，其他vcpu就不能在中间插入操作了。这个过程通过
 cpu_exec_step_atomic()来完成（它是框架的一部分，如果只是做翻译，这个事情留给框
-架就可以了）。</p>
-<p>.. note::</p>
-<p>cpu_exec_step_atomic()方法只支持一条指令，如果需要更多，需要更多的修改才能做
-   到。</p>
-<p>mmap_lock
-`````````</p>
-<p>（这是一个独立的主题。)</p>
-<p>TCG代码中经常用到mmap_lock的概念，它是一个简单的可叠加的锁机制，qemu的代码模拟
+架就可以了）。
+
+.. note::
+
+   cpu_exec_step_atomic()方法只支持一条指令，如果需要更多，需要更多的修改才能做
+   到。
+
+mmap_lock
+`````````
+
+（这是一个独立的主题。)
+
+TCG代码中经常用到mmap_lock的概念，它是一个简单的可叠加的锁机制，qemu的代码模拟
 通过mmap TB的代码区域让代码生效，但代码准备的时候必须上锁，mmap_lock允许所有这
-些操作嵌套调用mmap_lock，直到真的发生冲突的时候再真的上锁。</p>
-<h1>Machine</h1>
-<p>Machine代表一个整机，它本质就是个后端驱动，可以定义在比如hw/xxxx/board.c里面。
+些操作嵌套调用mmap_lock，直到真的发生冲突的时候再真的上锁。
+
+
+Machine
+=======
+Machine代表一个整机，它本质就是个后端驱动，可以定义在比如hw/xxxx/board.c里面。
 实现为一个QoM，父类是TYPE_MACHINE，class_init设一些父类的基本回调，关键应该是
-init，里面创建内存映射，增加基本设备这些东西。没有多少新东西。</p>
-<h1>其他小设施</h1>
-<p>.. _bql:</p>
-<h2>BQL：Big Qemu Lock</h2>
-<p>BQL是一个简化Qemu IO调度模型的锁机制。Qemu中主流的线程包括：</p>
-<ol>
-<li><p>进程的主线程，这个线程完成初始化后，剩下的时间全部用于IO调度。调度通过glib的
-MainLoop机制完成。也就是说，所有的IO都转化为文件fd，注册成MainLoop的一个
-Source，内部的通知也通过eventfd和signalfd这些机制注册，之后只要用poll这组fd，
-然后一个事件一个事件串行处理就可以了。</p>
-</li>
-<li><p>vcpu线程，每个vcpu一个，用于处理翻译，执行和异常处理。</p>
-</li>
-<li><p>通过-object iothread,id=my_id额外创建的io线程。</p>
-</li>
-</ol>
-<p>其中第三个是后来加的功能，在这个功能之前，第一个线程才是iothread，这个名字在代
+init，里面创建内存映射，增加基本设备这些东西。没有多少新东西。
+
+其他小设施
+===========
+
+.. _bql:
+
+BQL：Big Qemu Lock
+------------------
+
+BQL是一个简化Qemu IO调度模型的锁机制。Qemu中主流的线程包括：
+
+1. 进程的主线程，这个线程完成初始化后，剩下的时间全部用于IO调度。调度通过glib的
+   MainLoop机制完成。也就是说，所有的IO都转化为文件fd，注册成MainLoop的一个
+   Source，内部的通知也通过eventfd和signalfd这些机制注册，之后只要用poll这组fd，
+   然后一个事件一个事件串行处理就可以了。
+
+2. vcpu线程，每个vcpu一个，用于处理翻译，执行和异常处理。
+
+3. 通过-object iothread,id=my_id额外创建的io线程。
+
+其中第三个是后来加的功能，在这个功能之前，第一个线程才是iothread，这个名字在代
 码现在还有痕迹。我们这里为了区分，把第一个叫main iothread，第三个叫extra
-iothread。</p>
-<p>BQL就是一个简单的mutex，通过qemu_mutex_lock/unlock_iothread()调用。和大多数锁不
+iothread。
+
+BQL就是一个简单的mutex，通过qemu_mutex_lock/unlock_iothread()调用。和大多数锁不
 同，那些锁是在少数关键区域才上锁的，而这个锁在大部分时候都是锁上的，只在小部分
-地方才放开，比如：</p>
-<ol>
-<li>vcpu翻译和执行的时候</li>
-<li>main iothread做polling的时候</li>
-</ol>
-<p>除此以外，所有时间都是有锁的。这保证了qemu那些传统的io代码，比如设备模拟，vcpu
-的中断和异常处理，都是独占的。</p>
-<p>在这个基础上，Qemu提供start/end_exclusive()，这个两个函数创建一个互斥区，等待所有
-cpu都进入BQL的lock状态，这样在这个范围内的操作就是在所有CPU间互斥的。</p>
-<p>Extra iothread是另一个独立的体系，它的原理和main iothread相近，代码都有部分共享
+地方才放开，比如：
+
+1. vcpu翻译和执行的时候
+2. main iothread做polling的时候
+
+除此以外，所有时间都是有锁的。这保证了qemu那些传统的io代码，比如设备模拟，vcpu
+的中断和异常处理，都是独占的。
+
+在这个基础上，Qemu提供start/end_exclusive()，这个两个函数创建一个互斥区，等待所有
+cpu都进入BQL的lock状态，这样在这个范围内的操作就是在所有CPU间互斥的。
+
+Extra iothread是另一个独立的体系，它的原理和main iothread相近，代码都有部分共享
 ，有自己独立的时钟和bottom half等所有辅助机制。但它没有BQL，互斥使用
 aio_context_acquire/release()，也是个mutex。它的存在主要是为了帮某些子系统（主
 要是块设备）挂在它上面的事件处理独立运行，如果需要发回主线程处理，就只能通过发
-消息回去main iothread中来完成了。</p>
-<h2>RCU</h2>
-<p>qemu也支持类似内核的RCU机制（从liburcu移植过来的），接口是这样的：</p>
-<ol>
-<li><p>用到这个机制的线程都要调用rcu_register_thread()设置相关线程变量</p>
-</li>
-<li><p>读方用rcu_read_lock/unlock()保护，或者直接放一个RCU_READ_LOCK_GUARD进行区域
-自动保护。</p>
-</li>
-<li><p>用原子指令替换变量，释放旧数据的有两种模式：</p>
-<ol>
-<li><p>修改完替换指针，调用sychonized_rcu()等所有reader都退出访问了，再释放旧数
-据。</p>
-</li>
-<li><p>用call_rcu1(head, func)设定一个释放函数，等reader退出自动释放。启动head通
-常是放在数据中的一个成员，类型是struct rcu_head。
-call_rcu(head, func, field)和g_free_rcu(obj, field)是call_rcu1的封装。</p>
-</li>
-</ol>
-</li>
-</ol>
-<h2>Monitor</h2>
-<p>Qemu的Monitor是Qemu的控制界面，它可以占据当前的控制台，也可以通过其他tty控制台
-进行访问。Qemu的Monitor当前在概念空间上有两种：</p>
-<p>QMP
+消息回去main iothread中来完成了。
+
+
+RCU
+----
+
+qemu也支持类似内核的RCU机制（从liburcu移植过来的），接口是这样的：
+
+1. 用到这个机制的线程都要调用rcu_register_thread()设置相关线程变量
+
+2. 读方用rcu_read_lock/unlock()保护，或者直接放一个RCU_READ_LOCK_GUARD进行区域
+   自动保护。
+
+3. 用原子指令替换变量，释放旧数据的有两种模式：
+
+   1. 修改完替换指针，调用sychonized_rcu()等所有reader都退出访问了，再释放旧数
+      据。
+
+   2. 用call_rcu1(head, func)设定一个释放函数，等reader退出自动释放。启动head通
+      常是放在数据中的一个成员，类型是struct rcu_head。
+      call_rcu(head, func, field)和g_free_rcu(obj, field)是call_rcu1的封装。
+
+Monitor
+--------
+Qemu的Monitor是Qemu的控制界面，它可以占据当前的控制台，也可以通过其他tty控制台
+进行访问。Qemu的Monitor当前在概念空间上有两种：
+
+QMP
         Qemu Message Protocol，这是通过json消息对运行中的Qemu进行控制。
-        通过Qemu参数-qmp启动。启动后可以用telnet一类的中断登录上去控制。</p>
-<p>HMP
+        通过Qemu参数-qmp启动。启动后可以用telnet一类的中断登录上去控制。
+
+HMP
         Human Message Protocol，这直接就是命令行接口了，这在Qemu启动后通过热键
-        进入（默认是ctl-a c）。</p>
-<p>QMP是Qemu的核心逻辑，HMP最终都是解释为QMP的实现完成相应的功能的。比如
-hmp_info_version查qemu的版本，实际调用的是qmp_query_version()。</p>
-<h2>Error</h2>
-<p>Qemu使用一种层次化的报错机制，也就是说，由调用者决定这个错误的严重程度。比如这
-样一个调用关系：</p>
-<p>.. code-block:: C</p>
-<p>a(err) {
+        进入（默认是ctl-a c）。
+
+QMP是Qemu的核心逻辑，HMP最终都是解释为QMP的实现完成相应的功能的。比如
+hmp_info_version查qemu的版本，实际调用的是qmp_query_version()。
+
+Error
+------
+Qemu使用一种层次化的报错机制，也就是说，由调用者决定这个错误的严重程度。比如这
+样一个调用关系：
+
+.. code-block:: C
+
+   a(err) {
      b(err) {
         c(err);
      }
-   }</p>
-<p>当a调用b的时候，不是b决定这个错误有多严重，而是a决定这个错误有多严重。c用b的err
+   }
+
+当a调用b的时候，不是b决定这个错误有多严重，而是a决定这个错误有多严重。c用b的err
 参数报错，而b用a提供参数报错。如果b调用c的时候，觉得我不在乎这个调用会错（这很
 常见，比如我查找一个字符串，找不到就找不到了，无所谓），就可以传一个NULL进去，
-这样c继续基于这个NULL报错，这个错误就会被忽略。</p>
-<p>Qemu当前提供了两种错误控制类型：</p>
-<p>error_abort
-        需要abort()的错误。</p>
-<p>error_fatal
-        需要exit()的错误。</p>
-<p>报错的一层用这些函数报告错误：::</p>
-<pre><code>    error_setg(error, ...);         // 设置错误
-    error_append_hint(error, ...);  // 补充错误提示
-    error_propagate(error, ...);    // 向上一级传递
-</code></pre>
-<p>调用一方把error_abort或者error_fatal传进去，出来的时候根据这个参数检查实际的错误
-是什么。</p>
-<h2>事件通知</h2>
-<p>Qemu的事件通知用于两个线程间进行消息同步，在Linux下主要是对eventfd(2)和
+这样c继续基于这个NULL报错，这个错误就会被忽略。
+
+Qemu当前提供了两种错误控制类型：
+
+error_abort
+        需要abort()的错误。
+
+error_fatal
+        需要exit()的错误。
+
+报错的一层用这些函数报告错误：::
+
+        error_setg(error, ...);         // 设置错误
+        error_append_hint(error, ...);  // 补充错误提示
+        error_propagate(error, ...);    // 向上一级传递
+
+调用一方把error_abort或者error_fatal传进去，出来的时候根据这个参数检查实际的错误
+是什么。
+
+事件通知
+--------
+Qemu的事件通知用于两个线程间进行消息同步，在Linux下主要是对eventfd(2)和
 signalfd(2)的封装，在Windows下是对CreateEvent()的封装。它主要是封装这样一对接口
-：::</p>
-<pre><code>    event_notifier_set(EventNotifier);
-    event_notifier_test_and_clear(EventNotifier);
-</code></pre>
-<p>前者发起通知，后者测试通知。</p>
-<h2>编译系统</h2>
-<p>Qemu使用\ <code>meson</code>_\ 作为基础的编译系统，但它也提供一个基础的./configure文件作为
-配置命令入口，只是这个配置命令不靠auto-tool工具生成。</p>
-<p>meson的主配置文件是根目录下的meson.build，qemu的这个基本文件定义了所有下属子目
+：::
+
+        event_notifier_set(EventNotifier);
+        event_notifier_test_and_clear(EventNotifier);
+
+前者发起通知，后者测试通知。
+
+编译系统
+---------
+Qemu使用\ `meson`_\ 作为基础的编译系统，但它也提供一个基础的./configure文件作为
+配置命令入口，只是这个配置命令不靠auto-tool工具生成。
+
+meson的主配置文件是根目录下的meson.build，qemu的这个基本文件定义了所有下属子目
 录用的子meson.build，在这些meson.build文件中，你只需要把你的文件加到对应的
-xxx_ss文件集中，就可以参与编译。所以每个子目录的行为还是很简单的。</p>
-<p>.. _meson: <a href="https://mesonbuild.com">https://mesonbuild.com</a></p>
-<p>.. vim: set tw=78</p>
+xxx_ss文件集中，就可以参与编译。所以每个子目录的行为还是很简单的。
+
+.. _meson: https://mesonbuild.com
+
+.. vim: set tw=78
+</code></pre>

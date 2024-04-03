@@ -1,275 +1,228 @@
-<!DOCTYPE html>
-<html lang="en"><head>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.7.1 -->
-<title>Linux进程间通信概览 | Bingwhispers</title>
-<meta name="generator" content="Jekyll v3.8.7" />
-<meta property="og:title" content="Linux进程间通信概览" />
-<meta property="og:locale" content="en_US" />
-<meta name="description" content="一、概要 　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。" />
-<meta property="og:description" content="一、概要 　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。" />
-<link rel="canonical" href="/2018/01/15/helicopter-view-of-interprocess-communication" />
-<meta property="og:url" content="/2018/01/15/helicopter-view-of-interprocess-communication" />
-<meta property="og:site_name" content="Bingwhispers" />
-<meta property="og:type" content="article" />
-<meta property="article:published_time" content="2018-01-15T20:45:00+08:00" />
-<meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Linux进程间通信概览" />
-<script type="application/ld+json">
-{"@type":"BlogPosting","url":"/2018/01/15/helicopter-view-of-interprocess-communication","headline":"Linux进程间通信概览","dateModified":"2018-01-15T20:45:00+08:00","datePublished":"2018-01-15T20:45:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"/2018/01/15/helicopter-view-of-interprocess-communication"},"description":"一、概要 　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。","@context":"https://schema.org"}</script>
-<!-- End Jekyll SEO tag -->
-<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="/feed.xml" title="Bingwhispers" /></head>
-<body><header class="site-header" role="banner">
+<h2>原文：<a href="https://cyril3.github.io/helicopter-view-of-interprocess-communication.html">Linux进程间通信概览 | Bingwhispers</a></h2>
+<p>&lt;!DOCTYPE html&gt;</p>
+<p>&lt;html lang="en"&gt;&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;meta http-equiv="X-UA-Compatible" content="IE=edge"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;&lt;!-- Begin Jekyll SEO tag v2.7.1 --&gt;
+&lt;title&gt;Linux进程间通信概览 | Bingwhispers&lt;/title&gt;
+&lt;meta name="generator" content="Jekyll v3.8.7" /&gt;
+&lt;meta property="og:title" content="Linux进程间通信概览" /&gt;
+&lt;meta property="og:locale" content="en_US" /&gt;
+&lt;meta name="description" content="一、概要 　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。" /&gt;
+&lt;meta property="og:description" content="一、概要 　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。" /&gt;
+&lt;link rel="canonical" href="/2018/01/15/helicopter-view-of-interprocess-communication" /&gt;
+&lt;meta property="og:url" content="/2018/01/15/helicopter-view-of-interprocess-communication" /&gt;
+&lt;meta property="og:site_name" content="Bingwhispers" /&gt;
+&lt;meta property="og:type" content="article" /&gt;
+&lt;meta property="article:published_time" content="2018-01-15T20:45:00+08:00" /&gt;
+&lt;meta name="twitter:card" content="summary" /&gt;
+&lt;meta property="twitter:title" content="Linux进程间通信概览" /&gt;
+&lt;script type="application/ld+json"&gt;
+{"@type":"BlogPosting","url":"/2018/01/15/helicopter-view-of-interprocess-communication","headline":"Linux进程间通信概览","dateModified":"2018-01-15T20:45:00+08:00","datePublished":"2018-01-15T20:45:00+08:00","mainEntityOfPage":{"@type":"WebPage","@id":"/2018/01/15/helicopter-view-of-interprocess-communication"},"description":"一、概要 　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。","@context":"https://schema.org"}&lt;/script&gt;
+&lt;!-- End Jekyll SEO tag --&gt;
+&lt;link rel="stylesheet" href="/assets/main.css"&gt;&lt;link type="application/atom+xml" rel="alternate" href="/feed.xml" title="Bingwhispers" /&gt;&lt;/head&gt;
+&lt;body&gt;&lt;header class="site-header" role="banner"&gt;</p>
+<p>&lt;div class="wrapper"&gt;&lt;a class="site-title" rel="author" href="/"&gt;Bingwhispers&lt;/a&gt;&lt;nav class="site-nav"&gt;
+        &lt;input type="checkbox" id="nav-trigger" class="nav-trigger" /&gt;
+        &lt;label for="nav-trigger"&gt;
+          &lt;span class="menu-icon"&gt;
+            &lt;svg viewBox="0 0 18 15" width="18px" height="15px"&gt;
+              &lt;path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/&gt;
+            &lt;/svg&gt;
+          &lt;/span&gt;
+        &lt;/label&gt;</p>
+<pre><code>    &lt;div class="trigger"&gt;&lt;a class="page-link" href="/about/"&gt;About&lt;/a&gt;&lt;/div&gt;
+  &lt;/nav&gt;&lt;/div&gt;</code></pre>
+<p>&lt;/header&gt;
+&lt;main class="page-content" aria-label="Content"&gt;
+      &lt;div class="wrapper"&gt;
+        &lt;article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting"&gt;</p>
+<p>&lt;header class="post-header"&gt;
+    &lt;h1 class="post-title p-name" itemprop="name headline"&gt;Linux进程间通信概览&lt;/h1&gt;
+    &lt;p class="post-meta"&gt;
+      &lt;time class="dt-published" datetime="2018-01-15T20:45:00+08:00" itemprop="datePublished"&gt;2018年01月15日
+      &lt;/time&gt;&lt;/p&gt;
+  &lt;/header&gt;</p>
+<p>&lt;div class="post-content e-content" itemprop="articleBody"&gt;
+    &lt;h1 id="一概要"&gt;一、概要&lt;/h1&gt;
+&lt;p&gt;　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　总结起来，Linux下进程间通信主要有以下几种方法：&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;信号（Signal）&lt;/li&gt;
+  &lt;li&gt;管道（Pipe）和命名管道（Named pipe）&lt;/li&gt;
+  &lt;li&gt;消息队列（Message queue）&lt;/li&gt;
+  &lt;li&gt;共享内存（Shared memory）&lt;/li&gt;
+  &lt;li&gt;信号量（Semaphore）&lt;/li&gt;
+  &lt;li&gt;套接字（Socket）&lt;/li&gt;
+&lt;/ol&gt;</p>
+<p>&lt;p&gt;　　在众多的进程间通信的方法里面，每一种方法都有优缺点，如何根据使用情景选择合适的通信方法就非常重要了。&lt;/p&gt;</p>
+<p>&lt;h1 id="二信号"&gt;二、信号&lt;/h1&gt;
+&lt;p&gt;　　信号是非常基础的进程间通信方法，它从软件层面上对中断机制进行了模仿。所以信号也被称作“软中断信号”。信号用来通知进程发生了异步事件。进程之间可以通过系统调用发送软中断信号。操作系统内核也可以因为内部事件而给进程发送信号，通知进程发生了某个事件。Linux支持不可靠信号和可靠信号。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　Linux系统共定义了64种信号，分为两大类：实时信号与标准信号，前32种信号（信号值小于SIGRTMIN）为标准信号（也称之为不可靠信号和非实时信号），后32种（信号值位于SIGRTMIN和SIGRTMAX之间）为实时信号（也称之为可靠信号）。信号很重要的一个特点就是当进程接收到信号后，能够中断当前执行的代码，转而执行信号处理函数。实时信号和标准信号有如下区别：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;实时信号没有明确的含义，而是由使用者自己来决定如何使用。而标准信号则一般有确定的用途及含义，并且每种信号都有各自的缺省动作。如按键盘的CTRL+C时，会产生SIGINT信号，进程对该信号的默认反应就是进程终止。&lt;/li&gt;
+  &lt;li&gt;一个进程可以接受多个同样的实时信号，这些实时信号会被缓存在一个队列中，然后按次序被处理。而标准信号则不能。在标准信号没有得到处理的时候，多个标准信号会被合为一个。这也造成了标准信号可能丢失的情况。&lt;/li&gt;
+  &lt;li&gt;实时信号使用sigqueue发送的时候，可以携带附加的数据(int或者pointer)。标准信号不能。&lt;/li&gt;
+  &lt;li&gt;实时信号具有优先级的概念，数值越低的实时信号其优先级越高。在处理的时候，也是数值低的实时信号优先得到处理。&lt;/li&gt;
+  &lt;li&gt;实时信号的默认行为都一样，都是结束当前的进程，这个和标准信号是不一样的。&lt;/li&gt;
+  &lt;li&gt;进程每次处理标准信号后，就将对信号的响应设置为默认动作。在某些情况下，将导致对信号的错误处理。因此，用户如果不希望这样的操作，那么就要在信号处理函数结尾再一次调用signal()，重新安装该信号&lt;sup&gt;[注1]&lt;/sup&gt;。&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;p&gt;　　信号的相关API：&lt;/p&gt;</p>
+<p>&lt;ul&gt;
+  &lt;li&gt;signal()：安装信号&lt;/li&gt;
+  &lt;li&gt;sigaction()：安装信号&lt;/li&gt;
+  &lt;li&gt;kill()：向进程或进程组发送信号&lt;/li&gt;
+  &lt;li&gt;sigqueue()：发送信号&lt;/li&gt;
+  &lt;li&gt;alarm()：调用进程指定时间后发出SIGALARM信号&lt;/li&gt;
+  &lt;li&gt;setitimer()：设置定时器，计时达到后给进程发送SIGALRM信号&lt;/li&gt;
+  &lt;li&gt;abort()：向进程发送SIGABORT信号，默认进程会异常退出&lt;/li&gt;
+  &lt;li&gt;raise()：向进程自身发送信号&lt;/li&gt;
+  &lt;li&gt;sigemptyset()：信号集全部清0&lt;/li&gt;
+  &lt;li&gt;sigfillset()：信号集全部置1&lt;/li&gt;
+  &lt;li&gt;sigaddset()：向信号集中加入signum信号&lt;/li&gt;
+  &lt;li&gt;sigdelset()：向信号集中删除signum信号&lt;/li&gt;
+  &lt;li&gt;sigismember()：判定信号signum是否存在信号集中&lt;/li&gt;
+  &lt;li&gt;sigprocmask()：把信号集中的信号添加到进程信号集&lt;/li&gt;
+  &lt;li&gt;sigpending()：获取已发送到进程，却被阻塞的所有信号&lt;/li&gt;
+  &lt;li&gt;sigsuspend()：替换进程的原有掩码，并暂停进程执行，直到收到信号再恢复原有掩码并继续执行进程&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;p&gt;　　值得注意的是：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;由于信号会中断主进程的运行，所以在信号处理函数中多任务的并发控制也会经常使用。当主进程获取某个资源并加锁后，如果在它解锁前接收到了一个信号并进入了信号处理函数，并且在这个信号处理函数中，同样需要获取此资源并加锁。但是主进程还没有解锁，这就会导致死锁。所以，在信号处理函数中进行并发控制需要格外小心。&lt;/li&gt;
+  &lt;li&gt;当进程正阻塞在系统调用（或者库函数）中时，如果一个信号处理函数被调用。此时会出现两种情况：1.信号处理函数返回后，自动重新进入系统调用（库函数调用）。2.系统调用（库函数）失败并且返回EINTR。具体情况请参考Linux man pages。&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;h1 id="三管道"&gt;三、管道&lt;/h1&gt;
+&lt;p&gt;　　管道是所有进程间通信手段中最简单的一种。对于进程来说，管道和文件类似。命名管道和管道的区别仅在于创建和打开的方式不同。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　在Linux man pages中，命名管道被称作FIFO。管道和命名管道都提供了单向的进程间通信的通道。管道有一个读取端和一个写入端。数据从写入端写入，从读取端读取。由于管道的特点和创建管道的方法限制，导致管道只能用于具有亲缘关系的进程之间。命名管道（FIFO）和管道非常类似。只不过它在文件系统中有唯一的文件与之对应。读取端使用O_RDONLY标志打开，而写入端则是用O_WRONLY打开。管道和命名管道只能发送无格式的字节流，并且其容纳数据的缓冲区大小是受限制的。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　管道的相关API：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;pipe()：创建并打开匿名管道&lt;/li&gt;
+  &lt;li&gt;mkfifo()：创建命名管道&lt;/li&gt;
+  &lt;li&gt;unlink()：销毁命名管道&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;p&gt;　　管道的读写操作和文件操作基本一致。不过需要注意的是，以阻塞方式打开和读写命名管道时，阻塞方式和普通文件有所区别。具体情况请参考Linux man pages。&lt;/p&gt;</p>
+<p>&lt;h1 id="四消息队列"&gt;四、消息队列&lt;/h1&gt;
+&lt;p&gt;　　消息队列就是一个消息的链表。可以把消息看作一个记录，具有特定的格式以及特定的优先级。对消息队列有写权限的进程可以向中按照一定的规则添加新消息；对消息队列有读权限的进程则可以从消息队列中读走消息。消息队列解决了信号只能通知事件，而不能发送信息的问题。同时又克服了管道只能承载无格式字节流以及缓冲区大小受限等缺点。结构化的消息通信机制使通信双方在约定好数据结构之后，无须对消息再次解析。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　Linux既支持POSIX消息队列，也支持System V 消息队列，相关API如下所示：&lt;/p&gt;</p>
+<p>&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th style="text-align: left"&gt;操作&lt;/th&gt;
+      &lt;th style="text-align: left"&gt;POSIX 函数&lt;/th&gt;
+      &lt;th style="text-align: left"&gt;System V 函数&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td style="text-align: left"&gt;创建消息队列&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;mq_open()&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;msgget()&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style="text-align: left"&gt;发送消息&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;mq_send()&lt;br /&gt;mq_timedsend()&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;msgsnd()&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style="text-align: left"&gt;接收消息&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;mq_receive()&lt;br /&gt;mq_timedreceive()&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;msgrcv()&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style="text-align: left"&gt;操作消息队列&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;mq_getattr()&lt;br /&gt;mq_setattr()&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;msgctl()&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td style="text-align: left"&gt;消息队列通知&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;mq_notify()&lt;/td&gt;
+      &lt;td style="text-align: left"&gt;-&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;</p>
+<p>&lt;p&gt;&lt;br /&gt;
+　　消息队列具有内核延续性。所谓内核延续性是指：某个资源创建后会随着内核的运行而一直存在，直到这个资源被有意的回收。相似的概念还有进程延续性和文件系统延续性。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　Linux中POSIX消息队列的描述符直接使用了文件描述符，这意味着可以使用select、poll和epoll来操作消息队列。不过这些并不包含在POSIX标准中，所以这一特性不能保证可移植性。&lt;/p&gt;</p>
+<p>&lt;h1 id="五共享内存"&gt;五、共享内存&lt;/h1&gt;
+&lt;p&gt;　　采用共享内存通信的一个显而易见的好处是效率高，因为进程可以直接读写内存，而不需要任何数据的拷贝。对于像管道和消息队列等通信方式，则需要在内核和用户空间进行四次的数据拷贝，而共享内存则只拷贝两次数据：一次从输入文件到共享内存区，另一次从共享内存区到输出文件。实际上，进程之间在共享内存时，并不总是读写少量数据后就解除映射，有新的通信时，再重新建立共享内存区域。而是保持共享区域，直到通信完毕为止，这样，数据内容一直保存在共享内存中，并没有写回文件。共享内存中的内容往往是在解除映射时才写回文件的。因此，采用共享内存的通信方式效率是非常高的。不过共享内存往往要配合其他的通信方法使用，来达到进程间的同步及互斥。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　Linux同样也支持POSIX共享内存和System V 共享内存，相关API如下所示：&lt;/p&gt;</p>
+<p>&lt;ul&gt;
+  &lt;li&gt;shm_open()：（POSIX）创建并打开共享内存&lt;/li&gt;
+  &lt;li&gt;ftruncate()：（POSIX）设置共享内存大小&lt;/li&gt;
+  &lt;li&gt;mmap()：（POSIX）映射共享内存至虚拟进程空间&lt;/li&gt;
+  &lt;li&gt;munmap()：（POSIX）取消共享内存映射&lt;/li&gt;
+  &lt;li&gt;shm_unlink()：（POSIX）删除共享内存&lt;/li&gt;
+  &lt;li&gt;close()：（POSIX）关闭共享内存描述符&lt;/li&gt;
+  &lt;li&gt;fstat()：（POSIX）获取共享内存状态&lt;/li&gt;
+  &lt;li&gt;fchown()：（POSIX）更改共享内存所属&lt;/li&gt;
+  &lt;li&gt;fchmod()：（POSIX）更改共享内存访问权限&lt;/li&gt;
+  &lt;li&gt;shmget()：（System V）创建并打开共享内存&lt;/li&gt;
+  &lt;li&gt;shmat()：（System V）映射共享内存至虚拟进程空间&lt;/li&gt;
+  &lt;li&gt;shmctl()：（System V）设置共享内存空间&lt;/li&gt;
+  &lt;li&gt;shmdt()：（System V）取消共享内存映射&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;p&gt;　　共享内存具有内核延续性。&lt;/p&gt;</p>
+<p>&lt;h1 id="六信号量"&gt;六、信号量&lt;/h1&gt;
+&lt;p&gt;　　信号量使用一个正整数来表示的，通常用在进程间同步上。对信号量有两种操作：1.给信号量加1；2.给信号量减1。当信号量为0时，减1操作会阻塞，直到信号量不为0。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　在POSIX标准中，信号量分两种，匿名信号量和命名信号量。类似命名管道，命名信号量会以文件系统中的一个文件作为名字。所以命名信号量一般用于进程间同步。匿名信号量顾名思义没有名字，所以一般用于线程间同步。当需要用于进程间同步时需要将匿名信号量放置在共享内存中。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　需要注意的是：和匿名管道不同，匿名信号量不能直接用于父子进程之间。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　Linux支持POSIX信号量和System V 信号量，相关API如下所示：&lt;/p&gt;</p>
+<p>&lt;ul&gt;
+  &lt;li&gt;sem_open()：（POSIX）创建并打开信号量&lt;/li&gt;
+  &lt;li&gt;sem_init()：（POSIX）初始化信号量&lt;/li&gt;
+  &lt;li&gt;sem_getvalue()：（POSIX）获取信号量的值&lt;/li&gt;
+  &lt;li&gt;sem_post()：（POSIX）post操作&lt;/li&gt;
+  &lt;li&gt;sem_wait()：（POSIX）wait操作&lt;/li&gt;
+  &lt;li&gt;sem_close()：（POSIX）关闭信号量&lt;/li&gt;
+  &lt;li&gt;sem_destroy()：（POSIX）销毁信号量&lt;/li&gt;
+  &lt;li&gt;sem_unlink()：（POSIX）销毁信号量&lt;/li&gt;
+  &lt;li&gt;semget()：（System V）创建并打开信号量&lt;/li&gt;
+  &lt;li&gt;semctl()：（System V）控制信号量&lt;/li&gt;
+  &lt;li&gt;semop()：（System V）操作信号量&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;p&gt;　　System V 信号量非常难用，在此就不做介绍了。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　命名信号量具有内核延续性，匿名信号量如果没有放在共享内存中的话具有进程延续性，如果放在共享内存中，我猜测应该会跟随共享内存的生命周期。&lt;/p&gt;</p>
+<p>&lt;h1 id="七套接字"&gt;七、套接字&lt;/h1&gt;
+&lt;p&gt;　　是的，你没有看错，套接字不仅用于网络通信，还可用于进程间通信。非但如此，套接字在设计之初便充分考虑到了进程间通信。套接字最早出现在《RFC 147:The Definition of a Socket》标准中，用于ARPANET（The Advanced Research Projects Agency Network）中。之后便发展出了用于TCP/IP协议的网络套接字（Network sockets）和用于进程间通信的Unix域套接字（Unix Domain sockets）。后来伯克利套接字（Berkeley sockets，也称作BSD sockets）基于前两者的基础上，随着4.2 BSD Unix操作系统发展起来。然而后来伯克利套接字慢慢被POSIX套接字所取代。&lt;/p&gt;</p>
+<p>&lt;p&gt;　　Linux实现了POSIX套接字。创建时选择相应的域和协议，便可以使用套接字进行进程间通信。&lt;/p&gt;</p>
+<p>&lt;figure class="highlight"&gt;&lt;pre&gt;&lt;code class="language-c" data-lang="c"&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="nf"&gt;socket&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;domain&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;type&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;protocol&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;</p>
+<p>&lt;p&gt;　　分别为domain和type传入AF_UNIX和SOCK_SEQPACKET便可创建一个套接字来支持Unix域套接字。它保证了通信的可靠性和有序性。&lt;/p&gt;</p>
+<p>&lt;h1 id="八其他"&gt;八、其他&lt;/h1&gt;
+&lt;p&gt;　　我们注意到：有POSIX和System V两套标准都支持信号量、消息队列和共享内存。为什么会这样呢？他们两个有什么区别呢？应该如何选择呢？&lt;/p&gt;</p>
+<p>&lt;p&gt;　　System V实际上指的是Unix System V。这里V是罗马数字五，读作“System Five”。1983年，UNIX System V是第一个发布的商业版的Unix操作系统。随着Unix操作系统的成功，Unix中的各种特性成为操作系统界的事实标准。后来直接使用“System V”来指代此标准。而POSIX标准虽然起源于1988年，但是直到2001年才被IEEE标准委员会所接纳。Linux的初版于1991年发布，所以最早支持了System V标准。不过由于POSIX在很多地方都优秀于System V，所以POSIX标准也逐渐被大部分人接受。&lt;/p&gt;</p>
+<p>&lt;ul&gt;
+  &lt;li&gt;按照Linux man pages的说法，System V是比较古老的接口，有很多设计不合理的地方。POSIX吸取了很多经验，提供了更加友好的接口设计。但是由于POSIX比较年轻，有些平台并没有完整的实现，尤其是比较古老的系统。&lt;/li&gt;
+  &lt;li&gt;按照《UNIX, Third Edition: The Textbook》上的说法，POSIX的进程间通信是线程安全的，而System V的不是。我还未对此作验证。&lt;/li&gt;
+  &lt;li&gt;由于POSIX标准的设计目标就是可移植性，所以POSIX的进程间通信方式更具可移植性。&lt;/li&gt;
+  &lt;li&gt;POSIX提供了更多的功能，比如支持select，poll等方法。&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;p&gt;注1：Linux支持不可靠信号，但是对不可靠信号机制做了改进：在调用完信号处理函数后，不必重新调用该信号的安装函数（信号安装函数是在可靠机制上的实现）。因此，Linux下的不可靠信号问题主要指的是信号可能丢失。&lt;/p&gt;</p>
+<p>&lt;p&gt;参考：&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Linux Man Pages&lt;/li&gt;
+  &lt;li&gt;Wikipedia&lt;/li&gt;
+&lt;/ul&gt;</p>
+<p>&lt;/div&gt;&lt;a class="u-url" href="/2018/01/15/helicopter-view-of-interprocess-communication" hidden&gt;&lt;/a&gt;
+&lt;/article&gt;</p>
+<pre><code>  &lt;/div&gt;
+&lt;/main&gt;&lt;footer class="site-footer h-card"&gt;</code></pre>
+<p>&lt;data class="u-url" href="/"&gt;&lt;/data&gt;</p>
+<p>&lt;div class="wrapper"&gt;</p>
+<pre><code>&lt;h2 class="footer-heading"&gt;Bingwhispers&lt;/h2&gt;
 
-  <div class="wrapper"><a class="site-title" rel="author" href="/">Bingwhispers</a><nav class="site-nav">
-        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
-        <label for="nav-trigger">
-          <span class="menu-icon">
-            <svg viewBox="0 0 18 15" width="18px" height="15px">
-              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
-            </svg>
-          </span>
-        </label>
+&lt;div class="footer-col-wrapper"&gt;
+  &lt;div class="footer-col footer-col-1"&gt;
+    &lt;ul class="contact-list"&gt;
+      &lt;li class="p-name"&gt;Bingwhispers&lt;/li&gt;&lt;li&gt;&lt;a class="u-email" href="mailto:zblinuxfun@gmail.com"&gt;zblinuxfun@gmail.com&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
+  &lt;/div&gt;
 
-        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
-      </nav></div>
-</header>
-<main class="page-content" aria-label="Content">
-      <div class="wrapper">
-        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
-
-  <header class="post-header">
-    <h1 class="post-title p-name" itemprop="name headline">Linux进程间通信概览</h1>
-    <p class="post-meta">
-      <time class="dt-published" datetime="2018-01-15T20:45:00+08:00" itemprop="datePublished">2018年01月15日
-      </time></p>
-  </header>
-
-  <div class="post-content e-content" itemprop="articleBody">
-    <h1 id="一概要">一、概要</h1>
-<p>　　最近一段时间，工作中经常会处理进程间通信相关的事情。于是将一些经验汇总一下。</p>
-
-<p>　　总结起来，Linux下进程间通信主要有以下几种方法：</p>
-<ol>
-  <li>信号（Signal）</li>
-  <li>管道（Pipe）和命名管道（Named pipe）</li>
-  <li>消息队列（Message queue）</li>
-  <li>共享内存（Shared memory）</li>
-  <li>信号量（Semaphore）</li>
-  <li>套接字（Socket）</li>
-</ol>
-
-<p>　　在众多的进程间通信的方法里面，每一种方法都有优缺点，如何根据使用情景选择合适的通信方法就非常重要了。</p>
-
-<h1 id="二信号">二、信号</h1>
-<p>　　信号是非常基础的进程间通信方法，它从软件层面上对中断机制进行了模仿。所以信号也被称作“软中断信号”。信号用来通知进程发生了异步事件。进程之间可以通过系统调用发送软中断信号。操作系统内核也可以因为内部事件而给进程发送信号，通知进程发生了某个事件。Linux支持不可靠信号和可靠信号。</p>
-
-<p>　　Linux系统共定义了64种信号，分为两大类：实时信号与标准信号，前32种信号（信号值小于SIGRTMIN）为标准信号（也称之为不可靠信号和非实时信号），后32种（信号值位于SIGRTMIN和SIGRTMAX之间）为实时信号（也称之为可靠信号）。信号很重要的一个特点就是当进程接收到信号后，能够中断当前执行的代码，转而执行信号处理函数。实时信号和标准信号有如下区别：</p>
-<ul>
-  <li>实时信号没有明确的含义，而是由使用者自己来决定如何使用。而标准信号则一般有确定的用途及含义，并且每种信号都有各自的缺省动作。如按键盘的CTRL+C时，会产生SIGINT信号，进程对该信号的默认反应就是进程终止。</li>
-  <li>一个进程可以接受多个同样的实时信号，这些实时信号会被缓存在一个队列中，然后按次序被处理。而标准信号则不能。在标准信号没有得到处理的时候，多个标准信号会被合为一个。这也造成了标准信号可能丢失的情况。</li>
-  <li>实时信号使用sigqueue发送的时候，可以携带附加的数据(int或者pointer)。标准信号不能。</li>
-  <li>实时信号具有优先级的概念，数值越低的实时信号其优先级越高。在处理的时候，也是数值低的实时信号优先得到处理。</li>
-  <li>实时信号的默认行为都一样，都是结束当前的进程，这个和标准信号是不一样的。</li>
-  <li>进程每次处理标准信号后，就将对信号的响应设置为默认动作。在某些情况下，将导致对信号的错误处理。因此，用户如果不希望这样的操作，那么就要在信号处理函数结尾再一次调用signal()，重新安装该信号<sup>[注1]</sup>。</li>
-</ul>
-
-<p>　　信号的相关API：</p>
-
-<ul>
-  <li>signal()：安装信号</li>
-  <li>sigaction()：安装信号</li>
-  <li>kill()：向进程或进程组发送信号</li>
-  <li>sigqueue()：发送信号</li>
-  <li>alarm()：调用进程指定时间后发出SIGALARM信号</li>
-  <li>setitimer()：设置定时器，计时达到后给进程发送SIGALRM信号</li>
-  <li>abort()：向进程发送SIGABORT信号，默认进程会异常退出</li>
-  <li>raise()：向进程自身发送信号</li>
-  <li>sigemptyset()：信号集全部清0</li>
-  <li>sigfillset()：信号集全部置1</li>
-  <li>sigaddset()：向信号集中加入signum信号</li>
-  <li>sigdelset()：向信号集中删除signum信号</li>
-  <li>sigismember()：判定信号signum是否存在信号集中</li>
-  <li>sigprocmask()：把信号集中的信号添加到进程信号集</li>
-  <li>sigpending()：获取已发送到进程，却被阻塞的所有信号</li>
-  <li>sigsuspend()：替换进程的原有掩码，并暂停进程执行，直到收到信号再恢复原有掩码并继续执行进程</li>
-</ul>
-
-<p>　　值得注意的是：</p>
-<ul>
-  <li>由于信号会中断主进程的运行，所以在信号处理函数中多任务的并发控制也会经常使用。当主进程获取某个资源并加锁后，如果在它解锁前接收到了一个信号并进入了信号处理函数，并且在这个信号处理函数中，同样需要获取此资源并加锁。但是主进程还没有解锁，这就会导致死锁。所以，在信号处理函数中进行并发控制需要格外小心。</li>
-  <li>当进程正阻塞在系统调用（或者库函数）中时，如果一个信号处理函数被调用。此时会出现两种情况：1.信号处理函数返回后，自动重新进入系统调用（库函数调用）。2.系统调用（库函数）失败并且返回EINTR。具体情况请参考Linux man pages。</li>
-</ul>
-
-<h1 id="三管道">三、管道</h1>
-<p>　　管道是所有进程间通信手段中最简单的一种。对于进程来说，管道和文件类似。命名管道和管道的区别仅在于创建和打开的方式不同。</p>
-
-<p>　　在Linux man pages中，命名管道被称作FIFO。管道和命名管道都提供了单向的进程间通信的通道。管道有一个读取端和一个写入端。数据从写入端写入，从读取端读取。由于管道的特点和创建管道的方法限制，导致管道只能用于具有亲缘关系的进程之间。命名管道（FIFO）和管道非常类似。只不过它在文件系统中有唯一的文件与之对应。读取端使用O_RDONLY标志打开，而写入端则是用O_WRONLY打开。管道和命名管道只能发送无格式的字节流，并且其容纳数据的缓冲区大小是受限制的。</p>
-
-<p>　　管道的相关API：</p>
-<ul>
-  <li>pipe()：创建并打开匿名管道</li>
-  <li>mkfifo()：创建命名管道</li>
-  <li>unlink()：销毁命名管道</li>
-</ul>
-
-<p>　　管道的读写操作和文件操作基本一致。不过需要注意的是，以阻塞方式打开和读写命名管道时，阻塞方式和普通文件有所区别。具体情况请参考Linux man pages。</p>
-
-<h1 id="四消息队列">四、消息队列</h1>
-<p>　　消息队列就是一个消息的链表。可以把消息看作一个记录，具有特定的格式以及特定的优先级。对消息队列有写权限的进程可以向中按照一定的规则添加新消息；对消息队列有读权限的进程则可以从消息队列中读走消息。消息队列解决了信号只能通知事件，而不能发送信息的问题。同时又克服了管道只能承载无格式字节流以及缓冲区大小受限等缺点。结构化的消息通信机制使通信双方在约定好数据结构之后，无须对消息再次解析。</p>
-
-<p>　　Linux既支持POSIX消息队列，也支持System V 消息队列，相关API如下所示：</p>
-
-<table>
-  <thead>
-    <tr>
-      <th style="text-align: left">操作</th>
-      <th style="text-align: left">POSIX 函数</th>
-      <th style="text-align: left">System V 函数</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td style="text-align: left">创建消息队列</td>
-      <td style="text-align: left">mq_open()</td>
-      <td style="text-align: left">msgget()</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">发送消息</td>
-      <td style="text-align: left">mq_send()<br />mq_timedsend()</td>
-      <td style="text-align: left">msgsnd()</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">接收消息</td>
-      <td style="text-align: left">mq_receive()<br />mq_timedreceive()</td>
-      <td style="text-align: left">msgrcv()</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">操作消息队列</td>
-      <td style="text-align: left">mq_getattr()<br />mq_setattr()</td>
-      <td style="text-align: left">msgctl()</td>
-    </tr>
-    <tr>
-      <td style="text-align: left">消息队列通知</td>
-      <td style="text-align: left">mq_notify()</td>
-      <td style="text-align: left">-</td>
-    </tr>
-  </tbody>
-</table>
-
-<p><br />
-　　消息队列具有内核延续性。所谓内核延续性是指：某个资源创建后会随着内核的运行而一直存在，直到这个资源被有意的回收。相似的概念还有进程延续性和文件系统延续性。</p>
-
-<p>　　Linux中POSIX消息队列的描述符直接使用了文件描述符，这意味着可以使用select、poll和epoll来操作消息队列。不过这些并不包含在POSIX标准中，所以这一特性不能保证可移植性。</p>
-
-<h1 id="五共享内存">五、共享内存</h1>
-<p>　　采用共享内存通信的一个显而易见的好处是效率高，因为进程可以直接读写内存，而不需要任何数据的拷贝。对于像管道和消息队列等通信方式，则需要在内核和用户空间进行四次的数据拷贝，而共享内存则只拷贝两次数据：一次从输入文件到共享内存区，另一次从共享内存区到输出文件。实际上，进程之间在共享内存时，并不总是读写少量数据后就解除映射，有新的通信时，再重新建立共享内存区域。而是保持共享区域，直到通信完毕为止，这样，数据内容一直保存在共享内存中，并没有写回文件。共享内存中的内容往往是在解除映射时才写回文件的。因此，采用共享内存的通信方式效率是非常高的。不过共享内存往往要配合其他的通信方法使用，来达到进程间的同步及互斥。</p>
-
-<p>　　Linux同样也支持POSIX共享内存和System V 共享内存，相关API如下所示：</p>
-
-<ul>
-  <li>shm_open()：（POSIX）创建并打开共享内存</li>
-  <li>ftruncate()：（POSIX）设置共享内存大小</li>
-  <li>mmap()：（POSIX）映射共享内存至虚拟进程空间</li>
-  <li>munmap()：（POSIX）取消共享内存映射</li>
-  <li>shm_unlink()：（POSIX）删除共享内存</li>
-  <li>close()：（POSIX）关闭共享内存描述符</li>
-  <li>fstat()：（POSIX）获取共享内存状态</li>
-  <li>fchown()：（POSIX）更改共享内存所属</li>
-  <li>fchmod()：（POSIX）更改共享内存访问权限</li>
-  <li>shmget()：（System V）创建并打开共享内存</li>
-  <li>shmat()：（System V）映射共享内存至虚拟进程空间</li>
-  <li>shmctl()：（System V）设置共享内存空间</li>
-  <li>shmdt()：（System V）取消共享内存映射</li>
-</ul>
-
-<p>　　共享内存具有内核延续性。</p>
-
-<h1 id="六信号量">六、信号量</h1>
-<p>　　信号量使用一个正整数来表示的，通常用在进程间同步上。对信号量有两种操作：1.给信号量加1；2.给信号量减1。当信号量为0时，减1操作会阻塞，直到信号量不为0。</p>
-
-<p>　　在POSIX标准中，信号量分两种，匿名信号量和命名信号量。类似命名管道，命名信号量会以文件系统中的一个文件作为名字。所以命名信号量一般用于进程间同步。匿名信号量顾名思义没有名字，所以一般用于线程间同步。当需要用于进程间同步时需要将匿名信号量放置在共享内存中。</p>
-
-<p>　　需要注意的是：和匿名管道不同，匿名信号量不能直接用于父子进程之间。</p>
-
-<p>　　Linux支持POSIX信号量和System V 信号量，相关API如下所示：</p>
-
-<ul>
-  <li>sem_open()：（POSIX）创建并打开信号量</li>
-  <li>sem_init()：（POSIX）初始化信号量</li>
-  <li>sem_getvalue()：（POSIX）获取信号量的值</li>
-  <li>sem_post()：（POSIX）post操作</li>
-  <li>sem_wait()：（POSIX）wait操作</li>
-  <li>sem_close()：（POSIX）关闭信号量</li>
-  <li>sem_destroy()：（POSIX）销毁信号量</li>
-  <li>sem_unlink()：（POSIX）销毁信号量</li>
-  <li>semget()：（System V）创建并打开信号量</li>
-  <li>semctl()：（System V）控制信号量</li>
-  <li>semop()：（System V）操作信号量</li>
-</ul>
-
-<p>　　System V 信号量非常难用，在此就不做介绍了。</p>
-
-<p>　　命名信号量具有内核延续性，匿名信号量如果没有放在共享内存中的话具有进程延续性，如果放在共享内存中，我猜测应该会跟随共享内存的生命周期。</p>
-
-<h1 id="七套接字">七、套接字</h1>
-<p>　　是的，你没有看错，套接字不仅用于网络通信，还可用于进程间通信。非但如此，套接字在设计之初便充分考虑到了进程间通信。套接字最早出现在《RFC 147:The Definition of a Socket》标准中，用于ARPANET（The Advanced Research Projects Agency Network）中。之后便发展出了用于TCP/IP协议的网络套接字（Network sockets）和用于进程间通信的Unix域套接字（Unix Domain sockets）。后来伯克利套接字（Berkeley sockets，也称作BSD sockets）基于前两者的基础上，随着4.2 BSD Unix操作系统发展起来。然而后来伯克利套接字慢慢被POSIX套接字所取代。</p>
-
-<p>　　Linux实现了POSIX套接字。创建时选择相应的域和协议，便可以使用套接字进行进程间通信。</p>
-
-<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">int</span> <span class="nf">socket</span><span class="p">(</span><span class="kt">int</span> <span class="n">domain</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span> <span class="kt">int</span> <span class="n">protocol</span><span class="p">);</span></code></pre></figure>
-
-<p>　　分别为domain和type传入AF_UNIX和SOCK_SEQPACKET便可创建一个套接字来支持Unix域套接字。它保证了通信的可靠性和有序性。</p>
-
-<h1 id="八其他">八、其他</h1>
-<p>　　我们注意到：有POSIX和System V两套标准都支持信号量、消息队列和共享内存。为什么会这样呢？他们两个有什么区别呢？应该如何选择呢？</p>
-
-<p>　　System V实际上指的是Unix System V。这里V是罗马数字五，读作“System Five”。1983年，UNIX System V是第一个发布的商业版的Unix操作系统。随着Unix操作系统的成功，Unix中的各种特性成为操作系统界的事实标准。后来直接使用“System V”来指代此标准。而POSIX标准虽然起源于1988年，但是直到2001年才被IEEE标准委员会所接纳。Linux的初版于1991年发布，所以最早支持了System V标准。不过由于POSIX在很多地方都优秀于System V，所以POSIX标准也逐渐被大部分人接受。</p>
-
-<ul>
-  <li>按照Linux man pages的说法，System V是比较古老的接口，有很多设计不合理的地方。POSIX吸取了很多经验，提供了更加友好的接口设计。但是由于POSIX比较年轻，有些平台并没有完整的实现，尤其是比较古老的系统。</li>
-  <li>按照《UNIX, Third Edition: The Textbook》上的说法，POSIX的进程间通信是线程安全的，而System V的不是。我还未对此作验证。</li>
-  <li>由于POSIX标准的设计目标就是可移植性，所以POSIX的进程间通信方式更具可移植性。</li>
-  <li>POSIX提供了更多的功能，比如支持select，poll等方法。</li>
-</ul>
-
-<p>注1：Linux支持不可靠信号，但是对不可靠信号机制做了改进：在调用完信号处理函数后，不必重新调用该信号的安装函数（信号安装函数是在可靠机制上的实现）。因此，Linux下的不可靠信号问题主要指的是信号可能丢失。</p>
-
-<p>参考：</p>
-<ul>
-  <li>Linux Man Pages</li>
-  <li>Wikipedia</li>
-</ul>
-
-  </div><a class="u-url" href="/2018/01/15/helicopter-view-of-interprocess-communication" hidden></a>
-</article>
-
-      </div>
-    </main><footer class="site-footer h-card">
-  <data class="u-url" href="/"></data>
-
-  <div class="wrapper">
-
-    <h2 class="footer-heading">Bingwhispers</h2>
-
-    <div class="footer-col-wrapper">
-      <div class="footer-col footer-col-1">
-        <ul class="contact-list">
-          <li class="p-name">Bingwhispers</li><li><a class="u-email" href="mailto:zblinuxfun@gmail.com">zblinuxfun@gmail.com</a></li></ul>
-      </div>
-
-      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/cyril3"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">cyril3</span></a></li><li><a href="https://www.twitter.com/zblinuxfun"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">zblinuxfun</span></a></li></ul>
-</div>
-
-      <div class="footer-col footer-col-3">
-        <p>Hi there!</p>
-      </div>
-    </div>
-
-  </div>
-
-</footer>
-</body>
-
-</html>
+  &lt;div class="footer-col footer-col-2"&gt;&lt;ul class="social-media-list"&gt;&lt;li&gt;&lt;a href="https://github.com/cyril3"&gt;&lt;svg class="svg-icon"&gt;&lt;use xlink:href="/assets/minima-social-icons.svg#github"&gt;&lt;/use&gt;&lt;/svg&gt; &lt;span class="username"&gt;cyril3&lt;/span&gt;&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href="https://www.twitter.com/zblinuxfun"&gt;&lt;svg class="svg-icon"&gt;&lt;use xlink:href="/assets/minima-social-icons.svg#twitter"&gt;&lt;/use&gt;&lt;/svg&gt; &lt;span class="username"&gt;zblinuxfun&lt;/span&gt;&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;</code></pre>
+<p>&lt;/div&gt;</p>
+<pre><code>  &lt;div class="footer-col footer-col-3"&gt;
+    &lt;p&gt;Hi there!&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+<p>&lt;/div&gt;</p>
+<p>&lt;/footer&gt;
+&lt;/body&gt;</p>
+<p>&lt;/html&gt;</p>

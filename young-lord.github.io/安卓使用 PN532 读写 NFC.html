@@ -1,9 +1,9 @@
 <h2>原文：<a href="https://young-lord.github.io/posts/android-pn532-nfc">安卓使用 PN532 读写 NFC</a></h2>
 <hr/>
-<p>tags: [网络安全, NFC, PN532]
+<h2>tags: [网络安全, NFC, PN532]
 title: 安卓使用 PN532 读写 NFC
-slug: android-pn532-nfc</p>
-<h2>last_modified_at: 2024-2-9</h2>
+slug: android-pn532-nfc
+last_modified_at: 2024-2-9</h2>
 <h2>动机</h2>
 <p>安卓手机本身的NFC功能不全且爆破密码太慢，于是买了个PN532破小区门卡。</p>
 <p>Windows上有现成的工具<a href="https://github.com/xcicode/MifareOneTool">MifareOneTool</a>和<a href="https://www.bilibili.com/video/BV1xf4y1F7Dj/">教程</a>，很轻松就解决了，于是想着能否在安卓的Termux上复现，于是就有了这篇文章。</p>
@@ -15,36 +15,12 @@ slug: android-pn532-nfc</p>
 <li>自行焊接PN532的引脚</li>
 </ul>
 <p>焊接完成后按下表接线，注意PN532上面有两个调节工作模式的开关（开关上覆膜），这里不需要调节。</p>
-<table>
-<thead><tr>
-<th>PN532</th>
-<th>USB转TTL模块</th>
-<th>USB转TTL线（具体颜色不重要）</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>GND</td>
-<td>GND</td>
-<td>黑色</td>
-</tr>
-<tr>
-<td>VCC</td>
-<td>5.0V</td>
-<td>红色</td>
-</tr>
-<tr>
-<td>TXD/SDA</td>
-<td>RXD</td>
-<td>白色</td>
-</tr>
-<tr>
-<td>RXD/SCL</td>
-<td>TXD</td>
-<td>绿色</td>
-</tr>
-</tbody>
-</table>
+<p>| PN532  | USB转TTL模块  | USB转TTL线（具体颜色不重要）|
+| ------ | --------------- | ------------ |
+| GND    | GND             | 黑色          |
+| VCC    | 5.0V            | 红色          |
+| TXD/SDA| RXD             | 白色          |
+| RXD/SCL| TXD             | 绿色          |</p>
 <h3>软件配置</h3>
 <ul>
 <li><a href="https://f-droid.org/packages/com.termux/">Termux</a>：终端模拟器</li>
@@ -54,7 +30,7 @@ slug: android-pn532-nfc</p>
 <h3>Termux配置</h3>
 <p>该方案在TermuxArch等proot系统中也可使用。强烈建议使用TermuxArch。</p>
 <p>感谢<a href="https://github.com/termux/termux-packages/discussions/15819">这个讨论</a>中给出的方案！</p>
-<pre><code class="lang-shell">pkg install autoconf make git automake pkg-config libtool clang
+<pre><code class="language-shell">pkg install autoconf make git automake pkg-config libtool clang
 # for Arch Linux
 # yay -S --needed autoconf make git automake pkg-config libtool gcc
 git clone --depth 1 https://github.com/mywalkb/libnfc
@@ -68,30 +44,30 @@ make install
 <h3>TCPUART监听</h3>
 <p>将PN532使用USB线连接到手机上，打开TCPUART，点击第一个<code>Connect</code>并在系统弹框中允许访问USB设备；然后下面的选项改为<code>Server</code>，配置监听端口（此处假设为<code>10000</code>），点击<code>Start</code>。记得锁后台，别被杀了。</p>
 <h3>Termux使用</h3>
-<pre><code class="lang-shell">export LIBNFC_DEVICE="pn532_uart:tcp_127.0.0.1_10000"
+<pre><code class="language-shell">export LIBNFC_DEVICE="pn532_uart:tcp_127.0.0.1_10000"
 # do what you want to do now
 </code></pre>
 <p>如果一切正常，你应该可以开始使用NFC相关命令了。</p>
-<pre><code class="lang-console">$ nfc-scan-device # 查看 NFC 设备
+<pre><code class="language-console">$ nfc-scan-device # 查看 NFC 设备
 nfc-scan-device uses libnfc 1.8.0
 1 NFC device(s) found:
-error   libnfc.bus.uart Unable to apply new speed settings.
+error	libnfc.bus.uart	Unable to apply new speed settings.
 - user defined device:
     pn532_uart:tcp_127.0.0.1_10000
 $ nfc-list # 扫描附近的卡片，注意 PN532 要贴紧卡片
-error   libnfc.bus.uart Unable to apply new speed settings.
+error	libnfc.bus.uart	Unable to apply new speed settings.
 NFC device: user defined device opened
 2 ISO14443A passive target(s) found:
 ISO/IEC 14443A (106 kbps) target:
     ATQA (SENS_RES): 00  04  
        UID (NFCID1): d8  11  c0  02  
-      SAK (SEL_RES): 08
+      SAK (SEL_RES): 08  
 </code></pre>
 <h2>使用</h2>
 <h3>nfc-mfclassic</h3>
 <p>PN532放在卡片上，执行，若输出类似下图则完全无加密，可以直接读写。如果卡片有加密，则需要在原有命令末尾再指定一个存有密钥的<code>.mfd</code>文件。</p>
 <p>详细命令行参数请参考 <a href="https://man.archlinux.org/man/nfc-mfclassic.1.en">nfc-mfclassic(1) - Arch manual pages</a>。</p>
-<pre><code class="lang-console">$ nfc-mfclassic r a u dump.mfd # `a`指使用密钥A，`u`指使用默认UID
+<pre><code class="language-console">$ nfc-mfclassic r a u dump.mfd # `a`指使用密钥A，`u`指使用默认UID
 NFC reader: user defined device opened
 Found MIFARE Classic card:
 ISO/IEC 14443A (106 kbps) target:
@@ -129,14 +105,14 @@ Done, 64 of 64 blocks written.
 <p><code>mfoc-hardnested</code>可用于半加密卡或已知一个密码的卡，使用<code>mfoc-hardnested -O dump.mfd</code>进行爆破。</p>
 <h3>crypto1_bs</h3>
 <p>用于半加密卡之一密破解。</p>
-<pre><code class="lang-console">git clone https://github.com/aczid/crypto1_bs.git --depth 1
+<pre><code class="language-console">git clone https://github.com/aczid/crypto1_bs.git --depth 1
 cd crypto1_bs
 git clone https://github.com/Tilka/crapto1.git crapto1-v3.3 --depth 1
 git clone https://github.com/vk496/craptev1.git craptev1-v1.1 --depth 1
 make
 ./libnfc_crypto1_crack &lt;known key&gt; &lt;for block&gt; &lt;A|B&gt; &lt;target block&gt; &lt;A|B&gt;
 </code></pre>
-<p>收集足够nounces（即停止显示<code>Collected xxx nounces...</code>，进入到<code>Cracking</code>）后，你就可以直接停止破解，在目录下找到<code>0x1111aaaa_003A.txt</code>的文件（<code>1111aaaa</code>为卡片UID，<code>3</code>为待破解扇区，<code>B</code>为待破解扇区密钥类型），并按照<a href="#动机">动机</a>中的视频教程破解，或是使用<code>./solve_bs 0x1111aaaa_003A.txt 0x1111aaaa</code>破解。</p>
+<p>收集足够nounces（即停止显示<code>Collected xxx nounces...</code>，进入到<code>Cracking</code>）后，你就可以直接停止破解，在目录下找到<code>0x1111aaaa_003A.txt</code>的文件（<code>1111aaaa</code>为卡片UID，<code>3</code>为待破解扇区，<code>B</code>为待破解扇区密钥类型），并按照<a href="#%E5%8A%A8%E6%9C%BA">动机</a>中的视频教程破解，或是使用<code>./solve_bs 0x1111aaaa_003A.txt 0x1111aaaa</code>破解。</p>
 <h3>Proxmark3</h3>
 <h4>如果你在用Termux（非proot/chroot）</h4>
 <p>自己编译各个组件（指<code>termcap</code>等）去吧。我也不确定能不能成功。</p>
@@ -147,7 +123,7 @@ make
 <p>直接<code>yay -S termcap gcc-arm-none-eabi-bin &amp;&amp; git clone https://github.com/Proxmark/proxmark3 --depth 1 &amp;&amp; cd proxmark3 &amp;&amp; wget https://github.com/Proxmark/proxmark3/commit/ee8491b04a5ef3950c2fdc1dd2c2a14706247e7e.diff &amp;&amp; git apply ee8491b04a5ef3950c2fdc1dd2c2a14706247e7e.diff &amp;&amp; make clean &amp;&amp; make all</code>即可。</p>
 <p>make完成后，你可以得到<code>client/</code>目录，<code>cd</code>进入此目录。</p>
 <p>下载<code>txt_to_bin.py</code>（本文件由Copilot Chat转换为Python 3代码），并将<code>0x1111aaaa_003A.txt</code>转换为<code>1111aaaa_generated.bin</code>，重命名为<code>nonces.bin</code>丢到<code>client/</code>目录下。</p>
-<pre><code class="lang-shell">cd client
+<pre><code class="language-shell">cd client
 wget https://young-lord.github.io/files/nfc_txttobin.py
 python3 nfc_txttobin.py 0x1111aaaa_003A.txt 1111aaaa
 mv 1111aaaa_generated.bin nonces.bin
@@ -157,12 +133,12 @@ mv 1111aaaa_generated.bin nonces.bin
 <p>进入proxmark3命令行后，执行以下命令爆破。注意留出足够的运行内存（~2GB）</p>
 <p><code>hf mf hardnested r</code></p>
 <p>很快该扇区密码就能跑出来了。</p>
-<pre><code class="lang-plain">proxmark3&gt; hf mf hardnested r
+<pre><code class="language-plain">proxmark3&gt; hf mf hardnested r
 --target block no:  0, target key type:A, known target key: 0x000000000000 (not set), file action: read, Slow: No, Tests: 0           
 Using no SIMD core.          
 
 
-
+          
  time    | #nonces | Activity                                                | expected to brute force          
          |         |                                                         | #states         | time           
 ------------------------------------------------------------------------------------------------------          
@@ -172,7 +148,7 @@ Using no SIMD core.
        3 |       0 | Reading nonces from file nonces.bin...                  | 140737488355328 |    7d          
       12 |    1670 | (Ignoring Sum(a8) properties)                           |          686792 |    0s          
       12 |    1670 | Starting brute force...                                 |          686792 |    0s          
-      12 |    1670 | Brute force phase completed. Key found: 000000000000    |               0 |    0s
+      12 |    1670 | Brute force phase completed. Key found: 000000000000    |               0 |    0s    
 </code></pre>
 <h3>mfterm</h3>
 <p>用于更简单地爆破密码、读写转储。</p>
@@ -184,7 +160,7 @@ Using no SIMD core.
 <p><a href="https://github.com/li0ard/mfdread/tree/master">下载脚本</a>，搞个虚拟环境安装<code>bitstring</code>依赖即可。</p>
 <h2>参考资料</h2>
 <ul>
-<li><a href="https://xuyiyang.com.cn/archives/记一次使用pn532破解半加密门禁卡/">记一次使用pn532破解半加密门禁卡</a></li>
+<li><a href="https://xuyiyang.com.cn/archives/%E8%AE%B0%E4%B8%80%E6%AC%A1%E4%BD%BF%E7%94%A8pn532%E7%A0%B4%E8%A7%A3%E5%8D%8A%E5%8A%A0%E5%AF%86%E9%97%A8%E7%A6%81%E5%8D%A1/">记一次使用pn532破解半加密门禁卡</a></li>
 <li><a href="https://blog.imea.me/archive/1474.html">树莓派进行hardnested破解</a></li>
 <li><a href="https://blog.czbix.com/clone-MIFARE-Classic-card.html">Mifare 门禁卡复制</a></li>
 </ul>

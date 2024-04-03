@@ -1,15 +1,16 @@
 <h2>原文：<a href="https://kexizeroing.github.io/node-sass-troubleshooting">Node-Sass troubleshooting</a></h2>
 <hr/>
-<p>layout: "../layouts/BlogPost.astro"
+<h2>layout: "../layouts/BlogPost.astro"
 title: "Node-Sass troubleshooting"
 slug: node-sass-troubleshooting
 description: ""
 added: "Nov 23 2022"
-tags: [web]</p>
-<h2>updatedDate: "Feb 13 2023"</h2>
+tags: [web]
+updatedDate: "Feb 13 2023"</h2>
 <h2>Node-Sass installation</h2>
 <p>Node-sass is a library that allows binding for Node.js to LibSass, the C version of Sass's stylesheet preprocessor. It compiles <code>.scss</code> files to CSS with speed and automatically through connected middleware.</p>
-<blockquote><p>LibSass is written in C++, it’s easy to embed LibSass within other programming languages and provide a native-feeling API. Calling out to LibSass via the C++ API is very fast, which means LibSass is substantially faster in JavaScript than Dart Sass-compiled-to-JS.</p>
+<blockquote>
+<p>LibSass is written in C++, it’s easy to embed LibSass within other programming languages and provide a native-feeling API. Calling out to LibSass via the C++ API is very fast, which means LibSass is substantially faster in JavaScript than Dart Sass-compiled-to-JS.</p>
 </blockquote>
 <p>node-sass 的安装过程大致是先下载 node-sass 包，安装时根据 node 版本和 node-sass 版本拉取对应的 <code>binding.node</code> 编译器（sass 的编译比较特殊，需要下载对应版本的编译器才能编译）。如果能拉下 <code>binding.node</code> 就算安装成功，如果找不到对应的 <code>binding.node</code> 就算失败了，然后就会尝试本地 build，需要 python 环境。</p>
 <p>node-sass 的 install 和 postinstall 会分别执行 <code>scripts/install.js</code> 和 <code>scripts/build.js</code>，在脚本里面可以找到安装过程会失败的原因：</p>
@@ -19,7 +20,8 @@ tags: [web]</p>
 <li>下载保存的路径是由 <code>SASS_BINARY_PATH</code> 设置的，决定是否需要下载 <code>binding.node</code>、设置保存路径、决定是否需要本地 build 都会用到这个路径，细节可以看 <code>getBinaryPath()</code> 函数，它的默认路径是在 <code>vendor</code> 下面，然后拼上操作系统相关的标识，可以这样找到本地保存的 <code>binding.node</code> 文件。</li>
 <li>如果有 <code>binding.node</code> 但是编译失败，一般就是当前环境和 <code>binding.node</code> 不兼容，需要降级 Node 版本，或者尝试 rebuild node-sass 重新下载，报错来源可以在 <code>lib/errors.js</code> 看到。node 和 node-sass 的版本兼容可以看 <a href="https://github.com/sass/node-sass#node-version-support-policy">Node version support policy</a></li>
 </ul>
-<blockquote><p><code>node-gyp</code> is a tool which compiles Node.js Addons. Node.js Addons are native Node.js Modules, written in C or C++, which therefore need to be compiled on your machine. After they are compiled, their functionality can be accessed via <code>require()</code>, just as any other Node.js Module. <code>node-gyp</code> expects Python ≥v3.6, not Python v2.x. (If you’re not a Python developer, you might not realize that Python v.3 isn’t backward-compatible with its previous major version.)</p>
+<blockquote>
+<p><code>node-gyp</code> is a tool which compiles Node.js Addons. Node.js Addons are native Node.js Modules, written in C or C++, which therefore need to be compiled on your machine. After they are compiled, their functionality can be accessed via <code>require()</code>, just as any other Node.js Module. <code>node-gyp</code> expects Python ≥v3.6, not Python v2.x. (If you’re not a Python developer, you might not realize that Python v.3 isn’t backward-compatible with its previous major version.)</p>
 <p>The filename extension of the compiled addon binary is <code>.node</code>. The <code>require()</code> function is written to look for files with the <code>.node</code> file extension and initialize those as dynamically-linked libraries. You should also be aware that these are binary modules, so loading them is a lot like just running a standard executable file (Think <code>.exe</code> file if you are familiar with Windows). Like native executables they are a lot more dependent on the particulars of your system and also potentially a security risk.</p>
 </blockquote>
 <h2>Migrate from Node-Sass to Sass</h2>
@@ -28,7 +30,7 @@ tags: [web]</p>
 <h2>Webpack and sass-loader</h2>
 <p>Sass is a popular choice for styling websites and it has two syntaxes. The older syntax is known as SASS (with <code>.sass</code> extention). Instead of brackets and semicolons, it uses the indentation of lines to specify blocks. The most commonly used is SCSS (with <code>.scss</code> extention). SCSS is a superset of CSS syntax, so every valid CSS is a valid SCSS as well.</p>
 <p><code>sass-loader</code> is a loader for Webpack for compiling SCSS/Sass files. It requires you to install either Dart Sass or Node Sass, which allows you to choose which Sass implementation to use. By default the loader resolve the implementation based on your dependencies. Just add required implementation to <code>package.json</code> (<code>sass</code> or <code>node-sass</code> package) and install dependencies. From <code>sass-loader</code> 9.x, it firstly uses <code>sass</code> and you don't need any configuration.</p>
-<pre><code class="lang-js">// sass-loader source code
+<pre><code class="language-js">// sass-loader source code
 function getDefaultSassImplementation() {
   let sassImplPkg = "sass";
 
@@ -47,10 +49,11 @@ function getDefaultSassImplementation() {
   return require(sassImplPkg);
 }
 </code></pre>
-<blockquote><p><code>require.resolve</code> uses the internal <code>require()</code> machinery to look up the location of a module, but rather than loading the module, just returns the resolved filename.</p>
+<blockquote>
+<p><code>require.resolve</code> uses the internal <code>require()</code> machinery to look up the location of a module, but rather than loading the module, just returns the resolved filename.</p>
 </blockquote>
 <p>Beware the situation when <code>node-sass</code> and <code>sass</code> were installed. In order to avoid this situation you can use the <code>implementation</code> option. It either accepts <code>sass</code> (Dart Sass) or <code>node-sass</code> as a module.</p>
-<pre><code class="lang-json">// In sass-loader source code, 
+<pre><code class="language-json">// In sass-loader source code, 
 // `options.implementation` from webpack config has the higher priority
 // than the above function `getDefaultSassImplementation()`
 {

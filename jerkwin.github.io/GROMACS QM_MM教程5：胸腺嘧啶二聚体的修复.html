@@ -1,8 +1,8 @@
-<h2>原文：<a href="https://jerkwin.github.io/2017/02/22/GMX_QMMM教程5：胸腺嘧啶二聚体的修复">GROMACS QM/MM教程5：胸腺嘧啶二聚体的修复</a></h2>
+<h2>原文：<a href="https://jerkwin.github.io/2017/02/22/GMX_QMMM%E6%95%99%E7%A8%8B5%EF%BC%9A%E8%83%B8%E8%85%BA%E5%98%A7%E5%95%B6%E4%BA%8C%E8%81%9A%E4%BD%93%E7%9A%84%E4%BF%AE%E5%A4%8D">GROMACS QM/MM教程5：胸腺嘧啶二聚体的修复</a></h2>
 <hr/>
 <p>layout: post
- title: GROMACS QM/MM教程5：胸腺嘧啶二聚体的修复
- categories:</p>
+title: GROMACS QM/MM教程5：胸腺嘧啶二聚体的修复
+categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -42,47 +42,38 @@ tags:</li>
 <p>我们使用Amber99力场描述原子间的相互作用. GROMACS的Amber接口可以从<a href="http://chemistry.csulb.edu/ffamber/">Eric Sorin的网站</a>下载.</p>
 <p>为了使<code>pdb2gmx</code>工具能够识别胸腺嘧啶二聚体, 我们需要修饰<code>ffamber99.rtp</code>残基数据库. 我们引入两个新的胸腺嘧啶残基<code>dtA</code>和<code>dtB</code>, 并在C5原子和C6原子之间定义额外的碱基间键. 修改后的<code>ffamber99.rtp</code>可在<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/ffamber99.rtp">这里</a>下载.</p>
 <p>使用下面的<code>pdb2gmx</code>命令, 我们创建<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/topol.top">拓扑文件<code>topol.top</code></a>和<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/conf.gro">构型构型文件<code>conf.gro</code></a></p>
-<pre><code>pdb2gmx -ignh -f Bmodel.pdb
-</code></pre>
+<pre><code>pdb2gmx -ignh -f Bmodel.pdb</code></pre>
 <p>其中的<code>-ignh</code>选项忽略输入文件中的氢原子, 并强制<code>pdb2gmx</code>基于<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/ffamber99.hdb"><code>amber99.hdb</code>数据库</a>添加氢原子.</p>
 <h3>准备结构</h3>
 <p>我们首先进行真空中的能量最小化, 使用最速下降算法. 查看我们所用的<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/steep.mdp"><code>steep.md</code>文件</a>, 熟悉我们执行的最小化过程.</p>
 <p>先执行<code>grompp</code>, 然后<code>mdrun</code>进行能量最小化</p>
 <pre><code>grompp -f steep.mdp
-mdrun -v -c minimized.pdb
-</code></pre>
+mdrun -v -c minimized.pdb</code></pre>
 <p>能量最小化后的DNA结构可在<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/minimized.pdb">这里</a>下载.</p>
 <p>下一步是添加水分子并保证体系电中性. 我们使用GROMACS工具<code>editconf</code>, <code>genbox</code>和<code>genion</code>.</p>
 <p>首先将能量最小化后的结构置于方形盒子的中心</p>
-<pre><code>editconf -c -d 1.6 -f minimized.pdb -o boxed.pdb
-</code></pre>
+<pre><code>editconf -c -d 1.6 -f minimized.pdb -o boxed.pdb</code></pre>
 <p>然后, 添加水分子, 使用tip4p模型</p>
-<pre><code>genbox -cs tip4p.gro -cp boxed.pdb -p topol -o solved.pdb
-</code></pre>
+<pre><code>genbox -cs tip4p.gro -cp boxed.pdb -p topol -o solved.pdb</code></pre>
 <p>最后, 需要加入38个钠离子来中和体系的负电荷. 先使用<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/neutralize.mdp"><code>neutralize.mdp</code></a>创建一个tpr文件</p>
-<pre><code>grompp -f neutralize.mdp -c solved.pdb -p topol
-</code></pre>
+<pre><code>grompp -f neutralize.mdp -c solved.pdb -p topol</code></pre>
 <p>得到<code>topol.tpr</code>文件后, 可以使用<code>genion</code>将38个抗衡离子随机放在盒子中</p>
-<pre><code>genion -np 38 -pname Na -o neutral.pdb -random
-</code></pre>
+<pre><code>genion -np 38 -pname Na -o neutral.pdb -random</code></pre>
 <p>我们必须修改拓扑文件, 手动添加38个钠离子(<code>NA</code>), 并去除38个tip4p水分子. 最终的拓扑文件可以在<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/neutral.top">这里</a>下载. 接下来, 我们还需要一个<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/neutral.ndx">索引文件</a>, 其中包含DNA, 水和离子的原子编号.</p>
 <h3>平衡</h3>
 <p>由于水分子和DNA原子之间可能存在重叠, 我们必须对体系进行能量最小化. 我们再次使用最速下降法来消除初始结构中可能的应变. mdp文件可以在<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/mini_sol.mdp">这里</a>下载.</p>
 <pre><code>grompp -f mini_sol.mdp -p neutral.top -c neutral.pdb -n neutral.ndx
-mdrun -v -c neutral_mini.pdb
-</code></pre>
+mdrun -v -c neutral_mini.pdb</code></pre>
 <p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/neutral_mini.pdb"><code>neutral_mini.pdb</code></a>.</p>
 <p>然后, 我们使用<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/equi_sol.mdp"><code>equi_sol.mdp</code></a>中的参数对水和离子进行100 ps的平衡. 在溶剂平衡期间DNA中的重原子会被<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/posres.itp">位置限制</a>.</p>
 <pre><code>grompp -f equi_sol.mdp -p neutral.top -c neutral_mini.pdb -n neutral.ndx
-mdrun -v -c neutral_sol_equi.pdb
-</code></pre>
+mdrun -v -c neutral_sol_equi.pdb</code></pre>
 <p>A20T20低聚物溶剂平衡后的结果可在<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/neutral_sol_equi.pdb">这里</a>下载.</p>
 <h2>2. DNA平衡模拟</h2>
 <h3>经典分子动力学</h3>
 <p>我们将对体系进行1 ns的经典分子动力学模拟, 其中包含由20个碱基对组成的带胸腺嘧啶二聚体的DNA分子, 水和离子. 作为模拟的<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/neutral_sol_equi.pdb">起始结构</a>, 我们使用上一步骤的平衡结构.</p>
 <pre><code>grompp -f md.mdp -p neutral.top -c neutral_sol_equi.pdb -n neutral.ndx
-mdrun -c equi.gro
-</code></pre>
+mdrun -c equi.gro</code></pre>
 <p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/md.mdp"><code>md.mdp</code></a>, <a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/equi.gro"><code>equi.gro</code></a></p>
 <p>注意, 我们现在使用gro文件格式, 因为我们在下一步中不仅要使用平衡后的坐标, 还要使用相应的速度.</p>
 <h2>3. 设置QM/MM模拟体系</h2>
@@ -100,29 +91,24 @@ mdrun -c equi.gro
 <h3>添加链接原子</h3>
 <p>在连接QM和MM子体系的化学键处, 我们引入了链接原子. 在GROMACS中, 我们将链接原子视为一个特殊的原子类型, <code>LA</code>. 该原子类型在QM计算中被视为氢原子, 而在力场计算中被视为虚原子. 链接原子(如果存在)是体系的一部分, 但与体系中的任何其他原子没有相互作用, 除了作用在其上的QM力会重新分配到所在键的两个原子上. 因此, 在拓扑中链接原子(LA)被定义为虚原子：</p>
 <pre><code>[dummies 2]
-LA QMatom MMatom 1 0.73
-</code></pre>
+LA QMatom MMatom 1 0.73</code></pre>
 <p>注意, 链接原子没有质量.</p>
 <p>此外, MM和QM原子之间的键仍维持在力场水平:</p>
 <pre><code>[ bonds ]
-QMatom MMatom 1
-</code></pre>
+QMatom MMatom 1</code></pre>
 <p>注意, 因为在我们的体系中, QM/MM键是碳-氮键(0.153 nm), 我们使用的约束长度为0.153 nm, 虚拟位置为0.65. 后者是理想C-H键长和理想C-C键长之间的比. 使用这一比例, 链接原子离QM原子对距离始终为0.1 nm, 与碳-氢键长度一致. 如果QM和MM子体系通过其他类型的键相连接, 则需要使用与其键类型匹配的约束和虚拟位置. 此外, 由于在模拟的每一步中都会重新计算链接原子的位置, 因此在初始构型文件中链接原子的位置并不重要. 我们可以简单地将两个链接原子置于原点(0,0,0).</p>
 <p>下载QM/MM模拟的<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm1.gro">结构文件</a>和<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm.top">拓扑文件</a>.</p>
 <p>最后, gromac的自带的amber力场文件中不包括链接原子. 因此, 我们需要手工添加. 在<code>ffamber99.atp</code>文件的末尾添加</p>
-<pre><code>LA 0.0 ; Link Atom for QM/MM
-</code></pre>
+<pre><code>LA 0.0 ; Link Atom for QM/MM</code></pre>
 <p>这样如果输入结构中存在链接原子, <code>pdb2gmx</code>就能够识别了. 我们还要将链接原子添加到<code>ffamber99nb.atp</code>文件</p>
-<pre><code>LA LA 1 0.0000 0.0000 A 0.0 0.0
-</code></pre>
+<pre><code>LA LA 1 0.0000 0.0000 A 0.0 0.0</code></pre>
 <p>这样<code>grompp</code>就能够知道对链接原子使用的Lennard-Jones参数. 很明显这些参数应该为零. 第一个整数是QM/MM计算中使用的元素类型, 链接原子被视为氢(1).</p>
 <p>下载需要的AMBER力场文件<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/amber.tar"><code>amber.tar</code></a>. 下载后使用命令<code>tar -xvf amber.tar</code>解压.</p>
 <h3>指定QM原子</h3>
 <p>一旦我们决定了哪些原子应该使用QM方法进行处理, 我们就将这些原子, 包括链接原子(如果有的话), 添加到索引文件. 我们可以使用<code>make_ndx</code>程序, 或者手动将原子编号加入<code>index.ndx</code>文件中. 下载本教程中使用的索引文件<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm.ndx">qmmm.ndx</a>. 可以单独约束QM子体系中的键, 也可以不限制而同时限制MM子体系中的键. 如果QM原子可能会经历键的断裂/形成反应, 不限制QM子体系中的键非常必要. 在这种情况下, GROMACS的键类型5用于QM子体系中的键:</p>
 <pre><code>[ bonds ]
 QMatom1 QMatom2 5
-QMatom2 QMatom3 5
-</code></pre>
+QMatom2 QMatom3 5</code></pre>
 <h3>指定QM/MM模拟参数</h3>
 <p>设置GROMACS执行QM/MM计算的最后一步是, 指定GROMACS使用什么级别的QM理论处理QM子体系, 使用哪种QM/MM接口, QM子体系的多重度, 等等. 所有这些都在mdp文件中定义. 运行QM/MM时需要包括以下选项:</p>
 <pre><code>QMMM       = yes
@@ -131,8 +117,7 @@ QMmethod   = RHF
 QMbasis    = STO-3G
 QMMMscheme = ONIOM
 QMcharge   = 0
-QMmult     = 1
-</code></pre>
+QMmult     = 1</code></pre>
 <p>请注意, 上面给出的是默认选项, 实际所用选项取决于你的体系. 你可以参考我们用于短时间QM/MM平衡模拟的mdp文件<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm1.mdp"><code>qmmm1.mdp</code></a>. 如果选择半经验的QM方法, 如AM1或PM3, 应忽略<code>QMbasis</code>.</p>
 <p>使用上面的设置, 我们将进行1 ps的短时间QM/MM MD模拟.</p>
 <h2>4. 体系的QM/MM模拟</h2>
@@ -140,12 +125,10 @@ QMmult     = 1
 <p>我们现在对体系进行1 ps的短时间QM/MM(AM1/Amber99)平衡模拟.</p>
 <p>为此, 我们需要一个已链接mopac库的特殊的<a href="http://wwwuser.gwdg.de/~ggroenh/mdrun"><code>mdrun</code>二进制文件</a>.</p>
 <p>要使下载的<code>mdrun</code>变为可执行文件, 请使用</p>
-<pre><code>chmod +x mdrun
-</code></pre>
+<pre><code>chmod +x mdrun</code></pre>
 <p>我们仍然使用正常版本的<code>grompp</code></p>
 <pre><code>grompp -f qmmm1.mdp -p qmmm.top -n qmmm.ndx -c qmmm1.gro
-./mdrun -v -c qmmm1out.gro -x traj_stepIV.xtc
-</code></pre>
+./mdrun -v -c qmmm1out.gro -x traj_stepIV.xtc</code></pre>
 <p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm1.mdp"><code>qmmm1.mdp</code></a>, <a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm.top"><code>qmmm.top</code></a>, <a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm1out.gro"><code>qmmm1out.gro</code></a></p>
 <p>由于此模拟大约需要40分钟才能完成, 我们给出打包好的<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmmmd.tar">输出文件</a>供你参考. 你既可以使用这些文件进行下一步骤(先解压<code>tar -xvf qmmmmd.tar</code>), 也可以等待自己的模拟结束, 使用自己得到的文件进行下一步.</p>
 <p>在下一步中, 我们将使用1 ps平衡后的结构来研究过量电子对胸腺嘧啶二聚体的稳定性的影响.</p>
@@ -158,17 +141,14 @@ QMmethod   = AM1
 QMbasis    = STO-3G
 QMMMscheme = ONIOM
 QMcharge   = -1
-QMmult     = 2
-</code></pre>
+QMmult     = 2</code></pre>
 <p>我们现在对胸腺嘧啶二聚体上带有过量电子的体系进行1 ps的短时间QM/MM模拟. 我们使用之前QM/MM模拟的<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm1out.gro">最后一帧</a>作为起始结构:</p>
 <pre><code>grompp -f qmmm2.mdp -p qmmm.top -n qmmm.ndx -c qmmm1out.gro
-mdrun -v -c qmmm2out.gro -x traj_stepV.xtc
-</code></pre>
+mdrun -v -c qmmm2out.gro -x traj_stepV.xtc</code></pre>
 <p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm2.mdp"><code>qmmm2.mdp</code></a>, <a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm2out.gro"><code>qmmm2out.gro</code></a></p>
 <p>此模拟仍然需要大约40分钟时间, 因此你可以下载我们得到的输出文件<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/electron1.tar"><code>electron1.tar</code></a>, 并使用前面的方法解压.</p>
 <p>在最后一帧中, 我们看到环丁烷环中的一根键断裂了(图4). 为了观看整个过程, 你可以将轨迹转换为pdb格式, 然后使用pymol或VMD载入.</p>
-<pre><code>trjconv -s -f traj_stepV.xtc -n qmmm.ndx -o traj2.pdb
-</code></pre>
+<pre><code>trjconv -s -f traj_stepV.xtc -n qmmm.ndx -o traj2.pdb</code></pre>
 <p>提示时选择<code>heavyatoms</code>组.</p>
 <p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/traj2.pdb"><code>traj2.pdb</code></a></p>
 <p>因此, 摄入电子后, 二聚体上的C5原子之间的键(图2)断裂. 考虑到断键发生的时间尺度, 该过程肯定是无垒的. C5-C5键而不是C6-C6键断裂的原因可能是甲基之间的空间排斥. 在模拟的时间尺度上, C6原子之间的共价键仍保持完整. 因此, 断裂第二根键是涉及(小)活化势垒的活化过程. 为了在短时间的QM/MM MD模拟中克服这个能垒, 我们将使用化学洪泛方法, 这将在下一节中描述.</p>
@@ -183,24 +163,20 @@ mdrun -v -c qmmm2out.gro -x traj_stepV.xtc
 <p>对于自由能面的准简谐近似, 选择线性集约坐标. 这些坐标可通过主成分分析(PCA)获得. 选择了合适的集约坐标后, 会构造高斯形的洪泛势, 使得其主轴平行于集约坐标.</p>
 <h3>主成分分析</h3>
 <p>我们首先需要一组集约坐标来表征QM子体系中的相关运动. <code>g_covar</code>程序可以从MD轨迹计算涨落运动的协方差矩阵. 由于显而易见的原因, 我们将分析限制在QM区域. 此外, 我们仅考虑重原子的运动. 对角化协方差矩阵, 得到的特征向量就可以作为集约坐标.</p>
-<pre><code>g_covar -n qmmm.ndx -f traj_stepV.xtc -s
-</code></pre>
+<pre><code>g_covar -n qmmm.ndx -f traj_stepV.xtc -s</code></pre>
 <p>提示时选择重原子组进行叠合和分析.</p>
 <p>特征向量(或集约运动)可以使用pymol可视化. 为此, 我们使用<code>g_anaeig</code>创建这些运动的一段小轨迹. 例如命令</p>
-<pre><code>g_anaeig -nframes 40 -first 1 -last 1 -n qmmm.ndx -extr vector1.pdb
-</code></pre>
+<pre><code>g_anaeig -nframes 40 -first 1 -last 1 -n qmmm.ndx -extr vector1.pdb</code></pre>
 <p>提示时选择<code>heavyatoms</code>组. 运行完成后. 会为QM子体系的第一个集约自由度生成内插的轨迹.</p>
 <h3>构建洪泛势</h3>
 <p>我们将使用所有的集约坐标或特征向量来构造洪泛势, 其强度为150 kJ/mol. <code>make_edi</code>程序可生成带有洪泛参数的<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/sam.edi"><code>sam.edi</code>文件</a>.</p>
-<pre><code>make_edi -f eigenvec.trr -eig eigenval.xvg -flood 1-48 -Eflnull 150 -outfrq 1 -s -n qmmm.ndx -tau 0
-</code></pre>
+<pre><code>make_edi -f eigenvec.trr -eig eigenval.xvg -flood 1-48 -Eflnull 150 -outfrq 1 -s -n qmmm.ndx -tau 0</code></pre>
 <p><code>-outfrq</code>选项设置输出记录的频率, 我们希望在模拟的每一步都输出. 生成的<code>sam.edi</code>文件可由<code>mdrun</code>读入并进行洪泛模拟, 我们将在下面看到.</p>
 <h2>7. 电子摄入的影响 II: 增强采样与化学洪泛模拟</h2>
 <h3>具有洪泛势的QM/MM MD模拟</h3>
 <p>我们对所有集约自由度应用洪泛势并继续QM/MM模拟. 我们使用先前QM/MM模拟的最后一帧作为洪泛模拟的起始结构:</p>
 <pre><code>grompp -f qmmm2.mdp -p qmmm.top -n qmmm.ndx -c qmmm2out.gro
-./mdrun -v -c qmmm3out.gro -ei sam.edi -x traj_VII.xtc
-</code></pre>
+./mdrun -v -c qmmm3out.gro -ei sam.edi -x traj_VII.xtc</code></pre>
 <p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm2.mdp"><code>qmmm2.mdp</code></a>, <a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm2out.gro"><code>qmmm2out.gro</code></a>, <a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm3out.gro"><code>qmmm3out.gro</code></a>, <a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/sam.edi"><code>sam.edi</code></a></p>
 <p>这一模拟仍然需要大约40分钟的时间, 你可以下载我们得到的输出文件<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/electron2.tar"><code>electron2.tar</code></a>.</p>
 <p>图5为洪泛模拟的最后一帧. 我们可以看到碱基之间的两根共价键都断开了. 然而, 其中一个碱基上仍然存在过量电子, 这通过嘧啶氮原子的sp3杂化反映出来.</p>
@@ -208,9 +184,8 @@ mdrun -v -c qmmm2out.gro -x traj_stepV.xtc
 <p>图5. 利用洪泛势, 胸腺嘧啶二聚体在2 ps内被完全破坏.</p>
 <p>实际上, 电子会被转移回光解酶中的FADH辅因子, 或DNA链中的相邻碱基. 为了在我们的模拟中考虑这种反向传递, 我们从最后一帧继续模拟, 使用<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm1.mdp">旧的mdp文件</a>, 其中的QM子体系为中性单线态.</p>
 <pre><code>grompp -f qmmm1.mdp -p qmmm.top -n qmmm.ndx -c qmmm3out.gro
-./mdrun -v -c qmmm4out.gro
-</code></pre>
-<p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm4out.gro"><code>qmmm4out.gro</code></a>, 输出文件<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/final.tar"><code>final.tar</code></a></p>
+./mdrun -v -c qmmm4out.gro</code></pre>
+<p>下载<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/qmmm4out.gro"><code>qmmm4out.gro</code></a>, 输出文件<a href="http://www3.mpibpc.mpg.de/groups/de_groot/compbio1/p7_qmmm/QMMM/files/final.tar"><code> final.tar</code></a></p>
 <p>模拟的最后一帧如图6所示. 我们看到DNA完全恢复了！</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/qmmm5_6.png"/></p>
 <p>图6. 恢复的DNA.</p>

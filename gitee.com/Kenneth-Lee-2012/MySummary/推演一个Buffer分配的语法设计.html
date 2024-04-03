@@ -1,4 +1,4 @@
-<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/软件构架设计/推演一个Buffer分配的语法设计.rst">推演一个Buffer分配的语法设计</a></h2>
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E8%BD%AF%E4%BB%B6%E6%9E%84%E6%9E%B6%E8%AE%BE%E8%AE%A1/%E6%8E%A8%E6%BC%94%E4%B8%80%E4%B8%AABuffer%E5%88%86%E9%85%8D%E7%9A%84%E8%AF%AD%E6%B3%95%E8%AE%BE%E8%AE%A1.rst">推演一个Buffer分配的语法设计</a></h2>
 <p>.. Kenneth Lee 版权所有 2019-2020</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.0</p>
@@ -21,8 +21,7 @@ Tensor表示Buffer中的首地址和长度。某些opX可以把数据从核外�
     Barrier()
     LoadDataToTensor()
     Barrier()
-    opX(N)
-</code></pre>
+    opX(N)</code></pre>
 <p>但这样的效率是很低的，因为在Load的时候opX的执行部件就会全部闲着。更好的办法是把
 它们交叉起来：::</p>
 <pre><code>    loadTensor(Tensor1)
@@ -35,16 +34,14 @@ Tensor表示Buffer中的首地址和长度。某些opX可以把数据从核外�
     opX(N)(Tensor2)
     Barrier(Tensor2)
     LoadTensor(Tensor2)
-    ...
-</code></pre>
+    ...</code></pre>
 <p>Tensor3、4明显可以复用前面1、2的空间。</p>
 <p>我们可以把这个行为归结为这样的语法：::</p>
 <pre><code>    for i in range(x) pipeline(depth=2):
       t = AllocTensor()
         loadTensor(t)
           opXWithBarrier(N)
-            Free(t) 
-</code></pre>
+            Free(t) </code></pre>
 <p>这样我们可以构造一个深度为2的流水线，我们需要两个t，发射完两个序列后，我们等其
 中一个完成，然后我们让t复用它的Buffer，然后才投入运行第三个循环。我们如果要支持
 这样的语法，Tensor对Buffer的分配关系，应该提供什么样的语义才能提供最利于程序员
@@ -66,19 +63,16 @@ Tensor(size)这个定义来实现一次Buffer分配，保证Tensor在离开它�
 <p>方案3：半静态Buffer规划</p>
 <p>上面那个流水线语义的核心是，要把Buffer根据流水线平分使用，为此，我们引入一个
 Tensor别名的设计，你可以把Tensor切出多块出来单独使用，比如你有一个Tensor：::</p>
-<pre><code>    Tensor A(shape=(2,3)) #这个用动态分配来分配出来，离开名称空间就释放，但我们预期你根本不会释放它
-</code></pre>
+<pre><code>    Tensor A(shape=(2,3)) #这个用动态分配来分配出来，离开名称空间就释放，但我们预期你根本不会释放它</code></pre>
 <p>我们可以在这个Buffer的原位放另一个Tensor层叠上去：::</p>
 <pre><code>    Tensor A1(shape=3) alias A[0, :]
 
-    Tensor A2(shape=3) alias A[1, :]
-</code></pre>
+    Tensor A2(shape=3) alias A[1, :]</code></pre>
 <p>A1和A2复用A的内存，但使用了另一个语义进行解释。当我们进入一个流水线的时候，我们
 让流水线来处理这个分配，这个语法就会变成这样：::</p>
 <pre><code>    for i in [n, m] with t in Tensor1[0:2]:
       loadTensor(t, i)
-        opXWithBarrier(N)(t) 
-</code></pre>
+        opXWithBarrier(N)(t) </code></pre>
 <p>这个语义表达的是：把Tensor1的第一维分成两份，每份产生一个别名t，我们先完成两次
 循环的发射，然后等第一个循环的结束，再投入下一次的发射。这样，程序员始终知道整
 个Buffer的规划，在循环内部他还可以把t再通过别名再分解过多个独立的Tensor，这样，
@@ -91,20 +85,17 @@ Buffer定义为一个根Tensor就可以了。这样Tensor的定义语法是这�
     ...
     Tensor B(shape=(6,10)) from ROOT_TENSOR[7:68]
     for i in [n, m] with t in A[0:2]:
-          ...
-</code></pre>
+          ...</code></pre>
 <p>方案5：基于Tensor的动态分配</p>
 <p>这个方案是3,4方案上的一个addon，响应有人要求的：某些情况下，我的Buffer真得是充
 足，你随便帮我分就好了。</p>
 <p>那么，我们就给Tensor本身提供一个动态分配的Slice模式。以方案4为例，假如我们已经
 有一个Tensor A了（A可以是ROOT_TENSOR本身）</p>
 <p>我可以这样定义一个要求在A上动态分配的空间：::</p>
-<pre><code>    B(shape=(2, 3)) from A[auto]
-</code></pre>
+<pre><code>    B(shape=(2, 3)) from A[auto]</code></pre>
 <p>一旦你这样定义了，A的空间进入动态调配模式，B会在A上分配一个合适的空间。等你一段
 代码过后，你整个A要另做它用，你可以直接定义一个普通的Tensor：::</p>
-<pre><code>    X(shape=(2,3)) from A[0:7]
-</code></pre>
+<pre><code>    X(shape=(2,3)) from A[0:7]</code></pre>
 <p>这样我们可以继续用原来的模式来使用最初的功能。</p>
 <p>我暂时能想到的最优方案是方案3和4了，具体用哪个看具体情形（看起来4更好），其实要
 组合起来用也是可以的。有人有更喜欢的应用模式吗？</p>

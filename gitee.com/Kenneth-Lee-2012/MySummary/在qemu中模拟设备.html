@@ -1,4 +1,4 @@
-<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/软件构架设计/在qemu中模拟设备.rst">在qemu中模拟设备</a></h2>
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E8%BD%AF%E4%BB%B6%E6%9E%84%E6%9E%B6%E8%AE%BE%E8%AE%A1/%E5%9C%A8qemu%E4%B8%AD%E6%A8%A1%E6%8B%9F%E8%AE%BE%E5%A4%87.rst">在qemu中模拟设备</a></h2>
 <p>.. Kenneth Lee 版权所有 2019-2020</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.1</p>
@@ -20,8 +20,7 @@
 <p>首先我们理解一下Qemu的工作原理。很多系统工程师对Qemu有距离感，其实只是不熟悉，
 说起来，我觉得Qemu比Linux Kernel还是容易很多的。作为最基础的原理，我原来写过一
 个演示性的例子：</p>
-<pre><code>    https://github.com/nekin2017/pipeline_simulator.git
-</code></pre>
+<pre><code>    https://github.com/nekin2017/pipeline_simulator.git</code></pre>
 <p>那个只写了几个小时，当然并不实用，但用来说明模拟器是什么已经足够了。这一定程度
 上说明，模拟器在原理上并不复杂。</p>
 <p>Qemu要解决具体问题，相对当然复杂得多，但得益于良好的封装性，我们要在Qemu里面加
@@ -29,16 +28,16 @@
 来表述这个逻辑）：</p>
 <p>.. code-block:: python</p>
 <p>def run_a_guest():
-     vm = create_vm()
-     vm.create_cpu_object()
-     vm.create_device_object()
-     for cpu in cpus: create_thread(cpu_thread, cpu)</p>
+vm = create_vm()
+vm.create_cpu_object()
+vm.create_device_object()
+for cpu in cpus: create_thread(cpu_thread, cpu)</p>
 <p>def cpu_thread(cpu):
-     while true:
-       try:
-         cpu.run(vm)
-       except EIO eio:
-         find_device(eio.io_address).handle_io();</p>
+while true:
+try:
+cpu.run(vm)
+except EIO eio:
+find_device(eio.io_address).handle_io();</p>
 <p>对很多人来说，那个cpu.run()是最难理解的，在Qemu中有各种各样的实现方式，比如基于
 qemu.ko的，基于TCG（翻译执行），或者基于KVM的。但对于做设备的人来说，这些统统不
 用管，你就认为它是个系统调用好了。如果是KVM，这个地方其实就是个ioctl(KVM_RUN）
@@ -56,8 +55,7 @@ ARM aarch64，编译命令如下（我验证的时候最新的stable版本是2.9
     apt-get build-deps qemu #安装开发库
     cd qemu
     ./configure #如果喜欢，可以自己挑选具体要什么特性
-    make
-</code></pre>
+    make</code></pre>
 <p>先确认你可以编译过，这样我们加东西的基础就有了。（现在的版本使用了submodule，你
 还需要更新submodule，submodule的原理可以看这里：《:doc:<code>git-submodule的理解</code> 》
 ）</p>
@@ -72,13 +70,12 @@ ARM aarch64，编译命令如下（我验证的时候最新的stable版本是2.9
 <p>一个设备驱动类似一个Linux内核的LKM，通过type_init(type_init_function)定义，其语
 义空间如下：</p>
 <p>Type/Class
-        一种设备类型（相当于Java中的Class）</p>
+一种设备类型（相当于Java中的Class）</p>
 <p>Instance
-        一个设备实例（相当于Java中的Object)</p>
+一个设备实例（相当于Java中的Object)</p>
 <p>通常你在Instance的初始化函数中申请一些MemoryRegion，注册你的IO空间被访问的回调
 函数，问题就基本解决了）</p>
-<pre><code>    | 注：更多信息，参考后面的QOM一节。
-</code></pre>
+<pre><code>    | 注：更多信息，参考后面的QOM一节。</code></pre>
 <h1>创建设备</h1>
 <p>增加设备驱动仅仅是表明这个设备可以被创建了，还没有创建。设备由“机器”来定义，就
 是你用-machine xxxx指定的那个东西。这也是一个驱动，比如我们在ARM平台上常用virt
@@ -99,8 +96,7 @@ sysbus_create_simple(驱动的名字，IO地址，IRQ编号)。</p>
     ... // 设置dev其他属性
     sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &amp;error_fatal);
     sysbus_connect_irq(dev, i, irq)... //注册每个irq
-    memory_region_add_subregion(get_system_memory(), base, sysbus_mmio_get_region(s, 0)); //注册mmio空间
-</code></pre>
+    memory_region_add_subregion(get_system_memory(), base, sysbus_mmio_get_region(s, 0)); //注册mmio空间</code></pre>
 <p>通用平台设备和PCIE桥也是一种特殊的设备，方法是一样的。</p>
 <p>做完这个动作，用这个虚拟机运行你的Linux，对应的设备就能被发现到。</p>
 <p>这是静态的，动态的可以通过在命令行用-device来分配，这个读者自己去摸吧，基本原理
@@ -124,32 +120,31 @@ trace-events文件，里面描述你的函数原形，然后在你的主程序�
 <p>中断很简单，知道中断号，用qemu_set_irq()或者qemu_irq_pluse()往里种就可以了。内
 存区会麻烦很多，所以我们需要多介绍一些概念：</p>
 <p>MemoryRegion
-        这表示一组面向Guest的，具有相同属性的内存区。后面简称MR。系统有全局的总
-        MR，你直接用get_system_memory()就可以拿到了。所以你实际上任何时候都可以
-        访问全局任何内存。</p>
+这表示一组面向Guest的，具有相同属性的内存区。后面简称MR。系统有全局的总
+MR，你直接用get_system_memory()就可以拿到了。所以你实际上任何时候都可以
+访问全局任何内存。</p>
 <p>MemoryRegionCache
-        这表示一片为了满足Guest需要的一片临时的“真内存”。换句话说，MemoryRegion
-        是描述一片内存区，MemoryRegionCache是真的要用的内存，Hypervisor根据需要
-        动态申请，后面简称MRC。如果你不是要深入定制，一般你不管这个东西没有任何
-        问题。</p>
+这表示一片为了满足Guest需要的一片临时的“真内存”。换句话说，MemoryRegion
+是描述一片内存区，MemoryRegionCache是真的要用的内存，Hypervisor根据需要
+动态申请，后面简称MRC。如果你不是要深入定制，一般你不管这个东西没有任何
+问题。</p>
 <p>AddressSpace
-        这表示一个地址空间，一个地址空间可以包含多个不同属性的MR。后面简称AS。
-        AS是和MR直接对应的，所以你可以直接用address_space_memory拿到对应
-        get_system_memory()的AS。</p>
+这表示一个地址空间，一个地址空间可以包含多个不同属性的MR。后面简称AS。
+AS是和MR直接对应的，所以你可以直接用address_space_memory拿到对应
+get_system_memory()的AS。</p>
 <p>FlatView
-        这表示看到的地址空间。这就比较绕了。这么说：AS是立体的，里面的MR是相互
-        独立的，他们可以交叠，转义，动态开关等。但当你去访问的时候，某个时刻，
-        某个物理地址总是对应着某个MR中的地址，FlatView用来表示层叠的结果。后面
-        这个简称FV。FV大部分时候写设备模拟的时候都不用管，它是用于深入处理Host
-        这边访问内存的时候用的，比如通过address_space_to_flatview(as)把as换成fv
-        ，然后用flatview_read/write()进行本地内存访问。</p>
+这表示看到的地址空间。这就比较绕了。这么说：AS是立体的，里面的MR是相互
+独立的，他们可以交叠，转义，动态开关等。但当你去访问的时候，某个时刻，
+某个物理地址总是对应着某个MR中的地址，FlatView用来表示层叠的结果。后面
+这个简称FV。FV大部分时候写设备模拟的时候都不用管，它是用于深入处理Host
+这边访问内存的时候用的，比如通过address_space_to_flatview(as)把as换成fv
+，然后用flatview_read/write()进行本地内存访问。</p>
 <p>MR可以有很多类型，其中前面提到的都是IO类型的，这种算是最简单的。它的实际地址在
 创建设备的时候给定，而在设备驱动只要在instance的初始化函数中，从传入的系统总线
 对象中就可以拿到了。一般方法是：::</p>
 <pre><code>    memory_region_init_io(&amp;iomr, owner, ops, priv, name, size);
 
-    sysbus_init_mmio(sys_bus_device, &amp;iomr);
-</code></pre>
+    sysbus_init_mmio(sys_bus_device, &amp;iomr);</code></pre>
 <p>这样你就有了一个mr对象，Guest的访问由ops的读写函数来响应。</p>
 <p>但除了GPIO这种简单设备，几乎没有什么设备只有IO空间的，我们还需要做DMA。如果不使
 用IOMMU，这也很简单，请求总是通过IO空间进来的，进来以后调用
@@ -159,8 +154,7 @@ address_space_memory是个全局变量，就是整个虚拟机的AS。反正整�
 <p>如果你需要IOMMU，基本的方法是再创建一个设备接口，让CPU通过这个接口给你设置页表
 ，之后你要访问目标地址的时候先做一个转换就好了。</p>
 <p>Qemu提供了一种特殊的Region：::</p>
-<pre><code>    memory_region_init_iommu(&amp;iommumr, instance_size, mrtypename, owner, name, size);
-</code></pre>
+<pre><code>    memory_region_init_iommu(&amp;iommumr, instance_size, mrtypename, owner, name, size);</code></pre>
 <p>iommumr是我们要创建的MR内存，instance_size是它的大小，size是这个这个翻译器的输
 入地址的范围（iova的范围），其他域可以直接理解。唯一比较麻烦的是这个mrtypename
 。这个东西需要再创建一个父类是TYPE_IOMMU_MEMORY_REGION的新设备类型，例如这样：::</p>
@@ -168,12 +162,10 @@ address_space_memory是个全局变量，就是整个虚拟机的AS。反正整�
         .parent = TYPE_IOMMU_MEMORY_REGION,
         .name = TYPE_RC4030_IOMMU_MEMORY_REGION,
         .class_init = rc4030_iommu_memory_region_class_init,
-    };
-</code></pre>
+    };</code></pre>
 <p>然后在class_init中给这个域创建一组用于翻译的函数就可以了。其中最核心的显然是其
 中的translate函数了。我们简单看看它的API定义：::</p>
-<pre><code>    IOMMUTLBEntry translate(IOMMUMemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag, int iommu_idx);
-</code></pre>
+<pre><code>    IOMMUTLBEntry translate(IOMMUMemoryRegion *iommu, hwaddr addr, IOMMUAccessFlags flag, int iommu_idx);</code></pre>
 <p>iommu是操作上下文，addr是物理地址，flag是访问属性，iommu_idx用来给你区分实例。
 其实我觉得如果用来做软件的设备模拟，这玩意儿用不上，还不如用我前面说的，需要访
 问的时候自己翻译好了。</p>
@@ -246,8 +238,7 @@ interface定义的空间在创建类的时候都会在本类中占据一个空�
     }
     type_init(my_device_register_types)
     //这一段可以通过提供一个TypeInfo的数组这样定义:
-    //DEFINE_TYPES((devinfo_array)
-</code></pre>
+    //DEFINE_TYPES((devinfo_array)</code></pre>
 <p>首先我们可以看到，Type是全局静态定义的。通过TypeInfo来描述对这个类的要求。如果
 在类上就有数据，可以给定TypeInfo.class_size（注意也要在最前面包含父类的State结
 构），然后用class_init()给定初始化方法。</p>

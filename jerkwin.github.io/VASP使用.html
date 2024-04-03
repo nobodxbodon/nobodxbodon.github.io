@@ -1,8 +1,8 @@
-<h2>原文：<a href="https://jerkwin.github.io/2014/05/21/VASP使用">VASP使用</a></h2>
+<h2>原文：<a href="https://jerkwin.github.io/2014/05/21/VASP%E4%BD%BF%E7%94%A8">VASP使用</a></h2>
 <hr/>
 <p>layout: post
- title: VASP使用
- categories:</p>
+title: VASP使用
+categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -10,7 +10,7 @@ tags:</li>
 </ul>
 <hr/>
 <h2>2014-05-21 08:54:04</h2>
-<p>VASP的使用方法设计的缺陷很大, 如果只是简单算个东西, 倒也可以, 若是想大规模使用, 成千上百的文件, 都有着一样的名字, 看了不疯才怪. 
+<p>VASP的使用方法设计的缺陷很大, 如果只是简单算个东西, 倒也可以, 若是想大规模使用, 成千上百的文件, 都有着一样的名字, 看了不疯才怪.
 所以, 我们需要一个脚本, 将VASP计算的流程进行改造. 改造的原则是支持不同文件名, 且不同文件之间可任意组合.</p>
 <h3>创建赝势文件<code>POTCAR</code>的脚本</h3>
 <ol>
@@ -18,11 +18,11 @@ tags:</li>
 放在名称为<code>POT</code>的文件夹下</li>
 <li>下面的脚本用来提取创建<code>POTCAR</code></li>
 </ol>
-&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-bash"&gt;# Language: bash
+<p>&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-bash"&gt;# Language: bash
 POTROOT=$1; shift
 
 usage="CatPot \&lt;Type\&gt; \&lt;Elements...\&gt;
-    Type: uspp.LDA | uspp.GGA | paw.LDA | paw.GGA | paw.PBE"
+	Type: uspp.LDA | uspp.GGA | paw.LDA | paw.GGA | paw.PBE"
 
 [[ $# -lt 2 ]] &amp;&amp; { echo "$usage"; exit; }
 
@@ -30,80 +30,81 @@ Type=$1; shift
 
 echo -n &gt;POTCAR
 for i in $*; do
-    zcat ${POTROOT}/${Type}/$i/POTCAR  &gt;&gt; POTCAR
+	zcat ${POTROOT}/${Type}/$i/POTCAR  &gt;&gt; POTCAR
 done
 
 grep -A 21 VRHFIN POTCAR
-&lt;/code&gt;&lt;/pre&gt;<h3>运行作业脚本</h3>
+&lt;/code&gt;&lt;/pre&gt;</p>
+<h3>运行作业脚本</h3>
 <p>vasp运行需要四种输入文件, <code>INCAR</code>, <code>KPOINTS</code>, <code>POSCAR</code>, <code>POTCAR</code>, 且不能是其他名字, 程序也没提供选项指定其他名字.
-彻底的解决方法是修改源代码, 困难不大, 但不建议. 除此之外可以使用一个脚本, 
+彻底的解决方法是修改源代码, 困难不大, 但不建议. 除此之外可以使用一个脚本,
 先将文件改名, 复制至作业运行目录下, 运行vasp, 完成后复制输出文件至原目录, 再将输出文件更名.</p>
-<p>我的解决办法是参照GROMACS的运行方式, 先利用这四个文件产生一个总的输入文件, 然后运行这个.ikp文件即可. 
+<p>我的解决办法是参照GROMACS的运行方式, 先利用这四个文件产生一个总的输入文件, 然后运行这个.ikp文件即可.
 ikp文件的内容很简单, 里面写好使用的四个文件的绝对路径, 脚本运行时根据路径复制文件, 运行vasp.</p>
-&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-bash"&gt;# Language: bash
-    function vsp_ikp {
-        usage="\
-        &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;   vsp_ikp    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
-        &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;  Jicun Li    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
-        &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;    2014-05-21 10:12:32    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
-        &gt;&gt;Usage: vsp_ikp [File.in] [File.kpt] [File.pos] [File.pot] [Out.ikp]"
-        echo "$usage"
-
-        local Fin Fkpt Fpos Fpot Fout
-
-        PWD=$(pwd)
-        Fin=INCAR; Fkpt=KPOINTS; Fpos=POSCAR; Fpot=POTCAR; Fout=vsp.ikp
-
-        opt=($@); N=${#opt[@]}
-        for((i=0; i&lt;N; i++)); do
-            arg=${opt[$i]##*\.}
-            [[ $arg =~ in ]]  &amp;&amp; { Fin=${opt[$i]};  }
-            [[ $arg =~ kpt ]] &amp;&amp; { Fkpt=${opt[$i]}; }
-            [[ $arg =~ pos ]] &amp;&amp; { Fpos=${opt[$i]}; }
-            [[ $arg =~ pot ]] &amp;&amp; { Fpot=${opt[$i]}; }
-            [[ $arg =~ ikp ]] &amp;&amp; { Fout=${opt[$i]}; }
-        done
-
-        echo
-        echo Ouput ikp File: $Fout
-
-        echo -n &gt;$Fout
-        echo INCAR:   $PWD/$Fin  &gt;&gt; $Fout
-        echo KPOINTS: $PWD/$Fkpt &gt;&gt; $Fout
-        echo POSCAR:  $PWD/$Fpos &gt;&gt; $Fout
-        echo POTCAR:  $PWD/$Fpot &gt;&gt; $Fout
-    }
-
-    function vsp_run {
-        usage="\
-        &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;   vsp_run    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
-        &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;  Jicun Li    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
-        &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;    2014-05-21 10:12:32    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
-        &gt;&gt;Usage: vsp_run &lt;File.ikp&gt; [-cpu Ncpu]"
-
-        [[ $# -lt 1 ]] &amp;&amp; { echo "$usage"; exit; }
-
-        File=${1%\.*}; Fout=$File
-
-        Ncpu=4 #$(cat /proc/cpuinfo | grep "processor" | wc)
-        [[ $# -ge 3 ]] &amp;&amp; { Ncpu=$3; }
-
-        Fin=$( grep INCAR   $File.ikp | sed 's/INCAR://')
-        Fkpt=$(grep KPOINTS $File.ikp | sed 's/KPOINTS://')
-        Fpos=$(grep POSCAR  $File.ikp | sed 's/POSCAR://')
-        Fpot=$(grep POTCAR  $File.ikp | sed 's/POTCAR://')
-
-        cp $Fin  ./INCAR
-        cp $Fkpt ./KPOINTS
-        cp $Fpos ./POSCAR
-        cp $Fpot ./POTCAR
-
-        Path="/home/jicun/VASP/vasp.x"
-        MPIRUN="/share/apps/intel/impi/4.1.0.030/intel64/bin/mpirun"
-
-        $MPIRUN -np $Ncpu -machinefile $PBS_NODEFILE $Path
-    }
-
-    job=$1; shift
-    vsp_$job $*
-&lt;/code&gt;&lt;/pre&gt;
+<p>&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-bash"&gt;# Language: bash
+	function vsp_ikp {
+		usage="\
+		&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;   vsp_ikp    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+		&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;  Jicun Li    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+		&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;    2014-05-21 10:12:32    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+		&gt;&gt;Usage: vsp_ikp [File.in] [File.kpt] [File.pos] [File.pot] [Out.ikp]"
+		echo "$usage"
+	
+		local Fin Fkpt Fpos Fpot Fout
+	
+		PWD=$(pwd)
+		Fin=INCAR; Fkpt=KPOINTS; Fpos=POSCAR; Fpot=POTCAR; Fout=vsp.ikp
+	
+		opt=($@); N=${#opt[@]}
+		for((i=0; i&lt;N; i++)); do
+			arg=${opt[$i]##*\.}
+			[[ $arg =~ in ]]  &amp;&amp; { Fin=${opt[$i]};  }
+			[[ $arg =~ kpt ]] &amp;&amp; { Fkpt=${opt[$i]}; }
+			[[ $arg =~ pos ]] &amp;&amp; { Fpos=${opt[$i]}; }
+			[[ $arg =~ pot ]] &amp;&amp; { Fpot=${opt[$i]}; }
+			[[ $arg =~ ikp ]] &amp;&amp; { Fout=${opt[$i]}; }
+		done
+	
+		echo
+		echo Ouput ikp File: $Fout
+	
+		echo -n &gt;$Fout
+		echo INCAR:   $PWD/$Fin  &gt;&gt; $Fout
+		echo KPOINTS: $PWD/$Fkpt &gt;&gt; $Fout
+		echo POSCAR:  $PWD/$Fpos &gt;&gt; $Fout
+		echo POTCAR:  $PWD/$Fpot &gt;&gt; $Fout
+	}
+	
+	function vsp_run {
+		usage="\
+		&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;   vsp_run    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+		&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;  Jicun Li    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+		&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;    2014-05-21 10:12:32    &lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+		&gt;&gt;Usage: vsp_run &lt;File.ikp&gt; [-cpu Ncpu]"
+	
+		[[ $# -lt 1 ]] &amp;&amp; { echo "$usage"; exit; }
+	
+		File=${1%\.*}; Fout=$File
+	
+		Ncpu=4 #$(cat /proc/cpuinfo | grep "processor" | wc)
+		[[ $# -ge 3 ]] &amp;&amp; { Ncpu=$3; }
+	
+		Fin=$( grep INCAR   $File.ikp | sed 's/INCAR://')
+		Fkpt=$(grep KPOINTS $File.ikp | sed 's/KPOINTS://')
+		Fpos=$(grep POSCAR  $File.ikp | sed 's/POSCAR://')
+		Fpot=$(grep POTCAR  $File.ikp | sed 's/POTCAR://')
+	
+		cp $Fin  ./INCAR
+		cp $Fkpt ./KPOINTS
+		cp $Fpos ./POSCAR
+		cp $Fpot ./POTCAR
+	
+		Path="/home/jicun/VASP/vasp.x"
+		MPIRUN="/share/apps/intel/impi/4.1.0.030/intel64/bin/mpirun"
+	
+		$MPIRUN -np $Ncpu -machinefile $PBS_NODEFILE $Path
+	}
+	
+	job=$1; shift
+	vsp_$job $*
+&lt;/code&gt;&lt;/pre&gt;</p>

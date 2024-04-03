@@ -24,10 +24,10 @@ tags:</p>
 <h2>Steps</h2>
 <h3>Create an qemu instance for qubes os</h3>
 <p>First, we need an empty disk for our guest os.</p>
-<pre><code class="lang-sh">qemu-img create -f qeubes.raw 128G
+<pre><code class="language-sh">qemu-img create -f qeubes.raw 128G
 </code></pre>
 <p>Second, we need to start our qemu-instance</p>
-<pre><code class="lang-sh">#!/usr/bin/env bash
+<pre><code class="language-sh">#!/usr/bin/env bash
 
 qemu-system-x86_64 \
   -machine q35,accel=kvm,kernel-irqchip=split,igd-passthru=on \
@@ -41,18 +41,29 @@ qemu-system-x86_64 \
   -drive file=/media/mozart/qemu/qubes/qubes.raw,format=raw \
   -vga qxl \
   -spice port=5900,addr=127.0.0.1,disable-ticketing=on,image-compression=off,playback-compression=off
+ 
 </code></pre>
-<blockquote><p>While using spice video protocol, there will no any output in the console.
+<blockquote>
+<p>While using spice video protocol, there will no any output in the console.
 If you get nothing output, then it means you start the qemu instance successfully.</p>
+</blockquote>
+<blockquote>
 <p>WARNING: the parameter <code>igd-passthru=on</code> seems useless, you can remove this parameter</p>
 </blockquote>
 <p>Run the shell script and then open your favorite viewer which supports <code>spice</code> video protocol.</p>
 <p>Here are some FOSS viewers that works in linux platform: spicy, virt-viewer, tigervnc and realvnc</p>
-<blockquote><p>I highly recommend <code>spicy</code> viewer, which supports <code>spice</code> protocol so that you can copy and paste files conveniently, and this viewer supports better in mouse control.
+<blockquote>
+<p>I highly recommend <code>spicy</code> viewer, which supports <code>spice</code> protocol so that you can copy and paste files conveniently, and this viewer supports better in mouse control.
 In some guest os, the viewer can't detect the real cursor inside the guest os, so these viewer will create a virtual cursor (looks like a black dot). So here comes the problems: the position between virtual cursor and real cursor will de-sync. Once the de-sync happens, you will find that you can't move to the edges of the host os (Because the viewer thinks the virtual cursor is going to escape the viewer, so these viewer will release the mouse focus, which means you can't move your real cursor to the edges inside guest of)</p>
+</blockquote>
+<blockquote>
 <p>Use <code>virt-viewer</code> for vnc connection.</p>
+</blockquote>
+<blockquote>
 <p>If using <code>spice</code>, it's possible there may be some input latency randomly (e.g. right click the desktop). (It seems like some irq takes most of cpu-time, and the whole guest os stuck.) Also, even you install <code>spice-vdagentd</code> and <code>spice-server</code> in the guest os will not solve this performance issue. Try: some other solutions to tweak spice parameters
 However, <code>vnc</code> works like a charm.</p>
+</blockquote>
+<blockquote>
 <p>compression is disabled for localhost only connection, so that the input/output latency can be greatly reduced.</p>
 </blockquote>
 <h3>Run the qubes installer</h3>
@@ -61,7 +72,7 @@ However, <code>vnc</code> works like a charm.</p>
 <p>In the installer, we accept the <code>default settings</code> the installer recommended and we setup a default user account.</p>
 <p>NOTICE: once the installer finish its work, it will login the desktop and auto start <code>sys-net</code> VM.
 However, it's very possible you failed to start <code>sys-net</code> VM and get the error message</p>
-<pre><code class="lang-plain">[Dom0] Error
+<pre><code class="language-plain">[Dom0] Error
 ['/usr/bin/qvm-start', 'sys-firewall'] failed:
 stdout: ""
 stderr: "Start failed: internal error: Unable to reset PCI device 0000:00:02.0": no FLR, PM reset or bus reset available, see /var/log/libvirt/libxl/libxl-driver.log for details
@@ -71,25 +82,26 @@ stderr: "Start failed: internal error: Unable to reset PCI device 0000:00:02.0":
 <p>If you pass VT-d and IOMMU features successfully from host os into the guest os (the qubes os), then you can run VM inside qubes easily.</p>
 <p>For <code>sys-net</code> VM, if you assign the <code>NIC device</code> for the VM, then you need to do these 2 things to let the VM started.</p>
 <h4>Disable the PCI-reset-strict in <code>sys-net</code> VM</h4>
-<pre><code class="lang-sh">qvm-pci ls sys-net
+<pre><code class="language-sh">qvm-pci ls sys-net
 qvm-pci detach sys-net [BACKEND:DEVICE_ID]
 qvm-pci attach --persistent sys-net [BACKEND:DEVICE_ID] -o no-strict-reset=true
 </code></pre>
-<blockquote><p>The <code>device_id</code> is the <code>NIC device</code> assigned to <code>sys-net</code> VM</p>
+<blockquote>
+<p>The <code>device_id</code> is the <code>NIC device</code> assigned to <code>sys-net</code> VM</p>
 </blockquote>
 <h4>Set the virtualization-mode of <code>sys-net</code> VM to <code>PV</code></h4>
 <p>Change the virtualization-mode of <code>sys-net</code> VM from <code>HVM</code> to <code>PV</code>, so that the VM can start successfully. (This is the way to solve the error of NIC)</p>
-<pre><code class="lang-sh">qvm-prefs sys-net virt_mode pv
+<pre><code class="language-sh">qvm-prefs sys-net virt_mode pv
 </code></pre>
 <p>Now, you can launch <code>firefox</code> and it should work.</p>
 <h2>Reference</h2>
 <ol>
-<li><a href="https://wiki.qemu.org/Features/VT-d">https://wiki.qemu.org/Features/VT-d</a></li>
-<li><a href="https://wiki.xenproject.org/wiki/Xen_PCI_Passthrough">https://wiki.xenproject.org/wiki/Xen_PCI_Passthrough</a></li>
-<li><a href="https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF">https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF</a></li>
-<li><a href="https://www.qubes-os.org/doc/pci-troubleshooting/">https://www.qubes-os.org/doc/pci-troubleshooting/</a></li>
-<li><a href="https://www.qubes-os.org/doc/how-to-use-pci-devices/#additional-attach-options">https://www.qubes-os.org/doc/how-to-use-pci-devices/#additional-attach-options</a></li>
-<li><a href="https://forum.qubes-os.org/t/sys-net-not-starting-because-it-is-unable-to-reset-pci-device/15056">https://forum.qubes-os.org/t/sys-net-not-starting-because-it-is-unable-to-reset-pci-device/15056</a></li>
-<li><a href="https://forum.qubes-os.org/t/configure-strict-reset-for-pci-devices/13568">https://forum.qubes-os.org/t/configure-strict-reset-for-pci-devices/13568</a></li>
-<li><a href="https://forum.qubes-os.org/t/installing-qubes-unable-to-reset-pci-device/14943">https://forum.qubes-os.org/t/installing-qubes-unable-to-reset-pci-device/14943</a></li>
+<li>https://wiki.qemu.org/Features/VT-d</li>
+<li>https://wiki.xenproject.org/wiki/Xen_PCI_Passthrough</li>
+<li>https://wiki.archlinux.org/title/PCI_passthrough_via_OVMF</li>
+<li>https://www.qubes-os.org/doc/pci-troubleshooting/</li>
+<li>https://www.qubes-os.org/doc/how-to-use-pci-devices/#additional-attach-options</li>
+<li>https://forum.qubes-os.org/t/sys-net-not-starting-because-it-is-unable-to-reset-pci-device/15056</li>
+<li>https://forum.qubes-os.org/t/configure-strict-reset-for-pci-devices/13568</li>
+<li>https://forum.qubes-os.org/t/installing-qubes-unable-to-reset-pci-device/14943</li>
 </ol>

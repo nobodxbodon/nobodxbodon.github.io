@@ -1,8 +1,8 @@
-<h2>原文：<a href="https://jerkwin.github.io/2016/06/29/GROMACS电场的使用">GROMACS电场的使用</a></h2>
+<h2>原文：<a href="https://jerkwin.github.io/2016/06/29/GROMACS%E7%94%B5%E5%9C%BA%E7%9A%84%E4%BD%BF%E7%94%A8">GROMACS电场的使用</a></h2>
 <hr/>
 <p>layout: post
- title: GROMACS电场的使用
- categories:</p>
+title: GROMACS电场的使用
+categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -15,7 +15,8 @@ math: true</li>
 </ul>
 <p>GROMACS源代码中有关电场的代码至少可追溯至3.3版本, 但由于低版本手册中没有提及, 所以很多人以为GROMACS是不支持电场的. 在GROMACS 5.x版本的手册中虽然提到了电场的选项, 但仍语焉不详, 且说明与实际代码实现不一致, 导致很多误解. 在这里, 我根据网上查阅到的资料, 以及源代码和实际测试, 对GROMACS的电场选项说明一下. 使用的GROMACS版本为5.1.2.</p>
 <h2>手册7.3.26中电场选项的说明</h2>
-<blockquote><ul>
+<blockquote>
+<ul>
 <li><code>E-x</code>; <code>E-y</code>; <code>E-z</code>:</li>
 </ul>
 <p>如果你想在某个方向上使用电场, 在适当的E-*后输入3个数字. 第一个数字为余弦的数目, 因为只实现了单个余弦项(频率为0), 所以输入1即可; 第二个数字: 电场强度, 以V/nm为单位; 第三个数字: 余弦的相位, 你可以在这里输入任何数字, 因为频率为零的余弦没有相位.</p>
@@ -23,7 +24,8 @@ math: true</li>
 <p><strong>补充说明</strong></p>
 <p>实际上, 这几个选项在源码中称为电场的空间部分, 也就是电场不随时间变化的部分, 即用以设定电场强度. 这里你也可以使用多个余弦项, 每个余弦项指定两个参数, 强度大小和相位. 但正如上面所说, 代码中只实现了使用一个余弦项的功能, 所以即便指定了多个余弦项, 也只有第一个起作用, 其他被忽略. 另外, 只有设定的电场强度有意义, 相位参数没有在代码中使用, 所有随意给个数字即可.</p>
 <p>例如, 你可以使用两个余弦项, 那就指定<code>E-x = 2 第一项电场强度 任意数字 第二项电场强度 任意数字</code>, 但效果与<code>E-x = 1 电场强度 任意数字</code>是一样的. 还要注意, 第一个数字必须写为整数, 不能带小数点, 写成<code>1.0</code>这种会出问题.</p>
-<blockquote><ul>
+<blockquote>
+<ul>
 <li><code>E-xt</code>; <code>E-yt</code>; <code>E-zt</code>:</li>
 </ul>
 <p>使用这些选项你可以设置一个脉冲交变电场. 这个交变电场的形式为高斯脉冲:</p>
@@ -42,7 +44,7 @@ math: true</li>
 <p>使用余弦电场时, <code>Ex-t</code>等选项的第一个参数不为<code>3</code>即可, 但仍然只有第一项起作用, 所以使用<code>1 omega 任意数字</code>即可.</p>
 <h2>源代码中的电场部分</h2>
 <p>GROMACS中电场的实现代码位于<code>.\gromacs-5.1.2\src\gromacs\mdlib\sim_util.cpp</code>的<code>calc_f_el</code>函数,</p>
-&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;c&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;c&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
  2
  3
  4
@@ -130,54 +132,54 @@ math: true</li>
 &lt;span style="color: #008800; font-style: italic"&gt; * Solution: implement a self-consistent electric field into PME.&lt;/span&gt;
 &lt;span style="color: #008800; font-style: italic"&gt; */&lt;/span&gt;
 &lt;span style="color: #AA22FF; font-weight: bold"&gt;static&lt;/span&gt; &lt;span style="color: #00BB00; font-weight: bold"&gt;void&lt;/span&gt; &lt;span style="color: #00A000"&gt;calc_f_el&lt;/span&gt;(&lt;span style="color: #00BB00; font-weight: bold"&gt;FILE&lt;/span&gt; &lt;span style="color: #666666"&gt;*&lt;/span&gt;fp, &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;  start, &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt; homenr,
-                      real charge[], rvec f[],
-                      t_cosines Ex[], t_cosines Et[], &lt;span style="color: #00BB00; font-weight: bold"&gt;double&lt;/span&gt; t)
+					  real charge[], rvec f[],
+					  t_cosines Ex[], t_cosines Et[], &lt;span style="color: #00BB00; font-weight: bold"&gt;double&lt;/span&gt; t)
 {
-    rvec Ext;
-    real t0;
-    &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;  i, m;
-
-    &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (m &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;; (m &lt;span style="color: #666666"&gt;&lt;&lt;/span&gt; DIM); m&lt;span style="color: #666666"&gt;++&lt;/span&gt;)
-    {
-        &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Et[m].n &lt;span style="color: #666666"&gt;&gt;&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;)
-        {
-            &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Et[m].n &lt;span style="color: #666666"&gt;==&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt;)
-            {
-                t0     &lt;span style="color: #666666"&gt;=&lt;/span&gt; Et[m].a[&lt;span style="color: #666666"&gt;1&lt;/span&gt;];
-                Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; cos(Et[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;(t&lt;span style="color: #666666"&gt;-&lt;/span&gt;t0))&lt;span style="color: #666666"&gt;*&lt;/span&gt;exp(&lt;span style="color: #666666"&gt;-&lt;/span&gt;sqr(t&lt;span style="color: #666666"&gt;-&lt;/span&gt;t0)&lt;span style="color: #666666"&gt;/&lt;/span&gt;(&lt;span style="color: #666666"&gt;2.0*&lt;/span&gt;sqr(Et[m].a[&lt;span style="color: #666666"&gt;2&lt;/span&gt;])));
-            }
-            &lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
-            {
-                Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; cos(Et[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;t);
-            }
-        }
-        &lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
-        {
-            Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;1.0&lt;/span&gt;;
-        }
-        &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Ex[m].n &lt;span style="color: #666666"&gt;&gt;&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;)
-        {
-            &lt;span style="color: #008800; font-style: italic"&gt;/* Convert the field strength from V/nm to MD-units */&lt;/span&gt;
-            Ext[m] &lt;span style="color: #666666"&gt;*=&lt;/span&gt; Ex[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;FIELDFAC;
-            &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (i &lt;span style="color: #666666"&gt;=&lt;/span&gt; start; (i &lt;span style="color: #666666"&gt;&lt;&lt;/span&gt; start&lt;span style="color: #666666"&gt;+&lt;/span&gt;homenr); i&lt;span style="color: #666666"&gt;++&lt;/span&gt;)
-            {
-                f[i][m] &lt;span style="color: #666666"&gt;+=&lt;/span&gt; charge[i]&lt;span style="color: #666666"&gt;*&lt;/span&gt;Ext[m];
-            }
-        }
-        &lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
-        {
-            Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;;
-        }
-    }
-    &lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (fp &lt;span style="color: #666666"&gt;!=&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;NULL&lt;/span&gt;)
-    {
-        fprintf(fp, &lt;span style="color: #BB4444"&gt;"%10g  %10g  %10g  %10g #FIELD&lt;/span&gt;&lt;span style="color: #BB6622; font-weight: bold"&gt;\n&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"&lt;/span&gt;, t,
-                Ext[XX]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC, Ext[YY]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC, Ext[ZZ]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC);
-    }
+	rvec Ext;
+	real t0;
+	&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;  i, m;</p>
+<pre><code>&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (m &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;; (m &lt;span style="color: #666666"&gt;&amp;lt;&lt;/span&gt; DIM); m&lt;span style="color: #666666"&gt;++&lt;/span&gt;)
+{
+	&lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Et[m].n &lt;span style="color: #666666"&gt;&amp;gt;&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;)
+	{
+		&lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Et[m].n &lt;span style="color: #666666"&gt;==&lt;/span&gt; &lt;span style="color: #666666"&gt;3&lt;/span&gt;)
+		{
+			t0     &lt;span style="color: #666666"&gt;=&lt;/span&gt; Et[m].a[&lt;span style="color: #666666"&gt;1&lt;/span&gt;];
+			Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; cos(Et[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;(t&lt;span style="color: #666666"&gt;-&lt;/span&gt;t0))&lt;span style="color: #666666"&gt;*&lt;/span&gt;exp(&lt;span style="color: #666666"&gt;-&lt;/span&gt;sqr(t&lt;span style="color: #666666"&gt;-&lt;/span&gt;t0)&lt;span style="color: #666666"&gt;/&lt;/span&gt;(&lt;span style="color: #666666"&gt;2.0*&lt;/span&gt;sqr(Et[m].a[&lt;span style="color: #666666"&gt;2&lt;/span&gt;])));
+		}
+		&lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
+		{
+			Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; cos(Et[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;t);
+		}
+	}
+	&lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
+	{
+		Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;1.0&lt;/span&gt;;
+	}
+	&lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (Ex[m].n &lt;span style="color: #666666"&gt;&amp;gt;&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;)
+	{
+		&lt;span style="color: #008800; font-style: italic"&gt;/* Convert the field strength from V/nm to MD-units */&lt;/span&gt;
+		Ext[m] &lt;span style="color: #666666"&gt;*=&lt;/span&gt; Ex[m].a[&lt;span style="color: #666666"&gt;0&lt;/span&gt;]&lt;span style="color: #666666"&gt;*&lt;/span&gt;FIELDFAC;
+		&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; (i &lt;span style="color: #666666"&gt;=&lt;/span&gt; start; (i &lt;span style="color: #666666"&gt;&amp;lt;&lt;/span&gt; start&lt;span style="color: #666666"&gt;+&lt;/span&gt;homenr); i&lt;span style="color: #666666"&gt;++&lt;/span&gt;)
+		{
+			f[i][m] &lt;span style="color: #666666"&gt;+=&lt;/span&gt; charge[i]&lt;span style="color: #666666"&gt;*&lt;/span&gt;Ext[m];
+		}
+	}
+	&lt;span style="color: #AA22FF; font-weight: bold"&gt;else&lt;/span&gt;
+	{
+		Ext[m] &lt;span style="color: #666666"&gt;=&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;;
+	}
 }
-&lt;/pre&gt;&lt;/div&gt;
-&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>可以看到, 函数<code>calc_f_el</code>中传入的<code>Ex[]</code>和<code>Et[]</code>的数据类型都是<code>t_cosines</code>. 这种数据类型的定义于<code>.\gromacs-5.1.2\src\gromacs\legacyheaders\types\inputrec.h</code>:</p>
-&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;c&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;if&lt;/span&gt; (fp &lt;span style="color: #666666"&gt;!=&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;NULL&lt;/span&gt;)
+{
+	fprintf(fp, &lt;span style="color: #BB4444"&gt;&amp;quot;%10g  %10g  %10g  %10g #FIELD&lt;/span&gt;&lt;span style="color: #BB6622; font-weight: bold"&gt;\n&lt;/span&gt;&lt;span style="color: #BB4444"&gt;&amp;quot;&lt;/span&gt;, t,
+			Ext[XX]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC, Ext[YY]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC, Ext[ZZ]&lt;span style="color: #666666"&gt;/&lt;/span&gt;FIELDFAC);
+}</code></pre>
+<p>}
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</p>
+<p>可以看到, 函数<code>calc_f_el</code>中传入的<code>Ex[]</code>和<code>Et[]</code>的数据类型都是<code>t_cosines</code>. 这种数据类型的定义于<code>.\gromacs-5.1.2\src\gromacs\legacyheaders\types\inputrec.h</code>:</p>
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;c&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height: 125%"&gt; 1
  2
  3
  4
@@ -189,19 +191,19 @@ math: true</li>
 10
 11
 12&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight" style="background: #f8f8f8"&gt;&lt;pre style="line-height: 125%"&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;typedef&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;struct&lt;/span&gt; {
-    &lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;   n;    &lt;span style="color: #008800; font-style: italic"&gt;/* Number of terms              */&lt;/span&gt;
-    real &lt;span style="color: #666666"&gt;*&lt;/span&gt;a;    &lt;span style="color: #008800; font-style: italic"&gt;/* Coeffients (V / nm )                     */&lt;/span&gt;
-    real &lt;span style="color: #666666"&gt;*&lt;/span&gt;phi;  &lt;span style="color: #008800; font-style: italic"&gt;/* Phase angles                    */&lt;/span&gt;
-} t_cosines;
-
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;typedef&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;struct&lt;/span&gt; {
-    real E0;            &lt;span style="color: #008800; font-style: italic"&gt;/* Field strength (V/nm)                        */&lt;/span&gt;
-    real omega;         &lt;span style="color: #008800; font-style: italic"&gt;/* Frequency (1/ps)                             */&lt;/span&gt;
-    real t0;            &lt;span style="color: #008800; font-style: italic"&gt;/* Centre of the Gaussian pulse (ps)            */&lt;/span&gt;
-    real sigma;         &lt;span style="color: #008800; font-style: italic"&gt;/* Width of the Gaussian pulse (FWHM) (ps)      */&lt;/span&gt;
+	&lt;span style="color: #00BB00; font-weight: bold"&gt;int&lt;/span&gt;   n;    &lt;span style="color: #008800; font-style: italic"&gt;/* Number of terms				*/&lt;/span&gt;
+	real &lt;span style="color: #666666"&gt;*&lt;/span&gt;a;    &lt;span style="color: #008800; font-style: italic"&gt;/* Coeffients (V / nm )                     */&lt;/span&gt;
+	real &lt;span style="color: #666666"&gt;*&lt;/span&gt;phi;  &lt;span style="color: #008800; font-style: italic"&gt;/* Phase angles					*/&lt;/span&gt;
+} t_cosines;</p>
+<p>&lt;span style="color: #AA22FF; font-weight: bold"&gt;typedef&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;struct&lt;/span&gt; {
+real E0;            &lt;span style="color: #008800; font-style: italic"&gt;/* Field strength (V/nm)                        <em>/&lt;/span&gt;
+real omega;         &lt;span style="color: #008800; font-style: italic"&gt;/</em> Frequency (1/ps)                             <em>/&lt;/span&gt;
+real t0;            &lt;span style="color: #008800; font-style: italic"&gt;/</em> Centre of the Gaussian pulse (ps)            <em>/&lt;/span&gt;
+real sigma;         &lt;span style="color: #008800; font-style: italic"&gt;/</em> Width of the Gaussian pulse (FWHM) (ps)      */&lt;/span&gt;
 } t_efield;
-&lt;/pre&gt;&lt;/div&gt;
-&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>在这里我们还可以看到, 虽然定义了高斯脉冲电场使用的数据类型<code>_efield</code>, 但它没有传入函数<code>calc_f_el</code>, 所以没有办法直接使用.</p>
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</p>
+<p>在这里我们还可以看到, 虽然定义了高斯脉冲电场使用的数据类型<code>_efield</code>, 但它没有传入函数<code>calc_f_el</code>, 所以没有办法直接使用.</p>
 <p>如果你需要实现特殊的电场形式, 修改<code>calc_f_el</code>函数即可, 且可以像目前实现高斯脉冲电场的方法一样, 重用传入的参数.</p>
 <h2>&lt;code&gt;mdrun&lt;/code&gt;时查看电场信息</h2>
 <p><code>mdrun</code>运行模拟后, 输出的<code>.log</code>文件中会给出设定的电场信息, 类似于</p>
@@ -220,22 +222,19 @@ E-yt:
 E-z:
    n = 0
 E-zt:
-   n = 0
-</code></pre>
+   n = 0</code></pre>
 <p>你可以从这里看到自己设定的值是否正确读入了.</p>
 <p><code>mdrun</code>运行时有一个选项<code>-field</code>, 可以指定一个<code>.xvg</code>文件, 里面记录每个时间步的电场大小, 默认输出文件为<code>field.xvg</code>. 利用这个文件你可以查看所加的电场是否正确.</p>
 <h3>余弦电场</h3>
 <p>在<code>.mdp</code>中的设置强度为10 V/nm, 频率为100 ps&lt;sup&gt;-1&lt;/sup&gt;(即100 THz)的余弦电场</p>
 <pre><code>E-x              = 1 10 0
-E-xt             = 1 100 0
-</code></pre>
+E-xt             = 1 100 0</code></pre>
 <p>GROMACS输出的数据与设置完全一致</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/GMXfld-1.png"/></p>
 <h3>高斯脉冲电场</h3>
 <p>在<code>.mdp</code>中的设置强度为10 V/nm, 频率为100 ps&lt;sup&gt;-1&lt;/sup&gt;(即100 THz), 脉冲中心0.1 ps, 方差0.01 ps的高斯脉冲电场</p>
 <pre><code>E-x              = 1 10 0
-E-xt             = 3 100 0 .1 0 .01 0
-</code></pre>
+E-xt             = 3 100 0 .1 0 .01 0</code></pre>
 <p>GROMACS输出的数据与设置完全一致</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/GMXfld-2.png"/></p>
 <h2>使用电场的示例</h2>

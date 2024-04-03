@@ -1,33 +1,29 @@
-<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/软件构架设计/用户态DMA的问题.rst">用户态DMA的问题</a></h2>
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E8%BD%AF%E4%BB%B6%E6%9E%84%E6%9E%B6%E8%AE%BE%E8%AE%A1/%E7%94%A8%E6%88%B7%E6%80%81DMA%E7%9A%84%E9%97%AE%E9%A2%98.rst">用户态DMA的问题</a></h2>
 <p>.. Kenneth Lee 版权所有 2017-2020</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.0</p>
 <p>用户态DMA的问题</p>
 <hr/>
 <p>Linux的安全模型分两层，用户和内核，用户是不可信任的，内核是可信任的。像这样：</p>
-<pre><code>    .. figure:: _static/OS隔间1.png
-</code></pre>
+<pre><code>    .. figure:: _static/OS隔间1.png</code></pre>
 <p>这种分层模型其实已经比较落后了（但也比较实用），现在更推崇的模式是分隔（而不是
 分层），一个身份访问一个隔间，这样不会导致“只要你获得root权限，就可以对系统为所
 欲为”。</p>
-<pre><code>    .. figure:: _static/OS隔间2.png
-</code></pre>
+<pre><code>    .. figure:: _static/OS隔间2.png</code></pre>
 <p>但分隔技术灵活性太高，不容易有共识，所以到现在为止，这种方法也不成熟。只是作为
 分层技术的补充。</p>
 <p>隔间的一大技术是微内核化。这里“微内核”的含义和它的最初定义不完全一致。更多的是
 指把内核的功能移到用户态，让每个用户态的程序使用独立的权限。这样，虽然内核仍具
 有最高的权限。但因为大部分操作不需要在内核中进行，我们就可以把权限控制聚集在一
 个或者一组进程的内部了。</p>
-<pre><code>    .. figure:: _static/OS隔间3.png
-</code></pre>
+<pre><code>    .. figure:: _static/OS隔间3.png</code></pre>
 <p>用户态驱动因此成为其中一个需求了。通过用户态驱动，我们可以把一个设备（或者这个
 设备的其中一部分）分配给一个进程，这样，对这个设备的控制就可以完全限制在这个进
 程的内部了。</p>
 <p>用户态进程也可以在一定程度上提高设备访问的效率。想象一下，原来你需要把用户空间
 的内存拷贝到内核，然后再从内核拷贝到设备上，现在让你直接从用户空间拷贝的设备上
 ，这个效率岂不是可以大大提高？：</p>
-<pre><code>    .. figure:: _static/OS隔间4.png
-</code></pre>
+<pre><code>    .. figure:: _static/OS隔间4.png</code></pre>
 <p>本文要讨论的问题是：怎么才能从用户一侧对设备发起DMA？</p>
 <p>所谓DMA，本质上就是设备访问内存。让设备访问内存，我们有如下要求：</p>
 <ol>
@@ -87,8 +83,7 @@ Linux做成一个专用系统了。按Linux的设计理念，专用系统你在�
      * or similar operation cannot guarantee anything stronger anyway because
      * locks can't be held over the syscall boundary.
      *...
-    */
-</code></pre>
+    */</code></pre>
 <p>请注意这个函数的使用要求，他必须在mmap_sem锁住的范围内使用，换句话说，你必须做
 一个系统调用，然后在这个系统锁住mmap_sem，然后才调用gup，接着做你的DMA，并且，
 必须等待这个DMA完成，然后你通过put_page()释放gup，并对mmap_sem解锁，然后才能从
@@ -96,7 +91,7 @@ Linux做成一个专用系统了。按Linux的设计理念，专用系统你在�
 <p>gup限制这么大，核心原因在于，gup只是把page pin住了，可没有把vma pin住。参考下面
 这幅图：</p>
 <pre><code>    .. figure:: _static/OS隔间5.png
-</code></pre>
+    </code></pre>
 <p>gup做了两个动作，第一是分配了一个page（如果没有的话）给进程，让进程的vma指向这
 个page（这会导致这个页的索引加1）。第二是gup自己也给这个page的索引加1。这样，这
 个page一般情况下就释放不了了，设备可以很安全地对这个内存进行读写。</p>
@@ -105,8 +100,7 @@ Linux做成一个专用系统了。按Linux的设计理念，专用系统你在�
 会引起释放，因为还是gup本身的索引），同时vma的指针没了。等你设备完成操作了，通
 知进程可以使用物理页中的数据，进程再访问这个虚拟地址（会使用这个vma），这时发生
 缺页，系统会重新分配一个页给这进程，你就根本拿不到设备返回的数据了：</p>
-<pre><code>    .. figure:: _static/OS隔间6.png
-</code></pre>
+<pre><code>    .. figure:: _static/OS隔间6.png</code></pre>
 <p>所以，正如我在前面一个文档（Linux Socket 0拷贝特性）中说的，如果你只是发送，这
 是没有问题的，因为你的用户进程根本不需要访问原来的页，但如果你还要收，这就有问
 题了。</p>
@@ -136,8 +130,7 @@ VM_PINNED这个特性叫得也不够狠，痛的人少，在这种讨论下是�
 <pre><code>    3   2464  mm/mmap.c &lt;&lt;unmap_region&gt;&gt;
               unmap_vmas(&amp;tlb, vma, start, end);
     4   2963  mm/mmap.c &lt;&lt;exit_mmap&gt;&gt;
-              unmap_vmas(&amp;tlb, vma, 0, -1);
-</code></pre>
+              unmap_vmas(&amp;tlb, vma, 0, -1);</code></pre>
 <p>两个都是主动操作。</p>
 <p>另一个用户是omm_killer，这个连进程都死了，也不是我们需要担心的。而且，这个
 Killer不能处理VM_SHARED页，所以如果用VM_SHARED，这样我们就会更安全了。但要注意

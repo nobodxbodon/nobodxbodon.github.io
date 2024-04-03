@@ -1,12 +1,11 @@
-<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/软件构架设计/qemu_PCIe总线结构.rst">qemu_PCIe总线结构</a></h2>
+<h2>原文：<a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E8%BD%AF%E4%BB%B6%E6%9E%84%E6%9E%B6%E8%AE%BE%E8%AE%A1/qemu_PCIe%E6%80%BB%E7%BA%BF%E7%BB%93%E6%9E%84.rst">qemu_PCIe总线结构</a></h2>
 <p>.. Kenneth Lee 版权所有 2020</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.0</p>
 <p>qemu PCIe总线结构</p>
 <hr/>
 <p>本文是写这个章节的一些边角料：</p>
-<pre><code>source/认识鲲鹏920：一个服务器SoC/设备和设备总线.rst · Kenneth-Lee-2012/从鲲鹏920了解现代服务器实现和应用_公开 - 码云 Gitee.com
-</code></pre>
+<pre><code>source/认识鲲鹏920：一个服务器SoC/设备和设备总线.rst · Kenneth-Lee-2012/从鲲鹏920了解现代服务器实现和应用_公开 - 码云 Gitee.com</code></pre>
 <p>由于没法放到那个文档的主逻辑中，我放在这里。（顺便感慨说一句，你看我在那里写一
 句话，可能我在背后要确认两三天。正经写点东西还是很难的）</p>
 <p>本文用3.1.50源代码版本作为参考。</p>
@@ -14,19 +13,16 @@
 链接）。具体模拟成的样子在具体模拟的那个机器上上定义，比如我在PC上用这个参数启
 动虚拟机：::</p>
 <pre><code>~/work/qemu-run-arm64/qemu/aarch64-softmmu/qemu-system-aarch64 \       
-    -s -cpu cortex-a57 -machine virt \
-    -nographic -smp 2 -m 1024m -kernel arch/arm64/boot/Image \
-    -append "console=ttyAMA0"
-</code></pre>
+	-s -cpu cortex-a57 -machine virt \
+	-nographic -smp 2 -m 1024m -kernel arch/arm64/boot/Image \
+	-append "console=ttyAMA0"</code></pre>
 <p>mainchine是ARM平台virt，它的机器定义在就在hw/arm/virt.c中。所以它会有一个默认的
 PCI结构。默认是这样的：</p>
 <p>那么如果你要在其中插入一个PCIe设备，方法就是用这个参数：::</p>
-<pre><code>-device &lt;dev&gt;[,bus=pcie.0]...
-</code></pre>
+<pre><code>-device &lt;dev&gt;[,bus=pcie.0]...</code></pre>
 <p>不同的dev类型会有不同参数，这个可以看对应设备的详细说明，部分qemu的文档中有，但
 文档不一定同步，你可以通过这样的命令让qemu直接打印出来：::</p>
-<pre><code>    -device help
-</code></pre>
+<pre><code>    -device help</code></pre>
 <p>不同的设备有不同的属性，这个在源代码中是通过object_property_add()或者在设备
 class里加的，你可以从qemu源代码的hw目录中找，每种设备类型都有类似的定义的，比如
 vfio-pic的定义是这样的：::</p>
@@ -75,12 +71,10 @@ vfio-pic的定义是这样的：::</p>
          * DEFINE_PROP_STRING("vfiogroupfd, VFIOPCIDevice, vfiogroupfd_name),
          */
         DEFINE_PROP_END_OF_LIST(),
-    };
-</code></pre>
+    };</code></pre>
 <p>但这个还是很烦，因为部分参数是从父类继承过来的。更好的办法和前面用help参数一样
 ，可以这样让它打印：::</p>
-<pre><code>    -device vfio-pic,?
-</code></pre>
+<pre><code>    -device vfio-pic,?</code></pre>
 <p>缺点是通常没有解释，如果你需要知道详细的意思，还是需要看代码。</p>
 <p>下面给出一些比较常用的参数：</p>
 <ul>
@@ -105,12 +99,10 @@ vfio-pic的定义是这样的：::</p>
             -netdev type=user,id=net1 \
             -device virtio-net-pci,bus=pcie.0,netdev=net0,addr=6.0 \
             -device virtio-net-pci,bus=pcie.0,netdev=net1,addr=7.0 \
-            -append "console=ttyAMA0"
-</code></pre>
+            -append "console=ttyAMA0"</code></pre>
 <p>-netdev创建了两个本地设备，-device用这两个本地设备制造了两张网卡，我们给定了
 addr，整个拓扑就是这样的：</p>
-<pre><code>    .. figure:: _static/pcie_topo1.jpg
-</code></pre>
+<pre><code>    .. figure:: _static/pcie_topo1.jpg</code></pre>
 <p>我们再增加两条根桥和一个virtio网卡：::</p>
 <pre><code>    ~/work/qemu-run-arm64/qemu/aarch64-softmmu/qemu-system-aarch64 \
             -s -cpu cortex-a57 -machine virt \
@@ -123,11 +115,9 @@ addr，整个拓扑就是这样的：</p>
             -device virtio-net-pci,bus=pcie.0,netdev=net0,addr=5.0 \
             -device virtio-net-pci,bus=pcie.1,netdev=net1,addr=0.0 \
             -device virtio-net-pci,bus=pcie.2,netdev=net2,addr=0.0 \
-            -append "console=ttyAMA0"
-</code></pre>
+            -append "console=ttyAMA0"</code></pre>
 <p>整个系统变成这样：</p>
-<pre><code>    .. figure:: _static/pcie_topo2.jpg
-</code></pre>
+<pre><code>    .. figure:: _static/pcie_topo2.jpg</code></pre>
 <p>这里这个chassis不能省略，qemu里现在没有自动分配这个id，你不给它就直接互相冲突，
 保证你至少给定chassis或者slot就可以规避（保证这个组合对每个设备都是唯一的）。我
 感觉这个设计是多余的，也许我体会不够深。</p>
