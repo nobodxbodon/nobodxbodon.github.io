@@ -1,0 +1,61 @@
+<h2>原文：<a href="http://zhangwenli.com/blog/2014/07/15/jekyll-related-posts-without-plugin">Jekyll Related Posts without Plugin</a></h2>
+<hr/>
+<p>title: Jekyll Related Posts without Plugin
+time: 2014.07.15 22:57:38
+layout: post
+tags:</p>
+<ul>
+<li>Jekyll</li>
+<li>Liquid</li>
+<li>GitHub</li>
+<li>Ruby
+excerpt: This post introduces how to implement <em>related posts</em> function with Jekyll. Since GitHub disables plugin for security reasons, plugins like &lt;a href="https://github.com/LawrenceWoodman/related_posts-jekyll_plugin" targe="_blank"&gt;LawrenceWoodman / related_posts-jekyll_plugin&lt;/a&gt; cannot be used. Default <code>site.related_posts</code> may return recent posts when there aren't enough posts sharing the same tags with current post.</li>
+</ul>
+<hr/>
+<blockquote>
+<h4>What will you learn in this post?</h4>
+</blockquote>
+<blockquote>
+<p>This post introduces how to implement <em>related posts</em> function with Jekyll. Since GitHub disables plugin for security reasons, plugins like &lt;a href="https://github.com/LawrenceWoodman/related_posts-jekyll_plugin" targe="_blank"&gt;LawrenceWoodman / related_posts-jekyll_plugin&lt;/a&gt; cannot be used. Default <code>site.related_posts</code> may return recent posts when there aren't enough posts sharing the same tags with current post.</p>
+</blockquote>
+<h1>Jekyll's Native Support</h1>
+<p>Jekyll has native support for related posts function, which can be used with Liquid as <code>site.related_posts</code>.</p>
+<p>However, as we can see from its &lt;a href="https://github.com/jekyll/jekyll/blob/df8458275de4dc3d0f9b92c5247ff20832d1cc8e/lib/jekyll/related_posts.rb" target="_blank"&gt;source code&lt;/a&gt;, it lists posts with mutual tags without ordering by how many mutual tags they share. In this way, if <code>A</code> post is tagged with <code>a</code>, <code>b</code> and <code>c</code>, <code>B</code> post is tagged with <code>a</code> and <code>C</code> post is tagged with <code>a</code> and <code>c</code>, <code>A</code>'s related posts may contain only <code>B</code> but not <code>C</code> if you set the limit to be <code>1</code>. Apparently, this doesn't make sense.</p>
+<h1>Using Plugin</h1>
+<p>&lt;a href="https://github.com/LawrenceWoodman/related_posts-jekyll_plugin" targe="_blank"&gt;LawrenceWoodman / related_posts-jekyll_plugin&lt;/a&gt; is an easy-to-use Jekyll plugin to implement <em>related posts</em> feature.</p>
+<p>It solves the above problem by calculating how many mutual tags they share and sort by it, as we can see from the &lt;a href="https://github.com/LawrenceWoodman/related_posts-jekyll_plugin/blob/master/_plugins/related_posts.rb" target="_blank"&gt;source code&lt;/a&gt; below.</p>
+<p>{% highlight ruby %}
+def related_posts(posts)
+return [] unless posts.size &gt; 1
+highest_freq = Jekyll::Post.tag_freq(posts).values.max
+related_scores = Hash.new(0)
+posts.each do |post|
+post.tags.each do |tag|
+if self.tags.include?(tag) &amp;&amp; post != self
+cat_freq = Jekyll::Post.tag_freq(posts)[tag]
+related_scores[post] += (1+highest_freq-cat_freq)
+end
+end
+end</p>
+<pre><code>Jekyll::Post.sort_related_posts(related_scores)</code></pre>
+<p>end
+{% endhighlight %}</p>
+<p>But just as the default Jekyll behaves, it returns recent posts if there aren't enough posts sharing the same tags. I think this doesn't make sense. After all, why should a post called <code>How to become a good programmer</code> be related to <code>I was bitten by a bug yesterday</code> just because there are no other related posts?</p>
+<p>So, I improved it with the following code and &lt;a href="https://github.com/Ovilia/related_posts-jekyll_plugin/commit/4562de1b048a5dbce5f533d343be30254427160e" target="_blank"&gt;pulled a request&lt;/a&gt;.</p>
+<p>{% highlight ruby %}
+related_scores.each do |post, score|
+if score &lt; 0
+related_scores.delete(post)
+end
+end
+{% endhighlight %}</p>
+<p>I have almost no experience with Ruby, but this isn't too hard for me.</p>
+<h1>Without Plugin</h1>
+<p>After I've done with the previous improvement and pushed my blog code to GitHub with joy, I found it didn't word! :scream:</p>
+<p>I thought it was the cache, but it still doesn't change when I tried to clear the cache and even visit it using a different browser and a different device.</p>
+<p>Finally, I realized that this is caused by GitHub's disabling plugins for security concerns. I knew this before, but didn't know that this is the reason I was looking for.</p>
+<p>Then, I improved the default one and return only those with mutual tags. It still cost me much time, since the syntax of Liquid is so strange! :weary:</p>
+<p>&lt;script src="https://gist.github.com/Ovilia/ea95e762544d84f00281.js"&gt;&lt;/script&gt;</p>
+<p>You can't use <code>!abc</code> to check if <code>abc</code> is <code>false</code>. Instead, you should use <code>abc == false</code>.</p>
+<p>You can't use <code>abc++</code> or even <code>abc = abc + 1</code> to increment a variable. Instead, you should use something as strange as {% capture abc %}{{ abc }}*{% endcapture %} appending a character <code>*</code> at a time, and then check <code>abc.size</code> to get its length as a string and this is how you increment a variable! :joy: But, believe me, this is not the strangest syntax when you use Liquid.</p>
+<p>Who can tell me why this syntax is so strange!</p>

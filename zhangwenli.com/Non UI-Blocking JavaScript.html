@@ -1,0 +1,76 @@
+<h2>原文：<a href="http://zhangwenli.com/blog/2016/07/27/non-ui-blocking-javascript">Non UI-Blocking JavaScript</a></h2>
+<hr/>
+<p>title: Non UI-Blocking JavaScript
+time: 2016.07.27 13:44:48
+layout: post
+tags:</p>
+<ul>
+<li>JavaScript
+excerpt: JavaScript often behaves like a multi-thread language with it's event-based nature. But it's not. In this post, I'm talking about how to prevent blocking UI when doing some heavy work in JavaScript.</li>
+</ul>
+<hr/>
+<p>JavaScript often behaves like a multi-thread language with it's event-based nature.</p>
+<p>But it's not.</p>
+<p>John Resig, author of <em>Secrets of JavaScript Ninja</em>, explained <a href="http://ejohn.org/blog/how-javascript-timers-work/">how timers work in JavaScript</a>.</p>
+<p>Of course, you may use <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers">Web Works</a> to do the labor. But it's <a href="http://caniuse.com/#search=worker">support situation</a> is quite a drawback.</p>
+<p>In this post, I'm talking about how to prevent blocking UI when doing some heavy work in JavaScript.</p>
+<h1>A Naïve Version</h1>
+<p>We have some job that cannot be paused, called <code>doHeavyJob</code> in this case. During the job, however, we want to know how many loops have be run. So we update the content of a log <code>&lt;div&gt;</code> in each loop, after a turn of <code>doHeavyJob</code> is done.</p>
+<p>This is what may probably come to our mind by intuition.</p>
+<p>{% highlight html %}</p>
+<p>&lt;div id="log"&gt;&lt;/div&gt;
+{% endhighlight %}</p>
+<p>{% highlight js %}
+var logPanel = document.getElementById('log');
+function log(txt) {
+logPanel.innerHTML += txt + ', ';
+console.log(txt);
+}</p>
+<p>for (var i = 0; i &lt; 100; ++i) {
+doHeavyJob();
+log(i); // update UI in each loop
+}</p>
+<p>function doHeavyJob() {
+for (var j = 0; j &lt; 10000000; ++j) {
+Math.random();
+}
+}
+{% endhighlight %}</p>
+<p>If you open console, you should find log information is printed with each loop of <code>i</code>, but DOM is not updated until all 100 loops are finished.</p>
+<p>Since JavaScript is single-thread, UI shares the same thread with logic. So how should we tell the logic to stop some time for UI to update?</p>
+<h1>An Attempt with <code>setTimeout</code></h1>
+<p>With <code>setTimeout(func, 0)</code>, we can tell JavaScript to execute a function immediately once it's free from previous work.</p>
+<p>Guess how this may work?</p>
+<p>{% highlight js %}
+for (var i = 0; i &lt; 100; ++i) {
+doHeavyJob();</p>
+<pre><code>(function (i) {
+    setTimeout(function() {
+        log(i);
+    }, 0);
+})(i);</code></pre>
+<p>}
+{% endhighlight %}</p>
+<p>Hopefully, you won't get too surprised to see the <code>(function (i) { ... })(i)</code> part. It's a <a href="http://benalman.com/news/2010/11/immediately-invoked-function-expression/">Immediately-Invoked Function Expression (IIFE)</a> to make sure <code>i</code> remains expected after the <code>for</code> loop ends.</p>
+<p>Anyway, this attempt expects <code>setTimeout</code> to <em>create a new thread</em> to update DOM, and keeps <code>doHeavyJob</code> running alongside.</p>
+<p>But as we talked above, <strong>there won't be a new thread after all</strong>.</p>
+<p>What happens here is that, <code>setTimeout</code> is called in each loop, and <code>function() { log(i); }</code> is pushed into a queue to be executed once it's free.</p>
+<p>And when will it be free?</p>
+<p>The answer is, after 100 loops of <code>doHeavyJob</code>. So, DOM is updated only after that.</p>
+<h1>Another Attempt with <code>setTimeout</code></h1>
+<p>This time, we put <code>doHeavyJob</code> into another <code>setTimeout</code>.</p>
+<p>{% highlight js %}
+for (var i = 0; i &lt; 100; ++i) {
+setTimeout(function() {
+doHeavyJob();
+}, 0);</p>
+<pre><code>(function (i) {
+    setTimeout(function() {
+        log(i);
+    }, 0);
+})(i);</code></pre>
+<p>}
+{% endhighlight %}</p>
+<p>It works in a way that a group of <code>i</code>'s are printed at the same time after interval. This is because the <code>setTimeout</code> of <code>doHeavyJob</code> gives chances for others to execute, which includes DOM updating.</p>
+<h1>More Aggressively?</h1>
+<p>For some cases, we want to know more than a rough impression of progress bar. In this case, you may add a <code>pause</code> and <code>resume</code> function for <code>heavyJob</code> so as to break the elephant into pieces. And there should be a consideration over the balance between the accuracy of progress and the overall efficiency.</p>

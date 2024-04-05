@@ -1,0 +1,196 @@
+<h2>原文：<a href="http://zhangwenli.com/blog/2017/08/29/echarts-with-ionic">使用 ECharts 与 ionic 创建原生应用</a></h2>
+<hr/>
+<p>title: 使用 ECharts 与 ionic 创建原生应用
+time: 2017.08.29 18:48:08
+layout: post
+tags:</p>
+<ul>
+<li>中文</li>
+<li>ECharts</li>
+<li>TypeScript</li>
+<li>JavaScript</li>
+<li>ionic</li>
+<li>教程
+excerpt: 在这个教程中，我们将使用 ionic 创建原生应用，并用 ECharts 创建饼图和水球图。ionic 项目开发语言是 TypeScript，而 ECharts 的官方版本是基于 JavaScript 的，本教程将带你轻松实现在 TypeScript 中创建 ECharts 图表。</li>
+</ul>
+<hr/>
+<p>在这个教程中，我们将使用 <a href="http://ionicframework.com/">ionic</a> 创建原生应用，并用 <a href="http://echarts.baidu.com">ECharts</a> 创建饼图和水球图。ionic 项目开发语言是 TypeScript，而 ECharts 的官方版本是基于 JavaScript 的，本教程将带你轻松实现在 TypeScript 中创建 ECharts 图表。</p>
+<p>最终，我们将实现这样的效果：</p>
+<p>&lt;img class="single-img" src="{{ site.url }}/img/post/2017-08-29-echarts-with-ionic-bottle.gif" alt="运行结果"&gt;</p>
+<p>这篇教程将会教你：</p>
+<ul>
+<li>安装 ionic</li>
+<li>在 TypeScript 中使用 ECharts</li>
+<li>在 ionic 项目中创建 ECharts 图表</li>
+<li>在 ionic 项目中创建 ECharts 水球图</li>
+</ul>
+<p>它不会教你：</p>
+<ul>
+<li><a href="http://echarts.baidu.com">ECharts</a> 是什么</li>
+<li><a href="http://ionicframework.com/">ionic</a> 是什么</li>
+<li><a href="https://angular.io/">Angular</a> 是什么</li>
+<li><a href="https://www.typescriptlang.org/">TypeScript</a> 是什么</li>
+</ul>
+<h1>新建 ionic 项目</h1>
+<p>ionic 官网有详细的<a href="http://ionicframework.com/docs/intro/installation/">安装教程</a>，这里我们简单介绍一下我们的操作步骤。</p>
+<p>首先，安装全局的 ionic 和 cordova npm 包，前者是用来在命令行操作 ionic 的，后者是提供从网页到原生应用的底层支持的库。</p>
+<pre><code class="language-sh">$ npm install -g ionic cordova
+</code></pre>
+<p>然后就可以创建项目了，我们的当前操作目录在 <code>~/Workspace</code>，想创建一个名为 <code>pretty-charts</code> 的项目，执行：</p>
+<pre><code class="language-sh">$ ionic start pretty-charts
+</code></pre>
+<p>这样就会自动下载项目的模板，并且一键安装各种 npm 包之类的。是不是超简单的！</p>
+<p>现在，我们可以 <code>cd</code> 到 <code>pretty-charts</code> 目录下运行项目。</p>
+<pre><code class="language-sh">$ cd pretty-charts
+$ ionic serve
+</code></pre>
+<p><code>ionic serve</code> 会编译你的代码（什么？你还没写？没关系，模板都帮你写好了），并且起一个本地的服务器，自动打开一个浏览器运行代码。看到的效果类似这样：</p>
+<p>&lt;img class="single-img" src="{{ site.url }}/img/post/2017-08-29-echarts-with-ionic-init.png" alt="初始化项目运行结果"&gt;</p>
+<blockquote>
+<p>目前 ionic 3 的运行需要 Node 6.0+，可以通过 nvm 安装并切换 Node 版本。</p>
+<p>首先运行 <code>node -v</code> 查看 Node 版本，如果不是 6.0+，可以运行 <code>npm i -g nvm; nvm install 6; nvm use 6</code>。</p>
+</blockquote>
+<h1>在 TypeScript 中引入 ECharts</h1>
+<p>之前我有写过一篇教程介绍如何用 typings 1.x 在 TypeScript 中引入 ECharts，想了解原理的可以参考[这篇教程]({{ site.url }}/2016/08/24/using-echarts-with-typescript/)。下面我们使用的方法是基于 typings 2.x 的。</p>
+<p>首先我们安装 typings 库，以及 ECharts：</p>
+<pre><code class="language-sh">npm install typings echarts --global
+</code></pre>
+<p>然后，安装 ECharts 的 TypeScript 定义文件，这个文件来自社区贡献。</p>
+<pre><code class="language-sh">npm install @types/echarts --save
+</code></pre>
+<p>现在，我们可以在 TypeScript 文件中访问 ECharts 库了：</p>
+<pre><code class="language-ts">import * as echarts from 'echarts';
+</code></pre>
+<p>typings 实际上是为 JavaScript 的库提供了一个接口声明的作用，有点类似 C++ 的头文件的意思，但不对其作检查。具体来说，我们刚才下载的文件来自 <a href="https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/echarts/index.d.ts">DefinitelyTyped/types/echarts/index.d.ts</a>，但是这个接口是否和 ECharts 吻合是不会有东西去检查的。</p>
+<p>比如我们在项目的 <code>src/pages/home.ts</code> 中，引入并使用 ECharts，可以发现 <code>echarts</code> 这个变量是正确能访问的，但是如果我们访问 <code>echarts.version</code> 的话，就会编译报错。</p>
+<pre><code class="language-ts">@Component({
+  selector: 'page-home',
+  templateUrl: 'home.html'
+})
+export class HomePage {
+
+  constructor(public navCtrl: NavController) {
+    console.log(echarts); // This is ok
+    console.log(echarts.version); // Compile-time error
+  }
+
+}
+</code></pre>
+<p>这是因为在 typings 定义的文件中，不存在 version 这个变量。而我们安装的当前版本的 ECharts 3.7.0 其实是有这个变量的，因此这是 TypeScript 编译器的误报。</p>
+<p>对于这种情况，我们可以提 Pull Request，或者用这样的方式让 TypeScript 不对 ECharts 做类型检查：</p>
+<pre><code class="language-ts">@Component({
+  selector: 'page-home',
+  templateUrl: 'home.html'
+})
+export class HomePage {
+
+  constructor(public navCtrl: NavController) {
+    const ec = echarts as any;
+    console.log(ec.version); // '3.7.0'
+  }
+
+}
+</code></pre>
+<p>现在，你就可以按一般使用 ECharts 的方法使用它了。</p>
+<h1>初始化图表</h1>
+<p>我们在 <code>home.html</code> 中创建一个 DIV 元素作为图表的容器：</p>
+<pre><code class="language-html">&lt;ion-content&gt;
+  &lt;div id="chart"&gt;&lt;/div&gt;
+&lt;/ion-content&gt;
+</code></pre>
+<p>在 <code>home.scss</code> 中将其 CSS 设为：</p>
+<pre><code class="language-scss">page-home {
+    #chart {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+    }
+}
+</code></pre>
+<p>但是，我们不能在 <code>HomePage</code> 的构造函数中初始化图表，因为这时候页面还没有构建， <code>document.getElementById('chart')</code> 返回的是 <code>null</code>。</p>
+<p>正确的做法是，在 <code>ionViewDidEnter</code> 这个 ionic 特定的函数中初始化图表，它将在进入这个页面后调用。这时候页面中已经有这个 DIV 并且正确的宽高了。整个 <code>home.ts</code> 文件是这样的：</p>
+<pre><code class="language-ts">import { Component } from '@angular/core';
+import * as echarts from 'echarts';
+
+@Component({
+  selector: 'page-home',
+  templateUrl: 'home.html'
+})
+export class HomePage {
+
+  constructor() {
+  }
+
+  ionViewDidEnter() {
+    const ec = echarts as any;
+    const container = document.getElementById('chart');
+    console.log(container.offsetWidth, container.offsetHeight);
+  }
+
+}
+</code></pre>
+<p>现在，我们可以创建一个饼图了：</p>
+<pre><code class="language-ts">const ec = echarts as any;
+const container = document.getElementById('chart');
+
+const chart = ec.init(container);
+chart.setOption({
+    series: {
+        type: 'pie',
+        data: [{
+            name: 'A',
+            value: 10
+        }, {
+            name: 'B',
+            value: 20
+        }, {
+            name: 'C',
+            value: 30
+        }]
+    }
+});
+</code></pre>
+<p>运行结果：</p>
+<p>&lt;img class="single-img" src="{{ site.url }}/img/post/2017-08-29-echarts-with-ionic-pie.png" alt="饼图"&gt;</p>
+<h1>使用水球图</h1>
+<p>ECharts 水球图是作为扩展存在的，因此不在 ECharts 项目中，但是使用起来也是意外地简单呢！</p>
+<p>首先，我们使用 npm 安装：</p>
+<pre><code class="language-sh">npm install --save echarts-liquidfill
+</code></pre>
+<p>代码如下：</p>
+<pre><code class="language-ts">import { Component } from '@angular/core';
+import * as echarts from 'echarts';
+import 'echarts-liquidfill';
+
+@Component({
+  selector: 'page-home',
+  templateUrl: 'home.html'
+})
+export class HomePage {
+
+  constructor() {
+  }
+
+  ionViewDidEnter() {
+    const ec = echarts as any;
+    const container = document.getElementById('chart');
+
+    const chart = ec.init(container);
+    chart.setOption({
+      series: {
+        type: 'liquidFill',
+        data: [0.5, 0.4, 0.3, 0.2]
+      }
+    });
+  }
+
+}
+</code></pre>
+<p>这样就能得到水球图啦！</p>
+<p>&lt;img class="single-img" src="{{ site.url }}/img/post/2017-08-29-echarts-with-ionic-liquidfill.png" alt="水球图"&gt;</p>
+<p>是不是超简单的？</p>
+<p>如果我们再配置一下水球图，就能得到更好玩的结果啦：</p>
+<p>{% capture imgSrc %}{{ site.url }}/img/post/2017-08-29-echarts-with-ionic-bottle.gif{% endcapture %}
+{% include figure.html src=imgSrc caption='图标来自 &lt;a href="https://www.flaticon.com/" title="Flaticon"&gt;www.flaticon.com&lt;/a&gt; 的 &lt;a href="http://www.freepik.com" title="Freepik"&gt;Freepik&lt;/a&gt;，基于 &lt;a href="http://creativecommons.org/licenses/by/3.0/" title="Creative Commons BY 3.0" target="_blank"&gt;CC 3.0 BY&lt;/a&gt; 发布' %}</p>
+<p>这里，我们使用 SVG Path 定义了水球图的形状，并且在 HTML 中加入瓶子的图片，就能得到一个奶瓶啦！完整代码请参见 <a href="https://github.com/Ovilia/echarts-with-ionics/tree/master/src/pages/home">GitHub 项目</a>。</p>
+<p>是不是很酷呢？</p>

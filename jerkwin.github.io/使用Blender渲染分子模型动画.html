@@ -1,0 +1,83 @@
+<h2>原文：<a href="https://jerkwin.github.io/2024/04/03/%E4%BD%BF%E7%94%A8Blender%E6%B8%B2%E6%9F%93%E5%88%86%E5%AD%90%E6%A8%A1%E5%9E%8B%E5%8A%A8%E7%94%BB">使用Blender渲染分子模型动画</a></h2>
+<hr/>
+<p>layout: post
+title: 使用Blender渲染分子模型动画
+categories:</p>
+<ul>
+<li>科
+tags:</li>
+<li>blender</li>
+</ul>
+<hr/>
+<ul>
+<li>2024-04-03 17:13:16</li>
+</ul>
+<p>好几年前, 我发过一篇<a href="https://jerkwin.github.io/2017/12/21/Blender%E5%88%86%E5%AD%90%E6%B8%B2%E6%9F%93%E4%B9%A0%E4%BD%9C/">Blender分子渲染习作</a>, 练习渲染了几个已有的模型, 但没有仔细去追究如何具体建模. 那时候相关的资料还不是很多. 现在几年过去了, 等我再来查看这方面的资料时, 发现已经新增了不少工作:</p>
+<ul>
+<li><a href="https://docs.blender.org/manual/zh-hans/3.4/addons/import_export/mesh_atomic.html">Atomic Blender (PDB/XYZ)插件</a></li>
+<li><a href="https://github.com/patrickfuller/blender-chemicals">blender-chemicals</a>, <a href="https://patrickemmettfuller.com/molecules-in-blender/">说明</a></li>
+<li><a href="https://github.com/beautiful-atoms">Beautiful Atoms</a>, <a href="https://www.zhihu.com/column/c_1253371203613716480">知乎专栏</a></li>
+<li><a href="https://space.bilibili.com/391755761/">Mol3DStruct分子可视化插件</a></li>
+</ul>
+<p>饶是如此, 我仍希望自己能从头学习一下脚本建模方法, 而不是直接使用已有的模型或脚本. 这样做的坏处是自己要费心学习, 好处则在于自己实现了一个大致的框架后, 后面想做什么都比较方便, 不会受限于已有的工具. 为此, 暂定的目标就是: 给定分子结构的xyz文件, 可以是单帧的, 也可以是多帧的, 参照效果较好的已有渲染图, 实现渲染每一帧, 效果尽量接近, 并最后将多张渲染图片制作成MP4视频.</p>
+<p>要想借助python建模, 首先要熟悉基本的python语法, 这方面的资料较多, 就不说了.</p>
+<p>熟悉python后, 接下来就要学习下 Blender Python 的使用. 注意其版本, 因为不同版本的API会有变化. 建议使用新近的版本, 这样遇到问题时候比较容易找到答案.</p>
+<p>一般性的资料:</p>
+<ul>
+<li><a href="https://yangxi1209.github.io/index3.html">Blender学习笔记</a></li>
+<li><a href="https://juejin.cn/column/7096259779105914887">Blender Python 编程</a></li>
+<li><a href="http://www.bimant.com/blog/blender-python-crash-course/">Blender Python开发入门</a></li>
+<li><a href="https://www.zhihu.com/column/c_1583135785963720704">Blender Python 简易参考</a></li>
+<li><a href="https://cloud.tencent.com/developer/article/1772598">2.blender的基本操作与动画案例挑战</a></li>
+<li><a href="https://ziyedy.github.io/page/blender-python-script-basic.html">Blender使用Python脚本的基本渲染操作</a></li>
+</ul>
+<p>一些示例:</p>
+<ul>
+<li><a href="https://adrianszatmari.medium.com/quickstart-blender-scripting-tutorial-the-plane-and-the-ball-886b9ffa2cc8">Quickstart Blender Scripting Tutorial: The Plane and the Ball.</a></li>
+<li><a href="https://physicspython.wordpress.com/2019/09/19/visualizing-xyz-structures-in-blender/">Visualizing .xyz Structures in Blender</a>, <a href="https://k.sina.cn/article_1882666893_7037378d00100zz78.html">中文版</a></li>
+<li><a href="https://demando.io/blog/dev-generating-a-procedural-solar-system-with-blenders-python-api">Create 3D objects and animations in Blender with Python API</a></li>
+<li><a href="https://juejin.cn/post/7119737999931211813">Blender 3D - 如何使用Python API在Blender中创建和渲染一个场景</a> <a href="https://gist.github.com/armindocachada/3466586d1b0b9cb20a826310f9a3e14d#file-render_360_cube_with_material-py">源码</a></li>
+</ul>
+<p>具体问题:</p>
+<ul>
+<li><a href="https://vividfax.github.io/2021/01/14/blender-materials.html">Assign a material to an object in Blender using Python</a></li>
+<li><a href="https://blender.stackexchange.com/questions/101820/how-to-add-remove-links-to-existing-or-new-nodes-using-python">How to add/remove links to existing or new nodes using Python?</a></li>
+<li><a href="https://b3d.interplanety.org/en/">Blender 3D: tutorials, articles, tips, notes</a></li>
+<li><a href="https://blog.songjiahao.com/archives/993">探究OpenGL中的坐标变换</a></li>
+</ul>
+<p>大致而言, 使用python建模的步骤:</p>
+<ul>
+<li>清理场景</li>
+<li>创建材质</li>
+<li>添加背景, 灯光, 相机, 物体</li>
+<li>设置相机位置</li>
+<li>渲染图片</li>
+</ul>
+<p>脚本写好后, 执行 <code>blender -P FILE.py</code> 即可. 如果不希望打开Blender界面, 可以背后执行 <code>blender -P FILE.py -b</code>.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/blender-mol.png"/></p>
+<p>Blender也可以直接制作动画, 但我目前还不是很懂, 所以我就直接渲染出图片, 然后借助<a href="https://ffmpeg.org/">FFmpeg</a>制作成视频.</p>
+<p>FFmpeg默认输出的视频在Windows下可能无法播放, 为此可以使用下面的选项:</p>
+<pre><code>ffmpeg -r 12 -i FILENAME%d.png -pix_fmt yuv420p -c:v libx264 OUT.mp4</code></pre>
+<p>上面的命令中</p>
+<ul>
+<li><code>-r 12</code> 表示帧率12, 也就是生成的视频每秒播放12张图片, 具体数字可以根据自己的需要调整.</li>
+<li><code>%d</code> 表示图片名称的最后为连续编号的数字, 如 <code>FILENAME1.png</code>, <code>FILENAME2.png</code>, ..., <code>FILENAME9.png</code>, <code>FILENAME10.png</code>, ..., <code>FILENAME20.png</code> 等.</li>
+<li><code>-pix_fmt yuv420p -c:v libx264</code> 两个选项指定像素格式和视频格式, 只有使用这种组合时才能使用Windows自带的播放器播放, 否则要使用特定的解码器.</li>
+</ul>
+<p>如果图片的名称没有使用连续数字, 或者没有规律, 那么可以将所有图片名称放到文本文件中(如<code>list.txt</code>), 每个名称一行, 并在每行前面加上<code>file</code>, 类似</p>
+<pre><code>file zz-0.png
+file zz-10.png
+file zz-20.png
+file zz-30.png
+...更多
+file zz-340.png
+file zz-350.png</code></pre>
+<p>这种情况下, 使用时添加拼接选项<code>-f concat</code>即可:</p>
+<pre><code>ffmpeg -r 12 -f concat -i list.txt -pix_fmt yuv420p -c:v libx264 OUT.mp4</code></pre>
+<p>具体可参考<a href="https://www.jianshu.com/p/e51f5c549720">ffmpeg # -f concat -i mylist.txt</a>, 或<a href="https://www.quarkbook.com/wp-content/uploads/2019/10/ffmpeg%E7%BF%BB%E8%AF%91%E6%96%87%E6%A1%A3.pdf">FFmpeg中文文档</a></p>
+<h2>示例</h2>
+<p>首先是一条轨迹的视频, 轨迹为测试分子的二面角旋转, 使用前前篇博文中的测地插值方法生成. 给出两个二面角对应的构型, 使用默认的方法生成17个插值点. 渲染成图片, 然后做成视频.</p>
+<p>&lt;video src="blender-traj.mp4" controls="controls" width="500" height="300"&gt;&lt;/video&gt;</p>
+<p>下面这段则是使用固定的分子构型, 展示了相机的360度移动, 每帧移动10度.</p>
+<p>&lt;video src="blender-rot.mp4" controls="controls" width="500" height="300"&gt;&lt;/video&gt;</p>
+<p>对一个场景, 变化或不变, 所用的相机既可以固定, 也可以移动. 具体如何运镜, 则是艺术的事了. 根据网上的说法, 至少有<a href="https://www.niaogebiji.com/article-101991-1.html">八种运镜方法</a>: 推、拉、摇、移、跟、升、降、甩. 具体如何用Blender脚本实现, 还有待研究.</p>

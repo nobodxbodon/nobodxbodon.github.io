@@ -1,0 +1,110 @@
+<h2>原文：<a href="http://zhangwenli.com/blog/2016/04/19/installing-nodebb-on-mac-os">Installing NodeBB with MongoDB on Mac OS</a></h2>
+<hr/>
+<p>title: Installing NodeBB with MongoDB on Mac OS
+time: 2016.04.19 18:17:48
+layout: post
+tags:</p>
+<ul>
+<li>NodeBB</li>
+<li>MongoDB</li>
+<li>NodeJs
+excerpt: My attempt to use NodeBB could be largely attributed to the simplicity of its &lt;a href="https://docs.nodebb.org/en/latest/installing/os/osx-mavericks.html" target="_blank"&gt;install instructions&lt;/a&gt;. Yet I ended up spending much more time fixing all kinds of install problems. So this post serves as a hint for someone who runs into a similar situation.</li>
+</ul>
+<hr/>
+<p>My attempt to use NodeBB could be largely attributed to the simplicity of its <a href="https://docs.nodebb.org/en/latest/installing/os/osx-mavericks.html">install instructions</a>. Yet I ended up spending much more time fixing all kinds of install problems. :joy: So this post serves as a hint for someone who runs into a similar situation.</p>
+<h1>Installing MongoDB</h1>
+<p>{% highlight bash %}
+brew install mongodb
+{% endhighlight %}</p>
+<p>MongoDB can be easily installed on Mac OS <a href="https://docs.mongodb.org/manual/tutorial/install-mongodb-on-os-x/#install-mongodb-community-edition">using brew</a>.</p>
+<p>But after that, I found myself fail to login with terminal.</p>
+<p>{% highlight bash %}
+$ mongo
+MongoDB shell version: 3.2.4
+connecting to: test
+2016-04-19T16:46:45.522+0800 W NETWORK  [thread1] Failed to connect to 127.0.0.1:27017, reason: errno:61 Connection refused
+2016-04-19T16:46:45.524+0800 E QUERY    [thread1] Error: couldn't connect to server 127.0.0.1:27017, connection attempt failed :
+connect@src/mongo/shell/mongo.js:224:14
+@(connect):1:6
+{% endhighlight %}</p>
+<p><a href="http://stackoverflow.com/questions/23418134/cannot-connect-to-mongodb-errno61-connection-refused">Accoding to StackOverflow</a>, this is because <code>mongodb</code> service is not running. And it worked after the following instruction.</p>
+<p>{% highlight bash %}
+brew services start mongodb
+{% endhighlight %}</p>
+<h1>Connect NodeBB with MongoDB</h1>
+<h2>Create a user in MongoDB</h2>
+<p>As NodeBB install instructions states, the interactive installation is available with:</p>
+<p>{% highlight bash %}
+./nodebb setup
+{% endhighlight %}</p>
+<p>Well, it failed and gave the following error message:</p>
+<p>{% highlight bash %}
+error: NodeBB could not connect to your Mongo database. Mongo returned the following error: Authentication failed.
+{% endhighlight %}</p>
+<p>I don't know the default username and password of my MongoDB. So I created a new user and fixed this problem.</p>
+<p>{% highlight bash %}
+db.createUser({user:'username', pwd:'password', roles:[{role:'readWrite', db:'db-name'}]})
+{% endhighlight %}</p>
+<p>Before that, I also created a database called <code>db-name</code> by using <code>use db-name</code>. But this procedure is unnecessary, which I will explain later.</p>
+<h2>You don't have to create the database</h2>
+<p>After that, I ran into the following error message:</p>
+<p>{% highlight bash %}
+/Users/baidu/Workspace/NodeBB/src/database/mongo.js:141
+db.objects.dropIndex({_key:1, value: -1});
+^
+SyntaxError: Unexpected token ;
+at exports.runInThisContext (vm.js:53:16)
+at Module._compile (module.js:373:25)
+at Object.Module._extensions..js (module.js:416:10)
+at Module.load (module.js:343:32)
+at Function.Module._load (module.js:300:12)
+at Module.require (module.js:353:17)
+at require (internal/module.js:12:17)
+at Object.&lt;anonymous&gt; (/Users/baidu/Workspace/NodeBB/install/databases.js:9:9)
+at Module._compile (module.js:409:26)
+at Object.Module._extensions..js (module.js:416:10)
+{% endhighlight %}</p>
+<p>I searched but found no similar questions, only knowing this concerned with creating something supposed to have unique name.</p>
+<p>Yep. That's why I shouldn't create the database <code>db-name</code> in MongoDB shell. But this is really weired, right? You need to create a user, but not a database.</p>
+<h2>NodeBB admin should be the same with that of MongoDB</h2>
+<p>NodeBB told me to create an admin.</p>
+<p>{% highlight bash %}
+warn: No administrators have been detected, running initial user setup
+Administrator username echarts-admin
+Administrator email address echarts@baidu.com
+Password
+Confirm Password
+{% endhighlight %}</p>
+<p>I thought this could be different from my MongoDB, but it turned out to be:</p>
+<p>{% highlight bash %}
+warn: NodeBB Setup Aborted.
+Error: [[user:change_password_error_length]]
+at Object.User.isPasswordValid (/Users/baidu/Workspace/NodeBB/src/user/create.js:193:20)
+at async.parallel.passwordValid (/Users/baidu/Workspace/NodeBB/src/user/create.js:165:11)
+at /Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:718:13
+at async.forEachOf.async.eachOf (/Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:233:13)
+at _parallel (/Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:717:9)
+at Object.async.parallel (/Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:731:9)
+at Object.User.isDataValid (/Users/baidu/Workspace/NodeBB/src/user/create.js:152:9)
+at Object.User.create (/Users/baidu/Workspace/NodeBB/src/user/create.js:22:8)
+at async.waterfall.adminUid (/Users/baidu/Workspace/NodeBB/src/install.js:275:11)
+at fn (/Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:746:34)
+at /Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:1213:16
+at /Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:166:37
+at /Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:706:43
+at /Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:167:37
+at Object.async.waterfall (/Users/baidu/Workspace/NodeBB/node_modules/async/lib/async.js:710:44)
+at success (/Users/baidu/Workspace/NodeBB/src/install.js:273:10)
+{% endhighlight %}</p>
+<p>This could be fixed by using the same username and password of your MongoDB user.</p>
+<h1>Conclusion</h1>
+<p>All these steps are described by NodeBB as:</p>
+<blockquote>
+<p>Run interactive installation:<br/>
+./nodebb setup<br/>
+You may leave all of the options as default.</p>
+</blockquote>
+<p>You know what, this is how you teach someone to draw a horse:</p>
+<p>{% capture imgSrc %}{{ site.url }}/img/post/2016-04-19-installing-nodebb-on-mac-os-1.jpg{% endcapture %}
+{% include figure.html src=imgSrc caption='Image from &lt;a href="http://9gag.com/gag/6261567/how-to-draw-a-horse"&gt;9gag.com&lt;/a&gt;' %}</p>
+<p>Just kidding... I love NodeBB! :heart_eyes:</p>
