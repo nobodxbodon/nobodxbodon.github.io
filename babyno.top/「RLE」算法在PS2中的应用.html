@@ -1,0 +1,46 @@
+<h2>原文：<a href="https://babyno.top/posts/2023/10/16/rle-algorithm-in-ps2">「RLE」算法在PS2中的应用</a></h2>
+<hr/>
+<p>author: 路边的阿不
+title: 「RLE」算法在PS2中的应用
+slug: rle-algorithm-in-ps2
+description: Experience the power of Run Length Encoding (RLE), a fundamental data compression algorithm. Witness its astounding application in PS2 for efficient image compression and unveil the intricacies behind its implementation.
+date: 2023-10-16 12:30:58
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>Python</li>
+<li>算法
+categories:</li>
+<li>教程</li>
+</ul>
+<hr/>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-16-rle-algorithm-in-ps2/run_length_f9030faa12.webp"/></p>
+<h2>RLE算法介绍</h2>
+<p><code>RLE</code>（Run Length Encoding，行程长度编码）算法，是把文件内容用“重复次数x数据”的形式来表示的压缩方法。比如：有<code>AAAAAABBCDDEEEEEF</code>这样一段数据，在字符后面加上重复出现次数，就可以用<code>6A2B1C2D5E1F</code>来表示。可以看到原始数据是17字节，编码后是12字节，因此压缩是成功的。</p>
+<p>让我们再看一串数据：<code>ABCDE</code>，如果按照上面的算法，编码后为<code>1A1B1C1D1E</code>，原始数据是5字节，编码后是10字节，毫无疑问这种压缩方式是失败的。</p>
+<p>为什么第二种字符串压缩会失败呢？细心的朋友一定看出来是因为它的字符重复出现的次数很少，因此使用“重复次数x数据”反而增加了数据长度。那有没有办法解决这个“缺陷”呢？答案是有的。我们接下来介绍在<code>PS2</code>游戏机中，是如何使用<code>RLE</code>算法来压缩图片的。</p>
+<h2>RLE算法在PS2中的应用</h2>
+<p>在<code>PS2</code>中，图片文件的前4个字节指示了压缩后文件的大小。接下来的数据按照<code>rle_code</code> + <code>数据块</code>的格式重复排列。需要注意的是，在<code>PS2</code>这里，<code>rle_code</code>和<code>数据块</code>中的每个数据，都是2字节，这点是与其它传统的<code>RLE</code>算法普遍为1字节最大的不同。</p>
+<p><code>rle_code</code>的最高位是标识位，如果这一位是<code>1</code>，则表示后面紧跟着的数据块是“非重复数据”，类似于上面的<code>ABCDE</code>。此时将<code>0x8000</code>减去<code>rle_code</code>的后7位，得到的是<code>数据块</code>的长度。此时只需取出后面紧跟的该长度的<code>数据块</code>即可。</p>
+<p>如果标识位为<code>0</code>，则表示后面紧跟着的数据块是“重复数据”，类似于<code>AAAAA</code>，此时<code>rle_code</code>就是重复次数，只要取出后面紧跟着的一个<code>数据块</code>，重复<code>rle_code</code>次即可。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-16-rle-algorithm-in-ps2/2.gif"/></p>
+<p>伪代码如下：</p>
+<pre><code class="lang-python">while rle_offset &lt; compressed_size:
+    rle_code = rle_code_struct.unpack_from(self.byte_val, rle_offset)[0]
+    rle_offset += 2
+    if rle_code &amp; 0x8000:
+        next_bytes = 0x8000 - (rle_code ^ 0x8000)
+        texture_buf += self.byte_val[rle_offset: rle_offset + next_bytes * 2]
+        rle_offset += next_bytes * 2
+    else:
+        times = rle_code
+        if times &gt; 0:
+            next_byte = self.byte_val[rle_offset: rle_offset + 2]
+            for _ in range(times):
+                texture_buf += next_byte
+            rle_offset += 2
+</code></pre>
+<h2>总结</h2>
+<p>如果在一个文件中，能连续遇到大量重复的数据，<code>RLE</code>算法可以提供很好的压缩效果。但对于出现连续的“非重复数据”，需要使用改良过的算法进行优化。<code>PS2</code>使用的是众多改良算法的一种，比较简单，也很方便初学者对该算法的学习。</p>

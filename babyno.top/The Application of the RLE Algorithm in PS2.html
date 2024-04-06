@@ -1,0 +1,46 @@
+<h2>原文：<a href="https://babyno.top/posts/2023/10/16/rle-algorithm-in-ps2.en">The Application of the RLE Algorithm in PS2</a></h2>
+<hr/>
+<p>author: caol64
+title: The Application of the RLE Algorithm in PS2
+slug: rle-algorithm-in-ps2
+description: Experience the power of Run Length Encoding (RLE), a fundamental data compression algorithm. Witness its astounding application in PS2 for efficient image compression and unveil the intricacies behind its implementation.
+date: 2023-10-16 12:30:58
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>Python</li>
+<li>Algorithm
+categories:</li>
+<li>Tutorial</li>
+</ul>
+<hr/>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-16-rle-algorithm-in-ps2/run_length_f9030faa12.webp"/></p>
+<h2>Introduction to RLE Algorithm</h2>
+<p>The <code>RLE</code> (Run Length Encoding) algorithm is a compression method that represents file content in the form of "number of repetitions x data." For example: given the data <code>AAAAAABBCDDEEEEEF</code>, by appending the number of consecutive occurrences after each character, it can be represented as <code>6A2B1C2D5E1F</code>. It can be observed that the original data is 17 bytes, while the encoded data is 12 bytes, thus achieving successful compression.</p>
+<p>Let's consider another string of data: <code>ABCDE</code>. If we apply the above algorithm, the encoded form would be <code>1A1B1C1D1E</code>. The original data is 5 bytes, but the encoded form is 10 bytes. Undoubtedly, this compression method fails.</p>
+<p>Why does the compression fail for the second string? Astute readers will notice that it's because the characters in it have very few consecutive repetitions. Therefore, using the "number of repetitions x data" approach actually increases the data length. Is there a way to address this "defect"? The answer is affirmative. Next, we will explore how the <code>RLE</code> algorithm is used to compress images in the <code>PS2</code> game console.</p>
+<h2>Application of RLE Algorithm in PS2</h2>
+<p>In the <code>PS2</code>, the first 4 bytes of an image file indicate the size of the compressed file. The subsequent data is arranged in the format of <code>rle_code</code> + <code>data block</code> repeated. It's noteworthy that in <code>PS2</code>, both the <code>rle_code</code> and the <code>data block</code> consist of 2 bytes each, which is a notable difference from other traditional <code>RLE</code> algorithms where typically only 1 byte is used.</p>
+<p>The most significant bit of the <code>rle_code</code> serves as a flag. If this bit is <code>1</code>, it indicates that the following data block is "non-repeated data," similar to the example <code>ABCDE</code> mentioned earlier. In this case, subtracting the last 7 bits of <code>rle_code</code> from <code>0x8000</code> yields the length of the <code>data block</code>. Then, it's sufficient to extract the following <code>data block</code> of that length.</p>
+<p>If the flag bit is <code>0</code>, it indicates that the following data block is "repeated data," similar to <code>AAAAA</code>. In this case, <code>rle_code</code> represents the number of repetitions, and it suffices to extract a single <code>data block</code> following it, repeating it <code>rle_code</code> times.</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-16-rle-algorithm-in-ps2/2.gif"/></p>
+<p>伪代码如下：</p>
+<pre><code class="lang-python">while rle_offset &lt; compressed_size:
+    rle_code = rle_code_struct.unpack_from(self.byte_val, rle_offset)[0]
+    rle_offset += 2
+    if rle_code &amp; 0x8000:
+        next_bytes = 0x8000 - (rle_code ^ 0x8000)
+        texture_buf += self.byte_val[rle_offset: rle_offset + next_bytes * 2]
+        rle_offset += next_bytes * 2
+    else:
+        times = rle_code
+        if times &gt; 0:
+            next_byte = self.byte_val[rle_offset: rle_offset + 2]
+            for _ in range(times):
+                texture_buf += next_byte
+            rle_offset += 2
+</code></pre>
+<h2>Conclusion</h2>
+<p>If a file contains a large amount of consecutive repeated data, the <code>RLE</code> algorithm can achieve good compression results. However, for consecutive occurrences of "non-repeated data," it requires the use of optimized algorithms. <code>PS2</code> employs one of many improved algorithms, which is relatively simple and convenient for beginners to learn about this algorithm.</p>

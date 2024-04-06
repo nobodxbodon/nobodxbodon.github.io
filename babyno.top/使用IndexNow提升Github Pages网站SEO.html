@@ -1,0 +1,148 @@
+<h2>原文：<a href="https://babyno.top/posts/2024/01/17/boost-your-seo-with-indexnow">使用IndexNow提升Github Pages网站SEO</a></h2>
+<hr/>
+<p>author: 路边的阿不
+title: 使用IndexNow提升Github Pages网站SEO
+slug: boost-your-seo-with-indexnow
+description: Learn how to optimize SEO for your Github Pages site by using IndexNow. From understanding the purpose of SEO to detailed steps on applying IndexNow, enhance your website visibility efficiently!
+date: 2024-01-17 14:42:30
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>SEO</li>
+<li>建站
+categories:</li>
+<li>教程</li>
+</ul>
+<hr/>
+<p>我之前写过<a href="https://babyno.top/posts/2023/11/new-hugo-blog/">一篇文章</a>，介绍了<a href="https://babyno.top/">本站</a>是使用<code>Hugo</code>进行构建并发布在<code>Github Pages</code>上的。也向大家介绍过将网站提交给搜索引擎的方法，但是手工提交未免繁琐和低效。今天给大家介绍下如何通过<code>IndexNow</code> 对网站进行<code>SEO</code>优化。</p>
+<h2>SEO的作用</h2>
+<p><strong>搜索引擎优化 (SEO)</strong> 对于网站的重要性无法忽视。如果你想让你的网站获得更多的曝光，那么你需要理解 <code>SEO</code> 的作用，以及它是如何帮助你获得更高的搜索引擎排名的。以下是使用 <code>SEO</code> 的 5 大理由：</p>
+<ol>
+<li>提高可见性</li>
+<li>提高网站流量</li>
+<li>提供用户友好的体验</li>
+<li>建立信任和信誉</li>
+<li>获得竞争优势</li>
+</ol>
+<h2>IndexNow介绍</h2>
+<p><code>IndexNow</code>是一个开源协议，由微软提出并开发。它使网站无论是新增页面，更新页面或删除页面，发布者都可以使用 <code>IndexNow</code> 协议将这些更新快速推送至搜索引擎。</p>
+<p>对于 <code>SEO</code>，<code>IndexNow</code> 有着直接的影响。使用 <code>IndexNow</code> 的网站可以使其内容更快地呈现在搜索结果中，从而提高网站的 <code>SEO</code> 排名。由于搜索结果的新鲜度是影响 <code>SEO</code> 的一个重要因素，因此 <code>IndexNow</code> 的使用对于 <code>SEO</code> 而言具有重大价值。</p>
+<p>另一个巨大优势在于：支持 <code>IndexNow</code> 协议的搜索引擎会立即共享数据至其它的搜索引擎，因此您只需通知其中一个搜索引擎即可。目前支持的搜索引擎有：<code>Bing</code>，<code>Naver</code>，<code>Seznam.cz</code>，<code>Yandex</code>。</p>
+<h2>接入准备</h2>
+<p>访问<a href="https://www.bing.com/indexnow">https://www.bing.com/indexnow</a>，上面给出了接入步骤分为4步：</p>
+<ul>
+<li>Generate API Key</li>
+<li>Host API key</li>
+<li>Submit URLs with parameters</li>
+<li>Get details on how many submitted</li>
+</ul>
+<p>实际上准备工作就是上面的步骤1和步骤2。在上面的网站上生成一个<code>API Key</code> （按钮1），下载<code>API Key</code>文件（按钮2），最后将文本文件放置在你的网站根目录下。</p>
+<p><img alt="IndexNow Implementation Steps" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-01-17-boost-your-seo-with-indexnow/Untitled.webp"/></p>
+<p>IndexNow Implementation Steps</p>
+<p>这样准备工作就完成了。</p>
+<h2>利用Github Actions自动提交</h2>
+<p>由于我的网站是通过<code>Hugo</code> 在本地生成静态页面，然后推送到仓库，通过<code>Guthub Actions</code>部署到<code>Github Pages</code>上的，因此我这里做了如下改动：</p>
+<ul>
+<li>写了一个<code>python</code>脚本，读取<code>sitemap</code>里最近更新的10篇文章的<code>url</code>。构建一个<code>POST</code>请求，将<code>url</code>提交给<code>IndexNow</code>。</li>
+<li>新增加一个<code>workflow</code> ，在代码推送至仓库时，调用上面这个<code>python</code>脚本。</li>
+</ul>
+<p>代码参考：</p>
+<pre><code class="lang-python">def get_latest_posts(sitemap_path, n=10):
+    # Parse the XML sitemap.
+    tree = ET.parse(sitemap_path)
+    root = tree.getroot()
+
+    # Namespace dictionary to find the 'loc' and 'lastmod' tags.
+    namespaces = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+
+    # Get all URLs.
+    urls = [(url.find('s:loc', namespaces).text, url.find('s:lastmod', namespaces).text)
+            for url in root.findall('s:url', namespaces)
+            if "/posts/2" in url.find('s:loc', namespaces).text]
+
+    # Sort URLs by the lastmod tag (in descending order), hence most recent pages come first.
+    urls.sort(key=lambda x: x[1], reverse=True)
+
+    # Return the n most recent URLs.
+    return [url[0] for url in urls[:n]]
+
+def ping_bing(url_list):
+    # Prepare the URL and headers.
+    url = 'https://www.bing.com/indexnow'
+    headers = {
+      'Content-Type': 'application/json; charset=utf-8',
+    }
+
+    # Prepare the body data.
+    data = {
+      "host": HOST,
+      "key": KEY,
+      "keyLocation": f"https://{HOST}/{KEY}.txt",
+      "urlList": url_list
+    }
+
+    # Send the POST request.
+    response = requests.post(url, headers=headers, json=data)
+    return response
+
+if __name__ == "__main__":
+
+    sitemap_path = "../sitemap.xml"
+    url_list = get_latest_posts(sitemap_path, 9)
+    url_list.insert(0, f'https://{HOST}/')
+    print(url_list)
+
+    response = ping_bing(url_list)
+    # Print the response.
+    print(response.status_code)
+    print(response.text)
+</code></pre>
+<pre><code class="lang-yaml"># Simple workflow for deploying static content to GitHub Pages
+name: Submit IndexNow Request To Bing
+
+on:
+  # Runs on pushes targeting the default branch
+  push:
+    branches: ["main"]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  indexnow:
+    name: IndexNow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run script
+        run: |
+          cd .github
+          python ping_bing.py
+</code></pre>
+<p>最后查看下效果，登录<a href="https://www.bing.com/webmasters/indexnow">Bing Webmaster Tools</a>，选择左边菜单栏的<code>IndexNow</code>：</p>
+<p><img alt="IndexNow on Bing Webmaster Tools" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-01-17-boost-your-seo-with-indexnow/Untitled%201.webp"/></p>
+<p>IndexNow on Bing Webmaster Tools</p>
+<h2><strong><strong>使用 Cloudflare 集成 IndexNow</strong></strong></h2>
+<p><code>Cloudflare</code>已经集成了<code>IndexNow</code>，<a href="https://blog.cloudflare.com/cloudflare-now-supports-indexnow">https://blog.cloudflare.com/cloudflare-now-supports-indexnow</a>。所以如果你的网站是托管在<code>Cloudflare</code>上的，可以直接在控制台里设置。这个功能免费用户可用。</p>
+<ol>
+<li>Sign in to your Cloudflare Account.</li>
+<li>In the dashboard, navigate to the <strong>Cache tab.</strong></li>
+<li>Click on the <strong>Configuration</strong> section.</li>
+<li>Locate the Crawler Hints sign up card and enable. It's that easy.</li>
+</ol>
+<p><img alt="Cloudflare Crawler Hints" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-01-17-boost-your-seo-with-indexnow/Untitled%202.webp"/></p>
+<p>Cloudflare Crawler Hints</p>
+<p>但是有个奇怪的地方，我没有用<code>Cloudflare Pages</code>进行网站托管，仅仅使用了它的<code>DNS</code>解析，开启<code>Crawler Hints</code>后，效果很差。它并不能将我的文章<code>url</code>准确推送给<code>IndexNow</code>，相反推送的是一些图片和<code>txt</code>文件。</p>

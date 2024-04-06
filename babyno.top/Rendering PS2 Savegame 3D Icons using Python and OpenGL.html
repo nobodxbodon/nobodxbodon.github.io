@@ -1,0 +1,355 @@
+<h2>原文：<a href="https://babyno.top/posts/2023/10/09/rendering-ps2-3d-icon.en">Rendering PS2 Savegame 3D Icons using Python and OpenGL</a></h2>
+<hr/>
+<p>author: caol64
+title: Rendering PS2 Savegame 3D Icons using Python and OpenGL
+slug: rendering-ps2-3d-icon
+description: Step into the world of 3D icon rendering using tools like Python3, PyGame, Numpy, ModernGL and PyGLM. Discover their unique roles in creating animation effects, light additions, smooth transitions and more within PS2.
+date: 2023-10-09 17:34:15
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>ps2mc-browser</li>
+<li>Python</li>
+<li>OpenGL
+categories:</li>
+<li>Tutorial</li>
+</ul>
+<hr/>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/1.jpg"/></p>
+<p>After a series of previous articles laying the groundwork, the files for PS2 savegame 3D icons have all been parsed. In this article, we will begin to explore how to render the 3D icons using the following tools, aiming to achieve a rendering as close as possible to the original effect on the PS2 console.</p>
+<ul>
+<li>Python3</li>
+<li>PyGame</li>
+<li>Numpy</li>
+<li>ModernGL</li>
+<li>PyGLM</li>
+</ul>
+<h2>01 Initialize PyGame and ModernGL</h2>
+<p>The first step is to initialize PyGame, setting the window size to <code>640x480</code> and the FPS to <code>60</code>. We enable OpenGL rendering mode and set the OpenGL version to <code>3.3</code>.</p>
+<pre><code class="lang-python">import pygame as pg
+
+pg.init()
+pg.display.gl_set_attribute(pg.GL_CONTEXT_MAJOR_VERSION, 3)
+pg.display.gl_set_attribute(pg.GL_CONTEXT_MINOR_VERSION, 3)
+pg.display.gl_set_attribute(pg.GL_CONTEXT_PROFILE_MASK, pg.GL_CONTEXT_PROFILE_CORE)
+pg.display.set_mode((640, 480), flags=pg.OPENGL | pg.DOUBLEBUF)
+self.clock = pg.time.Clock()
+self.clock.tick(60)
+</code></pre>
+<p>Next, initialize ModernGL. This is very simple; just create a context and enable depth testing and face culling.</p>
+<pre><code class="lang-python">import moderngl as mgl
+
+self.ctx = mgl.create_context()
+self.ctx.enable(flags=mgl.DEPTH_TEST | mgl.CULL_FACE)
+</code></pre>
+<h2>02 Obtain Vertex, Texture, Normal Data, etc.</h2>
+<p>This part of the content was detailed in the previous article <a href="">Parsing PS2 Game Save 3D Icon</a>, so I won't go into detail here. Below is just the data structure of <code>icon.sys</code> for reference.</p>
+<pre><code class="lang-c++">struct IconSys {
+    char magic[4];
+    uint16 unknown; // ignore
+    uint16 subtitle_line_break;
+    uint16 unknown; // ignore
+    uint32 bg_transparency;
+    uint32 bg_color_upper_left[4];
+    uint32 bg_color_upper_right[4];
+    uint32 bg_color_lower_left[4];
+    uint32 bg_color_lower_right[4];
+    float32 light_pos1[4];
+    float32 light_pos2[4];
+    float32 light_pos3[4];
+    float32 light_color1[4];
+    float32 light_color2[4];
+    float32 light_color3[4];
+    float32 ambient[4];
+    char subtitle[68];
+    char icon_file_normal[64];
+    char icon_file_copy[64];
+    char icon_file_delete[64];
+    char zeros[512]; // ignore
+};
+</code></pre>
+<h2>03 Coordinate System</h2>
+<p>Here, we create a coordinate system using the right-hand system, but the original vertices are inverted along the y-axis, as shown in Figure A. Therefore, our subsequent work will be conducted in the transformed coordinate system shown in Figure B.
+<img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/%E5%AD%98%E5%82%A8%E5%8D%A1-%E5%9D%90%E6%A0%87%E7%B3%BB.jpg"/></p>
+<h2>04 Transformation Matrices</h2>
+<h3>View Matrix</h3>
+<p>In Figure B, the camera position extends in the negative direction of the z-axis. We move the camera slightly downward along the negative y-axis to adjust the viewpoint slightly above the icon, rather than focusing on its feet. Thus, we set the camera position coordinates to <code>(0, -2, -10)</code>. As we need to invert the y-axis, we can directly set the camera's upward direction to the negative direction of the y-axis. This creates the <code>lookAt</code> matrix as follows:</p>
+<pre><code class="lang-python">self.position = glm.vec3(0, -2, -10)
+self.up = glm.vec3(0, -1, 0)
+self.view = glm.lookAt(self.position, glm.vec3(0, -2, 0), self.up)
+</code></pre>
+<h3>Projection Matrix</h3>
+<p>The projection matrix can be obtained using the following formula:</p>
+<pre><code class="lang-python">self.proj = glm.perspective(glm.radians(50), window_width / window_height, 0.1, 100)
+</code></pre>
+<h3>Model Matrix</h3>
+<p>The purpose of creating the model matrix is to control the positional changes of the model object in 3D space. Here, the model object needs to rotate 360 degrees around the y-axis.</p>
+<pre><code class="lang-python"># Initialize the model matrix
+self.m_model = glm.mat4()
+# Rotate the model around the y-axis by an angle corresponding to the elapsed time.
+# The initial 180 degrees is to make the model initially face away from the screen, closer to the behavior of the PS2 console.
+m_model = glm.rotate(self.m_model, glm.radians(180) + animation_time / 2,
+                     glm.vec3(0, 1, 0))
+</code></pre>
+<h2>05 Create Shaders</h2>
+<p>Here, we need to create four shaders in total:</p>
+<ul>
+<li>Background Vertex Shader</li>
+<li>Background Fragment Shader</li>
+<li>Icon Vertex Shader</li>
+<li>Icon Fragment Shader</li>
+</ul>
+<h3>Background Shader</h3>
+<p>The background shader is relatively simple. We just need to create a rectangle that covers the entire coordinate system and place it on the coordinate plane farthest from the camera. Referring to the diagram above (Figure B), this plane should be at z-axis 0.9999. The coordinates of the four vertices of this rectangle are (-1, 1), (-1, -1), (1, -1), and (1, 1), respectively. The corresponding colors can be parsed from <code>icon.sys</code>. With these four vertices and colors, we can construct the background VBO and VAO. Further details are not provided here.</p>
+<pre><code class="lang-glsl">// bg.vert
+#version 330 core
+
+in vec2 vertexPos;
+in vec4 vertexColor;
+
+out vec3 fragColor0;
+
+void main() {
+    fragColor0 = vertexColor.rgb;
+    gl_Position = vec4(vertexPos.xy, 0.9999, 1.0);
+}
+</code></pre>
+<pre><code class="lang-glsl">// bg.frag
+#version 330 core
+
+in vec3 fragColor0;
+
+out vec4 fragColor;
+
+uniform float alpha0;
+
+void main() {
+    fragColor = vec4(fragColor0, alpha0);
+}
+</code></pre>
+<h3>Icon Shader</h3>
+<p>The Icon shader will be relatively complex. Let's start by attempting to render the Icon vertices. Do you remember that each icon has multiple shapes? Shapes are related to animation. For now, we will only select one shape to compose the VBO and VAO.</p>
+<pre><code class="lang-glsl">// icon.vert
+#version 330 core
+
+in vec4 vertexPos;
+
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+
+void main() {
+    gl_Position = proj * view * model * vec4(vertexPos.xyz, 1);
+}
+</code></pre>
+<pre><code class="lang-glsl">// icon.frag
+#version 330 core
+
+out vec4 fragColor;
+
+void main() {
+    fragColor = vec4(0, 0, 0, 1);
+}
+</code></pre>
+<p>Below is the result after running the code:</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/3.gif"/></p>
+<h3>Adding Textures</h3>
+<p>Building upon the previous setup, introduce texture coordinates and texture data.</p>
+<pre><code class="lang-glsl">// icon.vert
+#version 330 core
+
+in vec4 vertexPos;
+in vec2 texCoord;
+in vec4 vertexColor;
+
+out vec4 fragColor0;
+out vec2 uv0;
+
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+
+void main() {
+    uv0 = texCoord;
+    fragColor0 = vertexColor;
+    gl_Position = proj * view * model * vec4(vertexPos.xyz, 1);
+}
+</code></pre>
+<pre><code class="lang-glsl">// icon.frag
+#version 330 core
+
+in vec2 uv0;
+in vec4 fragColor0;
+
+out vec4 fragColor;
+
+uniform sampler2D texture0;
+
+void main() {
+    float alpha = fragColor0.a;
+    vec3 color = fragColor0.rgb * texture(texture0, uv0).rgb;
+    fragColor = vec4(color, alpha);
+}
+</code></pre>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/4.gif"/></p>
+<h3>Adding Lighting</h3>
+<p>Building upon the previous setup, introduce light sources, ambient light, and normal data.</p>
+<pre><code class="lang-glsl">// icon.vert
+#version 330 core
+
+in vec4 vertexPos;
+in vec2 texCoord;
+in vec4 vertexColor;
+in vec4 normal;
+
+out vec4 fragColor0;
+out vec2 uv0;
+out vec3 normal0;
+out vec3 fragPos0;
+
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+
+void main() {
+    uv0 = texCoord;
+    fragColor0 = vertexColor;
+    normal0 = mat3(model) * normalize(normal.xyz);
+    gl_Position = proj * view * model * vec4(vertexPos.xyz, 1);
+    fragPos0 = gl_Position.xyz;
+}
+</code></pre>
+<pre><code class="lang-glsl">// icon.frag
+#version 330 core
+#define MAX_NUM_TOTAL_LIGHTS 3
+
+in vec2 uv0;
+in vec4 fragColor0;
+in vec3 normal0;
+in vec3 fragPos0;
+
+out vec4 fragColor;
+
+struct Light {
+    vec4 pos;
+    vec4 color;
+};
+
+uniform sampler2D texture0;
+uniform vec4 ambient;
+
+uniform Light lights[MAX_NUM_TOTAL_LIGHTS];
+
+void main() {
+    vec3 normal = normalize(normal0);
+    float alpha = fragColor0.a;
+    vec3 color = fragColor0.rgb * texture(texture0, uv0).rgb;
+    vec3 diffuse = vec3(0.0, 0.0, 0.0);
+    for (int i = 0; i &lt; MAX_NUM_TOTAL_LIGHTS; i++) {
+        vec3 lightDir = normalize(lights[i].pos.xyz - fragPos0);
+        float diff = max(dot(lightDir, normal), 0.0);
+        diffuse += diff * lights[i].color.rgb;
+    }
+    color = (ambient.rgb + diffuse) * color;
+    fragColor = vec4(color, alpha);
+}
+</code></pre>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/5.gif"/></p>
+<h3>Animation Effects</h3>
+<p>Animation effects involve rendering vertex data of different shapes by shaders over time. We can design a timer and a counter to determine which shape's vertices should be rendered at the current time.</p>
+<ul>
+<li><code>frame_length</code>: The actual number of frames required to complete the animation effect, with a frame rate of 60FPS.</li>
+<li><code>animation_time</code>: The elapsed time of the animation.</li>
+<li><code>anim_speed</code>: The playback speed of the animation.</li>
+<li><code>frame_length</code> / animation_shapes: Number of frames contained in one shape.</li>
+</ul>
+<pre><code class="lang-python">animation_time = time.time() - self.start_time
+curr_frame = int(animation_time * self.window.fps * self.icon.anim_speed)
+             % self.icon.frame_length
+curr_shape = int(curr_frame // (self.icon.frame_length / self.icon.animation_shapes))
+</code></pre>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/6.gif"/></p>
+<h3>Achieving Smooth Animation Transitions</h3>
+<p>To achieve smooth animation transitions, we need to use vertex interpolation techniques in the shader. When sending vertex data to the shader, we send the vertex data of both the current shape and the next shape simultaneously. Then, based on the time factor, the shader will automatically calculate the vertices between the two shapes.</p>
+<ul>
+<li><code>tween_factor</code>: Calculates the percentage of frames occupied by the current timestamp within the entire shape.</li>
+</ul>
+<pre><code class="lang-python">curr_frame_in_shape = curr_frame % frames_in_shape / frames_in_shape
+tween_factor = glm.float32(curr_frame_in_shape)
+</code></pre>
+<pre><code class="lang-glsl">// icon.vert
+#version 330 core
+
+in vec4 vertexPos;
+in vec2 texCoord;
+in vec4 vertexColor;
+in vec4 nextVertexPos;
+in vec4 normal;
+
+out vec4 fragColor0;
+out vec2 uv0;
+out vec3 normal0;
+out vec3 fragPos0;
+
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+uniform float tweenFactor;
+
+void main() {
+    uv0 = texCoord;
+    fragColor0 = vertexColor;
+    normal0 = mat3(model) * normalize(normal.xyz);
+    vec4 basePos = vec4(mix(vertexPos.xyz, nextVertexPos.xyz, tweenFactor), 1.0);
+    gl_Position = proj * view * model * basePos;
+    fragPos0 = gl_Position.xyz;
+}
+</code></pre>
+<pre><code class="lang-glsl">// icon.frag
+#version 330 core
+#define MAX_NUM_TOTAL_LIGHTS 3
+
+in vec2 uv0;
+in vec4 fragColor0;
+in vec3 normal0;
+in vec3 fragPos0;
+
+out vec4 fragColor;
+
+struct Light {
+    vec4 pos;
+    vec4 color;
+};
+
+uniform sampler2D texture0;
+uniform vec4 ambient;
+
+uniform Light lights[MAX_NUM_TOTAL_LIGHTS];
+
+void main() {
+    vec3 normal = normalize(normal0);
+    float alpha = fragColor0.a;
+    vec3 color = fragColor0.rgb * texture(texture0, uv0).rgb;
+    vec3 diffuse = vec3(0.0, 0.0, 0.0);
+    for (int i = 0; i &lt; MAX_NUM_TOTAL_LIGHTS; i++) {
+        vec3 lightDir = normalize(lights[i].pos.xyz - fragPos0);
+        float diff = max(dot(lightDir, normal), 0.0);
+        diffuse += diff * lights[i].color.rgb;
+    }
+    color = (ambient.rgb + diffuse) * color;
+    fragColor = vec4(color, alpha);
+}
+</code></pre>
+<p>The final result:</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/7.gif"/></p>
+<h2>06 Closing Words</h2>
+<p>All the code can be downloaded from <a href="https://github.com/caol64/ps2mc-browser">here</a>. As I mentioned in my first article, the original intention of this series was to commemorate the passing of youth and the everlasting passion for technology. With this conclusion, it's like fulfilling a dream from my youth.</p>
+<h2>07 References</h2>
+<ul>
+<li><a href="https://www.ps2savetools.com/documents/iconsys-format/">gothi - icon.sys format</a></li>
+<li><a href="http://www.csclub.uwaterloo.ca:11068/mymc/ps2icon-0.5.pdf">Martin Akesson - PS2 Icon Format v0.5</a></li>
+<li><a href="https://git.sr.ht/~thestr4ng3r/mymcplus">Florian Märkl - mymcplus</a></li>
+<li><a href="https://www.ps2savetools.com/ps2memcardformat.html">Ross Ridge - PlayStation 2 Memory Card File System</a></li>
+</ul>
