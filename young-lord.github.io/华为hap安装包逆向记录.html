@@ -60,15 +60,23 @@ classes.dex
 <p>总的来说，你需要进行两组文本替换：</p>
 <p><code>com.company.victim</code> -&gt; <code>moe.person.attack</code></p>
 <p><code>com/company/victim</code> -&gt; <code>moe/person/attack</code>（此处指的是<code>smali</code>中的语法）</p>
-<h5>需要替换的文件</h5>
+<h5>需要修改的文件</h5>
+<p>如果只是修改包名而不修改类名，那么需要修改的文件有：</p>
 <ul>
-<li><code>entry_release_signed_entry</code>目录里的<code>smali</code>目录与<code>AndroidManifest.xml</code>文件</li>
+<li><code>entry_release_signed_entry</code>目录里的<code>AndroidManifest.xml</code>文件（仅<code>manifest</code>标签中的<code>package</code>属性）</li>
+<li><code>config.json</code>文件（<code>.app.bundleName</code>与<code>.module.package</code>）</li>
+<li><code>pack.info</code>文件（<code>.summary.app.bundleName</code>）</li>
+</ul>
+<p>如果还需要修改类名，那么需要修改的文件有：</p>
+<ul>
+<li><code>entry_release_signed_entry</code>目录里<code>smali</code>目录与<code>AndroidManifest.xml</code>文件</li>
 <li><code>config.json</code>文件</li>
 <li><code>pack.info</code>文件</li>
-<li><code>out</code>目录</li>
+<li><code>out</code>目录中的<code>smali</code>文件</li>
+<li><code>assets</code>目录中的部分文件（比如<code>entry/resources.index</code>）</li>
+<li><code>out/com/company/victim</code>目录下的所有文件移动至<code>out/moe/person/attack</code>下</li>
+<li><code>entry_release_signed_entry/com/company/victim</code>目录下的所有文件移动至<code>entry_release_signed_entry/moe/person/attack</code>下</li>
 </ul>
-<h5>需要移动/重命名的目录</h5>
-<p><code>out/com/company/victim</code>目录下的所有文件移动至<code>out/moe/person/attack</code>下</p>
 <h4>修改程序代码</h4>
 <p>由于<code>entry_release_signed_entry.apk</code>里有一些<code>.js</code>和<code>.bin</code>文件，根据<a href="https://www.bandbbs.cn/threads/3936">相关分析</a>是QuickJS编译后的字节码，所以花了一些时间在这里，后来才发现这个只是依赖框架一类的东西……</p>
 <p>实际的逻辑代码位于<code>classes.dex</code>，也就是解包后的<code>out</code>目录下。修改<code>out</code>目录下的相关<code>.smali</code>文件即可达到修改程序运行逻辑的目的。</p>
@@ -76,10 +84,10 @@ classes.dex
 <h3>打包&amp;签名</h3>
 <h4>签名申请</h4>
 <p>首先，你需要生成<code>.p12</code>与<code>.csr</code>文件。使用以下命令：</p>
-<pre><code class="language-shell">keytool -genkeypair -alias "naMe" -keyalg EC -sigalg SHA256withECDSA -dname "C=CN,O=name,OU=name1,CN=name2"  -keystore a.p12 -storetype pkcs12 -validity 9125 -storepass ST1RE -keypass kEy
+<pre><code class="language-shell">keytool -genkeypair -alias "naMe" -keyalg EC -sigalg SHA256withECDSA -dname "C=CN,O=name,OU=name1,CN=name2" -keystore a.p12 -storetype pkcs12 -validity 9125 -storepass ST1RE -keypass kEy
 keytool -certreq -alias "naMe" -keystore a.p12 -storetype pkcs12 -file a.csr
 </code></pre>
-<p>接着，在网页完成新建证书、新建应用、绑定设备等步骤，最终下载得到<code>.cer</code>与<code>.p7b</code>文件。具体步骤参见<a href="https://zhuanlan.zhihu.com/p/377931066">这篇文章</a>。注意注册设备时“设备类型”应选择“智能手表”。</p>
+<p>接着，在网页完成新建证书、新建应用、绑定设备等步骤，最终下载得到<code>.cer</code>与<code>.p7b</code>文件。具体步骤参见<a href="https://zhuanlan.zhihu.com/p/377931066">这篇文章</a>。注意注册设备时“设备类型”应选择“智能手表”。注意此处设定的包名必须与你修改后的包名一致。</p>
 <p>需要注意的是，此处的开发证书有效期仅为一年。</p>
 <p>完成这一步后，你得到了数个文件，后续步骤中使用以下文件名表示：</p>
 <ul>
@@ -97,14 +105,15 @@ keytool -certreq -alias "naMe" -keystore a.p12 -storetype pkcs12 -file a.csr
 <h4>打包、签名<code>.apk</code>文件</h4>
 <pre><code class="language-shell">apktool b entry_release_signed_entry
 del entry_release_signed_entry.apk
-jarsigner -verbose -keystore a.p12 -storetype pkcs12 -signedjar entry_release_signed_entry.apk entry_release_signed_entry\dist\entry_release_signed_entry.apk naMe
+jarsigner -verbose -keystore a.p12 -storepass ST1RE -keypass kEy -storetype pkcs12 -signedjar entry_release_signed_entry.apk entry_release_signed_entry\dist\entry_release_signed_entry.apk naMe
 </code></pre>
 <p>完成后，得到已签名的<code>entry_release_signed_entry.apk</code>文件。</p>
 <h4>打包<code>classes.dex</code></h4>
-<p><code>java -jar baksmali.jar b out</code></p>
-<p>将得到的<code>out.dex</code>覆盖原有的<code>classes.dex</code></p>
+<p><code>java -jar smali.jar a out -o classes.dex</code></p>
+<p>将得到的<code>classes.dex</code>覆盖原有的<code>classes.dex</code></p>
 <h4>打包、签名<code>.hap</code>文件</h4>
 <p>首先，<strong>在hap解压后的目录中把所有文件选中</strong>并以“仅存储”的压缩级别压缩为<code>.zip</code>压缩包。将压缩包重命名为<code>sth.hap</code>。请确保压缩包打开后可以直接看见<code>classes.dex</code>、<code>config.json</code>、<code>entry_release_signed_entry.apk</code>、<code>pack.info</code>等文件，而不是文件外面套着一层目录。</p>
+<p>对应的命令如下（可能需要按需更改）：<code>zip -r0 sth.hap assets org classes.dex config.json entry_release_signed_entry.apk pack.info</code></p>
 <p>接着，使用以下命令签名：</p>
 <pre><code class="language-shell">java -jar hapsigntoolv2.jar sign -mode localjks -privatekey naMe -inputFile sth.hap -outputFile sign.hap -signAlg SHA256withECDSA -keystore a.p12 -keystorepasswd ST1RE -keyaliaspasswd kEy -profile a.p7b -certpath a.cer -profileSigned 1
 </code></pre>
@@ -112,8 +121,8 @@ jarsigner -verbose -keystore a.p12 -storetype pkcs12 -signedjar entry_release_si
 <h3>安装</h3>
 <p>使用adb连接手表，依次执行以下命令：</p>
 <ul>
-<li>推送安装包：<code>adb push sign.hap /sdcard/a.hap</code></li>
-<li>安装：<code>adb shell bm install -p /sdcard/a.hap</code>（注意此处的安装必须保证文件名后缀是<code>.hap</code>）</li>
-<li>删除手表中的安装包：<code>adb shell rm /sdcard/a.hap</code></li>
+<li>推送安装包：<code>adb push sign.hap /sdcard/sign.hap</code></li>
+<li>安装：<code>adb shell bm install -p /sdcard/sign.hap</code>（注意此处的安装必须保证文件名后缀是<code>.hap</code>）</li>
+<li>删除手表中的安装包：<code>adb shell rm /sdcard/sign.hap</code></li>
 </ul>
 <p>如果“安装”这一步执行完成后输出<code>Success</code>，则完成安装。</p>

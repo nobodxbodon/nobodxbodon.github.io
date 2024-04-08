@@ -19,7 +19,7 @@ categories:</li>
 <p>上一篇文章中我们解析了PS2存储卡的文件系统，这次直接实战，编写<code>python</code>代码导出指定的游戏存档。本篇文章完整代码可以访问：<a href="https://github.com/caol64/ps2mc-browser">ps2mc-browser</a>。</p>
 <h2>01 解析<code>SuperBlock</code></h2>
 <p><code>SuperBlock</code>结构如下，大小为340字节：</p>
-<pre><code class="lang-c++">struct SuperBlock {
+<pre><code class="language-c++">struct SuperBlock {
     char magic[28];
     char version[12];
     uint16 page_size;
@@ -42,17 +42,17 @@ categories:</li>
 };
 </code></pre>
 <p>使用<code>struct.unpack()</code>解包：</p>
-<pre><code class="lang-python">struct.Struct("&lt;28s12sHHH2xLLLL4x4x8x128s128xbbxx").unpack(byte_val)
+<pre><code class="language-python">struct.Struct("&lt;28s12sHHH2xLLLL4x4x8x128s128xbbxx").unpack(byte_val)
 </code></pre>
 <p>得到<code>page_size</code>和<code>pages_per_cluster</code>。</p>
 <h2>02 读取<code>page</code>和<code>cluster</code></h2>
 <p>根据公式计算<code>page</code>和<code>cluster</code>大小：</p>
-<pre><code class="lang-python">self.spare_size = (self.page_size // 128) * 4 # 备用区域字节数
+<pre><code class="language-python">self.spare_size = (self.page_size // 128) * 4 # 备用区域字节数
 self.raw_page_size = self.page_size + self.spare_size # 算上备用区域的page字节数
 self.cluster_size = self.page_size * self.pages_per_cluster # 簇字节数
 </code></pre>
 <p>读取<code>page</code>和<code>cluster</code>，<code>spare area</code>里的内容是被舍弃掉的：</p>
-<pre><code class="lang-python">def read_page(self, n): # n为page编号
+<pre><code class="language-python">def read_page(self, n): # n为page编号
     offset = self.raw_page_size * n
     return self.byte_val[offset: offset + self.page_size]
 
@@ -66,7 +66,7 @@ def read_cluster(self, n): # n为cluster编号
 <h2>03 构建<code>FAT</code>矩阵</h2>
 <p>从上一篇文章知道<code>FAT</code>矩阵的构建方式如下：
 <img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-29-exporting-file-from-ps2-memcard/%E5%AD%98%E5%82%A8%E5%8D%A1-FAT2.jpg"/></p>
-<pre><code class="lang-python">def __build_fat_matrix(self):
+<pre><code class="language-python">def __build_fat_matrix(self):
     # 从ifc_list构建间接FAT
     indirect_fat_matrix = self.__build_matrix(self.ifc_list)
     # 间接FAT是个一维数组
@@ -99,7 +99,7 @@ def get_fat_value(self, n):
 </code></pre>
 <h2>04 条目数据结构</h2>
 <p>条目是所有文件和目录的元数据，条目的数据结构如下：</p>
-<pre><code class="lang-c++">struct Entry {
+<pre><code class="language-c++">struct Entry {
     uint16 mode;
     uint16 unknown; // ignore
     uint32 length;
@@ -114,11 +114,11 @@ def get_fat_value(self, n):
 };
 </code></pre>
 <p>使用<code>struct.unpack()</code>解包：</p>
-<pre><code class="lang-python">struct.Struct("&lt;H2xL8sL4x8s4x28x32s416x").unpack(byte_val)
+<pre><code class="language-python">struct.Struct("&lt;H2xL8sL4x8s4x28x32s416x").unpack(byte_val)
 </code></pre>
 <p>每个条目的大小为512字节，条目里最重要的字段是<code>cluster</code>，标识了该条目对应的文件或目录的簇编号。如果本条目是目录，则对应的簇编号是“条目簇”；如果本条目是文件，则对应的簇编号是“文件簇”。另一个重要字段是<code>length</code>，如果本条目是目录，则对应的是目录下的条目数；如果本条目是文件，则对应的是文件的字节数。</p>
 <h2>05 解析“条目簇”和“数据簇”</h2>
-<pre><code class="lang-python"># 读取条目，条目是512字节，一个簇可以包含多个条目
+<pre><code class="language-python"># 读取条目，条目是512字节，一个簇可以包含多个条目
 def read_entry_cluster(self, cluster_offset):
     cluster_value = self.read_cluster(cluster_offset + self.alloc_offset)
     return Entry.build(cluster_value)
@@ -146,7 +146,7 @@ def build(byte_val):
 <h2>06 读取存储卡中的所有文件</h2>
 <p>上一篇文章说过，根目录没有条目，它的首个“条目簇”在超级块的<code>rootdir_cluster</code>中，它的“包含条目数”在<code>.</code>这个条目中。</p>
 <p>要读取存储卡中的所有文件，第一步是解析根目录下所有条目，再解析条目下所有文件。因此只要循环调用以下方法：</p>
-<pre><code class="lang-python">def find_sub_entries(self, parent_entry):
+<pre><code class="language-python">def find_sub_entries(self, parent_entry):
     chain_start = parent_entry.cluster
     sub_entries = []
     while chain_start != Fat.CHAIN_END:
@@ -176,7 +176,7 @@ BASLUS-21441DBZT2
 </code></pre>
 <h2>07 导出游戏存档</h2>
 <p>既然所有文件条目都已经读取出来了，我们只要写个方法，根据输入的游戏名称，即可导出目录下的所有文件。</p>
-<pre><code class="lang-python">def export(self, name, dest):
+<pre><code class="language-python">def export(self, name, dest):
     dir_path = dest + os.sep + name
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)

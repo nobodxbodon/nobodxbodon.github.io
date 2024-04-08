@@ -19,7 +19,7 @@ categories:</li>
 <p>In the previous article, we analyzed the file system of the PS2 memory card. This time, we'll dive straight into practice and write Python code to export specific game saves. The complete code for this article can be found at: <a href="https://github.com/caol64/ps2mc-browser">ps2mc-browser</a>.</p>
 <h2>01 Parsing the <code>SuperBlock</code></h2>
 <p>The structure of the <code>SuperBlock</code> is as follows, with a size of 340 bytes:</p>
-<pre><code class="lang-c++">struct SuperBlock {
+<pre><code class="language-c++">struct SuperBlock {
     char magic[28];
     char version[12];
     uint16 page_size;
@@ -42,17 +42,17 @@ categories:</li>
 };
 </code></pre>
 <p>Use <code>struct.unpack()</code> to unpack:</p>
-<pre><code class="lang-python">struct.Struct("&lt;28s12sHHH2xLLLL4x4x8x128s128xbbxx").unpack(byte_val)
+<pre><code class="language-python">struct.Struct("&lt;28s12sHHH2xLLLL4x4x8x128s128xbbxx").unpack(byte_val)
 </code></pre>
 <p>Obtain <code>page_size</code> and <code>pages_per_cluster</code>.</p>
 <h2>02 Reading <code>page</code> and <code>cluster</code></h2>
 <p>Calculate the sizes of <code>page</code> and <code>cluster</code> using the formula:</p>
-<pre><code class="lang-python">self.spare_size = (self.page_size // 128) * 4  # Size of spare area in bytes
+<pre><code class="language-python">self.spare_size = (self.page_size // 128) * 4  # Size of spare area in bytes
 self.raw_page_size = self.page_size + self.spare_size  # Total size of page including spare area in bytes
 self.cluster_size = self.page_size * self.pages_per_cluster  # Size of cluster in bytes
 </code></pre>
 <p>Read <code>page</code> and <code>cluster</code>, discarding the contents of the <code>spare area</code>:</p>
-<pre><code class="lang-python">def read_page(self, n):  # n is the page number
+<pre><code class="language-python">def read_page(self, n):  # n is the page number
     offset = self.raw_page_size * n
     return self.byte_val[offset: offset + self.page_size]
 
@@ -66,7 +66,7 @@ def read_cluster(self, n):  # n is the cluster number
 <h2>03 Constructing the <code>FAT</code> Matrix</h2>
 <p>From the previous article, we know the construction method of the <code>FAT</code> matrix as follows:
 <img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-29-exporting-file-from-ps2-memcard/%E5%AD%98%E5%82%A8%E5%8D%A1-FAT2.jpg"/></p>
-<pre><code class="lang-python">def __build_fat_matrix(self):
+<pre><code class="language-python">def __build_fat_matrix(self):
     # Build the indirect FAT from ifc_list
     indirect_fat_matrix = self.__build_matrix(self.ifc_list)
     # Indirect FAT is a one-dimensional array
@@ -100,7 +100,7 @@ def get_fat_value(self, n):
 </code></pre>
 <h2>04 Entry Data Structure</h2>
 <p>An entry serves as metadata for all files and directories. The data structure of an entry is as follows:</p>
-<pre><code class="lang-c++">struct Entry {
+<pre><code class="language-c++">struct Entry {
     uint16 mode;
     uint16 unknown; // ignore
     uint32 length;
@@ -115,11 +115,11 @@ def get_fat_value(self, n):
 };
 </code></pre>
 <p>Using <code>struct.unpack()</code> to unpack:</p>
-<pre><code class="lang-python">struct.Struct("&lt;H2xL8sL4x8s4x28x32s416x").unpack(byte_val)
+<pre><code class="language-python">struct.Struct("&lt;H2xL8sL4x8s4x28x32s416x").unpack(byte_val)
 </code></pre>
 <p>Each entry is 512 bytes in size. The most important field in an entry is <code>cluster</code>, which identifies the cluster number corresponding to the file or directory of that entry. If the entry represents a directory, the cluster number corresponds to the "entry cluster"; if the entry represents a file, the cluster number corresponds to the "file cluster". Another important field is <code>length</code>, which represents the number of entries in a directory if the entry represents a directory, or the number of bytes in a file if the entry represents a file.</p>
 <h2>05 Parsing "Entry Cluster" and "Data Cluster"</h2>
-<pre><code class="lang-python"># Read entry, where each entry is 512 bytes and multiple entries can be contained in one cluster
+<pre><code class="language-python"># Read entry, where each entry is 512 bytes and multiple entries can be contained in one cluster
 def read_entry_cluster(self, cluster_offset):
     cluster_value = self.read_cluster(cluster_offset + self.alloc_offset)
     return Entry.build(cluster_value)
@@ -147,7 +147,7 @@ def build(byte_val):
 <h2>06 Reading all files from the memory card</h2>
 <p>As mentioned in the previous article, the root directory does not have entries. Its first "entry cluster" is specified in the <code>rootdir_cluster</code> field of the superblock, and the number of entries it contains is specified in the <code>.</code> entry.</p>
 <p>To read all files from the memory card, the first step is to parse all entries in the root directory and then parse all files under those entries. Therefore, all you need to do is loop through the following method:</p>
-<pre><code class="lang-python">def find_sub_entries(self, parent_entry):
+<pre><code class="language-python">def find_sub_entries(self, parent_entry):
     chain_start = parent_entry.cluster
     sub_entries = []
     while chain_start != Fat.CHAIN_END:
@@ -177,7 +177,7 @@ BASLUS-21441DBZT2
 </code></pre>
 <h2>07 Exporting Game Saves</h2>
 <p>Now that all file entries have been read, all we need to do is write a method that can export all files in a directory based on the input game name.</p>
-<pre><code class="lang-python">def export(self, name, dest):
+<pre><code class="language-python">def export(self, name, dest):
     dir_path = dest + os.sep + name
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
