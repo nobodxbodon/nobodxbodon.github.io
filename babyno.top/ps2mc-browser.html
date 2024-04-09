@@ -1,140 +1,41 @@
-<h2>原文：<a href="https://babyno.top/posts/2023/12/20/ps2mc-browsers-shader-introduction.en">ps2mc-browser</a></h2>
+<h2>原文：<a href="https://babyno.top/posts/2023/11/20/ps2mc-browser-new-feature-release.en">ps2mc-browser</a></h2>
 <hr/>
 <p>author: caol64
-title: '"ps2mc-browser" Shader Code Analysis'
-slug: ps2mc-browsers-shader-introduction
-description: Uncover the magic behind colorful 3D rendering using OpenGL Shader with the ps2mc-browser. Dive deep into how polygons, vertices, and textures combine to create vibrant tabletop graphics.
-date: 2023-12-20 12:07:17
+title: '"ps2mc-browser" New Feature Release'
+slug: ps2mc-browser-new-feature-release
+description: Check out the new features and updates in the PS2MC-Browser, a PS2 save file viewer that can now interactively display dynamic 3D Icons, provide enhanced visibility with a skybox layer, and much more.
+date: 2023-11-20 14:52:18
 draft: false
 ShowToc: true
 TocOpen: true
 tags:</p>
 <ul>
 <li>ps2mc-browser</li>
-<li>OpenGL</li>
-<li>Python
+<li>Python</li>
+<li>Open-Source
 categories:</li>
-<li>Tutorial</li>
+<li>Share</li>
 </ul>
 <hr/>
-<p>How do we render the vertices and textures of polygons into a colorful scene? This is where OpenGL shaders come into play. Today, we'll discuss the shaders of <code>ps2mc-browser</code>.</p>
-<p>To briefly introduce, <a href="https://github.com/caol64/ps2mc-browser">ps2mc-browser</a> is a PS2 memory card viewer capable of parsing vertex and texture data from 3D icons within PS2 memory card files and rendering them using OpenGL.</p>
-<p>In the following content, I'll dissect the six OpenGL shaders used in <code>ps2mc-browser</code> one by one. Let's dive into understanding how they work.</p>
-<h2>Background Shaders (bg.frag and bg.vert)</h2>
-<p>These shaders are primarily responsible for rendering the background color. As we learned from previous articles, the <code>icon.sys</code> file provides data for the colors and transparency of the four vertices of the background.</p>
-<p>Let's revisit the coordinate system we created:</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/%E5%AD%98%E5%82%A8%E5%8D%A1-%E5%9D%90%E6%A0%87%E7%B3%BB.jpg"/></p>
-<p>Since the space we create is a cube with each side having a length of 2, and the origin coordinates are at the center of the cube. Additionally, our camera is in the negative direction of the <code>z-axis</code>. Let's imagine which face of the cube should be the background face:</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-12-20-ps2mc-browsers-shader-introduction/image.webp"/></p>
-<p>Therefore, we can construct the coordinates of the four vertices of the background as:</p>
-<pre><code class="language-python">bg_vertex = [(-1, 1, 0.99), (-1, -1, 0.99), (1, -1, 0.99), (1, 1, 0.99)]
-</code></pre>
-<p>By the way, in shaders, rendering is done on a per-triangle basis. Therefore, this square face should be split into two triangles. Now, we'll fill in the corresponding color values for these 4 coordinates, and the shader will render the color for the entire face.</p>
-<pre><code class="language-glsl">// bg.frag
-#version 330 core
-in vec4 fragColor0;
-out vec4 fragColor;
-void main() {
-    fragColor = fragColor0;
-}
-</code></pre>
-<p>In the fragment shader for the background (<code>bg.frag</code>), we input a color (<code>fragColor0</code>), and then assign its value to the output color (<code>fragColor</code>). This process essentially renders the background color.</p>
-<pre><code class="language-glsl">// bg.vert
-#version 330 core
-in vec3 vertexPos;
-in vec4 vertexColor;
-out vec4 fragColor0;
-void main() {
-    fragColor0 = vertexColor;
-    gl_Position = vec4(vertexPos, 1.0);
-}
-</code></pre>
-<p>In the vertex shader for the background (<code>bg.vert</code>), we first define a vertex position (<code>vertexPos</code>) and a color value (<code>vertexColor</code>) as inputs. Then, we pass the color value to the fragment shader and set the vertex position (<code>gl_Position</code>).</p>
-<p>It can be said that the main responsibility of the background shader is to fill the desired color onto the screen.</p>
-<p>We're not done yet. Previously, we mentioned that besides color data, the background also has transparency data. How do we represent transparency? We'll add another layer behind the background layer, which we call the <code>skybox</code> layer, and add some color to this layer. This way, if the background layer has transparency, some of the color from the skybox layer will show through the background layer, achieving the desired visual effect.</p>
-<pre><code class="language-python">skybox_vertex = [(-1, 1, 0.999), (-1, -1, 0.999), (1, -1, 0.999), (1, 1, 0.999)]
-skybox_colors = [
-    (0.6, 0.6, 0.6, 1),
-    (0.6, 0.6, 0.6, 1),
-    (0.6, 0.6, 0.6, 1),
-    (0.6, 0.6, 0.6, 1),
-]
-</code></pre>
-<p>Finally, here's an example of the background effect. You can see that the color transition in the middle is automatically calculated by shader interpolation.</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-12-20-ps2mc-browsers-shader-introduction/%E6%88%AA%E5%B1%8F2023-12-20%2014.41.10.webp"/></p>
-<h2>Icon Shaders (icon.frag and icon.vert)</h2>
-<p>This is the most complex part, responsible for rendering the 3D icons parsed from the PS2 memory card files. As mentioned earlier, shaders render triangles formed by vertices one by one.</p>
-<pre><code class="language-glsl">// icon.frag
-#version 330 core
-...
-// Uniform variables
-uniform sampler2D texture0;  // Texture
-uniform vec4 ambient;        // Ambient light
-uniform mat4 model;          // Model matrix
-uniform Light lights[MAX_NUM_TOTAL_LIGHTS];  // Array of lights
-void main() {
-    // Calculate normalized normal vector
-    vec3 normal = normalize(normal0).xyz;
-    // Get color from the texture
-    vec3 color = texture(texture0, uv0).rgb;
-    // Calculate diffuse lighting
-    vec3 diffuse = vec3(0);
-    for (int i = 0; i &lt; MAX_NUM_TOTAL_LIGHTS; i++) {
-        vec3 lightDir = normalize(lights[i].dir.xyz);
-        diffuse += max(dot(normal, lightDir), 0.0) * lights[i].color.rgb;
-    }
-    // Final color calculation
-    vec4 finalColor = vec4((ambient.rgb + diffuse) * color, 1.0);
-    fragColor = finalColor;
-}
-</code></pre>
-<p>In the fragment shader for the icons (<code>icon.frag</code>), the "uniform" keyword introduces some constants, including the texture (<code>texture0</code>), ambient light (<code>ambient</code>), and lighting (<code>lights</code>).</p>
-<p>Next, we calculate a unit normal vector (<code>normal</code>), retrieve the color from the texture, and compute the diffuse reflection (<code>diffuse</code>). Specifically, each light contributes to the diffuse reflection, which depends on the angle between the light direction and the normal vector. We sum up the contributions of all lights to obtain the final diffuse reflection.</p>
-<p>Finally, we multiply the ambient light and diffuse reflection by the texture color to get the final color (<code>finalColor</code>), which is then passed to the output color (<code>fragColor</code>) of the fragment shader.</p>
-<pre><code class="language-glsl">// icon.vert
-#version 330 core
-...
-// Output variables for fragment shader
-out vec2 uv0;            // Texture coordinates for fragment shader
-out vec4 normal0;        // Transformed normal for fragment shader
-// Uniform matrices
-uniform mat4 proj;       // Projection matrix
-uniform mat4 view;       // View matrix
-uniform mat4 model;      // Model matrix
-uniform float tweenFactor; // Tweening factor for vertex animation
-void main() {
-    // Pass texture coordinates to fragment shader
-    uv0 = texCoord;
-    // Transform and pass normal to fragment shader
-    normal0 = model * vec4(normal, 1);
-    // Interpolate between current and next vertex positions based on tween factor
-    vec4 basePos = vec4(mix(vertexPos, nextVertexPos, tweenFactor), 1.0);
-    // Combine transformations and set the final vertex position
-    gl_Position = proj * view * model * basePos;
-}
-</code></pre>
-<p>In the vertex shader for the icons (<code>icon.vert</code>), we use the <code>uniform</code> keyword to set up some matrices (<code>proj</code>, <code>view</code>, <code>model</code>) and an interpolation factor (<code>tweenFactor</code>).</p>
-<p>Let's focus on the interpolation factor (<code>tweenFactor</code>) here. This value is crucial for achieving animation effects in 3D icons. Since each memory card contains not only the complete set of vertices for the icon but also additional vertex coordinates for different actions, which we refer to as action frames, animating the frames in a loop creates the animation effect. Therefore, we need to interpolate between adjacent action frames to calculate the vertex coordinates. The <code>tweenFactor</code> represents the time factor between the current frame and the next frame.</p>
-<p>Next, we pass the texture coordinates (<code>uv0</code>) and the normal vector (<code>normal0</code>) to the fragment shader. We interpolate between the current vertex position (<code>vertexPos</code>) and the next vertex position (<code>nextVertexPos</code>) based on the tween factor. Then, we transform the interpolated position using the model matrix (<code>model</code>) and finally transform it into homogeneous clipping space using the view matrix (<code>view</code>) and projection matrix (<code>proj</code>).</p>
-<p>With this, the icon shader's task is completed.</p>
-<h2>Button Shaders (circle.frag and circle.vert)</h2>
-<p>Responsible for rendering interactive buttons for mouse interaction. <code>ps2mc-browser</code> can display various actions of characters in the memory card. Users can click on the corresponding buttons to switch between different actions.</p>
-<pre><code class="language-glsl">// circle.frag
-#version 330 core
-out vec4 fragColor;
-void main() {
-    fragColor = vec4(1.0, 1.0, 1.0, 0.6);
-}
-</code></pre>
-<p>In this <code>circle.frag</code>, we directly set the color (<code>fragColor</code>) to semi-transparent white and do not accept any inputs.</p>
-<pre><code class="language-glsl">// circle.vert
-#version 330 core
-in vec2 vertexPos;
-void main() {
-    gl_Position = vec4(vertexPos, 0, 1.0);
-}
-</code></pre>
-<p>In <code>circle.vert</code>, we only need to receive a vertex position (<code>vertexPos</code>) as input and then assign it to the OpenGL built-in variable <code>gl_Position</code>.</p>
-<p>In simple terms, the button shader's job is to draw a semi-transparent white geometric shape as a button. The number of buttons it needs to render and their coordinates are all calculated by the program and passed to the shader.</p>
-<h2>Summary</h2>
-<p>So far, we have detailed how <code>ps2mc-browser</code> renders 3D dynamic icons using OpenGL shaders. Both Python and OpenGL were new to me, and I didn't expect to integrate them together for this project. There may be some new features added to this project in the future, so until next time, goodbye.</p>
+<p><code>ps2mc-browser</code> is a <code>PS2</code> memory card file viewer that utilizes an <code>OpenGL</code> canvas to display 3D dynamic icons from the memory card. It relies on the following dependencies:</p>
+<ul>
+<li>Python3</li>
+<li>WxPython</li>
+<li>Numpy</li>
+<li>ModernGL</li>
+<li>PyGlm</li>
+</ul>
+<p>You can find the GitHub repository <a href="https://github.com/caol64/ps2mc-browser">here</a>.</p>
+<h2>New Features</h2>
+<p>Some <code>PS2</code> game memory card files contain three sets of different animated icons, corresponding to three different operations: "browse," "copy," and "delete."</p>
+<p>The newly released feature allows the <code>ps2mc-browser</code> interface not only to display animated icons but also to interact with users and respond to mouse operations. Consequently, the animation of icons can vary based on user selection.</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-11-20-ps2mc-browser-new-feature-release/2.gif"/></p>
+<h2>Other Updates</h2>
+<p>The background pattern of each animated memory card icon is stored in the <code>icon.sys</code> file (refer to <a href="../../10/parsing-ps2-3d-icon">Parsing PS2 Game Memory Card 3D Icons</a> for details). In reality, it has transparency, which is more apparent on a physical <code>PS2</code> console.</p>
+<p>Therefore, when rendering the background in <code>OpenGL</code>, an additional layer of <code>skybox</code> is added behind the <code>bg</code> background layer. The <code>z</code> coordinates of these two layers are distributed as <code>0.99</code> and <code>0.999</code>, and the <code>RGBA</code> of the <code>skybox</code> is <code>(0.6, 0.6, 0.6, 1)</code> opaque. This setup ensures that if the <code>bg</code> has transparency, the color of the <code>skybox</code> will be displayed.</p>
+<p>Taking <code>Viewtiful Joe</code> as an example, its <code>bg</code> has <code>100%</code> transparency. Without the <code>skybox</code>, the effect would be as follows:
+<img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-11-20-ps2mc-browser-new-feature-release/3.gif"/></p>
+<p>With the <code>skybox</code> added, the effect is as follows:
+<img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-11-20-ps2mc-browser-new-feature-release/4.gif"/></p>
+<h2>Unresolved Issues</h2>
+<p>The problem with lighting has not been resolved, resulting in incorrect lighting for many games and poor display effects. For more details, refer to <a href="../../10/parsing-ps2-3d-icon">Parsing PS2 Game Memory Card 3D Icons</a>.</p>
