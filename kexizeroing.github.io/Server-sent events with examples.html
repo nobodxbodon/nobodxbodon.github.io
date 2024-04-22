@@ -1,4 +1,4 @@
-<h2>原文：<a href="https://kexizeroing.github.io/server-sent-events-with-examples">Server-sent events with examples</a></h2>
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/server-sent-events-with-examples.md">仓库源文</a>，<a href="https://kexizeroing.github.io/server-sent-events-with-examples">站点原文</a></h2>
 <hr/>
 <h2>layout: "../layouts/BlogPost.astro"
 title: "Server-sent events with examples"
@@ -104,12 +104,15 @@ await fetchEventSource('/api/sse', {
     foo: 'bar'
   }),
   signal: ctrl.signal,
+  onopen(response) { },
+  onclose() { },
+  onmessage(message) { },
 });
 </code></pre>
 <h2>Server-side streams</h2>
 <p>What if one wanted to build a server which responded with a message every second? This can be achieved by combining <code>ReadableStream</code> with <code>setInterval</code>. Additionally, by setting the content-type to <code>text/event-stream</code> and prefixing each message with <code>"data: "</code>, Server-Sent Events make for easy processing using the EventSource API.</p>
 <blockquote>
-<p>Streaming is the action of rendering data on the client progressively while it's still being generated on the server. As data arrives in chunks, it can be processed without waiting for the entire payload. This can significantly enhance the perceived performance of large data loads or slow network connections.</p>
+<p>Streaming is the action of rendering data on the client progressively while it's still being generated on the server. As data arrives in chunks, it can be processed without waiting for the entire payload. This can significantly enhance the perceived performance of large data loads or slow network connections. Streaming is the basis for HTML5 server-sent events.</p>
 </blockquote>
 <pre><code class="language-js">import { serve } from "https://deno.land/std@0.140.0/http/server.ts";
 
@@ -120,7 +123,7 @@ serve(async (_) =&gt; {
   const body = new ReadableStream({
     start(controller) {
       timerId = setInterval(() =&gt; {
-        // Add the message to the stream
+        // Add the message (a chunk) to the stream
         controller.enqueue(msg);
       }, 1000);
     },
@@ -139,6 +142,9 @@ serve(async (_) =&gt; {
 </code></pre>
 <p><code>start(controller)</code> method is called immediately when the object is constructed. It aims to get access to the stream source, and do anything else required to set up the stream functionality. The <code>controller</code> parameter passed to this method can be used to control the stream's state and internal queue.</p>
 <p><code>cancel()</code> method will be called if the app signals that the stream is to be cancelled (e.g. if <code>ReadableStream.cancel()</code> is called).</p>
+<blockquote>
+<p><a href="https://github.com/rexxars/eventsource-parser">eventsource-parser</a> is a streaming parser for server-sent events, without any assumptions about how the actual stream of data is retrieved. It simplifies the process of handling SSE data by providing functions to parse and handle the incoming messages.</p>
+</blockquote>
 <p><strong>How OpenAI uses SSE to stream the results back to the client?</strong></p>
 <ol>
 <li>The client creates an SSE <code>EventSource</code> to server endpoint with SSE configured.</li>
@@ -176,6 +182,55 @@ serve(async (_) =&gt; {
     });
   })
 })
+</code></pre>
+<h3>Changing the HTML content during streaming</h3>
+<p>One of the practices that has many performance benefits is to change the HTML content during streaming. A clear example is React Suspense. The idea is to show empty content (placeholder, skeleton, or spinner) while loading the rest of the HTML. Once the server has the missing content then in streaming-time it changes it. (Browsers are smart enough to execute small JS scripts during streaming.)</p>
+<p>Everything is done with a single request and the user instantly sees the HTML and the changes to it without having to make extra requests. In the past years, these requests were made from the client, making this not executed until all the HTML was loaded.</p>
+<pre><code class="language-js">// Refer to: https://aralroca.com/blog/html-node-streaming
+return new Response(
+  new ReadableStream({
+    async start(controller) {
+      const suspensePromises = []
+
+      controller.enqueue(encoder.encode('&lt;html lang="en"&gt;'))
+      controller.enqueue(encoder.encode('&lt;head&gt;'))
+      // Load the code to allow "unsuspense"
+      controller.enqueue(
+        enconder.encode('&lt;script src="unsuspense.js"&gt;&lt;/script&gt;')
+      )
+      controller.enqueue(encoder.encode('&lt;/head&gt;'))
+      controller.enqueue(encoder.encode('&lt;body&gt;'))
+
+      // Add a placeholder (suspense)
+      controller.enqueue(
+        encoder.encode('&lt;div id="suspensed:1"&gt;Loading...&lt;/div&gt;')
+      )
+
+      // Load the content - without "await"
+      suspensePromises.push(
+        computeExpensiveChunk().then((content) =&gt; {
+          // enqueue the real content
+          controller.enqueue(
+            encoder.encode(
+              `&lt;template id="suspensed-content:1"&gt;${content}&lt;/template&gt;`
+            )
+          )
+          // enqueue the script to replace the suspensed content to the real one
+          controller.enqueue(encoder.encode(`&lt;script&gt;unsuspense('1')&lt;/script&gt;`))
+        })
+      )
+
+      controller.enqueue(encoder.encode('&lt;div class="foo"&gt;Bar&lt;/div&gt;'))
+      controller.enqueue(encoder.encode('&lt;/body&gt;'))
+      controller.enqueue(encoder.encode('&lt;/html&gt;'))
+
+      // Wait for all suspended content before closing the stream
+      await Promise.all(suspensePromises)
+
+      controller.close()
+    },
+  })
+)
 </code></pre>
 <h2>Download streamed data using vanilla JavaScript</h2>
 <pre><code class="language-js">// Create an AbortController to control and cancel the fetch request, 

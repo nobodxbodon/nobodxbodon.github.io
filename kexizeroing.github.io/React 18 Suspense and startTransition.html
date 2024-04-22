@@ -1,4 +1,4 @@
-<h2>原文：<a href="https://kexizeroing.github.io/react-18-suspense-transition">React 18 Suspense and startTransition</a></h2>
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/react-18-suspense-transition.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-18-suspense-transition">站点原文</a></h2>
 <hr/>
 <h2>layout: "../layouts/BlogPost.astro"
 title: "React 18 Suspense and startTransition"
@@ -6,7 +6,7 @@ slug: react-18-suspense-transition
 description: ""
 added: "Oct 7 2023"
 tags: [react]
-updatedDate: "Feb 5 2024"</h2>
+updatedDate: "Apr 17 2024"</h2>
 <p>A key property of Concurrent React is that rendering is interruptible. With synchronous rendering, once an update starts rendering, nothing can interrupt it until the user can see the result on screen. In a concurrent render, this is not always the case. React may start rendering an update, pause in the middle, then continue later. It may even abandon an in-progress render altogether.</p>
 <p>Concurrent React is opt-in — it’s only enabled when you use a concurrent feature. you can gradually start adding concurrent features at your own pace. The new root API in React 18 enables the new concurrent renderer, which allows you to opt-into concurrent features. Continue to read <a href="https://react.dev/blog/2022/03/08/react-18-upgrade-guide">How to Upgrade to React 18</a>.</p>
 <pre><code class="language-js">// Before
@@ -25,7 +25,7 @@ root.render(&lt;App tab="home" /&gt;);
 <p>Until React 18, all updates were rendered urgently. A transition is a new concept in React to distinguish between urgent and non-urgent updates.</p>
 <ul>
 <li>Urgent updates reflect direct interaction, like typing, clicking, pressing, and so on.</li>
-<li>Transition updates transition the UI from one view to another.</li>
+<li>Transition is a "potential future UI state". It's not committed immediately, it's enqueued.</li>
 </ul>
 <pre><code class="language-jsx">import { startTransition } from 'react';
 
@@ -48,11 +48,47 @@ startTransition(() =&gt; {
 </ol>
 </blockquote>
 <p>What if you want to display something on the search results while waiting for the expensive UI render to finish? For this, we can use the <code>isPending</code> flag that comes from the <code>useTransition</code> hook.</p>
-<pre><code class="language-jsx">import { useTransition } from 'react';
+<pre><code class="language-jsx">function App() {
+  const [query, setQuery] = useState('');
+  const [isPending, startTransition] = useTransition();
+  const [deferredQuery, setDeferredQuery] = useState(query);
 
-const [isPending, startTransition] = useTransition();
+  useEffect(() =&gt; {
+    // Hi React, schedule this function for later
+    startTransition(() =&gt; {
+      setDeferredQuery(query);
+    });
+  }, [query]);
 
-{isPending &amp;&amp; &lt;Spinner /&gt;}
+  return (
+    &lt;div&gt;
+      &lt;input
+        type="text"
+        value={query}
+        onChange={e =&gt; setQuery(e.target.value)}
+      /&gt;
+      { isPending ? &lt;Spinner /&gt; : &lt;List q={deferredQuery} /&gt; }
+    &lt;/div&gt; 
+  )
+}
+</code></pre>
+<p><code>useTransition</code> returns <em>isPending</em> and <code>useDeferredValue</code> you can do <em>value !== deferredValue</em>:</p>
+<pre><code class="language-jsx">function App() {
+  const [query, setQuery] = useState('');
+  // Get a deferred version of that value
+  const deferredQuery = useDeferredValue(query);
+
+  return (
+    &lt;div&gt;
+      &lt;input
+        type="text"
+        value={query}
+        onChange={e =&gt; setQuery(e.target.value)}
+      /&gt;
+      { query !== deferredQuery ? &lt;Spinner /&gt; : &lt;List q={deferredQuery} /&gt; }
+    &lt;/div&gt; 
+  )
+}
 </code></pre>
 <h2>New Suspense Features</h2>
 <p>Suspense allows you to render a fallback component while a component is waiting for some asynchronous operations.</p>
