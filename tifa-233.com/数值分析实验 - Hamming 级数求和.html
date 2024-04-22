@@ -1,0 +1,185 @@
+<h2><a href="https://github.com/Tiphereth-A/Tiphereth-A.github.io/blob/master/source/_posts/numanaexp-01.md">仓库源文</a>，<a href="https://tifa-233.com/numanaexp-01">站点原文</a></h2>
+<hr/>
+<p>title: 数值分析实验 - Hamming 级数求和
+categories:</p>
+<ul>
+<li>笔记</li>
+<li>数学</li>
+<li>数值分析</li>
+<li>实验报告
+tags:</li>
+<li>笔记</li>
+<li>数学</li>
+<li>数值分析</li>
+<li>实验报告</li>
+<li>MATLAB</li>
+<li>C++</li>
+<li>Hamming级数</li>
+<li>递推
+date: 2021-04-16 20:30:47</li>
+</ul>
+<hr/>
+<p>数值分析实验 1 - Hamming 级数求和</p>
+<p>&lt;!-- more --&gt;</p>
+<h2>实验要求</h2>
+<p>令</p>
+<p>$$
+\psi(x)=\sum_{k=1}^{\infty}\frac{1}{k(k+x)}\tag{1}
+$$</p>
+<p>取 $x=0.0,~0.1,~0.2~,...,300.0$, 计算在这 $3001$ 个值下所有的 $\psi(x)$, 并将误差控制在 $1.0\rm{e-}10$ 范围</p>
+<h2>分析</h2>
+<p>直接计算的耗时往往过长 (见 &lt;a href="#exp1-1"&gt;直接计算的误差及复杂度分析&lt;/a&gt;), 故需要进行优化</p>
+<p>本文给出了一种将绝大多数数据通过线性递推计算, 从而以极快的运算速度完成运算的算法</p>
+<h2>计算公式</h2>
+<p>注意到</p>
+<ul>
+<li><p>$$
+\psi(0)=\sum_{k=1}^{\infty}\frac{1}{k^2}=\frac{\pi^2}{6}\tag{2}
+$$</p>
+</li>
+<li><p>当 $x\ne0$ 时</p>
+<p>$$
+\psi(x)=\sum_{k=1}^{\infty}\frac{1}{k(k+x)}=\frac{1}{x}\sum_{k=1}^{\infty}\left(\frac{1}{k}-\frac{1}{k+x}\right)\tag{3}
+$$</p>
+<p>注意到, 当 $x\geqslant1$ 时</p>
+<p>$$
+\begin{aligned}
+x~\psi(x)&amp;=\sum_{k=1}^{\infty}\frac{1}{k}-\sum_{k=1}^{\infty}\frac{1}{k+x}\
+&amp;=\sum_{k=1}^{\infty}\frac{1}{k}-\sum_{k=1}^{\infty}\frac{1}{k+x-1}+\frac{1}{x}\
+&amp;=(x-1)~\psi(x-1)+\frac{1}{x}
+\end{aligned}
+$$</p>
+<p>则有</p>
+<p>$$
+\psi(x)=\frac{x-1}{x}\psi(x-1)+\frac{1}{x^2}\tag{4}
+$$</p>
+</li>
+</ul>
+<p>对于 $0&lt;x&lt;1$ 的点, 我们这样考虑</p>
+<p>注意到</p>
+<p>$$
+\sum_{k=a+1}^{\infty}\frac{1}{k^m}&lt;\int_a^{\infty}{\mathrm{d}k\over k^m}\tag{5}
+$$</p>
+<p>我们需要取满足</p>
+<p>$$
+\int_a^{\infty}{\mathrm{d}k\over k^m}\leqslant\epsilon=10^{-10}\tag{6}
+$$</p>
+<p>的最小 $a$ 值, 且让其尽可能小 (至少小于 $10^7$)</p>
+<p>容易解得</p>
+<p>$$
+a\geqslant(\epsilon(m-1))^\frac{1}{1-m}=\sqrt[m-1]{10^{10}\over m-1},\qquad m&gt;1\tag{7}
+$$</p>
+<p>当 $m=3$ 时, $a\geqslant 7.0711\times10^4$</p>
+<p>这启发我们应尝试将级数 $\psi(x)$ 分母项的次数升高到 $3$ 次</p>
+<p>注意到</p>
+<ul>
+<li>$$
+\psi(1)=\sum_{k=1}^{\infty}\frac{1}{k(k+1)}=1\tag{8}
+$$</li>
+</ul>
+<p>我们设级数</p>
+<p>$$
+\psi_1(x)=\frac{\psi(x)-\psi(1)}{1-x}=\sum_{k=1}^{\infty}\frac{1}{k(k+1)(k+x)}\tag{9}
+$$</p>
+<p>则可将</p>
+<p>$$
+(1-x)\sum_{k=1}^{a_3}\frac{1}{k(k+1)(k+x)}+1\tag{10}
+$$</p>
+<p>视为 $\psi(x)$ 的近似值, 其中 $a_3\geqslant 70711$, 下面代码中取 $71000$</p>
+<p>所以最终的计算公式如下</p>
+<p>$$
+\psi(x)=\begin{cases}
+\frac{\pi^2}{6},&amp;x=0\
+(1-x)\sum_{k=1}^{a_3}\frac{1}{k(k+1)(k+x)}+1,&amp;0&lt;x&lt;1\
+\frac{x-1}{x}\psi(x-1)+\frac{1}{x^2},&amp;x\geqslant 1
+\end{cases}\tag{11}
+$$</p>
+<p>时间复杂度为 $\Theta(a_3+n)$</p>
+<h2>程序设计</h2>
+<h3>C++ 程序</h3>
+<p>&lt;details open&gt;
+&lt;summary&gt;&lt;font color='orange'&gt;Show code&lt;/font&gt;&lt;/summary&gt;</p>
+<p>{% include_code lang:cpp numanaexp-01/main.cpp %}</p>
+<p>&lt;/details&gt;</p>
+<h3>MATLAB 程序</h3>
+<h4>主程序</h4>
+<p>&lt;details open&gt;
+&lt;summary&gt;&lt;font color='orange'&gt;Show code&lt;/font&gt;&lt;/summary&gt;</p>
+<p>{% include_code lang:matlab numanaexp-01/main.m %}</p>
+<p>&lt;/details&gt;</p>
+<h4>计算函数</h4>
+<p>&lt;details open&gt;
+&lt;summary&gt;&lt;font color='orange'&gt;Show code&lt;/font&gt;&lt;/summary&gt;</p>
+<p>{% include_code lang:matlab numanaexp-01/calc_fast.m %}</p>
+<p>&lt;/details&gt;</p>
+<h4>误差检验函数</h4>
+<p>&lt;details open&gt;
+&lt;summary&gt;&lt;font color='orange'&gt;Show code&lt;/font&gt;&lt;/summary&gt;</p>
+<p>{% include_code lang:matlab numanaexp-01/error_judge.m %}</p>
+<p>&lt;/details&gt;</p>
+<h2>结果讨论和分析</h2>
+<h3>&lt;a id="exp1-1"&gt;直接计算的误差及复杂度分析&lt;/a&gt;</h3>
+<p>令</p>
+<p>$$
+\psi^*(x)=\sum_{k=1}^a\frac{1}{k(k+x)}\tag{12}
+$$</p>
+<p>注意到</p>
+<ul>
+<li>$$
+\sum_{k=a+1}^{\infty}\frac{1}{k(k+x)}&lt;\int_a^{\infty}{\mathrm{d}k\over k(k+x)}=\frac{\ln(a+x)-\ln a}{x}\tag{13}
+$$</li>
+<li>$$
+\frac{\ln(a+x)-\ln a}{x}\leqslant\epsilon\implies a\geqslant{x\over e^{x\epsilon}-1}\tag{14}
+$$</li>
+<li>当 $x\ll\frac{1}{\epsilon}$ 时,
+$$
+{x\over e^{x\epsilon}-1}\approx\frac{1}{\epsilon}\tag{15}
+$$</li>
+</ul>
+<blockquote>
+<p>本实验中, $x_{max}=300.0,~\epsilon=1.0\rm{e-}10$</p>
+</blockquote>
+<p>故 $a$ 大致取 $\frac{1}{\epsilon}$ 即可保证 $\psi(x)$ 的绝对误差 $|E(\psi(x))|\leqslant\epsilon$, 实验结果也符合这一估计</p>
+<p>则直接计算的时间复杂度为</p>
+<p>$$
+\Theta\left(\sum_{x=1}^n\left(0.1x+\frac{1}{\epsilon}\right)\right)=\Theta\left(\frac{n}{\epsilon}+n^2\right)
+$$</p>
+<p>其中</p>
+<ul>
+<li>$n$ 为 $x$ 样本点的个数, 本实验中即为 $3001$</li>
+<li>$\epsilon$ 为误差范围, 本实验中即为 $1.0\rm{e-}10$</li>
+</ul>
+<p>可以发现, 由于 $\epsilon$ 很小, 所以直接计算的耗时会很长. 在每秒执行 $1\rm{e}8$ 次运算的计算机上预计花费一天多的时间才能完成计算</p>
+<h3>进一步的优化方案</h3>
+<ul>
+<li><p>通过提高 $m$ 来减小 $a$
+我们知道, 在满足误差要求的条件下, $a$ 和 $m$ 满足如下关系(即式 $(7)$):</p>
+<p>$$
+a\geqslant\sqrt[1-m]{\epsilon(m-1)}=\sqrt[m-1]{10^{10}\over m-1},\qquad m&gt;1
+$$</p>
+<p>容易得知, $f(x)=\sqrt[1-m]{\epsilon(m-1)},~(m&gt;1)$ 是严格递减的凸函数, 且有下表</p>
+<p>| $m$ | $\lceil f(m)\rceil$ | $m\lceil f(m)\rceil$ |
+| --- | ------------------- | -------------------- |
+| $2$ | $10^{10}$           | $2\times 10^{10}$    |
+| $3$ | $70711$             | $212133$             |
+| $4$ | $1494$              | $5976$               |
+| $5$ | $224$               | $1120$               |
+| $6$ | $73$                | $438$                |
+| $7$ | $35$                | $245$                |
+| $8$ | $21$                | $168$                |</p>
+<p>由于计算每个数的时候都会做至少 $m\lceil f(m)\rceil$ 次乘法, 且考虑累计误差的影响, 我们只考虑 $m=4$ 的情况</p>
+<p>令</p>
+<p>$$
+\psi_2(x)=\frac{\psi_1(x)-\psi_1(2)}{2-x}\tag{16}
+$$</p>
+<p>由式 $(9)$, 有</p>
+<p>$$
+\psi_2(x)=\sum_{k=1}^{\infty}\frac{1}{k(k+1)(k+2)(k+x)}\tag{17}
+$$</p>
+<p>则可将</p>
+<p>$$
+(1-x)\left((2-x)\sum_{k=1}^{a_4}\frac{1}{k(k+1)(k+2)(k+x)}+\frac{1}{4}\right)+1\tag{18}
+$$</p>
+<p>视为 $\psi(x)$ 的近似值, 其中 $a_4\geqslant 1494$, 推荐取 $1500$</p>
+</li>
+</ul>
