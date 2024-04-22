@@ -1,0 +1,80 @@
+<h2>原文：<a href="https://babyno.top/posts/2024/04/22/run-stable-diffusion-locally-with-lora">在本地跑一个AI模型(6) - Stable Diffusion模型微调</a></h2>
+<hr/>
+<p>author: "路边的阿不"
+title: 在本地跑一个AI模型(6) - Stable Diffusion模型微调
+slug: run-stable-diffusion-locally-with-lora
+description: "Learn how to fine-tune your local Stable Diffusion model with LoRA, a low-rank adaptation technique that adds more details to generated images. Discover how to download and use pre-trained LoRA models from the community, and explore examples of using LoRA with different styles, such as Chinese illustration and pixel art."
+date: 2024-04-22 11:53:55
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>Stable-Diffusion</li>
+<li>AI
+categories:</li>
+<li>教程</li>
+</ul>
+<hr/>
+<p>本文是<a href="https://babyno.top/tags/stable-diffusion/"><code>Stable Diffusion</code>系列</a>第二篇。</p>
+<p>在<a href="https://babyno.top/posts/2024/04/run-stable-diffusion-locally/">上一篇文章中</a>，我们介绍了在本地使用<code>Diffusers</code>运行<code>Stable Diffusion</code>模型，并使用<code>Text to Image</code>技术使用提示词让<code>AI</code>生成了图片。在本篇文章中，我们将介绍如何使用社区提供的<code>LoRA</code>对模型的输出进行微调。</p>
+<h2>LoRA</h2>
+<p><code>LoRA（Low-Rank Adaptation）</code>是模型训练中的一种模型微调技术，用于在少量数据上快速训练新的模型。<code>LoRA</code>通过冻结基础模型的大部分参数，只对少量参数进行微调来实现这一点。<code>LoRA</code>可以使生成的图片增加更多的细节，例如生成特定的角色、动作、背景等。它可以基于现有模型而不必从头开始训练，优点是训练时间短、占用内存少。因此在<code>hugging face</code>和<code>Civitai</code>上可以下载到大量社区提供的<code>LoRA</code>。</p>
+<p>今天我们示例的<code>LoRA</code>如下：</p>
+<ul>
+<li><a href="https://civitai.com/models/120206/sdxlchinese-style-illustration">国风插画</a></li>
+<li><a href="https://civitai.com/models/158945/sdxl-film-photography-style">电影照片</a></li>
+<li><a href="https://civitai.com/models/120096/pixel-art-xl">像素风格</a></li>
+<li><a href="https://civitai.com/models/122359/detail-tweaker-xl">添加细节</a></li>
+</ul>
+<p><strong>请注意，在详情页关注<code>Base Model</code>选项，根据你运行的模型的<code>Base Model</code>选择合适的<code>LoRA</code>。比如，本文示例的模型为<a href="https://civitai.com/models/112902/dreamshaper-xl"><code>DreamShaper XL</code></a>，因此选择<code>LoRA</code>时应该对应的<code>Base Model</code>为<code>SDXL 1.0</code>。这在上一篇文章中有提到。</strong></p>
+<h2>基准图片</h2>
+<p>使用如下代码生成基准图片：</p>
+<pre><code class="language-python">from diffusers import StableDiffusionXLPipeline, DPMSolverSinglestepScheduler
+
+
+device = 'mps'
+
+pipe = StableDiffusionXLPipeline.from_single_file(
+    "your/path/dreamshaperXL_v21TurboDPMSDE.safetensors",
+    use_safetensors=True
+).to(device)
+pipe.scheduler = DPMSolverSinglestepScheduler.from_config(pipe.scheduler.config, use_karras_sigmas=True)
+# Recommended if your computer has &lt; 64 GB of RAM
+pipe.enable_attention_slicing()
+
+prompt = "masterpiece, 1girl, long hair, asian, sundress, cartoon, add detail"
+negative_prompt = 'low quality, bad quality, sketches'
+
+image = pipe(
+    prompt,
+    negative_prompt=negative_prompt,
+    num_inference_steps=6,
+    guidance_scale=2,
+).images[0]
+image.save("data/out.jpg")
+</code></pre>
+<p>注意提示词为<code>一个穿背心裙的长发亚洲女孩（卡通风格）</code>，其它参数在上一篇文章中有介绍。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-04-22-run-stable-diffusion-locally-with-lora/out.jpg"/></p>
+<h2>使用LoRA</h2>
+<p>首先在上面给出的网页上下载<code>safetensors</code>格式的<code>LoRA</code>文件，然后在代码中加上一行代码：</p>
+<pre><code class="language-python">pipe.load_lora_weights("your/path", weight_name="lora_name.safetensors")
+</code></pre>
+<p>这里有两个参数，前面一个参数是<code>LoRA</code>所在的目录，第二个参数是<code>LoRA</code>的文件名。</p>
+<p>此外，阅读<code>LoRA</code>详情页，一般作者都会提供触发关键词，如果作者未提供关键词，可能该<code>LoRA</code>会自动触发，也可以尝试在提示词中添加这个<code>LoRA</code>的名字。</p>
+<p>接下来我们看下分别使用这4个<code>LoRA</code>的效果。</p>
+<h3>国风插画</h3>
+<p>触发关键词：<code>guofeng</code>或<code>Chinese style</code>。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-04-22-run-stable-diffusion-locally-with-lora/guofeng_out.jpg"/></p>
+<h3>电影照片</h3>
+<p>触发关键词：无（自动触发）。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-04-22-run-stable-diffusion-locally-with-lora/filem_photo_out.jpg"/></p>
+<h3>像素风格</h3>
+<p>触发关键词：<code>pixel</code>。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-04-22-run-stable-diffusion-locally-with-lora/pixel_out.jpg"/></p>
+<h3>添加细节</h3>
+<p>触发关键词：<code>(add detail)++++++++</code>。</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2024-04-22-run-stable-diffusion-locally-with-lora/add_detail_out.jpg"/></p>
+<h2>总结</h2>
+<p>本文介绍了使用<code>LoRA</code>为本地<code>Stable Diffusion</code>模型进行微调，并介绍了如何下载和使用社区提供的已经训练好的<code>LoRA</code>。使用<code>LoRA</code>可以使生成的图片增加更多的细节。<code>LoRA</code>是<code>Text to Image</code>技术对提示词优化的一种补充。</p>
+<p>下一篇将介绍如何使用<code>ControlNet</code>和<code>Adapter</code>，使用<code>Image to Image</code>和<code>Text to Image</code>技术相结合，使用“草稿”对<code>AI</code>生成的图像进行规划和约束。</p>
