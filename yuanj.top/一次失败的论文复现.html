@@ -1,0 +1,116 @@
+<h2><a href="https://github.com/yuanj82/yuanj.top/blob/master/content/posts/%E4%B8%80%E6%AC%A1%E5%A4%B1%E8%B4%A5%E7%9A%84%E8%AE%BA%E6%96%87%E5%A4%8D%E7%8E%B0.md">仓库源文</a>，<a href="https://yuanj.top/posts/v7x0u7t">站点原文</a></h2>
+<hr/>
+<p>title: 一次失败的论文复现
+tags:</p>
+<ul>
+<li>"Genomics"</li>
+<li>"Publications"
+slug: v7x0u7t
+date: 2024-03-09T17:21:37+08:00</li>
+</ul>
+<hr/>
+<p>最近在学习多组学分析，于是决定从论文复现入手，找了一篇感觉可以的文章 <a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10057503/">《Integrated ATAC-Seq and RNA-Seq Data Analysis to Reveal OsbZIP14 Function in Rice in Response to Heat Stress》</a> 就直接开干了。</p>
+<p>&lt;!--more--&gt;</p>
+<p>这篇文章结合了 RNA-seq 和 ATAC-seq 两种组学分析方法，鉴定出了三个水稻中的热胁迫响应基因 OsHSF7、OsbZIP14 和 OsMYB2，通过一系列实验证实了 OsbZIP14 在热胁迫下植物生长发育中发挥作用，揭示了 OsbZIP14 基因与热应激诱导的叶片早衰之间的关联，此外，作者还找出并证实了 OsbZIP14 的一个相互作用蛋白 OsbZIP58。</p>
+<p>我主要对其中的 RNA-seq 和 ATAC-seq 两种分析进行复现。</p>
+<h2>RNA-seq</h2>
+<p>作者使用的测序数据来自 NCBI SRA 数据库，BioProject 编号为 PRJNA604026，此项目共有 12 个样本的数据，但是作者只用了 6 个，我使用所有的 12 个样本进行分析。RNA-seq 分析我已经是比较熟悉了，之前也写过 <a href="https://yuanj.top/tags/genomics/">相关的教程</a>，于是登录超算，按照作者材料与方法中的步骤（大体相同），fastqc 进行质量检测后使用 Trim Galore 去除接头连接子和低质量序列，使用 RAP DB 上的参考基因组构建 hisat2 索引后，将 reads 比对到参考基因组，然后 samtools 排序、压缩、转为 bam 格式，最后这里作者没有写用什么软件进行计量，只写了<code> Clean reads were then mapped to the reference genome using HISAT2 v2.2.1, sorted using samtools v1.9, and FPKM was calculated for each gene.</code> 所以我也就按照以前的套路用 subread，拿到基因计数表格之后用 R 语言进行 FPKM 标准化：</p>
+<pre><code class="language-r">rm(list = ls())
+
+counts &lt;- read.csv(
+    'rna-seq.counts',
+    header = TRUE,
+    sep = '\t',
+    # row.names = "Geneid",
+    comment.char = '#',
+    check.names = FALSE
+)
+# 对第 6 列以后的数据进行 fpkm 计算
+for (clm in colnames(counts)[6:ncol(counts)]) {
+    col_fpkm &lt;- paste0(clm, "_FPKM")     # 新列的名称，加上"_FPKM"后缀
+    total &lt;- sum(counts[, clm])          # 计算每个样本的总读数
+    counts[col_fpkm] &lt;- (counts[, clm] * 10^6) / (counts[, "Length"] / 1000)  # 使用相应样本的长度值计算 FPKM 并添加 FPKM 列 # nolint
+}
+# 删掉原有的 counts
+counts = counts[,-c(2:19)]
+
+numeric_mask &lt;- sapply(counts, is.numeric)
+counts[numeric_mask] &lt;- lapply(counts[numeric_mask], function(x) ifelse(x &lt; 1, x + 1, x)) # nolint
+
+write.table(counts, file = 'fpkm_output', sep = '\t', row.names = FALSE)
+</code></pre>
+<p>随后就是差异表达分析，还是 Deseq2 包：</p>
+<pre><code class="language-r">rm(list = ls())  
+Sys.setenv(LANGUAGE = "en")
+
+library(DESeq2)
+
+fpkm = read.csv(
+    'fpkm_output', 
+    header = T,  
+    sep = '\t', 
+    row.names = "Geneid", 
+    comment.char = '#', 
+    check.name = F
+)
+
+fpkm &lt;- round(fpkm)
+
+numeric_mask &lt;- sapply(fpkm, is.numeric)
+fpkm[numeric_mask] &lt;- lapply(fpkm[numeric_mask], function(x) ifelse(is.numeric(x) &amp; x &lt; 1, x + 100, x))
+
+fpkm[-1, ] &lt;- apply(fpkm[-1, ], 2, as.integer)
+
+missing_values &lt;- sum(is.na(fpkm))
+if (missing_values &gt; 0) {
+  fpkm &lt;- na.omit(fpkm)
+}
+
+samples = data.frame(
+    sampleID = c("Normal-1-1_FPKM", "Normal-1-2_FPKM", "Normal-1-3_FPKM", "HS-1-1_FPKM", "HS-1-2_FPKM", "HS-1-3_FPKM", "Normal-2-1_FPKM", "Normal-2-2_FPKM", "Normal-2-3_FPKM", "HS-2-1_FPKM", "HS-2-2_FPKM", "HS-2-3_FPKM"), 
+    sample = c("sample1", "sample1", "sample1", "sample2", "sample2", "sample2", "sample3", "sample3", "sample3", "sample4", "sample4", "sample4")
+)
+rownames(samples) = samples$sampleID
+samples$sample = factor(samples$sample, levels = c('sample1', 'sample2', 'sample3', 'sample4'))
+dds = DESeqDataSetFromMatrix(countData = fpkm, colData = samples, design = ~sample)
+dds_count &lt;- DESeq(dds, fitType = 'mean', minReplicatesForReplace = 7, parallel = FALSE)
+
+sampl1_vs_sample2 &lt;- results(dds_count, contrast = c('sample', 'sample1', 'sample2'))
+sampl3_vs_sample4 &lt;- results(dds_count, contrast = c('sample', 'sample3', 'sample4'))
+
+result1 &lt;- data.frame(sampl1_vs_sample2, stringsAsFactors = FALSE, check.names = FALSE)
+result2 &lt;- data.frame(sampl3_vs_sample4, stringsAsFactors = FALSE, check.names = FALSE)
+
+write.table(result1, 'sampl1_vs_sample2.DESeq2.txt', col.names = NA, sep = '\t', quote = FALSE)
+write.table(result2, 'sampl3_vs_sample3.DESeq4.txt', col.names = NA, sep = '\t', quote = FALSE)
+</code></pre>
+<p>把结果可视化后我一看，跟作者的相差的太大了 ... 而这里设置的 p 值和 log2FC 的阈值都是与作者一致的。</p>
+<p><img alt="" src="https://images.yuanj.top/202403091748006.png"/></p>
+<p>不仅如此，鉴定出的差异基因数量也有很大的差别，作者明确说了<code>In total, 24283 genes were identified in both the heat stress treated and control samples. To identify the critical functional genes related to heat stress resistance, differentially expressed genes (DEGs) were filtered based on the criteria |log2(fold change)| ≥ 1 and p-Value &lt; 0.05. Overall, 1942 upregulated and 3617 downregulated genes were screened.</code></p>
+<p>但是我鉴定出的差异基因有 34026 个，上调与下调的基因数量也差别很大。</p>
+<p>我猜测失败的原因有以下几个：</p>
+<ul>
+<li>计量时所用的软件不同</li>
+<li>测序数据预处理时参数设置不同</li>
+<li>参考基因组变化，作者是 2021 年 9 月 10 日访问的，已经过去了两年多</li>
+<li>基因注释变化，RAP DB 上最新的是 2024 年 1 月 11 日更新的</li>
+</ul>
+<h2>ATAC-seq</h2>
+<p>ATAC-seq 的数据也是来自 NCBI SRA 数据库，BioProject 编号为 PRJNA604028，我是第一次做，也是按照文章材料与方法部分写的<code>Using a similar approach to the RNA-seq analysis, data quality control, filtering, and comparison were performed.</code>拿到 bam 文件后使用 macs2 进行 Peak Calling，这里 macs2 需要指定基因组的大小，我指定为 3e8（水稻基因组为 389M），报错无法输出结果 ... 试了很多个数字都不行，也没有查到相关的资料，于是我取消指定基因组大小，倒是可以输出结果了</p>
+<p>然后使用 ChIPseeker 进行注释：</p>
+<pre><code class="language-r">rm(list = ls())  
+
+library(GenomicFeatures)
+library(ChIPseeker)
+
+spompe &lt;- makeTxDbFromGFF('transcripts.gff')
+setwd('/home/yuanj/work/ata-seq/macs2_bed')
+peak &lt;- readPeakFile('IRGSP_genome_57.bed')
+
+peakAnno &lt;- annotatePeak(peak, tssRegion = c(-500, 500), TxDb = spompe)
+</code></pre>
+<p>annotatePeak 函数一直报错<code>Error: invalid subscript</code>，无论怎么改都不行 ... 于是我猜测应该是 macs2 输出结果的问题。</p>
+<p>再尝试使用 homer 进行 motif 注释与分析，也是一直报错 ...</p>
+<pre><code class="language-bash">findMotifsGenome.pl IR57.bed tair10 motif -len 8,10,12
+</code></pre>
+<p>看来应该是 macs2 这里出错了，暂时还没有找到解决办法，于是此次论文复现就被迫中止了😫</p>
