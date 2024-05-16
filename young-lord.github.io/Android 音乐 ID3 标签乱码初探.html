@@ -1,0 +1,62 @@
+<h2><a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/_posts/2024-05-13-Android%E9%9F%B3%E4%B9%90ID3%E6%A0%87%E7%AD%BE%E4%B9%B1%E7%A0%81%E5%88%9D%E6%8E%A2.md">仓库源文</a>，<a href="https://young-lord.github.io/posts/android-music-mojibake">站点原文</a></h2>
+<hr/>
+<h2>tags: [Android, bugfix]
+title: Android 音乐 ID3 标签乱码初探
+slug: android-music-mojibake
+last_modified_at: 2024-5-16</h2>
+<h2>前言</h2>
+<p>首先讲点背景。我平时从网易云音乐的<a href="https://music.163.com/#/djradio?id=350746079">Arcaea (韵律源点) 主播电台</a>下一些音乐，用<a href="https://www.cnblogs.com/vinlxc/p/11932130.html">音乐标签</a>修正封面、专辑、作者、文件名等信息。但在标题含带音符的拉丁文小写字母（比如<code>Dynitikǒs</code>）的时候，专辑<code>Arcaea (韵律源点)</code>就会显示为<code>Arcaea (éŸµå¾‹æº�ç‚¹)</code>这样的乱码，但在删掉音符后就正常了。在我印象里ID3v2是有记录文本编码的区域的，于是就想去看看这个bug根源在哪里。</p>
+<p>这个bug还有一些更离奇的变种，即改变某个标签中的字符位置也可能改变另一个标签的读取编码，如图所示。</p>
+<p><img alt="改变标题、专辑等标签中的一两个字符后，标题与专辑出现各种不同乱码" src="https://s2.loli.net/2024/05/13/7QmLwG56MIjNgrX.png"/></p>
+<h2>分析</h2>
+<p>首先打开<a href="https://www.ff98sha.me/tools/messycode/">在线乱码恢复</a>，可以看到这个乱码出现的原因是将<code>UTF-8</code>字节序列以<code>Windows-1252</code>或者<code>ISO-8859-1</code>读取。</p>
+<p>然后安装<code>python-mutagen</code>和<code>eyeD3</code>（如果只是平时简单查看的话，<code>exiftool</code>或<code>ffmpeg</code>也可以），通过<code>mid3v2 --list-raw</code>等命令确认现有ID3标签版本及每个标签的文本编码。我的文件中的对应标签均为<code>UTF16</code>，并且能被这些软件正确解析。</p>
+<p>众所周知Android系统所有音乐是由<a href="https://source.android.google.cn/docs/core/media/media-provider?hl=zh-cn">媒体库</a>进行索引、解析元信息的，因此查看<code>/data/data/com.android.providers.media/databases/external.db</code>中，发现其中的字段已经是乱码，因此我首先考虑是更底层的问题。</p>
+<p>打开<a href="http://aospxref.com/">AOSPXref</a>，搜索<code>ID3</code>，很容易就能找到<a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libstagefright/id3/ID3.cpp#641-730">libstagefright 中的 ID3 类</a>。我们可以在<code>void ID3::Iterator::getstring(String8 *id, bool otherdata)</code>函数中看到完整的编码处理。&lt;del&gt;所以问题解决，本文结束&lt;/del&gt;</p>
+<p>然而我们可以看到<a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libstagefright/id3/ID3.cpp#712">一行注释</a>：<code>let the media scanner client figure out the real encoding</code>，或者说这个编码位取出来并没有用于最终的编码判断，因此继续找。</p>
+<p>这个<code>media scanner client</code>不就是前文说的媒体库（的扫描部分）吗？为了找到具体代码在哪里，我<a href="http://aospxref.com/android-12.0.0_r3/search?project=frameworks&amp;project=packages&amp;full=MEDIA_SCANNER_SCAN_FILE&amp;defs=&amp;refs=&amp;path=&amp;hist=&amp;type=&amp;xrd=&amp;nn=2">搜索了<code>MEDIA_SCANNER_SCAN_FILE</code></a>（也就是参考链接中给出的强制扫描媒体文件的intent），在结果里打开<a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/AndroidManifest.xml#78-99">MediaProvider的<code>AndroidManifest.xml</code></a>，然后顺着这个<code>BroadcastReceiver</code>一路找下去：</p>
+<ul>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/MediaReceiver.java#27">com.android.providers.media.MediaReceiver.onReceive</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/MediaService.java#84">com.android.providers.media.MediaReceiver.onHandleWork</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/MediaService.java#215">com.android.providers.media.MediaReceiver.onScanFile</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/MediaProvider.java#1279">com.android.providers.media.MediaProvider.scanFile</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/MediaProvider.java#924">com.android.providers.media.MediaProvider.onCreate</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/scan/ModernMediaScanner.java#263">com.android.providers.media.scan.ModernMediaScanner.scanFile</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/scan/ModernMediaScanner.java#391">com.android.providers.media.scan.ModernMediaScanner.Scan.run</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/scan/ModernMediaScanner.java#439">com.android.providers.media.scan.ModernMediaScanner.Scan.walkFileTree</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/scan/ModernMediaScanner.java#801">com.android.providers.media.scan.ModernMediaScanner.Scan.visitFile</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/packages/providers/MediaProvider/src/com/android/providers/media/scan/ModernMediaScanner.java#999">com.android.providers.media.scan.ModernMediaScanner.scanItem</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/base/media/java/android/media/MediaMetadataRetriever.java#413">android.media.MediaMetadataRetriever.nativeExtractMetadata</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/base/media/java/android/media/MediaMetadataRetriever.java#214">android.media.MediaMetadataRetriever -&gt; static</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/base/media/jni/android_media_MediaMetadataRetriever.cpp#733">/frameworks/base/media/jni/android_media_MediaMetadataRetriever.cpp -&gt; nativeMethods</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/base/media/jni/android_media_MediaMetadataRetriever.cpp#592">/frameworks/base/media/jni/android_media_MediaMetadataRetriever.cpp -&gt; android_media_MediaMetadataRetriever_extractMetadata</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/base/media/jni/android_media_MediaMetadataRetriever.cpp#27">/frameworks/base/media/jni/android_media_MediaMetadataRetriever.cpp -&gt; #include &lt;media/mediametadataretriever.h&gt;</a>（这里直接单击一下就可以看到<code>MediaMetadataRetriever</code>是在<code>libmedia</code>里的）</li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmedia/mediametadataretriever.cpp#202">/frameworks/av/media/libmedia/mediametadataretriever.cpp -&gt; MediaMetadataRetriever::extractMetadata</a>（如果懒的继续找的话，直接在<code>libmedia</code>目录里看一看就能见到可疑的<code>CharacterEncodingDetector.cpp</code>了）</li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmedia/mediametadataretriever.cpp#70">/frameworks/av/media/libmedia/mediametadataretriever.cpp -&gt; MediaMetadataRetriever::MediaMetadataRetriever</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmedia/IMediaPlayerService.cpp#62">/frameworks/av/media/libmedia/IMediaPlayerService.cpp -&gt; BpMediaPlayerService.createMetadataRetriever</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmedia/IMediaPlayerService.cpp#156">/frameworks/av/media/libmedia/IMediaPlayerService.cpp -&gt; BnMediaPlayerService::onTransact</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmediaplayerservice/MediaPlayerService.cpp#487">/frameworks/av/media/libmediaplayerservice/MediaPlayerService.cpp -&gt; MediaPlayerService::createMetadataRetriever</a>（进入<code>libmediaplayerservice</code>，此处为Binder IPC）</li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmediaplayerservice/MetadataRetrieverClient.cpp#310">/frameworks/av/media/libmediaplayerservice/MetadataRetrieverClient.cpp -&gt; MetadataRetrieverClient::extractMetadata</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmediaplayerservice/MetadataRetrieverClient.cpp#128">/frameworks/av/media/libmediaplayerservice/MetadataRetrieverClient.cpp -&gt; MetadataRetrieverClient::setDataSource</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmediaplayerservice/MetadataRetrieverClient.cpp#91">/frameworks/av/media/libmediaplayerservice/MetadataRetrieverClient.cpp -&gt; createRetriever</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmediaplayerservice/StagefrightMetadataRetriever.cpp#405">/frameworks/av/media/libmediaplayerservice/StagefrightMetadataRetriever.cpp -&gt; StagefrightMetadataRetriever::extractMetadata</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmediaplayerservice/StagefrightMetadataRetriever.cpp#486">/frameworks/av/media/libmediaplayerservice/StagefrightMetadataRetriever.cpp -&gt; StagefrightMetadataRetriever::parseMetaData</a></li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/extractors/mp3/MP3Extractor.cpp#605">/frameworks/av/media/extractors/mp3/MP3Extractor.cpp -&gt; MP3Extractor::getMetaData</a>（此处为读取原始ID3数据部分）</li>
+<li><a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmedia/CharacterEncodingDetector.cpp#97-307">/frameworks/av/media/libmedia/CharacterEncodingDetector.cpp -&gt; CharacterEncodingDetector::detectAndConvert</a></li>
+</ul>
+<p>这里的<code>CharacterEncodingDetector</code>是不是看着就很可疑？很容易看得出来，这个文件结合了多个音乐标签字段进行编码识别，并通过<a href="http://aospxref.com/android-12.0.0_r3/xref/frameworks/av/media/libmedia/CharacterEncodingDetectorTables.h">常用字表</a>等一系列手段提高准确率。但问题是————为啥啊？</p>
+<h2>bugreport</h2>
+<p>启动<a href="https://issuetracker.google.com/issues%20q=componentid:190923%2B?hl=zh-cn">Google 问题跟踪器</a>，搜索<code>id3 encoding charset music</code>一类的词语，你就能<a href="https://issuetracker.google.com/issues?q=id3%20encoding">找到很多相关bug</a>。最古老的在2009年就已被汇报，而直至2024年仍有与此相关的新问题。</p>
+<h2>总结</h2>
+<p>这是一个在AOSP中至少有十年历史的老bug，在Android 5甚至更早就已经存在。希望你能给下面这俩issue打个<code>+1</code>，以催促某大厂尽早修掉。</p>
+<ul>
+<li><a href="https://issuetracker.google.com/issues/237674422">Android Media Store misdetects encoding in music tags [237674422] - Issue Tracker</a></li>
+<li><a href="https://issuetracker.google.com/issues/37013213">Android media service should always read tags in OGG/AAC(M4A) as UTF-8 [37013213] - Issue Tracker</a> （由于过久未处理，已close）</li>
+</ul>
+<p>作为普通用户，你也可以在音乐标签设置的<code>杂项 -&gt; Id3v2</code>中选中<code>Id3v2.4 UTF-8</code>，使文本以<code>UTF-8</code>而非<code>UTF-16</code>格式存储，来达到修复目的。</p>
+<h2>参考资料</h2>
+<ul>
+<li><a href="https://stackoverflow.com/questions/17928576/refresh-android-mediastore-using-adb">Refresh Android mediastore using adb - Stack Overflow</a></li>
+<li><a href="https://android.stackexchange.com/questions/224119/how-to-gain-root-on-bluestacks-android-emulator">rooting - How to gain root on BlueStacks Android emulator - Android Enthusiasts Stack Exchange</a>（用<code>/system/xbin/bstk/su</code>在Bluestacks模拟器中获得root权限）</li>
+<li><a href="https://id3.org/id3v2.4.0-structure#:~:text=%2400%20%20%20ISO%2D8859%2D1%20%5BISO%2D8859%2D1%5D.%20Terminated%20with%20%2400.">id3v2.4.0-structure - ID3.org</a></li>
+</ul>
