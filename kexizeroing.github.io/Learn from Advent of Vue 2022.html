@@ -75,12 +75,12 @@ Normally, a Vue component is defined by a JavaScript object with various propert
 <p>The key idea of the Composition API is that, rather than defining a component’s functionality as object properties, we define them as JavaScript variables that get returned from a new <code>setup</code> function. The clear advantage of the Composition API is that it’s easy to extract logic. It allows Vue to lean on the safeguards built into native JavaScript in order to share code, like passing variables to the composition function, and the module system.</p>
 <pre><code class="language-js">// useCounter.js
 // https://css-tricks.com/how-the-vue-composition-api-replaces-vue-mixins/
-import { ref, computed } from 'vue';
+import { ref, computed } from 'vue'
 export default function () {
-  const count = ref(0);
+  const count = ref(0)
   const double = computed(() =&gt; count.value * 2)
   function increment() {
-    count.value++;
+    count.value++
   }
   return {
     count,
@@ -90,19 +90,43 @@ export default function () {
 }
 
 // useEvent composable
-import { onMounted, onBeforeUnmount } from 'vue';
+import { onMounted, onBeforeUnmount } from 'vue'
 export function useEvent = (event, handler, options) =&gt; {
   const {
     target = window,
     listener,
-  } = options;
+  } = options
   onMounted(() =&gt; {
-    target.addEventListener(event, handler, listener);
-  });
+    target.addEventListener(event, handler, listener)
+  })
   onBeforeUnmount(() =&gt; {
-    target.removeEventListener(event, handler, listener);
-  });
-};
+    target.removeEventListener(event, handler, listener)
+  })
+}
+
+// useTimeout composable
+export function useTimeout = (fn, delay, options) =&gt; {
+  const immediate = options?.immediate
+  if (immediate) {
+    fn()
+  }
+
+  watchEffect(onCleanup =&gt; {
+    if (isRef(delay)) {
+      if (typeof delay.value !== 'number' || delay.value &lt; 0) return
+    } else {
+      if (typeof delay !== 'number' || delay &lt; 0) return
+    }
+    const _deply = unref(delay)
+    const timer = setTimeout(() =&gt; {
+      fn()
+    }, _deply)
+
+    onCleanup(() =&gt; {
+      clearInterval(timer)
+    })
+  })
+}
 </code></pre>
 <h3>Organize your Composition API code</h3>
 <p>We abandon the options API for the composition API, and the idea is not that we write everything the same way as the options API but not having the data/computed/watch options.</p>

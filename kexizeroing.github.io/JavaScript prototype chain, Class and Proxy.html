@@ -243,25 +243,6 @@ const b = new B();  // logs "B"
 </code></pre>
 <p>The <strong>Reflect</strong> namespace object contains static methods for invoking interceptable JavaScript object internal methods. The methods are the same as those of proxy handlers. All properties and methods of Reflect are static <em>(just like the Math object)</em>.</p>
 <p>The major use case of Reflect is to provide default forwarding behavior in Proxy handler traps. The Reflect API is used to invoke the corresponding internal method. For example, you create a proxy with a <code>deleteProperty</code> trap that intercepts the <code>[[Delete]]</code> internal method. <code>Reflect.deleteProperty()</code> is used to invoke the default <code>[[Delete]]</code> behavior on targetObject directly. You can replace it with <code>delete</code>, but using Reflect saves you from having to remember the syntax that each internal method corresponds to.</p>
-<pre><code class="language-js">const target = {
-  message1: "hello",
-  message2: "everyone",
-};
-
-const handler = {
-  get(target, prop, receiver) {
-    if (prop === "message2") {
-      return "world";
-    }
-    return Reflect.get(...arguments);
-  },
-};
-
-const proxy = new Proxy(target, handler);
-
-console.log(proxy.message1); // hello
-console.log(proxy.message2); // world
-</code></pre>
 <pre><code class="language-js">const person = {
   name: "John Doe",
   age: 42,
@@ -276,4 +257,43 @@ const personProxy = new Proxy(person, {
     Reflect.set(obj, prop, value);
   },
 });
+</code></pre>
+<pre><code class="language-js">// time machine
+function createTimeMachine(data, onUpdate) {
+  return new Proxy(
+    {
+      states: [stucturedClone(data)],
+      currentIndex: 0,
+    },
+    {
+      set(target, prop, value) {
+        target.states.push(stucturedClone({
+           ...target.states[target.currentIndex],
+           [prop]: value
+        }))
+        target.currentIndex++
+        onUpdate()
+      },
+
+      get(target, prop) {
+        const currentState = target.states[target.currentIndex]
+        if (prop === 'currentState') {
+          return currentState
+        } else if (prop === 'backward') {
+          return () =&gt; {
+            target.currentIndex--
+            onUpdate()
+          }
+        } else if (prop === 'forward') {
+          return () =&gt; {
+            target.currentIndex++
+            onUpdate()
+          }
+        } else {
+          return currentState[prop]
+        }
+      }
+    }
+  )
+}
 </code></pre>

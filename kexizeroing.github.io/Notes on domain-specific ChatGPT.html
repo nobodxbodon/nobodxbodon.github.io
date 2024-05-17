@@ -6,15 +6,51 @@ slug: notes-on-domain-specific-chatgpt
 description: ""
 added: "Mar 25 2023"
 tags: [AI]
-updatedDate: "Mar 13 2024"</h2>
+updatedDate: "May 7 2024"</h2>
 <h2>What are Vector Embeddings?</h2>
 <p>Vector embeddings are one of the most fascinating and useful concepts in machine learning. They are central to many NLP, recommendation, and search algorithms. ML algorithms, like most software algorithms, need numbers to work with. Sometimes we have a dataset with columns of numeric values or values that can be translated into them. Other times we come across something more abstract like an entire document of text. We create vector embeddings, which are just lists of numbers, for data like this to perform various operations with them. A whole paragraph of text or any other object can be reduced to a vector.</p>
 <p>There is something special about vectors that makes them so useful. This representation makes it possible to translate semantic similarity as perceived by humans to proximity in a vector space. In other words, when we represent real-world objects and concepts such as images, audio recordings, news articles, and user profiles as vector embeddings, the semantic similarity of these objects and concepts can be quantified by how close they are to each other as points in vector spaces.</p>
 <p>&lt;img alt="sentence_embeddings" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/008vOhrAly1hcc5elwuuoj313s0e075k.jpg" width="550" /&gt;</p>
-<p>We train models to translate objects to vectors. A deep neural network is a common tool for training such models. The resulting embeddings are usually high dimensional (up to two thousand dimensions) and dense (all values are non-zero). For text data, models such as Word2Vec, GloVe, and BERT transform words, sentences, or paragraphs into vector embeddings. Images can be embedded using models such as convolutional neural networks (CNNs).</p>
-<blockquote>
-<p>Know more about Text2vec: https://github.com/shibing624/text2vec and a HuggingFace Demo: https://huggingface.co/spaces/shibing624/text2vec</p>
-</blockquote>
+<p>We train models to translate objects to vectors. A deep neural network is a common tool for training such models. The resulting embeddings are usually high dimensional (up to two thousand dimensions) and dense (all values are non-zero). For text data, models such as Word2Vec, GloVe (Global Vectors for Word Representation), and BERT transform words, sentences, or paragraphs into vector embeddings. Images can be embedded using models such as convolutional neural networks (CNNs).</p>
+<h3>Tokens and Embeddings</h3>
+<p>Tokens are the basic units of data processed by LLMs. In the context of text, a token can be a word, part of a word (subword), or even a character — depending on the tokenization process.</p>
+<p>In the context of GPT-2, each piece of text is represented by the ID of the corresponding token in the final vocabulary. If a word is not in the vocabulary, it’s broken down into smaller tokens that are in the vocabulary. The key point is that the assignment of token IDs is not arbitrary but based on the frequency of occurrence and combination patterns in the language data the model was trained on.</p>
+<pre><code class="language-py"># Tokens are vectors based on a specific tokenizer.
+# Online playground for OpenAPI tokenizers: https://tiktokenizer.vercel.app
+
+import tiktoken
+ 
+tokenizer=tiktoken.encoding_for_model("gpt-4")
+ 
+text = "Apple is a fruit"
+ 
+token=tokenizer.encode(text)
+print(token)
+# [27665, 374, 264, 14098]
+ 
+decoded_text = tokenizer.decode(token)
+print(decoded_text)
+# Apple is a fruit
+</code></pre>
+<p>Token IDs are a straightforward numerical representation of tokens. It is a basic form of vectorization. They do not capture any deeper relationships or patterns between the tokens.</p>
+<p>Embeddings are advanced vector representations of tokens. They try to capture the most nuance, connections, and semantic meanings between tokens. Each embedding is generally a series of real numbers on a vector space computed by a neural network. They are the “real inputs” of LLMs.</p>
+<p>Embeddings are, in fact, a subset of the model’s weights. They are the weights associated with the input layer (in the case of feedforward networks) or the embedding layer (in models like Transformers).</p>
+<pre><code class="language-py">from langchain_openai.embeddings import OpenAIEmbeddings
+
+embeddings = OpenAIEmbeddings()
+embedded_query = embeddings.embed_query("Who is Mary's sister?")
+
+print(f"Embedding length: {len(embedded_query)}") # Embedding length: 1536
+print(embedded_query) # [-0.0013594045786472937, -0.03437049808954925, ...]
+</code></pre>
+<pre><code class="language-js">import { embed } from 'ai'
+import { openai } from '@ai-sdk/openai'
+
+const { embedding } = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'sunny day at the beach',
+})
+</code></pre>
 <h2>OpenAI’s text embeddings API</h2>
 <p>An embedding is a vector (list) of floating point numbers. The distance between two vectors measures their relatedness. Small distances suggest high relatedness and large distances suggest low relatedness.</p>
 <p>To get an embedding, send your text string to the embeddings API endpoint along with a choice of embedding model ID (e.g., <code>text-embedding-ada-002</code>). The response will contain an embedding, which you can extract, save, and use.</p>
@@ -121,11 +157,12 @@ const completionResponse = await openai.createCompletion({
 })
 </code></pre>
 <blockquote>
-<p>Language models don't see text like you and I, instead they see a sequence of tokens. Byte pair encoding (BPE) is a way of converting text into tokens.</p>
+<p>Language models don't see text like you and I, instead they see a sequence of tokens. Byte pair encoding (BPE) is a way of converting text into tokens used in GPT.</p>
 <ul>
 <li>It's reversible and lossless, so you can convert tokens back into the original text.</li>
 <li>It compresses the text: the token sequence is shorter than the bytes corresponding to the original text. On average, in practice, each token corresponds to about 4 bytes.</li>
 <li>It attempts to let the model see common subwords. For instance, "ing" is a common subword in English, so BPE encodings will often split "encoding" into tokens like "encod" and "ing" (instead of e.g. "enc" and "oding"). Because the model will then see the "ing" token again and again in different contexts, it helps models generalise and better understand grammar.</li>
+<li>It ensures that the most common words are represented as a single token while the rare words are broken down into two or more subword tokens. (Looking for the most frequent pairing, merge them, and perform the same iteration again and again until we reach our token limit or iteration limit.)</li>
 </ul>
 </blockquote>
 <h3>Domain-specific ChatGTP Starter App</h3>
@@ -286,6 +323,9 @@ export const search = async (query: string) =&gt; {
   return results;
 };
 </code></pre>
+<blockquote>
+<p>Run a local LLM with Ollama and open-source models: Looking at the specs for the <a href="https://ollama.com/library/llama2">llama2 7b model</a>, I was certain that my M1 Macbook with only 8 GB memory would even run it. But it did, just very slowly. The easiest approach to interacting with LLMs using Ollama is via the CLI <code>ollama run &lt;MODEL_NAME&gt;</code>.</p>
+</blockquote>
 <h2>Vector Store</h2>
 <p>Vector Databases Explained: https://vercel.com/guides/vector-databases</p>
 <p><a href="https://docs.trychroma.com">Chroma</a> provides a vector store and embedding database that can run seamlessly during local development to power the applications. <a href="https://github.com/facebookresearch/faiss">Faiss</a> is a library for efficient similarity search and clustering of dense vectors. Both Chroma and FAISS are easy to work with locally.</p>

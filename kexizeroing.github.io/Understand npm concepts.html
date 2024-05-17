@@ -6,7 +6,7 @@ slug: understand-npm-concepts
 description: ""
 added: "Dec 14 2022"
 tags: [web]
-updatedDate: "Mar 5 2024"</h2>
+updatedDate: "May 12 2024"</h2>
 <h3>package.json and package-lock.json</h3>
 <p><code>package-lock.json</code> (called package locks, or lockfiles) is automatically generated for any operations where npm modifies either the <code>node_modules</code> tree or <code>package.json</code>. This file is intended to be committed into source repositories. The purpose of the <code>package-lock.json</code> is to avoid the situation where installing modules from the same <code>package.json</code> results in two different installs. <code>package-lock.json</code> is a large list of each dependency listed in your <code>package.json</code>, the specific version that should be installed, the location (URI) of the module, a hash that verifies the integrity of the module, the list of packages it requires.</p>
 <ol>
@@ -190,9 +190,11 @@ console.log(process.env.npm_package_name, process.env.npm_package_version);
 <li>One convention that you may have seen is using a prefix and a colon to group scripts, for example <code>build:dev</code> and <code>build:prod</code>. This can be helpful to create groups of scripts that are easier to identify by their prefixes.</li>
 <li><a href="https://github.com/shelljs/shx">shx</a> is a wrapper around ShellJS Unix commands, providing an easy solution for simple Unix-like, cross-platform commands in npm package scripts. ShellJS is a portable (Windows/Linux/macOS) implementation of Unix shell commands on top of the Node.js API. <code>shx</code> is good for writing one-off commands in npm package scripts (e.g. <code>"clean": "shx rm -rf out/"</code>). Run <code>npm install shx --save-dev</code> to install it, and run command in either a Unix or Windows command line.</li>
 </ul>
-<h3>The rise of supply chain attacks</h3>
-<p>Software <a href="https://socket.dev/blog/inside-node-modules">supply chain attacks</a> occur when an attacker infiltrates a vendor's network and injects malicious code into its software, which that vendor then unknowingly distributes to its customers. Imagine an attacker gets malicious code into a package hosted on npm. From there, the vulnerability spreads to the <code>node_modules</code> folders on developer machines, to the build servers, and finally to production systems.</p>
-<blockquote>
-<p>In October 2021, a hacker advertised on a Russian forum the sale of an npm account that controlled a package with over 7 million weekly downloads. Two weeks later, <code>ua-parser-js</code> was compromised, presumably by whoever purchased the password on the hacking forum, and three versions of the package were published containing malware. In just four hours, tens of thousands of users downloaded these versions before the community identified the problem and removed the malicious packages.</p>
-<p>Anyone who ran <code>npm install ua-parser-js</code> was compromised. Anyone who installed a package that depended on <code>ua-parser-js</code> was also compromised. Anyone running npm install without a <code>package-lock.json</code> file was compromised. Anyone unlucky enough to update to a new version of <code>ua-parser-js</code>, whether manually with <code>npm update</code> or through an automated pull request such as from Dependabot, was compromised.</p>
-</blockquote>
+<hr/>
+<p>Despite 'npm scripts' high usage they are not particularly well optimized.</p>
+<ol>
+<li><p>By running <code>cat $(which npm)</code>, you will find npm CLI is a standard JavaScript file. The only special thing is the first line <code>#!/usr/bin/env node</code> which tells your shell the current file can be executed with <code>node</code>.</p>
+</li>
+<li><p>Because it's just a js file, we can rely on all the usual ways to generate a profile. My favorite one is node’s <code>--cpu-prof</code> argument. Combine that knowledge together and we can generate a profile from an npm script via <code>node --cpu-prof $(which npm) run myscript</code>. Loading that profile into <a href="https://www.speedscope.app">speedscope</a> reveals quite a bit about how npm is structured. The majority of time is spent on loading all the modules that compose the npm cli. The time of the script that we’re running pales in comparison.</p>
+</li>
+</ol>
