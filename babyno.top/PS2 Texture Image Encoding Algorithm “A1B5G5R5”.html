@@ -1,0 +1,43 @@
+<h2><a href="https://github.com/caol64/caol64.github.io/blob/master/content/posts/2023/2023-10-20-ps2-texture-encoding-algorithm-a1b5g5r5.en.md">仓库源文</a>，<a href="https://babyno.top/posts/2023/10/20/ps2-texture-encoding-algorithm-a1b5g5r5.en">站点原文</a></h2>
+<hr/>
+<p>author: caol64
+title: PS2 Texture Image Encoding Algorithm "A1B5G5R5"
+slug: ps2-texture-encoding-algorithm-a1b5g5r5
+description: Delve into the unique texture mapping coding algorithm, A1B5G5R5, utilized by PS2. Our detailed guide takes you through the principle behind this lossy yet efficient form of image encoding that significantly reduces image size.
+date: 2023-10-20 14:48:31
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>Python</li>
+<li>Algorithm
+categories:</li>
+<li>Tutorial</li>
+</ul>
+<hr/>
+<p>In the <a href="../rle-algorithm-in-ps2/">previous article</a>, we discussed the <code>RLE</code> image compression algorithm used in <code>PS2</code>. This time, let's delve into its texture mapping encoding algorithm—<code>A1B5G5R5</code>.</p>
+<h2>Introduction</h2>
+<p>For textures, common image encoding formats like <code>jpg</code> or <code>png</code> are not suitable. This is because images are read and rendered by the GPU. You wouldn't want to send a <code>jpg</code> image over and have the GPU decode the entire image just to read one pixel, right? Therefore, the most ideal image format is an uncompressed bitmap format, allowing direct access to <code>RGB</code> data based on pixel coordinates. The <code>A1B5G5R5</code> format we're introducing today is one such encoding format.</p>
+<h2>Analysis</h2>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-20-ps2-texture-encoding-algorithm-a1b5g5r5/3.jpg"/></p>
+<p>The above two texture images are extracted from <code>PS2</code> archives, stored in bitmap format with a pixel count of <code>128x128</code>.</p>
+<p>In a standard <code>32-bit</code> bitmap, each pixel occupies <code>4 bytes</code> of data, storing data for the <code>RGBA</code> channels. Therefore, the size of the two texture images above is <code>128x128x4</code> bytes. The data structure for each pixel in <code>32-bit RGBA</code> format is as follows:</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-20-ps2-texture-encoding-algorithm-a1b5g5r5/RGBA.jpg"/></p>
+<p>For the <code>A1B5G5R5</code> encoding, each pixel occupies <code>2 bytes</code> of data, with the <code>alpha channel</code> using <code>1 bit</code>, and the other three colors each using <code>5 bits</code>. The data structure for each pixel is as follows:</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-20-ps2-texture-encoding-algorithm-a1b5g5r5/A1B5G5R5.jpg"/></p>
+<p>Decoding <code>A1B5G5R5</code> into <code>32-bit RGBA</code> can be achieved using the method depicted in the following image:</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-20-ps2-texture-encoding-algorithm-a1b5g5r5/decode.jpg"/></p>
+<p>The pseudo-code is as follows:</p>
+<pre><code class="language-python">while tex_offset &lt; len(self.texture):
+    b = tex_struct.unpack_from(self.texture, tex_offset)[0]
+    out[rgb_tex_offset] = (b &amp; 0x1F) &lt;&lt; 3 # R
+    out[rgb_tex_offset + 1] = ((b &gt;&gt; 5) &amp; 0x1F) &lt;&lt; 3 # G
+    out[rgb_tex_offset + 2] = ((b &gt;&gt; 10) &amp; 0x1F) &lt;&lt; 3 # B
+    rgb_tex_offset += 3
+    tex_offset += tex_struct.size
+</code></pre>
+<p>It's evident that encoding a <code>32-bit</code> <code>RGBA</code> image into a <code>16-bit</code> <code>A1B5G5R5</code> format results in the loss of the last 3 bits of data for each color, making it a lossy encoding format. However, the benefit is a compression ratio of 2:1, effectively halving the size of the image. When combined with the <code>RLE</code> encoding discussed in the previous article, further reduction in image size can be achieved.</p>
+<h2>Conclusion</h2>
+<p>Finally, here are the rendered effects of the two texture images mentioned above. Do any of you remember these two games?</p>
+<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-20-ps2-texture-encoding-algorithm-a1b5g5r5/4.jpg"/></p>
