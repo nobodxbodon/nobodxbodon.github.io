@@ -1,14 +1,15 @@
 <h2><a href="https://github.com/stevedsun/stevedsun.github.io/blob/master/content/posts/2024/audit-system-design.md">仓库源文</a>，<a href="https://sund.site/posts/2024/audit-system-design">站点原文</a></h2>
 <hr/>
-<p>title: "如何设计一个符合工业标准的审计系统"
+<h2>title: "如何设计一个符合工业标准的审计系统"
 date: 2024-04-15T16:44:40+08:00
 categories: [Cloud Native Computing]
 tags: [audit]
-aliases: [/posts/audit-system-design/]</p>
-<h2>description: ""</h2>
+aliases: [/posts/audit-system-design/]
+description: ""</h2>
 <p>审计追踪（Audit Trail）是指一个系统中用于记录用户行为日志、控制组件的活动日志等关键安全信息的服务。日志通常以时间顺序排列，记录了“谁在什么时间做了什么”。</p>
 <p>下面是 kubernetes 官方文档对其审计服务的描述：</p>
-<blockquote><p>Kubernetes 审计（Auditing） 功能提供了与安全相关的、按时间顺序排列的记录集，记录每个用户、使用 Kubernetes API 的应用以及控制面自身引发的活动。</p>
+<blockquote>
+<p>Kubernetes 审计（Auditing） 功能提供了与安全相关的、按时间顺序排列的记录集，记录每个用户、使用 Kubernetes API 的应用以及控制面自身引发的活动。</p>
 <p>审计功能使得集群管理员能够回答以下问题：</p>
 <ul>
 <li>发生了什么？</li>
@@ -34,121 +35,42 @@ aliases: [/posts/audit-system-design/]</p>
 </ol>
 <h2>涉及的行业标准</h2>
 <p>与审计相关的，常见的工业标准有 IEC62443、NIST SP 800-92。下面是 IEC 中涉及到审计相关的章节。</p>
-<table>
-<thead><tr>
-<th>工业标准</th>
-<th>章节</th>
-<th>安全级别</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR2.8</td>
-<td>SL-C 1</td>
-</tr>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR6.1</td>
-<td>SL-C 1</td>
-</tr>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR6.2</td>
-<td>SL_C 2</td>
-</tr>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR1.13</td>
-<td>SL_C 1</td>
-</tr>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR2.9</td>
-<td>SL_C 1</td>
-</tr>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR2.10</td>
-<td>SL_C 1</td>
-</tr>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR3.7</td>
-<td>SL_C 1</td>
-</tr>
-<tr>
-<td>IEC 62443-4-2:2019</td>
-<td>CR3.9</td>
-<td>SL_C 2</td>
-</tr>
-</tbody>
-</table>
+<p>| 工业标准           | 章节   | 安全级别 |
+| ------------------ | ------ | -------- |
+| IEC 62443-4-2:2019 | CR2.8  | SL-C 1   |
+| IEC 62443-4-2:2019 | CR6.1  | SL-C 1   |
+| IEC 62443-4-2:2019 | CR6.2  | SL_C 2   |
+| IEC 62443-4-2:2019 | CR1.13 | SL_C 1   |
+| IEC 62443-4-2:2019 | CR2.9  | SL_C 1   |
+| IEC 62443-4-2:2019 | CR2.10 | SL_C 1   |
+| IEC 62443-4-2:2019 | CR3.7  | SL_C 1   |
+| IEC 62443-4-2:2019 | CR3.9  | SL_C 2   |</p>
 <h2>审计日志的格式应遵循哪些协议或标准？</h2>
 <p>对于本地运行的软件，通常 Syslog 具有更好的系统兼容性。对于使用 ELK 采集日志的项目更适合用 CEF，其他情况建议使用自定义的 JSON。</p>
 <p>下面是三种格式（协议）的对比。</p>
 <h3><a href="https://docs.elastic.co/en/integrations/cef">Common Event Format (CEF)</a></h3>
 <p>Elastic-Search 使用的、一种基于 Event-souring 思想设计的日志格式。优点是冗余信息少，适合配合 ELK 体系构建监控系统。</p>
 <h3><a href="https://datatracker.ietf.org/doc/html/rfc5424">Syslog</a></h3>
-<p>Syslog 是 Linux 操作系统默认的审计日志格式，通常采用其 RFC5424 版本。大部分 SIEM<sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup> 系统都支持这种格式的导入。
+<p>Syslog 是 Linux 操作系统默认的审计日志格式，通常采用其 RFC5424 版本。大部分 SIEM[^1] 系统都支持这种格式的导入。
 Syslog 协议适配性很好，基于 mTLS 的 Syslog 传输可以在兼容传统软件的同时，最大程度保证系统的安全性。但是对于微服务来说，实现和维护标准协议成本较高。所以如 AWS CloudTrail, OpenTelemetry 等都选择更简单的 HTTPS + JSON 格式。</p>
+<p>[^1]: SIEM 是安全信息和事件管理(Security Information and Event Management)的缩写。<a href="https://www.microsoft.com/en-us/security/business/security-101/what-is-siem">https://www.microsoft.com/en-us/security/business/security-101/what-is-siem</a></p>
 <h3><a href="https://jsonlines.org/">JSON Lines</a></h3>
 <p>大部分 SaaS 产品都是用 JSON，简单高效。例如，下面是<a href="https://opentelemetry.io/docs/specs/otel/logs/data-model/">OpenTelemetry 官方文档</a>提到的日志模型中的字段：</p>
-<table>
-<thead><tr>
-<th>Field Name</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Timestamp</td>
-<td>Time when the event occurred.</td>
-</tr>
-<tr>
-<td>ObservedTimestamp</td>
-<td>Time when the event was observed.</td>
-</tr>
-<tr>
-<td>TraceId</td>
-<td>Request trace id.</td>
-</tr>
-<tr>
-<td>SpanId</td>
-<td>Request span id.</td>
-</tr>
-<tr>
-<td>TraceFlags</td>
-<td>W3C trace flag.</td>
-</tr>
-<tr>
-<td>SeverityText</td>
-<td>The severity text (also known as log level).</td>
-</tr>
-<tr>
-<td>SeverityNumber</td>
-<td>Numerical value of the severity.</td>
-</tr>
-<tr>
-<td>Body</td>
-<td>The body of the log record.</td>
-</tr>
-<tr>
-<td>Resource</td>
-<td>Describes the source of the log.</td>
-</tr>
-<tr>
-<td>InstrumentationScope</td>
-<td>Describes the scope that emitted the log.</td>
-</tr>
-<tr>
-<td>Attributes</td>
-<td>Additional information about the event.</td>
-</tr>
-</tbody>
-</table>
+<p>| Field Name           | Description                                  |
+| -------------------- | -------------------------------------------- |
+| Timestamp            | Time when the event occurred.                |
+| ObservedTimestamp    | Time when the event was observed.            |
+| TraceId              | Request trace id.                            |
+| SpanId               | Request span id.                             |
+| TraceFlags           | W3C trace flag.                              |
+| SeverityText         | The severity text (also known as log level). |
+| SeverityNumber       | Numerical value of the severity.             |
+| Body                 | The body of the log record.                  |
+| Resource             | Describes the source of the log.             |
+| InstrumentationScope | Describes the scope that emitted the log.    |
+| Attributes           | Additional information about the event.      |</p>
 <p>下面是 kubernetes apiserver 关于 Audit 消息格式定义的例子：</p>
-<pre><code class="lang-json">{
+<pre><code class="language-json">{
   "apiVersion": "audit.k8s.io/v1",
   "kind": "Event",
   "level": "Metadata",
@@ -235,7 +157,7 @@ Syslog 协议适配性很好，基于 mTLS 的 Syslog 传输可以在兼容传�
 <p>攻击者可以通过系统的安全漏洞，修改、删除某些审计日志。</p>
 <p>除了上面提到的加密和权限控制，还可以采取以下措施：</p>
 <ul>
-<li>完整性检查<sup class="footnote-ref" id="fnref-2"><a href="#fn-2">2</a></sup>：在日志条目中添加哈希值，以便在验证日志时能够快速检测到任何篡改或截断。</li>
+<li>完整性检查[^2]：在日志条目中添加哈希值，以便在验证日志时能够快速检测到任何篡改或截断。</li>
 <li>定期备份：定期备份日志，以防止攻击者删除或修改所有的日志条目。</li>
 </ul>
 <p><strong>日志文件的限制</strong>：通常要除了限制日志文件的大小，还要限制备份数量、最长备份天数等。下面是 kubernetes 中关于日志文件存储的参数：</p>
@@ -245,6 +167,7 @@ Syslog 协议适配性很好，基于 mTLS 的 Syslog 传输可以在兼容传�
 <li>--audit-log-maxbackup 定义要保留的审计日志文件的最大数量</li>
 <li>--audit-log-maxsize 定义审计日志文件轮转之前的最大大小（兆字节）</li>
 </ul>
+<p>[^2]: 对于日志的加密，一般在服务端会对日志额外添加 checksum 链来校验。可以参考亚马逊的实现 <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html">server-side encryption (SSE-S3)</a>.</p>
 <h3>可用性</h3>
 <p>攻击者可以攻击审计追踪服务，导致审计追踪服务内存、磁盘空间不足等。</p>
 <ul>
@@ -270,7 +193,8 @@ Syslog 协议适配性很好，基于 mTLS 的 Syslog 传输可以在兼容传�
 <p>kubernetes 的日志收集与 AWS 实现类似，也是基于中心化的服务，但是这套架构设计并非只为审计日志一种情况设计。它遵循了很多 kubernetes 声明式设计的理念，非常值得学习。</p>
 <p><img alt="kubernetes log" src="/images/audit-system-design/k8s-audit.png"/></p>
 <p>例如 kubernetes 专门为审计设计的 stage：</p>
-<blockquote><p>每个请求都可被记录其相关的阶段（stage）。已定义的阶段有：</p>
+<blockquote>
+<p>每个请求都可被记录其相关的阶段（stage）。已定义的阶段有：</p>
 <ul>
 <li>RequestReceived - 此阶段对应审计处理器接收到请求后， 并且在委托给其余处理器之前生成的事件。</li>
 <li>ResponseStarted - 在响应消息的头部发送后，响应消息体发送前生成的事件。 只有长时间运行的请求（例如 watch）才会生成这个阶段。</li>
@@ -278,12 +202,13 @@ Syslog 协议适配性很好，基于 mTLS 的 Syslog 传输可以在兼容传�
 <li>Panic - 当 panic 发生时生成。</li>
 </ul>
 </blockquote>
-<p><a href="https://kubernetes.io/zh-cn/docs/tasks/debug/debug-cluster/audit/">kubernetes 审计事件</a> 使用和 Event API 不同的消息结构<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">3</a></sup>。</p>
+<p><a href="https://kubernetes.io/zh-cn/docs/tasks/debug/debug-cluster/audit/">kubernetes 审计事件</a> 使用和 Event API 不同的消息结构[^3]。</p>
 <p>综上，云平台的审计服务设计可以总结为：</p>
 <ul>
 <li>优点：微服务设计，JSON 格式日志更灵活，中心化的日志收集服务易于集成更多应用服务和导出到开源数据处理工具。</li>
 <li>不足：分布式架构对存储、服务端加密、通信安全性和完整性要求更高。</li>
 </ul>
+<p>[^3]: <a href="https://kubernetes.io/zh-cn/docs/reference/config-api/apiserver-audit.v1/#audit-k8s-io-v1-Event">kubernetes 审计事件结构定义</a></p>
 <h3>OpenTelemetry</h3>
 <p><img alt="OpenTel" src="/images/audit-system-design/opentel.png"/></p>
 <p>OpenTelemetry 是现在云原生最主流的日志框架。可以支持侵入式（SDK）、非侵入式（Agent）两种日志采集模式。Collector 的设计可以让一部分日志处理的工作放在日志发送端完成。</p>
@@ -313,10 +238,3 @@ Syslog 协议适配性很好，基于 mTLS 的 Syslog 传输可以在兼容传�
 <li>AWS 等云产品</li>
 <li>OpenTelemetry</li>
 </ul>
-<div class="footnotes">
-<hr/>
-<ol><li id="fn-1"><p>SIEM 是安全信息和事件管理(Security Information and Event Management)的缩写。<a href="https://www.microsoft.com/en-us/security/business/security-101/what-is-siem">https://www.microsoft.com/en-us/security/business/security-101/what-is-siem</a><a class="footnote" href="#fnref-1">↩</a></p></li>
-<li id="fn-2"><p>对于日志的加密，一般在服务端会对日志额外添加 checksum 链来校验。可以参考亚马逊的实现 <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html">server-side encryption (SSE-S3)</a>.<a class="footnote" href="#fnref-2">↩</a></p></li>
-<li id="fn-3"><p><a href="https://kubernetes.io/zh-cn/docs/reference/config-api/apiserver-audit.v1/#audit-k8s-io-v1-Event">kubernetes 审计事件结构定义</a><a class="footnote" href="#fnref-3">↩</a></p></li>
-</ol>
-</div>
