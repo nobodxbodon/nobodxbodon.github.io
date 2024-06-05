@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/stevedsun/stevedsun.github.io/blob/master/content/posts/2017/py-yield.md">仓库源文</a>，<a href="https://sund.site/posts/2017/py-yield">站点原文</a></h2>
 <hr/>
-<p>title: "Python yield关键字的底层实现"
+<h2>title: "Python yield关键字的底层实现"
 date: 2016-12-28T18:00:00
 categories: [Python]
 tags: [python]
-description: "总结一下yield关键字在C层面是如何实现的"</p>
-<h2>aliases: [/posts/py-yield/]</h2>
+description: "总结一下yield关键字在C层面是如何实现的"
+aliases: [/posts/py-yield/]</h2>
 <p>这几天面试被问到类似的问题，顺便看了看 Python 的源码，参考网上的教程，总结一下 yield 关键字在 C 层面是如何实现的。</p>
 <h2>举个栗子</h2>
 <p>我们先看一个 python 生成器函数的例子：</p>
-<pre><code class="lang-python">from dis import dis
+<pre><code class="language-python">from dis import dis
 
 def func():
     i = 4
@@ -36,7 +36,7 @@ a.next()
              19 RETURN_VALUE
 </code></pre>
 <p>我们猜测其中第二列(代表字节码偏移量)为 9 的指令<code>YIELD_VALUE</code>就是 yield 关键字的执行代码，进入 Python2.7.12 源码目录，在解释器执行字节码的主函数<code>PyEval_EvalFrameEx</code>中找到了下面一段：</p>
-<pre><code class="lang-c">          TARGET_NOARG(YIELD_VALUE)
+<pre><code class="language-c">          TARGET_NOARG(YIELD_VALUE)
           {
               retval = POP();
               f-&gt;f_stacktop = stack_pointer;
@@ -49,7 +49,7 @@ a.next()
 <h2>生成器是如何记录代码返回位置的</h2>
 <p>显然，如果这时候调用代码<code>a.next()</code>就会直接返回 yield 后边的表达式结果。这对应了上面 C 代码的<code>fast_yield</code>部分，那生成器怎么记录上次执行的位置并在下一次调用<code>a.next()</code>的时候从上次的位置继续执行的呢？</p>
 <p>Python 在解释代码时，是将代码块加载为一个叫 PyFrameObject 的对象，这个对象代表了当前运行的栈帧。PyFrameObject 里有个<code>f_lasti</code>变量用于保存代码当前执行到了字节码的哪个位置。在第二次执行<code>a.next()</code>时，生成器对象把之前携带了<code>f_lasti</code>的 PyFrameObject 当参数传给<code>PyEval_EvalFrameEx</code>，在<code>PyEval_EvalFrameEx</code>里的执行一个 JUMPTO 就直接跳转到了上一次结束生成器时的字节码位置：</p>
-<pre><code class="lang-c">PyObject *
+<pre><code class="language-c">PyObject *
 PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
 {
 ...
@@ -77,7 +77,7 @@ fast_next_opcode:
 }
 </code></pre>
 <p>其中<code>INSTR_OFFSET</code>宏正是字节码的偏移量。</p>
-<pre><code class="lang-c">#define INSTR_OFFSET()  ((int)(next_instr - first_instr))
+<pre><code class="language-c">#define INSTR_OFFSET()  ((int)(next_instr - first_instr))
 
 // co-&gt;co_code里保存的是字节码
 first_instr = (unsigned char*) PyString_AS_STRING(co-&gt;co_code);

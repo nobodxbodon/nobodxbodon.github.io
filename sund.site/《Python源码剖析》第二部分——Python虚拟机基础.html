@@ -1,19 +1,22 @@
 <h2><a href="https://github.com/stevedsun/stevedsun.github.io/blob/master/content/posts/2017/python-2.md">仓库源文</a>，<a href="https://sund.site/posts/2017/python-2">站点原文</a></h2>
 <hr/>
-<p>title: "《Python源码剖析》第二部分——Python虚拟机基础"
+<h2>title: "《Python源码剖析》第二部分——Python虚拟机基础"
 date: 2017-07-13T00:00:00
 categories: [Python]
-tags: [python]</p>
-<h2>aliases: [/posts/python-2/]</h2>
+tags: [python]
+aliases: [/posts/python-2/]</h2>
 <h2>Python 执行环境</h2>
-<blockquote><p>在编译过程中，这些包含在 Python 源代码中的静态信息都会被 Python 编译器收集起来，编译的结果中包含了字符串，常量值，字节码等在源代码中出现的一切有用的静态信息。在 Python 运行期间，这些源文件中提供的静态信息最终会被存储在一个运行时的对象中，当 Python 运行结束后，这个运行时对象中所包含的信息甚至还会被存储在一种文件中。这个对象和文件就是我们这章探索的重点：PyCodeObject 对象和 pyc 文件。</p>
+<blockquote>
+<p>在编译过程中，这些包含在 Python 源代码中的静态信息都会被 Python 编译器收集起来，编译的结果中包含了字符串，常量值，字节码等在源代码中出现的一切有用的静态信息。在 Python 运行期间，这些源文件中提供的静态信息最终会被存储在一个运行时的对象中，当 Python 运行结束后，这个运行时对象中所包含的信息甚至还会被存储在一种文件中。这个对象和文件就是我们这章探索的重点：PyCodeObject 对象和 pyc 文件。</p>
+</blockquote>
+<blockquote>
 <p>在程序运行期间，编译结果存在于内存的 PyCodeObject 对象中；而 Python 结束运行后，编译结果又被保存到了 pyc 文件中。当下一次运行相同的程序时，Python 会根据 pyc 文件中记录的编译结果直接建立内存中的 PyCodeObject 对象，而不用再次对源文件进行编译了。</p>
 </blockquote>
 <p>从文章摘录可见，python 生成的不是编译后的文件，而是<code>.py</code>文件对应的静态信息——PyCodeObject，这里包括了字节码指令序列、字符串、常量。每个名字空间(类、模块、函数)都对应一个独立的 PyCodeObject。(python 连编译后的文件里存的都是个对象！)</p>
 <p>不被 import 的 py 文件不会生成 pyc。标准库里有 py_compile 等方法也可以生成 pyc。</p>
 <p><strong>import 机制</strong> 导入某个模块时，先查找对应的 pyc，如果没有 pyc 就生成然后 import 这个 pyc。(所以实际导入的并不是 py 文件，而是 py 文件编译后的 PyCodeObject)。</p>
 <p><strong>PyFrameObject</strong> Python 程序运行时的「执行环境」。参考操作系统执行可执行文件的过程。Python 也是将函数对应的执行环境封装成栈帧的形式加载进内存。</p>
-<pre><code class="lang-c">typedef struct _frame {
+<pre><code class="language-c">typedef struct _frame {
     PyObject_VAR_HEAD
     struct _frame *f_back;  //执行环境链上的前一个frame
     PyCodeObject *f_code;   //PyCodeObject对象
@@ -33,7 +36,7 @@ tags: [python]</p>
 <p>Python 标准库的<code>sys._getframe()</code>可以动态的在程序执行时获取当前内存中活跃的 PyFrameObject 信息。</p>
 <h2>LEGB 规则</h2>
 <p>即 python 作用域的查找顺序是<code>local</code>-<code>enclosing</code>-<code>global</code>-<code>buildin</code>。看下面代码：</p>
-<pre><code class="lang-python">a = 1
+<pre><code class="language-python">a = 1
 
 def g():
   print a
@@ -47,7 +50,10 @@ g()
 </code></pre>
 <p>代码在[1]处会抛出异常，原因是 python 在编译阶段就把静态数据(局部变量、全局变量、字节码)放入 pyc 里，执行到<code>f()</code>里时，查找到<code>a</code>是在 local 作用域里定义的而不是 global 里，但是此时 local 的 a 还没赋值，所以就会抛出异常。由此可见，<strong>python 作用域信息是在静态编译时就处理好了的</strong>。</p>
 <h2>Python 虚拟机运行框架</h2>
-<blockquote><p>运行时环境是一个全局的概念，而执行环境实际就是一个栈帧，是一个与某个 Code Block 对应的概念。</p>
+<blockquote>
+<p>运行时环境是一个全局的概念，而执行环境实际就是一个栈帧，是一个与某个 Code Block 对应的概念。</p>
+</blockquote>
+<blockquote>
 <p>在 PyCodeObject 对象的 co_code 域中保存着字节码指令和字节码指令的参数，Python 虚拟机执行字节码指令序列的过程就是从头到尾遍历整个 co_code、依次执行字节码指令的过程。</p>
 </blockquote>
 <p>由上文引用可见，python 在编译阶段将代码块的字节码保存在 PyCodeObject 的 co_code 属性里，然后在执行阶段从头到尾遍历这个 co_code 属性解读字节码。</p>
@@ -55,7 +61,7 @@ g()
 <p><img alt="" src="https://i.loli.net/2021/03/05/GHImB214fvxSXgk.png"/></p>
 <p>Python 虚拟机就是一个「软 CPU」，动态加载上述三种结构进内存，并模拟操作系统执行过程。程序执行后，先创建各个运行时环境，再将栈帧中的字节码载入，循环遍历解释执行。</p>
 <h2>Python 字节码</h2>
-<pre><code class="lang-c">i = 1
+<pre><code class="language-c">i = 1
 0   LOAD_CONST   0  (1)
 3   STORE_NAME   0  (i)
 </code></pre>
@@ -87,8 +93,11 @@ g()
 <p><img alt="" src="https://i.loli.net/2021/03/05/N76woqSlmR28Oyt.jpg"/></p>
 <p><strong>可调用性（callable）</strong> ，只要一个对象对应的 class 对象中实现了“<strong>call</strong>”操作（更确切地说，在 Python 内部的 PyTypeObject 中，tp_call 不为空）那么这个对象就是一个可调用的对象，换句话说，在 Python 中，所谓“调用”，就是执行对象的 type 所对应的 class 对象的 tp_call 操作。</p>
 <h2>Descriptor</h2>
-<blockquote><p>在 PyType_Ready 中，Python 虚拟机会填充 tp_dict，其中与操作名对应的是一个个 descriptor
+<blockquote>
+<p>在 PyType_Ready 中，Python 虚拟机会填充 tp_dict，其中与操作名对应的是一个个 descriptor
 对于一个 Python 中的对象 obj，如果 obj.<strong>class</strong>对应的 class 对象中存在<strong>get</strong>、<strong>set</strong>和<strong>delete</strong>三种操作，那么 obj 就可称为 Python 一个 descriptor。</p>
+</blockquote>
+<blockquote>
 <p>如果细分，那么 descriptor 还可分为如下两种：</p>
 </blockquote>
 <ol>
@@ -96,7 +105,8 @@ g()
 <li>non data descriptor : type 中只定义了<strong>get</strong>的 descriptor。
 在 Python 虚拟机访问 instance 对象的属性时，descriptor 的一个作用是影响 Python 虚拟机对属性的选择。从 PyObject_GenericGetAttr 的伪代码可以看出，Python 虚拟机会在 instance 对象自身的<strong>dict</strong>中寻找属性，也会在 instance 对象对应的 class 对象的 mro 列表中寻找</li>
 </ol>
-<blockquote><ol>
+<blockquote>
+<ol>
 <li>Python 虚拟机按照 instance 属性、class 属性的顺序选择属性，即 instance 属性优先于 class 属性；</li>
 <li>如果在 class 属性中发现同名的 data descriptor，那么该 descriptor 会优先于 instance 属性被 Python 虚拟机选择</li>
 </ol>
@@ -109,7 +119,7 @@ g()
 </ul>
 <h2>Bound Method 和 Unbound Method</h2>
 <p>假设有下面两种对类方法的调用：</p>
-<pre><code class="lang-python">class A(object):
+<pre><code class="language-python">class A(object):
     def f(self):
         pass
 
