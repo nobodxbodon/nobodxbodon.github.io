@@ -1,4 +1,4 @@
-<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/ACME%E7%9A%84%E4%BD%BF%E7%94%A8%E7%BB%8F%E9%AA%8C.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/ACME%E7%9A%84%E4%BD%BF%E7%94%A8%E7%BB%8F%E9%AA%8C">站点原文</a></h2>
+<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/ACME的使用经验.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/ACME的使用经验">站点原文</a></h2>
 <h1>ACME的使用经验</h1>
 <h2>ACME 简介</h2>
 <p>ACME 是一个自动管理证书的程序。
@@ -34,14 +34,13 @@ cd acme.sh
 </code></pre>
 <p>为 acme.sh 创建一个别名</p>
 <ul>
-<li>在 ~/.bashrc 加入这一行<pre><code>alias acme.sh=~/.acme.sh/acme.sh
+<li>在 ~/.bashrc 加入这一行<pre><code>  alias acme.sh=~/.acme.sh/acme.sh
 </code></pre>
 </li>
 <li>然后再运行这句 source ~/.bashrc</li>
 <li>如果没有 ~/.bashrc ，就新建一个 touch ~/.bashrc</li>
 </ul>
-<blockquote>
-<p>其实把安装后的目录复制到用户的根目录和创建别名都不是必须的，但为了贴合文档的教程和方便使用，最好还是这样做</p>
+<blockquote><p>其实把安装后的目录复制到用户的根目录和创建别名都不是必须的，但为了贴合文档的教程和方便使用，最好还是这样做</p>
 </blockquote>
 <h2>申请证书</h2>
 <p>运行这句命令申请证书，
@@ -97,6 +96,9 @@ cd acme.sh
 <p>查看已安装证书的信息</p>
 <pre><code>acme.sh --info -d www.example.com
 </code></pre>
+<p>删除证书</p>
+<pre><code>acme.sh --remove -d www.example.com
+</code></pre>
 <p>更新</p>
 <pre><code>acme.sh --upgrade
 </code></pre>
@@ -105,6 +107,9 @@ cd acme.sh
 </code></pre>
 <p>关闭自动更新</p>
 <pre><code>acme.sh --upgrade --auto-upgrade 0
+</code></pre>
+<p>卸载 acme.sh</p>
+<pre><code>acme.sh --uninstall
 </code></pre>
 <h2>在 Windows 环境下使用 ACME</h2>
 <p>acme.sh 文档里关于 Windows 环境的描述</p>
@@ -127,6 +132,14 @@ cd acme.sh
 （笔者试了很多方法依然无法隐藏这个黑框，在服务器里每晚运行一次的话应该没关系的吧，即使有黑框也是一闪而过）</p>
 <pre><code>Register-ScheduledTask -TaskName "acme_cron" -AsJob -Trigger (New-ScheduledTaskTrigger -Daily -At "2:00 AM") -Action (New-ScheduledTaskAction -Execute "PowerShell" -Argument "-Nolog -NonInteractive -WindowStyle Hidden -Command `"C:\Users\a\Git\usr\bin\bash.exe -l /c/Users/a/.acme.sh/acme.sh --cron --home /c/Users/a/.acme.sh`"")
 </code></pre>
+<p>似乎可以这样安装 计划任务 ，即使在 windows 环境里，只要在 cygwin 中运行，一样是有效的</p>
+<pre><code>acme.sh --install-cronjob
+</code></pre>
+<p>删除定时任务</p>
+<pre><code>acme.sh --uninstall-cronjob
+</code></pre>
+&lt;!-- 从源码里看，似乎只要运行了 acme.sh --install 就会自动新建定时任务了，除非指定了 --no-cron 参数 --&gt;
+
 <h3>以 nginx 为例子</h3>
 <p>假设已经安装好 acme.sh 和 nginx</p>
 <ol>
@@ -135,62 +148,64 @@ cd acme.sh
 <li>nginx 的配置文件里一般会有一个默认的站点，这个站点的目录一般在 nginx 的安装目录下的 html 目录</li>
 </ul>
 </li>
-<li>运行申请证书的命令，在 nginx 默认的站点更目录里运行这句<pre><code>acme.sh --issue -d www.example.com --webroot $(pwd)
+<li>运行申请证书的命令，在 nginx 默认的站点更目录里运行这句<pre><code> acme.sh --issue -d www.example.com --webroot $(pwd)
 </code></pre>
 </li>
-<li>在 nginx 的安装目录里新建一个名为 restart.ps1 的文件并写入以下内容，这个脚本主要是用于重启 nginx 的，要注意 powershell 的执行策略<pre><code class="language-powershell"># 切换到批处理文件所在的目录
-Set-Location $PSScriptRoot
+<li><p>在 nginx 的安装目录里新建一个名为 restart.ps1 的文件并写入以下内容，这个脚本主要是用于重启 nginx 的，要注意 powershell 的执行策略</p>
+<pre><code class="lang-powershell"> # 切换到批处理文件所在的目录
+ Set-Location $PSScriptRoot
 
-# 显示批处理文件所在的目录
-Write-Output $PSScriptRoot
+ # 显示批处理文件所在的目录
+ Write-Output $PSScriptRoot
 
-# 停止 nginx 服务
-./nginx.exe -s quit
+ # 停止 nginx 服务
+ ./nginx.exe -s quit
 
-# 等待 6 秒
-Start-Sleep -Seconds 6
+ # 等待 6 秒
+ Start-Sleep -Seconds 6
 
-# 强制结束 nginx 进程及其子进程
-Get-Process -Name nginx | Stop-Process -Force
+ # 强制结束 nginx 进程及其子进程
+ Get-Process -Name nginx | Stop-Process -Force
 
-# 测试 nginx 配置文件
-./nginx.exe -T
+ # 测试 nginx 配置文件
+ ./nginx.exe -T
 
-# 启动 nginx 服务
-Start-Process -FilePath powershell -ArgumentList "-NonInteractive", "-command", "./nginx.exe"
+ # 启动 nginx 服务
+ Start-Process -FilePath powershell -ArgumentList "-NonInteractive", "-command", "./nginx.exe"
 </code></pre>
 </li>
-<li>运行安装证书的命令<pre><code>acme.sh --install-cert -d www.example.com \
-    --cert-file      /c/Users/a/nginx/crt/www.example.com/cert.pem  \
-    --key-file       /c/Users/a/nginx/crt/www.example.com/www.example.com.key \
-    --fullchain-file /c/Users/a/nginx/crt/www.example.com/fullchain.cer \
-    --reloadcmd     "powershell \"C:\Users\a\nginx\restart.ps1\""
+<li>运行安装证书的命令<pre><code> acme.sh --install-cert -d www.example.com \
+     --cert-file      /c/Users/a/nginx/crt/www.example.com/cert.pem  \
+     --key-file       /c/Users/a/nginx/crt/www.example.com/www.example.com.key \
+     --fullchain-file /c/Users/a/nginx/crt/www.example.com/fullchain.cer \
+     --reloadcmd     "powershell \"C:\Users\a\nginx\restart.ps1\""
 </code></pre>
 </li>
-<li>在 nginx 的配置文件里加上这一段<pre><code>server {
-    listen       80;
-    server_name  www.example.com;
+<li><p>在 nginx 的配置文件里加上这一段</p>
+<pre><code> server {
+     listen       80;
+     server_name  www.example.com;
 
-    listen       443 ssl http2;
-    ssl_certificate  ./crt/www.example.com/fullchain.cer;
-    ssl_certificate_key ./crt/www.example.com/www.example.com.key;
+     listen       443 ssl http2;
+     ssl_certificate  ./crt/www.example.com/fullchain.cer;
+     ssl_certificate_key ./crt/www.example.com/www.example.com.key;
 
-    access_log  logs/www.example.com.access.log;
-    error_log  logs/www.example.com.error.log;
+     access_log  logs/www.example.com.access.log;
+     error_log  logs/www.example.com.error.log;
 
-    if ($scheme = 'http') {
-        return 302 https://$host$request_uri;
-    }
+     if ($scheme = 'http') {
+         return 302 https://$host$request_uri;
+     }
 
-    location / {
-        root   C:/User/a/www.example.com; # 这是站点根目录的路径
-        index  index.html index.htm;
-    }
-}
+     location / {
+         root   C:/User/a/www.example.com; # 这是站点根目录的路径
+         index  index.html index.htm;
+     }
+ }
 </code></pre>
 </li>
 </ol>
-<p>&lt;!--
+&lt;!--
 New-ScheduledTaskTrigger -Weekly -DaysOfWeek Tuesday -At "4:00 AM"
 
 Register-ScheduledTask -TaskName "acme_cron" -AsJob -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Tuesday -At "4:00 AM") -Action (New-ScheduledTaskAction -Execute "PowerShell" -Argument "-Nolog -NonInteractive -WindowStyle Hidden -Command `"C:\Users\a\Git\usr\bin\bash.exe -l /c/Users/a/.acme.sh/acme.sh --upgrade`"")
@@ -198,13 +213,7 @@ Register-ScheduledTask -TaskName "acme_cron" -AsJob -Trigger (New-ScheduledTaskT
 
 版本是 3.0.8
 
-似乎可以这样安装 计划任务 ，即使在 windows 环境里，只要在 cygwin 中运行，一样是有效的
-acme.sh --install-cronjob
 
-从源码里看，似乎只要运行了 acme.sh --install 就会自动新建定时任务了，除非指定了 --no-cron 参数
-
-acme.sh --uninstall-cronjob 删除定时任务
-acme.sh --uninstall 卸载 acme.sh
 
 
         server {
@@ -263,4 +272,4 @@ Start-Process -FilePath powershell -ArgumentList "-NonInteractive", "-command", 
 
 # powershell "C:\Users\a\dev\nginx-1.25.3\restart.ps1"
 
---&gt;</p>
+--&gt;
