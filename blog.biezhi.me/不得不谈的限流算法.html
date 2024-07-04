@@ -1,10 +1,11 @@
 <h2><a href="https://github.com/biezhi/blog/blob/master/_posts/2018-10-27-rate-limit-algorithm.md">仓库源文</a>，<a href="https://blog.biezhi.me/2018/10/27/rate-limit-algorithm">站点原文</a></h2>
 <hr/>
-<h2>layout: post
-title: 不得不谈的限流算法
-tags: ['限流']</h2>
+<p>layout: post
+title: 不得不谈的限流算法</p>
+<h2>tags: ['限流']</h2>
 <p>在开发中我们可能会遇到接口访问频次过高，这时候就需要做流量限制，你可能是用的 <code>Nginx</code> 这种 Web Server 来控制也可能是用了一些流行的类库实现。在分布式系统中更是如此，限流是高并发系统的一大杀器，在设计限流算法之前我们先来了解一下它们是什么。</p>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <h2>何为限流？</h2>
 <p>限流的英文是 <code>Rate limit</code>（速率限制），维基百科中的定义比较简单。我们编写的程序可以被外部调用，Web 应用通过浏览器或者其他方式的 HTTP 方式访问，接口的访问频率可能会非常快，如果我们没有对接口访问频次做限制可能会导致服务器无法承受过高的压力挂掉，这时候也可能会产生数据丢失。</p>
 <p>而限流算法就可以帮助我们去控制每个接口或程序的函数被调用频率，它有点儿像保险丝，防止系统因为超过访问频率或并发量而引起瘫痪。我们可能在调用某些第三方的接口的时候会看到类似这样的响应头：</p>
@@ -26,7 +27,7 @@ X-RateLimit-Reset: 1540650789 //限制重置时间
 </li>
 </ol>
 <p><strong>伪代码实现</strong></p>
-<pre><code class="language-go">type Counter struct {
+<pre><code class="lang-go">type Counter struct {
     Count       uint   // 初始计数器
     Limit       uint   // 时间窗口最大请求频次
     Interval    int64  // 单位毫秒 ms
@@ -52,20 +53,20 @@ func (c *Counter) rateLimit() bool {
 <p>这种方式的缺点在于它没有更细粒度的划分临界点，如果我们可以把这个时间窗口划分成 6 份，每一份代表 10 秒，当然你可以将它划分的更细。那么如何解决这里的临界问题呢？来看看下面的滑动窗口吧。</p>
 <h3>2. 滑动窗口</h3>
 <p>所谓 <a href="https://en.wikipedia.org/wiki/Sliding_window_protocol">滑动窗口（Sliding window）</a>{:target="_blank"} 是一种流量控制技术，这个词出现在 TCP 协议中。我们来看看在限流中它是怎样表现的：</p>
-<p>![滑动窗口]({{ "/public/images/2018/10/sliding_window.jpg" | prepend: site.cdnurl }} "滑动窗口")</p>
+<p><img alt="滑动窗口" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/blog.biezhi.me/_posts/{{" title='/public/images/2018/10/sliding_window.jpg" | prepend: site.cdnurl }} "滑动窗口'/></p>
 <p>上图中我们用红色的虚线代表一个时间窗口（一分钟），每个时间窗口有 6 个格子，每个格子是 10 秒钟。每过 10 秒钟时间窗口向右移动一格，可以看红色箭头的方向。我们为每个格子都设置一个独立的计数器 Counter，假如一个请求在 <code>0:45</code> 访问了那么我们将第五个格子的计数器 +1（也是就是 <code>0:40~0:50</code>），在判断限流的时候需要把所有格子的计数加起来和设定的频次进行比较即可。</p>
 <p>那么滑动窗口如何解决我们上面遇到的问题呢？来看下面的图：</p>
-<p>![滑动窗口]({{ "/public/images/2018/10/sliding_window_fix_counter.png" | prepend: site.cdnurl }} "滑动窗口")</p>
+<p><img alt="滑动窗口" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/blog.biezhi.me/_posts/{{" title='/public/images/2018/10/sliding_window_fix_counter.png" | prepend: site.cdnurl }} "滑动窗口'/></p>
 <p>当用户在 <code>0:59</code> 秒钟发送了 200 个请求就会被第六个格子的计数器记录 +200，当下一秒的时候时间窗口向右移动了一个，此时计数器已经记录了该用户发送的 200 个请求，所以再发送的话就会触发限流，则拒绝新的请求。</p>
 <p>通过上面的分析相信你了解什么是滑动窗口了，回想一下其实计数器就是滑动窗口啊，只不过只有一个格子而已，所以我们想让限流做的更精确只需要划分更多的格子就可以了，真是秒啊！为了更精确我们也不知道到底该设置多少个格子，所以又出了 2 种流行的平滑限流算法分别是漏桶算法和令牌桶算法，继续往下看。</p>
 <h3>3. 漏桶算法</h3>
-<p>![水龙头漏桶]({{ "/public/images/2018/10/leaky_bucket.jpeg" | prepend: site.cdnurl }} "水龙头漏桶")</p>
+<p><img alt="水龙头漏桶" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/blog.biezhi.me/_posts/{{" title='/public/images/2018/10/leaky_bucket.jpeg" | prepend: site.cdnurl }} "水龙头漏桶'/></p>
 <p>漏桶算法（Leaky Bucket）是什么呢？大家都用过水龙头，打开龙头开关水就会流下滴到水桶里，而漏桶指的是水桶下面有个漏洞可以出水。如果水龙头开的特别大那么水流速就会过大，这样就可能导致水桶的水满了然后溢出。</p>
 <p>而我们讨论的漏桶算法的思路也很简单，水龙头打开后流下的水（请求）以一定的速率流到漏桶里（限流容器），漏桶以一定的速度出水（接口响应速率），如果水流速度过大（请求过多）就可能会导致漏桶的水溢出（访问频率超过接口响应速率），这时候我们需要关掉水龙头（拒绝请求），下面是经典的漏桶算法图示：</p>
-<p>![漏桶算法]({{ "/public/images/2018/10/leaky_bucket_algorithm.png" | prepend: site.cdnurl }} "漏桶算法")</p>
+<p><img alt="漏桶算法" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/blog.biezhi.me/_posts/{{" title='/public/images/2018/10/leaky_bucket_algorithm.png" | prepend: site.cdnurl }} "漏桶算法'/></p>
 <p>这张图中有 2 个变量，一个是桶的大小（capacity），另一个是水桶漏洞的大小（rate），那么我们可以写下如下代码来实现：</p>
 <p><strong>伪代码实现</strong></p>
-<pre><code class="language-go">type LeakyBucket struct {
+<pre><code class="lang-go">type LeakyBucket struct {
     Capacity    int64 // 桶的容量
     Rate        int64 // 漏桶出水速度
     Water       int64 // 当前水量(当前累积请求数)
@@ -74,7 +75,7 @@ func (c *Counter) rateLimit() bool {
 
 func (b *LeakyBucket) rateLimit() bool {
     now := time.Now().Unix()
-    
+
     // 先执行漏水，计算剩余水量
     b.Water = max(0, b.Water-(now-b.RefreshTime)*b.Rate);
     b.RefreshTime = now
@@ -106,10 +107,10 @@ func max(a int64, b int64) int64 {
 <p>漏桶限制的是常量流出速率（即流出速率是一个固定常量值），所以最大的速率就是出水的速率，不能出现突发流量。</p>
 <h3>4. 令牌桶算法</h3>
 <p>令牌桶算法（Token Bucket）是网络流量整形（Traffic Shaping）和速率限制（Rate Limiting）中最常使用的一种算法。典型情况下，令牌桶算法用来控制发送到网络上的数据的数目，并允许突发数据的发送。</p>
-<p>![令牌桶算法]({{ "/public/images/2018/10/token_bucket.jpg" | prepend: site.cdnurl }} "令牌桶算法")</p>
+<p><img alt="令牌桶算法" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/blog.biezhi.me/_posts/{{" title='/public/images/2018/10/token_bucket.jpg" | prepend: site.cdnurl }} "令牌桶算法'/></p>
 <p>令牌桶算法和漏桶算法的方向刚好是相反的，我们有一个固定的桶，桶里存放着令牌（token）。一开始桶是空的，系统按固定的时间（rate）往桶里添加令牌，直到桶里的令牌数满，多余的请求会被丢弃。当请求来的时候，从桶里移除一个令牌，如果桶是空的则拒绝请求或者阻塞。</p>
 <p><strong>伪代码实现</strong></p>
-<pre><code class="language-go">type TokenBucket struct {
+<pre><code class="lang-go">type TokenBucket struct {
     Capacity    int64 // 桶的容量
     Rate        int64 // 令牌放入速度
     Tokens      int64 // 当前令牌数量
@@ -144,8 +145,24 @@ func (t *TokenBucket) rateLimit() bool {
 <p><strong>计数器和滑动窗口比较</strong></p>
 <p>计数器算法实现起来最简单，可以看成是滑动窗口的低精度实现。滑动窗口由于需要存储多份的计数器（每一个格子存一份），所以滑动窗口在实现上需要更多的存储空间。也就是说，如果滑动窗口的精度越高，需要的存储空间就越大。</p>
 <p><strong>漏桶算法和令牌桶算法比较</strong></p>
-<p>|  | 漏桶算法 | 令牌桶算法 |
-|----------|:-------------|:------|
-| 请求何时拒绝 | 流入请求速率任意，常量固定速率流出请求。当流入请求数积累到漏桶容量时，则拒绝新请求 | 固定速率往桶中添加令牌，如果桶中令牌不够，则拒绝新请求 |
-| 速率限制 | 限制常量流出速率（流出速率是固定值），从而 <strong>平滑突发流入速率</strong> | 限制平均流入速率，<strong>允许一定程度的突发请求</strong>（支持一次拿多个令牌） |</p>
+<table>
+<thead><tr>
+<th></th>
+<th style="text-align:left">漏桶算法</th>
+<th style="text-align:left">令牌桶算法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>请求何时拒绝</td>
+<td style="text-align:left">流入请求速率任意，常量固定速率流出请求。当流入请求数积累到漏桶容量时，则拒绝新请求</td>
+<td style="text-align:left">固定速率往桶中添加令牌，如果桶中令牌不够，则拒绝新请求</td>
+</tr>
+<tr>
+<td>速率限制</td>
+<td style="text-align:left">限制常量流出速率（流出速率是固定值），从而 <strong>平滑突发流入速率</strong></td>
+<td style="text-align:left">限制平均流入速率，<strong>允许一定程度的突发请求</strong>（支持一次拿多个令牌）</td>
+</tr>
+</tbody>
+</table>
 <p>本文主要对常见的限流算法的实现思路进行了介绍，同时给出了一些简单的代码实现，下篇文章中会介绍一些常见的编程语言实现方式和针对场景的应对策略。</p>

@@ -1,12 +1,13 @@
 <h2><a href="https://github.com/biezhi/blog/blob/master/_posts/2017-08-29-talk-tcp-keepalive.md">仓库源文</a>，<a href="https://blog.biezhi.me/2017/08/29/talk-tcp-keepalive">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 聊聊 TCP 中的 KeepAlive 机制
-cover: /public/images/cover/talk-tcp-keepalive.jpg
-tags: ['tcp', 'keepalive']</h2>
+cover: /public/images/cover/talk-tcp-keepalive.jpg</p>
+<h2>tags: ['tcp', 'keepalive']</h2>
 <p>服务端的系统设置中经常会和底层协议打交道，我们有必要重温一下曾经那些“听过”却不熟悉的名词。
 今天聊的话题是 <code>KeepAlive</code>，在实际应用中又是怎么使用的？</p>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <h2>为什么有Keepalive？</h2>
 <p>大家都做过电梯吧，假设电梯来了你先进去，你朋友还没进来，过一段时间电梯门就会自动关闭，
 你应该没遇到过哪个电梯会一直等你朋友来了才关门的。如果真是那样，那别的楼层的小姐姐们会炸了~</p>
@@ -23,8 +24,7 @@ tags: ['tcp', 'keepalive']</h2>
 如果对方回复了这个报文证明连接还存活着，如果对方没有报文返回且进行了多次尝试都是一样，
 那么就认为连接已经丢失，客户端就没必要继续保持连接了。
 如果没有这种机制就会有很多空闲的连接占用着系统资源。</p>
-<blockquote>
-<p>KeepAlive并不是TCP协议规范的一部分，但在几乎所有的TCP/IP协议栈（不管是Linux还是Windows）中，都实现了KeepAlive功能</p>
+<blockquote><p>KeepAlive并不是TCP协议规范的一部分，但在几乎所有的TCP/IP协议栈（不管是Linux还是Windows）中，都实现了KeepAlive功能</p>
 </blockquote>
 <p><a href="https://tools.ietf.org/html/rfc1122#page-101">RFC1122-TCP Keep-Alives</a>{:target="_blank"}</p>
 <h2>如何设置它?</h2>
@@ -39,22 +39,21 @@ tags: ['tcp', 'keepalive']</h2>
 <h3>在Linux内核设置</h3>
 <p><code>KeepAlive</code>默认不是开启的，如果想使用<code>KeepAlive</code>，需要在你的应用中设置<code>SO_KEEPALIVE</code>才可以生效。</p>
 <p>查看当前的配置：</p>
-<pre><code class="language-bash">cat /proc/sys/net/ipv4/tcp_keepalive_time
+<pre><code class="lang-bash">cat /proc/sys/net/ipv4/tcp_keepalive_time
 cat /proc/sys/net/ipv4/tcp_keepalive_intvl
 cat /proc/sys/net/ipv4/tcp_keepalive_probes
 </code></pre>
 <p>在Linux中我们可以通过修改 <code>/etc/sysctl.conf</code> 的全局配置：</p>
-<pre><code class="language-bash">net.ipv4.tcp_keepalive_time=7200
+<pre><code class="lang-bash">net.ipv4.tcp_keepalive_time=7200
 net.ipv4.tcp_keepalive_intvl=75
 net.ipv4.tcp_keepalive_probes=9
 </code></pre>
 <p>添加上面的配置后输入 <code>sysctl -p</code> 使其生效，你可以使用 <code>sysctl -a | grep keepalive</code> 命令来查看当前的默认配置</p>
-<blockquote>
-<p>如果应用中已经设置<code>SO_KEEPALIVE</code>，程序不用重启，内核直接生效</p>
+<blockquote><p>如果应用中已经设置<code>SO_KEEPALIVE</code>，程序不用重启，内核直接生效</p>
 </blockquote>
 <h3>使用Netty4设置</h3>
 <p>这里我们使用常用的Java网络框架Netty来设置，只需要在服务端设置即可：</p>
-<pre><code class="language-java">EventLoopGroup bossGroup   = new NioEventLoopGroup(1);
+<pre><code class="lang-java">EventLoopGroup bossGroup   = new NioEventLoopGroup(1);
 EventLoopGroup workerGroup = new NioEventLoopGroup();
 try {
     ServerBootstrap b = new ServerBootstrap();
@@ -78,7 +77,7 @@ try {
 Java程序只能做到设置<code>SO_KEEPALIVE</code>选项，其他配置项只能依赖于<code>sysctl</code>配置，系统进行读取。</p>
 <h3>C语言设置</h3>
 <p>函数原型：</p>
-<pre><code class="language-c">#include &lt;sys/socket.h&gt;
+<pre><code class="lang-c">#include &lt;sys/socket.h&gt;
 
 int setsockopt(int socket, int level, int option_name,
       const void *option_value, socklen_t option_len);
@@ -92,7 +91,7 @@ int setsockopt(int socket, int level, int option_name,
 <li>最后一个参数是第四个参数值的大小。</li>
 </ol>
 <p>调用例子：</p>
-<pre><code class="language-c">int socket(int domain, int type, int protocol)
+<pre><code class="lang-c">int socket(int domain, int type, int protocol)
 {
   int (*libc_socket)(int, int, int);
   int s, optval;
@@ -138,13 +137,12 @@ int setsockopt(int socket, int level, int option_name,
 <p>代码摘取自<code>libkeepalive</code>源码，C语言可以设置更为详细的TCP内核参数</p>
 <h3>在Nginx中配置</h3>
 <p>在Nginx中配置TCP的<code>KeepAlive</code>非常简单，在<code>listen</code>指令下配置<code>so_keepalive</code>就可以了，具体配置</p>
-<pre><code class="language-bash">so_keepalive=on|off|[keepidle]:[keepintvl]:[keepcnt]
+<pre><code class="lang-bash">so_keepalive=on|off|[keepidle]:[keepintvl]:[keepcnt]
 </code></pre>
-<blockquote>
-<p>this parameter (1.1.11) configures the “TCP keepalive” behavior for the listening socket. If this parameter is omitted then the operating system’s settings will be in effect for the socket. If it is set to the value “on”, the SO_KEEPALIVE option is turned on for the socket. If it is set to the value “off”, the SO_KEEPALIVE option is turned off for the socket. Some operating systems support setting of TCP keepalive parameters on a per-socket basis using the TCP_KEEPIDLE, TCP_KEEPINTVL, and TCP_KEEPCNT socket options. On such systems (currently, Linux 2.4+, NetBSD 5+, and FreeBSD 9.0-STABLE), they can be configured using the keepidle, keepintvl, and keepcnt parameters. One or two parameters may be omitted, in which case the system default setting for the corresponding socket option will be in effect.</p>
+<blockquote><p>this parameter (1.1.11) configures the “TCP keepalive” behavior for the listening socket. If this parameter is omitted then the operating system’s settings will be in effect for the socket. If it is set to the value “on”, the SO_KEEPALIVE option is turned on for the socket. If it is set to the value “off”, the SO_KEEPALIVE option is turned off for the socket. Some operating systems support setting of TCP keepalive parameters on a per-socket basis using the TCP_KEEPIDLE, TCP_KEEPINTVL, and TCP_KEEPCNT socket options. On such systems (currently, Linux 2.4+, NetBSD 5+, and FreeBSD 9.0-STABLE), they can be configured using the keepidle, keepintvl, and keepcnt parameters. One or two parameters may be omitted, in which case the system default setting for the corresponding socket option will be in effect.</p>
 </blockquote>
 <p><strong>例子</strong></p>
-<pre><code class="language-bash">so_keepalive=30m::10
+<pre><code class="lang-bash">so_keepalive=30m::10
     will set the idle timeout (TCP_KEEPIDLE) to 30 minutes,
     leave the probe interval (TCP_KEEPINTVL) at its system default,
     and set the probes count (TCP_KEEPCNT) to 10 probes.

@@ -1,8 +1,8 @@
 <h2><a href="https://github.com/biezhi/blog/blob/master/_posts/2019-01-20-simple-blocking-queue.md">仓库源文</a>，<a href="https://blog.biezhi.me/2019/01/20/simple-blocking-queue">站点原文</a></h2>
 <hr/>
-<h2>layout: post
-title: 阻塞队列的简单实现
-tags: ["queue", "java"]</h2>
+<p>layout: post
+title: 阻塞队列的简单实现</p>
+<h2>tags: ["queue", "java"]</h2>
 <p>Java 并发常用的组件中有一种队列叫阻塞队列（BlockingQueue），当队列为空时，获取元素的线程会阻塞等待直到队列有数据；当队列满时，想要存储元素的线程会阻塞等待直到队列有空间。我们经常会用这种数据结构可以实现生产者、消费者模型。</p>
 <p>本文会通过两种方式来实现简单的有界阻塞队列，在最后分别测试不同实现的性能差异。</p>
 <h1>Monitor 和 Condition</h1>
@@ -21,7 +21,7 @@ tags: ["queue", "java"]</h2>
 <li><code>Condition#signal()</code>: 唤醒一个等待线程</li>
 </ul>
 <p>条件和锁总是息息相关，在没有 Lock 接口的时候你会发现 monitor 机制有一个严重的问题：一把锁只能对应一个条件（也就是只可以做一次 wait），那么在唤醒的时候就可能出现唤醒丢失。举个例子，在两个方法上有不同的条件会导致阻塞，它们持有一把锁，唤醒时候如果用 <code>notify</code> 只会从条件队列选择一个，使用 <code>notifyAll</code> 会带来大量的 CPU 上下文切换和锁竞争，伪代码如下：</p>
-<pre><code class="language-java">synchronized void foo() {
+<pre><code class="lang-java">synchronized void foo() {
     while(CONDITION1){
         wait();
     }
@@ -38,7 +38,7 @@ synchronized void bar() {
 <h2>实现思路</h2>
 <p>我们通过定义一个 <code>Queue</code> 接口来实现两种队列，该队列是有界队列，使用数组的方式实现，如果你有兴趣也可以使用链表或栈来实现这个队列。提供 <code>put</code> 方法添加元素（满了则阻塞），<code>take</code> 方法弹出元素（没有元素则阻塞）。</p>
 <h2>定义接口</h2>
-<pre><code class="language-java">public interface Queue&lt;E&gt; {
+<pre><code class="lang-java">public interface Queue&lt;E&gt; {
 
     // 添加新元素，当队列满则阻塞
     void put(E e) throws InterruptedException;
@@ -62,7 +62,7 @@ synchronized void bar() {
 <li>添加元素后唤醒消费者</li>
 <li>弹出元素后唤醒生产者</li>
 </ul>
-<pre><code class="language-java">public class BlockingQueueWithSync&lt;E&gt; implements Queue&lt;E&gt; {
+<pre><code class="lang-java">public class BlockingQueueWithSync&lt;E&gt; implements Queue&lt;E&gt; {
 
     private E[] array;
     private int head;  // 队头指针
@@ -122,7 +122,7 @@ synchronized void bar() {
 }
 </code></pre>
 <h2>基于 ReentrantLock 的实现</h2>
-<pre><code class="language-java">public class BlockingQueueWithLock&lt;E&gt; implements Queue&lt;E&gt; {
+<pre><code class="lang-java">public class BlockingQueueWithLock&lt;E&gt; implements Queue&lt;E&gt; {
 
     private E[] array;
     private int head;
@@ -201,7 +201,7 @@ synchronized void bar() {
 }
 </code></pre>
 <h1>对比性能</h1>
-<pre><code class="language-java">public class Benchmark {
+<pre><code class="lang-java">public class Benchmark {
 
     @Test
     public void testWithMonitor() {
@@ -235,5 +235,5 @@ synchronized void bar() {
 }
 </code></pre>
 <p>这个测试程序让 2 个队列的可存储的元素数都为 5，开启 1000 个线程进行 <code>put</code> 和 <code>take</code> 操作，运行后查看总耗时。</p>
-<p>![性能对比]({{ "/public/images/2019/01/blockingqueue_benchmark.png" | prepend: site.cdnurl }} "性能对比"){:width="600px"}</p>
+<p><img alt="性能对比" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/blog.biezhi.me/_posts/{{" title='/public/images/2019/01/blockingqueue_benchmark.png" | prepend: site.cdnurl }} "性能对比'/>{:width="600px"}</p>
 <p>可以看出，使用 <code>synchronized</code> 的方式性能较差。</p>

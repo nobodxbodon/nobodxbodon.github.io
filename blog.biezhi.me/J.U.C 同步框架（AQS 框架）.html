@@ -1,8 +1,8 @@
 <h2><a href="https://github.com/biezhi/blog/blob/master/_posts/2018-12-05-the-juc-aqs-framework.md">仓库源文</a>，<a href="https://blog.biezhi.me/2018/12/05/the-juc-aqs-framework">站点原文</a></h2>
 <hr/>
-<h2>layout: post
-title: J.U.C 同步框架（AQS 框架）
-tags: ["java", "juc", "翻译"]</h2>
+<p>layout: post
+title: J.U.C 同步框架（AQS 框架）</p>
+<h2>tags: ["java", "juc", "翻译"]</h2>
 <p>本文转载自：<a href="https://www.cnblogs.com/dennyzhangdd/p/7218510.html">https://www.cnblogs.com/dennyzhangdd/p/7218510.html</a></p>
 <h1>一、论文简介</h1>
 <p>闲来无事，看看源码，发现了一篇JDK作者的论文《The java.util.concurrent Synchronizer Framework》主要描述了作者对 <code>AbstractQueuedSynchronizer</code> 同步器框架的设计和实现。权威性毋庸置疑！自然需要拜读一下，配上中文翻译，希望大家能有所收获。</p>
@@ -28,20 +28,20 @@ tags: ["java", "juc", "翻译"]</h2>
 <p>同步器的实现根据其状态是否独占而有所不同。独占状态的同步器，在同一时间只有一个线程可以通过阻塞点，而共享状态的同步器可以同时有多个线程在执行。一般锁的实现类往往只维护独占状态，但是，例如计数信号量在数量许可的情况下，允许多个线程同时执行。为了使框架能得到广泛应用，这两种模式都要支持。</p>
 <p>j.u.c 包里还定义了 <code>Condition</code> 接口，用于支持监控形式的 <code>await/signal</code> 操作，这些操作与独占模式的 <code>Lock</code> 类有关，且 <code>Condition</code> 的实现天生就和与其关联的 <code>Lock</code> 类紧密相关。</p>
 <h3>2.2 性能目标</h3>
-<p>Java 内置锁（使用 <code>synchronized</code> 的方法或代码块）的性能问题一直以来都在被人们关注，并且已经有一系列的文章描述其构造（例如引文 [^1],[^3]）。然而，大部分的研究主要关注的是在单核处理器上大部分时候使用于单线程上下文环境中时，如何尽量降低其空间（因为任何的 Java 对象都可以当成是锁）和时间的开销。对于同步器来说这些都不是特别重要：程序员仅在需要的时候才会使用同步器，因此并不需要压缩空间来避免浪费，并且同步器几乎是专门用在多线程设计中（特别是在多核处理器上），在这种环境下，偶尔的竞争是在意料之中的。因此，常规的 JVM 锁优化策略主要是针对零竞争的场景，而其它场景则使用缺乏可预见性的“慢速路径（slow paths）” ，所以常规的JVM锁优化策略并不适用于严重依赖于 J.U.C 包的典型多线程服务端应用。</p>
+<p>Java 内置锁（使用 <code>synchronized</code> 的方法或代码块）的性能问题一直以来都在被人们关注，并且已经有一系列的文章描述其构造（例如引文 <sup class="footnote-ref" id="fnref-1"><a href="#fn-1">1</a></sup>,<sup class="footnote-ref" id="fnref-3"><a href="#fn-3">2</a></sup>）。然而，大部分的研究主要关注的是在单核处理器上大部分时候使用于单线程上下文环境中时，如何尽量降低其空间（因为任何的 Java 对象都可以当成是锁）和时间的开销。对于同步器来说这些都不是特别重要：程序员仅在需要的时候才会使用同步器，因此并不需要压缩空间来避免浪费，并且同步器几乎是专门用在多线程设计中（特别是在多核处理器上），在这种环境下，偶尔的竞争是在意料之中的。因此，常规的 JVM 锁优化策略主要是针对零竞争的场景，而其它场景则使用缺乏可预见性的“慢速路径（slow paths）” ，所以常规的JVM锁优化策略并不适用于严重依赖于 J.U.C 包的典型多线程服务端应用。</p>
 <p>这里主要的性能目标是可伸缩性，即在大部分情况下，即使，或特别在同步器有竞争的情况下，稳定地保证其效率。在理想的情况下，不管有多少线程正试图通过同步点，通过同步点的开销都应该是个常量。在某一线程被允许通过同步点但还没有通过的情况下，使其耗费的总时间最少，这是主要目标之一。然而，这也必须考虑平衡各种资源，包括总 CPU 时间的需求，内存负载以及线程调度的开销。例如：获取自旋锁通常比阻塞锁所需的时间更短，但是通常也会浪费 CPU 时钟周期，并且造成内存竞争，所以使用的并不频繁。</p>
 <p>实现同步器的这些目标包含了两种不同的使用类型。大部分应用程序是最大化其总的吞吐量，容错性，并且最好保证尽量减少饥饿的情况。然而，对于那些控制资源分配的程序来说，更重要是去维持多线程读取的公平性，可以接受较差的总吞吐量。没有任何框架可以代表用户去决定应该选择哪一个方式，因此，应该提供不同的公平策略。</p>
 <p>无论同步器的内部实现是多么的精雕细琢，它还是会在某些应用中产生性能瓶颈。因此，框架必须提供相应的监视工具让用户发现和缓和这些瓶颈。至少需要提供一种方式来确定有多少线程被阻塞了。</p>
 <h2>3 设计与实现</h2>
 <p>同步器背后的基本思想非常简单。<code>acquire</code> 操作如下：</p>
-<pre><code class="language-java">while (synchronization state does not allow acquire) {
+<pre><code class="lang-java">while (synchronization state does not allow acquire) {
     enqueue current thread if not already queued;
     possibly block current thread;
 }
 dequeue current thread if it was queued;
 </code></pre>
 <p><code>release</code> 操作如下：</p>
-<pre><code class="language-java">update synchronization state;
+<pre><code class="lang-java">update synchronization state;
 if (state may permit a blocked thread to acquire)
     unblock one or more queued threads;
 </code></pre>
@@ -63,25 +63,25 @@ if (state may permit a blocked thread to acquire)
 <p>这个简单的机制与有些用法在某种程度上是相似的，例如 Solaris-9 的线程库，WIN32 中的“可消费事件”，以及 Linux 中的 NPTL 线程库。因此最常见的运行 Java 的平台上都有相对应的有效实现。（但目前 Solaris 和 Linux 上的 Sun Hotspot JVM 参考实现实际上是使用一个 pthread 的 condvar 来适应目前的运行时设计的）。park 方法同样支持可选的相对或绝对的超时设置，以及与 JVM 的 <code>Thread.interrupt</code> 结合 —— 可通过中断来 unpark 一个线程。</p>
 <h3>3.3 队列</h3>
 <p>整个框架的关键就是如何管理被阻塞的线程的队列，该队列是严格的 FIFO 队列，因此，框架不支持基于优先级的同步。</p>
-<p>同步队列的最佳选择是自身没有使用底层锁来构造的非阻塞数据结构，目前，业界对此很少有争议。而其中主要有两个选择：一个是 Mellor-Crummey 和 Scott 锁（MCS锁）[^9] 的变体，另一个是 Craig，Landin 和Hagersten 锁（CLH锁）[^5][^8][^10] 的变体。一直以来，<code>CLH</code> 锁仅被用于自旋锁。但是，在这个框架中，<code>CLH</code> 锁显然比 <code>MCS</code> 锁更合适。因为CLH锁可以更容易地去实现 “取消（cancellation）” 和 “超时” 功能，因此我们选择了 <code>CLH</code> 锁作为实现的基础。但是最终的设计已经与原来的 <code>CLH</code> 锁有较大的出入，因此下文将对此做出解释。</p>
+<p>同步队列的最佳选择是自身没有使用底层锁来构造的非阻塞数据结构，目前，业界对此很少有争议。而其中主要有两个选择：一个是 Mellor-Crummey 和 Scott 锁（MCS锁）<sup class="footnote-ref" id="fnref-9"><a href="#fn-9">3</a></sup> 的变体，另一个是 Craig，Landin 和Hagersten 锁（CLH锁）<sup class="footnote-ref" id="fnref-5"><a href="#fn-5">4</a></sup><sup class="footnote-ref" id="fnref-8"><a href="#fn-8">5</a></sup><sup class="footnote-ref" id="fnref-10"><a href="#fn-10">6</a></sup> 的变体。一直以来，<code>CLH</code> 锁仅被用于自旋锁。但是，在这个框架中，<code>CLH</code> 锁显然比 <code>MCS</code> 锁更合适。因为CLH锁可以更容易地去实现 “取消（cancellation）” 和 “超时” 功能，因此我们选择了 <code>CLH</code> 锁作为实现的基础。但是最终的设计已经与原来的 <code>CLH</code> 锁有较大的出入，因此下文将对此做出解释。</p>
 <p><code>CLH</code> 队列实际上并不那么像队列，因为它的入队和出队操作都与它的用途（即用作锁）紧密相关。它是一个链表队列，通过两个字段 <code>head</code> 和 <code>tail</code> 来存取，这两个字段是可原子更新的，两者在初始化时都指向了一个空节点。</p>
 <p><img alt="" src="http://ifeve.com/wp-content/uploads/2013/01/CLHNode.png"/></p>
 <p>一个新的节点 <code>node</code> 通过一个原子操作入队：</p>
-<pre><code class="language-java">do {
+<pre><code class="lang-java">do {
     pred = tail;
 } while(!tail.compareAndSet(pred, node));
 </code></pre>
 <p>每一个节点的 “释放” 状态都保存在其前驱节点中。因此，自旋锁的 “自旋” 操作就如下：</p>
-<pre><code class="language-java">while (pred.status != RELEASED); // spin
+<pre><code class="lang-java">while (pred.status != RELEASED); // spin
 </code></pre>
 <p>自旋后的出队操作只需将 <code>head</code> 字段指向刚刚得到锁的节点：</p>
-<pre><code class="language-java">head = node;
+<pre><code class="lang-java">head = node;
 </code></pre>
 <p><code>CLH</code> 锁的优点在于其入队和出队操作是快速、无锁的，以及无障碍的（即使在竞争下，某个线程总会赢得一次插入机会而能继续执行）；且探测是否有线程正在等待也很快（只要测试一下 head 是否与 tail 相等）；同时，“释放” 状态是分散的（译者注：几乎每个节点都保存了这个状态，当前节点保存了其后驱节点的 “释放” 状态，因此它们是分散的，不是集中于一块的。），避免了一些不必要的内存竞争。</p>
 <p>在原始版本的 <code>CLH</code> 锁中，节点间甚至都没有互相链接。自旋锁中，<code>pred</code> 变量可以是一个局部变量。然而，<code>Scott</code> 和 <code>Scherer</code> 证明了通过在节点中显式地维护前驱节点，<code>CLH</code> 锁就可以处理 “超时” 和各种形式的 “取消”：如果一个节点的前驱节点取消了，这个节点就可以滑动去使用前面一个节点的状态字段。</p>
 <p>为了将 <code>CLH</code> 队列用于阻塞式同步器，需要做些额外的修改以提供一种高效的方式定位某个节点的后继节点。在自旋锁中，一个节点只需要改变其状态，下一次自旋中其后继节点就能注意到这个改变，所以节点间的链接并不是必须的。但在阻塞式同步器中，一个节点需要显式地唤醒（unpark）其后继节点。</p>
 <p>AQS 队列的节点包含一个 <code>next</code> 链接到它的后继节点。但是，由于没有针对双向链表节点的类似<code>compareAndSet</code> 的原子性无锁插入指令，因此这个next链接的设置并非作为原子性插入操作的一部分，而仅是在节点被插入后简单地赋值：</p>
-<pre><code class="language-java">pred.next = node;
+<pre><code class="lang-java">pred.next = node;
 </code></pre>
 <p><code>next</code> 链接仅是一种优化。如果通过某个节点的 <code>next</code> 字段发现其后继结点不存在（或看似被取消了），总是可以使用 <code>pred</code> 字段从尾部开始向前遍历来检查是否真的有后续节点。</p>
 <p>第二个对 <code>CLH</code> 队列主要的修改是将每个节点都有的状态字段用于控制阻塞而非自旋。在同步器框架中，仅在线程调用具体子类中的 <code>tryAcquire</code> 方法返回 true 时，队列中的线程才能从 <code>acquire</code> 操作中返回；而单个 “released” 位是不够的。但仍然需要做些控制以确保当一个活动的线程位于队列头部时，仅允许其调用 <code>tryAcquire</code>；这时的 <code>acquire</code> 可能会失败，然后（重新）阻塞。这种情况不需要读取状态标识，因为可以通过检查当前节点的前驱是否为head来确定权限。与自旋锁不同，读取 <code>head</code> 以保证复制时不会有太多的内存竞争（there is not enough memory contention reading head to warrant replication.）。然而，“取消” 状态必须存在于状态字段中。</p>
@@ -89,7 +89,7 @@ if (state may permit a blocked thread to acquire)
 <p>同步框架中使用的 CLH 锁的变体与其他语言中的相比，主要区别可能是同步框架中使用的 CLH 锁需要依赖垃圾回收管理节点的内存，这就避免了一些复杂性和开销。但是，即使依赖 GC 也仍然需要在确定链接字段不再需要时将其置为 null。这往往可以与出队操作一起完成。否则，无用的节点仍然可触及，它们就没法被回收。</p>
 <p>其它一些更深入的微调，包括 CLH 队列首次遇到竞争时才需要的初始空节点的延迟初始化等，都可以在J2SE1.5的版本的源代码文档中找到相应的描述。</p>
 <p>抛开这些细节，基本的 <code>acquire</code> 操作的最终实现的一般形式如下（互斥，非中断，无超时）：</p>
-<pre><code class="language-java">if(!tryAcquire(arg)) {
+<pre><code class="lang-java">if(!tryAcquire(arg)) {
     node = create and enqueue new node;
     pred = node's effective predecessor;
     while (pred is not head node || !tryAcquire(arg)) {
@@ -103,7 +103,7 @@ if (state may permit a blocked thread to acquire)
 }
 </code></pre>
 <p>release操作：</p>
-<pre><code class="language-java">if(tryRelease(arg) &amp;&amp; head node's signal bit is set) {
+<pre><code class="lang-java">if(tryRelease(arg) &amp;&amp; head node's signal bit is set) {
     compareAndSet head's bit to false;
     unpark head's successor, if one exist
 }
@@ -112,24 +112,24 @@ if (state may permit a blocked thread to acquire)
 <p>支持 “取消” 操作主要是要在 <code>acquire</code> 循环里的 park 返回时检查中断或超时。由超时或中断而被取消等待的线程会设置其节点状态，然后unpark其后继节点。在有 “取消” 的情况下，判断其前驱节点和后继节点以及重置状态可能需要 <code>O(n)</code> 的遍历（n 是队列的长度）。由于 “取消” 操作，该线程再也不会被阻塞，节点的链接和状态字段可以被快速重建。</p>
 <h3>3.4 条件队列</h3>
 <p>AQS 框架提供了一个 <code>ConditionObject</code> 类，给维护独占同步的类以及实现 <code>Lock</code> 接口的类使用。一个锁对象可以关联任意数目的条件对象，可以提供典型的管程风格的 <code>await</code>、<code>signal</code> 和 <code>signalAll</code> 操作，包括带有超时的，以及一些检测、监控的方法。</p>
-<p>通过修正一些设计决策，<code>ConditionObject</code> 类有效地将条件（conditions）与其它同步操作结合到了一起。该类只支持 Java 风格的管程访问规则，这些规则中，仅当当前线程持有锁且要操作的条件（condition）属于该锁时，条件操作才是合法的（一些替代操作的讨论参考 [^4]）。这样，一个 <code>ConditionObject</code> 关联到一个 <code>ReentrantLock</code> 上就表现的跟内置的管程（通过 <code>Object.wait</code> 等）一样了。两者的不同仅仅在于方法的名称、额外的功能以及用户可以为每个锁声明多个条件。</p>
+<p>通过修正一些设计决策，<code>ConditionObject</code> 类有效地将条件（conditions）与其它同步操作结合到了一起。该类只支持 Java 风格的管程访问规则，这些规则中，仅当当前线程持有锁且要操作的条件（condition）属于该锁时，条件操作才是合法的（一些替代操作的讨论参考 <sup class="footnote-ref" id="fnref-4"><a href="#fn-4">7</a></sup>）。这样，一个 <code>ConditionObject</code> 关联到一个 <code>ReentrantLock</code> 上就表现的跟内置的管程（通过 <code>Object.wait</code> 等）一样了。两者的不同仅仅在于方法的名称、额外的功能以及用户可以为每个锁声明多个条件。</p>
 <p><code>ConditionObject</code> 使用了与同步器一样的内部队列节点。但是，是在一个单独的条件队列中维护这些节点的。<code>signal</code> 操作是通过将节点从条件队列转移到锁队列中来实现的，而没有必要在需要唤醒的线程重新获取到锁之前将其唤醒。</p>
 <p>基本的 <code>await</code> 操作如下：</p>
-<pre><code class="language-java">create and add new node to conditon queue;
+<pre><code class="lang-java">create and add new node to conditon queue;
 release lock;
 block until node is on lock queue;
 re-acquire lock;
 </code></pre>
 <p>signal操作如下：</p>
-<pre><code class="language-java">transfer the first node from condition queue to lock queue;
+<pre><code class="lang-java">transfer the first node from condition queue to lock queue;
 </code></pre>
 <p>因为只有在持有锁的时候才能执行这些操作，因此他们可以使用顺序链表队列操作来维护条件队列（在节点中用一个 <code>nextWaiter</code> 字段）。转移操作仅仅把第一个节点从条件队列中的链接解除，然后通过 CLH 插入操作将其插入到锁队列上。</p>
 <p>实现这些操作主要复杂在，因超时或 <code>Thread.interrupt</code> 导致取消了条件等待时，该如何处理。“取消” 和 “唤醒” 几乎同时发生就会有竞态问题，最终的结果遵照内置管程相关的规范。JSR133 修订以后，就要求如果中断发生在 <code>signal</code> 操作之前，<code>await</code> 方法必须在重新获取到锁后，抛出 <code>InterruptedException</code>。但是，如果中断发生在 <code>signal</code> 后，<code>await</code> 必须返回且不抛异常，同时设置线程的中断状态。</p>
 <p>为了维护适当的顺序，队列节点状态变量中的一个位记录了该节点是否已经（或正在）被转移。“唤醒” 和 “取消” 相关的代码都会尝试用 <code>compareAndSet</code> 修改这个状态。如果某次 <code>signal</code> 操作修改失败，就会转移队列中的下一个节点（如果存在的话）。如果某次 “取消” 操作修改失败，就必须中止此次转移，然后等待重新获得锁。后面的情况采用了一个潜在的无限的自旋等待。在节点成功的被插到锁队列之前，被 “取消” 的等待不能重新获得锁，所以必须自旋等待 CLH 队列插入（即 <code>compareAndSet</code> 操作）被 “唤醒” 线程成功执行。这里极少需要自旋，且自旋里使用 <code>Thread.yield</code> 来提示应该调度某一其它线程，理想情况下就是执行 signal 的那个线程。虽然有可能在这里为 “取消” 实现一个帮助策略以帮助插入节点，但这种情况实在太少，找不到合适的理由来增加这些开销。在其它所有的情况下，这个基本的机制都不需要自旋或 <code>yield</code>，因此在单处理器上保持着合理的性能。</p>
 <h2>4 用法</h2>
-<p>AQS 类将上述的功能结合到一起，并且作为一种基于 “模版方法模式” [^6] 的基类提供给同步器。子类只需定义状态的检查与更新相关的方法，这些方法控制着 <code>acquire</code> 和 <code>release</code> 操作。然而，将 AQS 的子类作为同步器 ADT 并不适合，因为这个类必须提供方法在内部控制 <code>acquire</code> 和 <code>release</code> 的规则，这些都不应该被用户所看到。所有 <code>java.util.concurrent</code> 包中的同步器类都声明了一个私有的继承了 <code>AbstractQueuedSynchronizer</code> 的内部类，并且把所有同步方法都委托给这个内部类。这样各个同步器类的公开方法就可以使用适合自己的名称。</p>
+<p>AQS 类将上述的功能结合到一起，并且作为一种基于 “模版方法模式” <sup class="footnote-ref" id="fnref-6"><a href="#fn-6">8</a></sup> 的基类提供给同步器。子类只需定义状态的检查与更新相关的方法，这些方法控制着 <code>acquire</code> 和 <code>release</code> 操作。然而，将 AQS 的子类作为同步器 ADT 并不适合，因为这个类必须提供方法在内部控制 <code>acquire</code> 和 <code>release</code> 的规则，这些都不应该被用户所看到。所有 <code>java.util.concurrent</code> 包中的同步器类都声明了一个私有的继承了 <code>AbstractQueuedSynchronizer</code> 的内部类，并且把所有同步方法都委托给这个内部类。这样各个同步器类的公开方法就可以使用适合自己的名称。</p>
 <p>下面是一个最简单的 <code>Mutex</code> 类的实现，它使用同步状态 0 表示解锁，1 表示锁定。这个类并不需要同步方法中的参数，因此这里在调用的时候使用 0 作为实参，方法实现里将其忽略。</p>
-<pre><code class="language-java">class Mutex {
+<pre><code class="lang-java">class Mutex {
     class Sync extends AbstractQueuedSynchronizer {
         public boolean tryAcquire(int ignore) {
             return compareAndSetState(0, 1);
@@ -138,7 +138,7 @@ re-acquire lock;
             setState(0); return true;
         }
     }
- 
+
     private final Sync sync = new Sync();
     public void lock() { sync.acquire(0); }
     public void unlock() { sync.release(0); }
@@ -169,36 +169,143 @@ re-acquire lock;
 <h2>5 性能</h2>
 <p>虽然 AQS 框架除了支持互斥锁外，还支持其它形式的同步方式，但锁的性能是最容易测量和比较的。即使如此，也还存在许多不同的测量方式。这里的实验主要是设计来展示锁的开销和吞吐量。</p>
 <p>在每个测试中，所有线程都重复的更新一个伪随机数，该随机数由 <code>nextRandom(int seed)</code> 方法计算：</p>
-<pre><code class="language-java">int t = (seed % 127773) * 16807 - (seed / 127773) * 2836;
+<pre><code class="lang-java">int t = (seed % 127773) * 16807 - (seed / 127773) * 2836;
 return (t &gt; 0) ? t : t + 0x7fffffff;
 </code></pre>
 <p>在每次迭代中，线程以概率S在一个互斥锁下更新共享的生成器，否则（译者注：概率为 1-S）更新其自己局部的生成器，此时是不需要锁的。如此，锁占用区域的耗时是短暂的，这就使线程持有锁期间被抢占时的外界干扰降到了最小。这个函数的随机性主要是为了两个目的：确定是否需要使用锁（这个生成器足以应付这里的需求），以及使循环中的代码不可能被轻易地优化掉。</p>
 <p>这里比较了四种锁：内置锁，用的是 <code>synchronized</code> 块；互斥锁，用的是像第四节例子中的那样简单的 <code>Mutex</code> 类；可重入锁，用的是 <code>ReentrantLock</code>；以及公平锁，用的是 <code>ReentrantLock</code> 的公平模式。所有测试都运行在 J2SE1.5 JDK build46（大致与 beta2 相同）的 server 模式下。在收集测试数据前，测试程序先运行 20 次非竞争的测试，以排除 JVM “预热”（译者注：更多关于 “预热” 的内容，参见：Java 理论与实践: 动态编译与性能测量）过程的影响。除了公平模式下的测试只跑了一百万次迭代，其它每个线程中的测试都运行了一千万次迭代。</p>
 <p>该测试运行在四个 <code>x86</code> 机器和四个 <code>UltraSparc</code> 机器上。所有 <code>x86</code> 机器都运行的是 RedHat 基于 NPTL 2.4 内核和库的 Linux 系统。所有的 <code>UltraSparc</code> 机器都运行的是 <code>Solaris-9</code>。测试时所有系统的负载都很轻。根据该测试的特征，并不要求系统完全空闲（译者注：即测试时操作系统上有其它较轻的负载也不会影响本次测试的结果。）。“4P” 这个名字反映出双核超线程的Xeon更像是4路机器，而不是2路机器。这里没有将测试数据规范化。如下所示，同步的相对开销与处理器的数量、类型、速度之间不具备简单的关系。</p>
-<p>| 名字 | 处理器数量 | 类型 | 速度(Mhz) |
-|-----|-----------|-----|-----------|
-| 1P | 1| Pentium3| 900 |
-| 2P| 2| Pentium3| 1400 |
-| 2A| 2| Athlon| 2000 |
-| 4P| 2HT| Pentium4/Xeon| 2400 |
-| 1U| 1| UltraSparc2| 650 |
-| 4U| 4| UltraSparc2| 450 |
-| 8U| 8| UltraSparc3| 750 |
-| 24U| 24| UltraSparc3| 750 |</p>
+<table>
+<thead><tr>
+<th>名字</th>
+<th>处理器数量</th>
+<th>类型</th>
+<th>速度(Mhz)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1P</td>
+<td>1</td>
+<td>Pentium3</td>
+<td>900</td>
+</tr>
+<tr>
+<td>2P</td>
+<td>2</td>
+<td>Pentium3</td>
+<td>1400</td>
+</tr>
+<tr>
+<td>2A</td>
+<td>2</td>
+<td>Athlon</td>
+<td>2000</td>
+</tr>
+<tr>
+<td>4P</td>
+<td>2HT</td>
+<td>Pentium4/Xeon</td>
+<td>2400</td>
+</tr>
+<tr>
+<td>1U</td>
+<td>1</td>
+<td>UltraSparc2</td>
+<td>650</td>
+</tr>
+<tr>
+<td>4U</td>
+<td>4</td>
+<td>UltraSparc2</td>
+<td>450</td>
+</tr>
+<tr>
+<td>8U</td>
+<td>8</td>
+<td>UltraSparc3</td>
+<td>750</td>
+</tr>
+<tr>
+<td>24U</td>
+<td>24</td>
+<td>UltraSparc3</td>
+<td>750</td>
+</tr>
+</tbody>
+</table>
 <p><strong>表1 测试的平台</strong></p>
 <h3>5.1 开销</h3>
 <p>无竞争情况下的开销是通过仅运行一个线程，将概率 <code>S</code> 为 1 时的每次迭代时间减去概率 <code>S</code> 为 0（访问共享内存的概率为 0）时的每次迭代时间得到的（译者注：这里的“概率S”即前文提到的 “概率 S”，概率为 0 时是没有锁操作的，概率为 1 时是每次都有锁操作，因此将概率为1时的耗时减去概率为 0 时的耗时就是整个锁操作的开销。）。表 2 以纳秒为单位显示了非竞争场景下每次锁操作的开销。<code>Mutex</code> 类最接近于框架的基本耗时，可重入锁的额外开销是记录当前所有者线程和错误检查的耗时，对于公平锁来说还包含开始时检查队列是否为空的耗时。</p>
 <p>表格 2 也展示与内置锁的 “快速路径（fast path）” 对比，<code>tryAcquire</code> 的耗时。这里的差异主要反映出了各锁和机器中使用的不同的原子指令以及内存屏障的耗时。在多处理器上，这些指令常常是完全优于所有其它指令的。内置锁和同步器类之间的主要差别，显然是由于 Hotspot 锁在锁定和解锁时都使用了一次<code>compareAndSet</code>，而同步器的 acquire 操作使用了一次 <code>compareAndSet</code> ，但 release 操作用的是一次volatile写（即，多处理器上的一次内存屏障以及所有处理器上的重排序限制）。每个锁的绝对的和相对耗时因机器的不同而不同。</p>
-<p>| 机器 | 内置 | 互斥 | 可重入 | 公平可重入 |
-|------|-----|-----|-------|-----------|
-| 1P | 18 | 9 | 31 | 37 |
-| 2P | 58 | 71 | 77 | 81 |
-| 2A | 13 | 21 | 31 | 30 |
-| 4P | 116 | 95 | 109 | 117 |
-| 1U | 90 | 40 | 58 | 67 |
-| 4U | 122 | 82 | 100 | 115 |
-| 8U | 160 | 83 | 103 | 123 |
-| 24U | 161 | 84 | 108 | 119 |</p>
+<table>
+<thead><tr>
+<th>机器</th>
+<th>内置</th>
+<th>互斥</th>
+<th>可重入</th>
+<th>公平可重入</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1P</td>
+<td>18</td>
+<td>9</td>
+<td>31</td>
+<td>37</td>
+</tr>
+<tr>
+<td>2P</td>
+<td>58</td>
+<td>71</td>
+<td>77</td>
+<td>81</td>
+</tr>
+<tr>
+<td>2A</td>
+<td>13</td>
+<td>21</td>
+<td>31</td>
+<td>30</td>
+</tr>
+<tr>
+<td>4P</td>
+<td>116</td>
+<td>95</td>
+<td>109</td>
+<td>117</td>
+</tr>
+<tr>
+<td>1U</td>
+<td>90</td>
+<td>40</td>
+<td>58</td>
+<td>67</td>
+</tr>
+<tr>
+<td>4U</td>
+<td>122</td>
+<td>82</td>
+<td>100</td>
+<td>115</td>
+</tr>
+<tr>
+<td>8U</td>
+<td>160</td>
+<td>83</td>
+<td>103</td>
+<td>123</td>
+</tr>
+<tr>
+<td>24U</td>
+<td>161</td>
+<td>84</td>
+<td>108</td>
+<td>119</td>
+</tr>
+</tbody>
+</table>
 <p><strong>表2 无竞争时的单锁开销（单位：纳秒）</strong></p>
 <p>从另一个极端看，表 3 展示了概率 <code>S</code> 为 1，运行 256 个并发线程时产生了大规模的锁竞争下每个锁的开销。在完全饱和的情况下，可闯入的FIFO锁比内置锁的开销少了一个数量级（也就是更大的吞吐量），比公平锁更是少了两个数量级。这表现出即使有着极大的竞争，在维持线程进展方面可闯入FIFO策略的效率。</p>
 <p>表3也说明了即使在内部开销比较低的情况下，公平锁的性能也完全是由上下文切换的时间所决定的。列出的时间大致上都与各平台上线程阻塞和解除线程阻塞的时间相称。</p>
@@ -229,15 +336,15 @@ return (t &gt; 0) ? t : t + 0x7fffffff;
 <h2>7 致谢</h2>
 <p>Thanks to Dave Dice for countless ideas and advice during the development of this framework, to Mark Moir and Michael Scott for urging consideration of CLH queues, to David Holmes for critiquing early versions of the code and API, to Victor Luchangco and Bill Scherer for reviewing previous incarnations of the source code, and to the other members of the JSR166 Expert Group (Joe Bowbeer, Josh Bloch, Brian Goetz, David Holmes, and Tim Peierls) as well as Bill Pugh, for helping with design and specifications and commenting on drafts of this paper. Portions of this work were made possible by a DARPA PCES grant, NSF grant EIA-0080206 (for access to the 24way Sparc) and a Sun Collaborative Research Grant.</p>
 <h1>参考文献</h1>
-<p>[^1]: Agesen, O., D. Detlefs, A. Garthwaite, R. Knippel, Y. S.Ramakrishna, and D. White. An Efficient Meta-lock for Implementing Ubiquitous Synchronization. ACM OOPSLA Proceedings, 1999.</p>
-<p>[^2]: Andrews, G. Concurrent Programming. Wiley, 1991.</p>
-<p>[^3]: Bacon, D. Thin Locks: Featherweight Synchronization for Java. ACM PLDI Proceedings, 1998.</p>
-<p>[^4]: Buhr, P. M. Fortier, and M. Coffin. Monitor Classification,ACM Computing Surveys, March 1995.</p>
-<p>[^5]: Craig, T. S. Building FIFO and priority-queueing spin locks from atomic swap. Technical Report TR 93-02-02,Department of Computer Science, University of Washington, Feb. 1993.</p>
-<p>[^6]: Gamma, E., R. Helm, R. Johnson, and J. Vlissides. Design Patterns, Addison Wesley, 1996.</p>
-<p>[^7]: Holmes, D. Synchronisation Rings, PhD Thesis, Macquarie University, 1999.</p>
-<p>[^8]: Magnussen, P., A. Landin, and E. Hagersten. Queue locks on cache coherent multiprocessors. 8th Intl. Parallel Processing Symposium, Cancun, Mexico, Apr. 1994.</p>
-<p>[^9]: Mellor-Crummey, J.M., and M. L. Scott. Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors. ACM Trans. on Computer Systems,February 1991</p>
-<p>[^10]: M. L. Scott and W N. Scherer III. Scalable Queue-Based Spin Locks with Timeout. 8th ACM Symp. on Principles and Practice of Parallel Programming, Snowbird, UT, June 2001.</p>
-<p>[^11]: Sun Microsystems. Multithreading in the Solaris Operating Environment. White paper available at http://wwws.sun.com/software/solaris/whitepapers.html 2002.</p>
-<p>[^12]: Zhang, H., S. Liang, and L. Bak. Monitor Conversion in a Multithreaded Computer System. United States Patent 6,691,304. 2004.</p>
+<div class="footnotes">
+<hr/>
+<ol><li id="fn-1"><p>Agesen, O., D. Detlefs, A. Garthwaite, R. Knippel, Y. S.Ramakrishna, and D. White. An Efficient Meta-lock for Implementing Ubiquitous Synchronization. ACM OOPSLA Proceedings, 1999.<a class="footnote" href="#fnref-1">↩</a></p></li>
+<li id="fn-3"><p>Bacon, D. Thin Locks: Featherweight Synchronization for Java. ACM PLDI Proceedings, 1998.<a class="footnote" href="#fnref-3">↩</a></p></li>
+<li id="fn-9"><p>Mellor-Crummey, J.M., and M. L. Scott. Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors. ACM Trans. on Computer Systems,February 1991<a class="footnote" href="#fnref-9">↩</a></p></li>
+<li id="fn-5"><p>Craig, T. S. Building FIFO and priority-queueing spin locks from atomic swap. Technical Report TR 93-02-02,Department of Computer Science, University of Washington, Feb. 1993.<a class="footnote" href="#fnref-5">↩</a></p></li>
+<li id="fn-8"><p>Magnussen, P., A. Landin, and E. Hagersten. Queue locks on cache coherent multiprocessors. 8th Intl. Parallel Processing Symposium, Cancun, Mexico, Apr. 1994.<a class="footnote" href="#fnref-8">↩</a></p></li>
+<li id="fn-10"><p>M. L. Scott and W N. Scherer III. Scalable Queue-Based Spin Locks with Timeout. 8th ACM Symp. on Principles and Practice of Parallel Programming, Snowbird, UT, June 2001.<a class="footnote" href="#fnref-10">↩</a></p></li>
+<li id="fn-4"><p>Buhr, P. M. Fortier, and M. Coffin. Monitor Classification,ACM Computing Surveys, March 1995.<a class="footnote" href="#fnref-4">↩</a></p></li>
+<li id="fn-6"><p>Gamma, E., R. Helm, R. Johnson, and J. Vlissides. Design Patterns, Addison Wesley, 1996.<a class="footnote" href="#fnref-6">↩</a></p></li>
+</ol>
+</div>
