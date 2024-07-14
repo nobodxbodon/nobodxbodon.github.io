@@ -1,0 +1,48 @@
+<h2><a href="https://github.com/hukeqing/hukeqing.github.io/blob/master/source/_posts/cpp/magic-variable-resolve-UAF.md">仓库源文</a>，<a href="https://blog.mauve.icu/2024/07/10/cpp/magic-variable-resolve-UAF">站点原文</a></h2>
+<hr/>
+<p>title: 用 magic 变量解决 UAF 问题
+date: 2024-07-10 09:06:10
+updated: 2024-07-10 09:06:10
+categories:</p>
+<ul>
+<li>杂项
+tags:</li>
+<li>C++</li>
+<li>UAF
+math: true
+description: 用 magic 变量解决 UAF 问题
+hide: false</li>
+</ul>
+<hr/>
+<p>最近学到了一个很有意思的方法解决 UA(Use-After-Free) 的问题，示例代码如下</p>
+<pre><code class="lang-cpp">class A {
+public:
+    explicit A(int x): _magic(0x41), a(x) {}
+
+    ~A() {
+        _magic = 0xdead;
+    }
+
+    void print() const {
+        assert(_magic == 0x41);
+        cout &lt;&lt; a &lt;&lt; endl;
+    }
+
+private:
+    unsigned _magic;
+    int a;
+};
+
+int main() {
+    auto a = new A(10);
+    a-&gt;print();
+    delete a;
+    a-&gt;print();
+}
+</code></pre>
+<p>简单来说就是在定义类的时候，增加一个 magic 的变量，用于记录当前的变量是否已经被释放了</p>
+<p>同时使用了 <code>assert</code> 在每一个方法内判断一下是否正在执行被释放的代码</p>
+<p>如果被释放了（示例中的代码），此时就会提示</p>
+<blockquote><p>Assertion failed: (_magic == 0x41), function print, file main.cpp, line 16.</p>
+</blockquote>
+<p>其中可以注意到使用了 <code>0x41</code> 作为 magic 的默认值，也是为了解决 CPP 没有 RTTI 的问题，因为其恰好是 <code>A</code> 这个字母</p>

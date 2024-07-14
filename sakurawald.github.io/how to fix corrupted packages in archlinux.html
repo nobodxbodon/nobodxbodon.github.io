@@ -1,0 +1,51 @@
+<h2><a href="https://github.com/sakurawald/sakurawald.github.io/blob/master/source/_posts/how-to-fix-corrupted-packages-in-archlinux.md">仓库源文</a>，<a href="https://sakurawald.github.io/posts/how-to-fix-corrupted-packages-in-archlinux">站点原文</a></h2>
+<hr/>
+<p>title: how to fix corrupted packages in archlinux
+date: 2024-07-12 00:22:17
+tags:</p>
+<h2>  - linux</h2>
+<h1>How to fix corrupted packages in archlinux</h1>
+<h2>Problem</h2>
+<p>If you machine is force shutdown during the process of <code>pacman -Syu</code>, it's possible the packages are in partial update state.
+To fix this problem, we need to do:</p>
+<ol>
+<li>Find out how bad it is. (How many packages are corrupted)</li>
+<li>Re-install these corrupted packages.</li>
+</ol>
+<h2>Solution</h2>
+<h3>Setup the living-os</h3>
+<p>Insert your living-os sticker (You can make this sticker folloing the arch wiki).</p>
+<p>Step:</p>
+<ul>
+<li>Mount the <code>root partition</code> of your <code>host os</code> into <code>/mnt</code></li>
+<li>Connect to the Internet using <code>iwctl</code>.</li>
+</ul>
+<h3>Check the corrupted package list</h3>
+<p>Let's say your <code>pacman</code> in the <code>host os</code> is corrupted, so that you need to use the <code>pacman</code> inside <code>living os</code>.
+The command looks like <code>pacman --root /mnt ...</code>.</p>
+<p>To get the corrupted packages list in the host-os, issue</p>
+<pre><code>sudo LC_ALL=C pacman --root /mnt -Qkk &gt;&gt; list_packages.txt 2&gt;&amp;1
+awk '/mtree/ {print}' ./list_packages.txt &gt; filter_packages.txt
+awk -F ':' '{print $1}' ./filter_packages.txt &gt; collect_packages.txt
+grep -v "error" collect_packages.txt &gt; packages.txt
+</code></pre>
+<p>And all the corrupted packages are in <code>packages.txt</code></p>
+<h3>Fix the <code>pacman</code> inside <code>host-os</code></h3>
+<p>First, we need to update the keyring inside <code>living os</code> using <code>pacman -Sy archlinux-keyring</code> to resolve the outdated gpg keys.
+Then, you can use <code>pacman --root /mnt -S $(&lt; packages.txt)</code> to re-install all the corrupted packages.</p>
+<blockquote><blockquote><p>If you need to modify mirrorlist, then you should modify the mirrorlist in <code>living os</code>, and use <code>pacman -Syy</code> to update databse.</p>
+</blockquote>
+</blockquote>
+<h3>Chroot into the host-os and do a fully-package upgrade again</h3>
+<p>You need to chroot into the host-os using <code>arch-chroot /mnt</code>
+And issue <code>pacman -Syu</code> to upgrade all packages.
+If pacman says "there is nothing to do", then it done.</p>
+<h3>Fix the bootloader</h3>
+<p>To fix the bootloader</p>
+<pre><code>mount /dev/&lt;root_partition&gt; /mnt
+mount /dev/&lt;EFI_system_partition&gt; /mnt/boot
+arch-chroot /mnt
+grub-mkconfig -o /boot/grub/grub.cfg
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+pacman -S linux
+</code></pre>
