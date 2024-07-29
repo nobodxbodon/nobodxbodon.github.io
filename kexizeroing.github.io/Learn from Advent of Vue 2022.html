@@ -6,10 +6,10 @@ slug: learn-from-advent-of-vue-2022
 description: ""
 added: "Dec 27 2022"
 tags: [vue]</p>
-<h2>updatedDate: "Mar 7 2024"</h2>
+<h2>updatedDate: "July 22 2024"</h2>
 <h3>Code Structure</h3>
 <p>Use the template <a href="https://stackblitz.com/edit/vue3-vite-starter">https://stackblitz.com/edit/vue3-vite-starter</a> to start.</p>
-<p>In a Vue component, <code>&lt;script setup&gt;</code> can be used alongside normal <code>&lt;script&gt;</code> using the options API. It works because the <code>&lt;script setup&gt;</code> block is compiled into the component's <code>setup()</code> function, <a href="https://vuejs.org/api/sfc-script-setup.html#usage-alongside-normal-script">check out the docs</a></p>
+<p>In a Vue component, <code>&lt;script setup&gt;</code> can be used alongside normal <code>&lt;script&gt;</code> using the options API. It works because the <code>&lt;script setup&gt;</code> block is compiled into the component's <code>setup()</code> function. A normal <code>&lt;script&gt;</code> may be needed, for example, we need to run side effects or create objects that should only execute once in module scope (outside the <code>export default {}</code>).</p>
 <p>Components using <code>&lt;script setup&gt;</code> are closed by default - i.e. the public instance of the component will not expose any of the bindings declared inside <code>&lt;script setup&gt;</code>. To explicitly expose properties, use the <code>defineExpose</code> compiler macro.</p>
 <h3>Date Countdown</h3>
 <p><a href="https://papaya-caramel-13dd76.netlify.app/">https://papaya-caramel-13dd76.netlify.app/</a></p>
@@ -29,8 +29,12 @@ const props = defineProps&lt;{ count: number }&gt;();
 const { count } = toRefs(props);
 const even = computed(() =&gt; (count.value % 2 === 0 ? 'even' : 'odd'));
 </code></pre>
-<blockquote><p>What is the difference between ref, toRef and toRefs: <a href="https://stackoverflow.com/questions/66585688/what-is-the-difference-between-ref-toref-and-torefs">https://stackoverflow.com/questions/66585688/what-is-the-difference-between-ref-toref-and-torefs</a></p>
-<p>I was wondering why <code>toRef</code> exists since you can just do <code>const fooRef = ref(state.foo)</code>, but that creates a disconnected ref; any changes to it only update fooRef's dependencies. But using <code>toRef</code> keeps the original connection.</p>
+<blockquote><p>What is the difference between <code>ref</code>, <code>toRef</code> and <code>toRefs</code>:</p>
+<ul>
+<li>The idea of using <code>ref</code> is to wrap a non-object variable inside a reactive object.</li>
+<li><code>toRef</code> converts a single reactive object property to a ref that maintains its connection with the parent object: <code>const fooRef = toRef(state, 'foo')</code>.</li>
+<li><code>toRefs</code> is a utility method used for destructing a reactive object and convert all its properties to ref: <code>toRefs(state)</code>.</li>
+</ul>
 </blockquote>
 <p>Adding deep reactivity to a large object can cost you a lot of performance, you can optimize the reactivity in your app by using <code>shallowRef</code>. Here reactivity is only triggered when the <code>value</code> of the <code>ref</code> itself is changed, but modifying any of the nested properties won’t trigger anything.</p>
 <pre><code class="lang-js">const state = shallowRef({ count: 1 })
@@ -64,7 +68,7 @@ state.value = { count: 2 }
 <blockquote><p>Similar idea to "Copy JSX? Create a component. Copy logic? Create a hook."</p>
 </blockquote>
 <p><strong>How the Vue Composition API replaces Vue Mixins?</strong><br/>
-Normally, a Vue component is defined by a JavaScript object with various properties representing the functionality we need — things like <code>data</code>, <code>methods</code>, <code>computed</code>, and so on. When we want to share the same properties between components, we can extract the common properties into a separate module. Now we can add this mixin to any consuming component by assigning it to the <code>mixin</code> config property. At runtime, Vue will merge the properties of the component with any added mixins.</p>
+Normally, a Vue component is defined by a JavaScript object with various properties representing the functionality we need — things like <code>data</code>, <code>methods</code>, <code>computed</code>, and so on. When we want to share the same properties between components, we can extract the common properties into a separate module. Then we can add this mixin to any consuming component by assigning it to the <code>mixin</code> config property. At runtime, Vue will merge the properties of the component with any added mixins.</p>
 <p>Mixins have drawbacks:</p>
 <ol>
 <li>Naming collisions. What happens if they both share a property with the same name?</li>
@@ -115,19 +119,21 @@ export function useTimeout = (fn, delay, options) =&gt; {
     fn()
   }
 
+  // The effect function receives a function that can be used to register a cleanup callback.
+  // The cleanup callback will be called right before the next time the effect is re-run.
   watchEffect(onCleanup =&gt; {
     if (isRef(delay)) {
       if (typeof delay.value !== 'number' || delay.value &lt; 0) return
     } else {
       if (typeof delay !== 'number' || delay &lt; 0) return
     }
-    const _deply = unref(delay)
+    const _delay = unref(delay)
     const timer = setTimeout(() =&gt; {
       fn()
-    }, _deply)
+    }, _delay)
 
     onCleanup(() =&gt; {
-      clearInterval(timer)
+      clearTimeout(timer)
     })
   })
 }
@@ -178,10 +184,6 @@ function useMessage(input) {
   }
 }
 </code></pre>
-<h3>Raido Player</h3>
-<p><a href="https://github.com/Advent-Of-Vue/xmas-radio">https://github.com/Advent-Of-Vue/xmas-radio</a><br/>
-<a href="https://silly-horse-5344a8.netlify.app">https://silly-horse-5344a8.netlify.app</a></p>
-<p>Use <a href="https://vueuse.org/core/usemediacontrols">useMediaControls</a>, <a href="https://vueuse.org/core/usecyclelist">useCycleList</a>, <a href="https://vueuse.org/core/onkeystroke">onKeyStroke</a> composables from VueUse.</p>
 <h3>Custom Directives</h3>
 <pre><code class="lang-html">&lt;div class="w-full h-full flex flex-col justify-center items-center text-center gap-12"&gt;
   &lt;p v-christmas&gt;Red + Green (default)&lt;/p&gt;
@@ -298,13 +300,6 @@ export function useCheckboxToggle() {
 </code></pre>
 <h3>Render function</h3>
 <p>When using the render function instead of templates, you'll be using the <code>h</code> function a lot (<code>hyperscript</code> - "JavaScript that produces HTML"). It creates a virtual node, an object that Vue uses internally to track updates and what it should be rendering. These render functions are essentially what is happening "under the hood" when Vue compiles your single file components to be run in the browser.</p>
-<blockquote><p>Vue provides different "builds" optimized for different use cases.</p>
-<ul>
-<li>Build files that start with <code>vue.runtime.*</code> are runtime-only builds: they do not include the compiler. When using these builds, all templates must be pre-compiled via a build step.</li>
-<li>Build files that do not include <code>.runtime</code> are full builds: they include the compiler and support compiling templates directly in the browser. </li>
-</ul>
-<p>Our default tooling setups use the runtime-only build since all templates in SFCs are pre-compiled. (When using <code>vue-loader</code>, templates inside <code>*.vue</code> files are pre-compiled into JavaScript at build time.) If, for some reason, you need in-browser template compilation even with a build step, you can do so by configuring the build tool to alias <code>vue</code> to <code>vue/dist/vue.esm-bundler.js</code> instead.</p>
-</blockquote>
 <pre><code class="lang-vue">&lt;script&gt;
 import { h } from 'vue'
 

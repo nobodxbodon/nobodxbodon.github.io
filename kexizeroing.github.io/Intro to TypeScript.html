@@ -6,7 +6,7 @@ slug: intro-to-typescript
 description: ""
 added: "Jun 12 2022"
 tags: [js]</p>
-<h2>updatedDate: "Mar 29 2024"</h2>
+<h2>updatedDate: "July 23 2024"</h2>
 <blockquote><p>There is a broad spectrum of what TypeScript can give you. On the one side of this spectrum, we have: writing good old JavaScript, without types or filling the gaps with any, and after the implementation is done — fixing the types. On the other side of the spectrum, we have type-driven development. Read from <a href="https://www.aleksandra.codes/fighting-with-ts">https://www.aleksandra.codes/fighting-with-ts</a></p>
 <p>TypeScript allows you to write complex yet elegant code. Some TypeScript users love to explore the possibilities of the type system and love to encode logic at type level. This practice is known as type gymnastics. The community also helps users to learn type gymnastics by creating fun and challenges such as <a href="https://github.com/type-challenges/type-challenges">type challenges</a>.</p>
 <p>Cheatsheets for experienced React developers getting started with TypeScript: <a href="https://react-typescript-cheatsheet.netlify.app">https://react-typescript-cheatsheet.netlify.app</a></p>
@@ -301,6 +301,53 @@ function loadFile&lt;Formats extends URLObject&gt;(fileFormats: Formats, format:
 <p><code>@ts-expect-error</code> lets you specify that an error will occur on the next line of the file, which is helpful letting us be sure that an error will occur. If <code>@ts-expect-error</code> doesn't find an error, it will source an error itself <em>(Unused '@ts-expect-error' directive)</em>.</p>
 <p>When you actually want to ignore an error, you'll be tempted to use <code>@ts-ignore</code>. It works similarly to <code>@ts-expect-error</code>, except for one thing: it won't error if it doesn't find an error.</p>
 <p>Sometimes, you'll want to ignore an error that later down the line gets fixed. If you're using <code>@ts-ignore</code>, it'll just ignore the fact that the error is gone. But with <code>@ts-expect-error</code>, you'll actually get a hint that the directive is now safe to remove. So if you're choosing between them, pick <code>@ts-expect-error</code>.</p>
+<h2>Building the Validation Schema with Zod</h2>
+<p><a href="https://github.com/colinhacks/zod">Zod</a> is a TypeScript-first schema declaration and validation library. With Zod, you declare a validator once and Zod will automatically infer the static TypeScript type. It's easy to compose simpler types into complex data structures.</p>
+<pre><code class="lang-js">import { z } from "zod";
+
+// creating a schema for strings
+const mySchema = z.string();
+
+// parsing
+mySchema.parse("tuna"); // =&gt; "tuna"
+mySchema.parse(12); // =&gt; throws ZodError
+
+// "safe" parsing (doesn't throw error if validation fails)
+mySchema.safeParse("tuna"); // =&gt; { success: true; data: "tuna" }
+mySchema.safeParse(12); // =&gt; { success: false; error: ZodError }
+
+const User = z.object({
+  username: z.string(),
+});
+
+User.parse({ username: "Ludwig" });
+
+// extract the inferred type
+type User = z.infer&lt;typeof User&gt;;
+// { username: string }
+</code></pre>
+<p>Sometimes you don't trust the data entering your app. For those cases, you should use Zod. Let’s build a schema for a form.</p>
+<pre><code class="lang-js">const formSchema = z
+  .object({
+    username: z.string().min(1, "Username is required").max(100),
+    email: z.string().email("Invalid email address").min(1, "Email is required"),
+    password: z
+      .string()
+      .min(1, "Password is required")
+      .min(8, "Password must have more than 8 characters"),
+    confirmPassword: z.string().min(1, "Password confirmation is required"),
+  })
+  // Zod lets you provide custom validation logic via refinements.
+  .refine((data) =&gt; data.password === data.confirmPassword, {
+    path: ["confirmPassword"], // path of error
+    message: "Passwords do not match",
+});
+
+// We can use this type to tell `react-hook-form` what our data should look like.
+type FormSchemaType = z.infer&lt;typeof formSchema&gt;;
+</code></pre>
+<blockquote><p><a href="https://github.com/fabian-hiller/valibot">Valibot</a> is very similar to Zod, helping you validate data easily using a schema. The biggest difference is the modular design and the ability to reduce the bundle size to a minimum.</p>
+</blockquote>
 <h2>Adding Type Check to JavaScript</h2>
 <p>TypeScript provides code analysis for JavaScript and VS Code gives us TypeScript out of the box (TypeScript language server). With the addition of <code>//@ts-check</code> as the very first line in our JavaScript file, TypeScript became active and started to add red lines to code pieces that just don’t make sense.</p>
 <p><a href="https://deno.com/blog/document-javascript-package">JSDoc</a> is a way to annotate JavaScript code using comments. JSDoc comments are any block comments that begin with <code>/**</code> and end with <code>*/</code> that precede a block of code. The comments can span multiple lines. Each line should start with <code>*</code> and should be indented by one space. JSDoc supports a variety of tags that can be used to provide additional information about your symbols, such as <code>@param</code> for parameters, <code>@returns</code> for the return value, or <code>@typeParam</code> for type parameters. TypeScript uses this annotations to get more information on our intended types.</p>

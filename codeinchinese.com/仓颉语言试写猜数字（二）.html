@@ -1,0 +1,139 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2024-07-23-仓颉语言试写猜数字（二）.md">仓库源文</a>，<a href="http://codeinchinese.com/2024/07/23/仓颉语言试写猜数字（二）">站点原文</a></h2>
+<p><a href="https://zhuanlan.zhihu.com/p/710551238">https://zhuanlan.zhihu.com/p/710551238</a></p>
+<p>接<a href="https://zhuanlan.zhihu.com/p/710454898">上文</a>。</p>
+<h3>导入</h3>
+<p>看 0.53.4 的发布文档中的语法更改部分，发现 <code>from x import y.*</code> 改成了 <code>import x.y.*</code>，更简化了。在内测阶段估计会常有此类语法修改。</p>
+<p>于是改成：</p>
+<pre><code>import std.random.*
+
+main() {
+  let 想的 = Random()
+  var 猜的 = 50
+  if (猜的 &gt; 想的) {
+    println("大了")
+  } else if (猜的 &lt; 想的) {
+    println("小了")
+  } else {
+    println("中了！")
+  }
+}
+</code></pre>
+<p>报错：</p>
+<pre><code>error: invalid binary operator '&gt;' on type 'Int64' and 'Class-Random'
+ ==&gt; tests/hi.cj:6:14:
+  | 
+6 |   if (猜的 &gt; 想的) {
+  |            ^ 
+  | 
+  # note: you may want to implement 'operator func &gt;(right: Class-Random)' for type 'Int64'
+
+error: invalid binary operator '&lt;' on type 'Int64' and 'Class-Random'
+ ==&gt; tests/hi.cj:8:21:
+  | 
+8 |   } else if (猜的 &lt; 想的) {
+  |                   ^ 
+  | 
+  # note: you may want to implement 'operator func &lt;(right: Class-Random)' for type 'Int64'
+
+2 errors generated, 2 errors printed.
+</code></pre>
+<h3>随机整数</h3>
+<p>看来需要把 Random 转为 Int64 先。但float不能乘Int：</p>
+<pre><code>error: invalid binary operator '*' on type 'Float64' and 'Int64'
+ ==&gt; tests/hi.cj:4:38:
+  | 
+4 |   let 想的 = Random().nextFloat64()*20
+  |                                    ^ 
+  | 
+  # note: you may want to implement 'operator func *(right: Int64)' for type 'Float64'
+</code></pre>
+<p>改为 <code>let 想的 = Random().nextFloat64()*40.0</code> 后，仍无法比较 Int 和 Float：</p>
+<pre><code>error: invalid binary operator '&gt;' on type 'Int64' and 'Float64'
+ ==&gt; tests/hi.cj:6:14:
+  | 
+6 |   if (猜的 &gt; 想的) {
+  |            ^ 
+  | 
+  # note: you may want to implement 'operator func &gt;(right: Float64)' for type 'Int64'
+
+error: invalid binary operator '&lt;' on type 'Int64' and 'Float64'
+ ==&gt; tests/hi.cj:8:21:
+  | 
+8 |   } else if (猜的 &lt; 想的) {
+  |                   ^ 
+  | 
+  # note: you may want to implement 'operator func &lt;(right: Float64)' for type 'Int64'
+
+2 errors generated, 2 errors printed.
+</code></pre>
+<p>试试把 nextFloat64 改成 nextInt64：<code>let 想的 = Random().nextInt64()%50</code> 但是输出发现会是负数，试后发现 -5%3 = -2，对比 python 的 -5%3 = 1</p>
+<p>于是猜要用 abs，但报错：<code>error: undeclared identifier 'abs'</code></p>
+<p>猜要导入 std.math.*，看到文档例程果然如此。如下终于编译通过：</p>
+<pre><code>import std.random.*
+import std.math.*
+
+main() {
+  let 想的 = abs(Random().nextInt64()%50)
+  var 猜的 = 20
+  if (猜的 &gt; 想的) {
+    println("大了")
+  } else if (猜的 &lt; 想的) {
+    println("小了")
+  } else {
+    println("中了！")
+  }
+}
+</code></pre>
+<h3>输入</h3>
+<p>没找到类似python里的取输入函数 input()，希望文档更完善。先跳过此部分。</p>
+<h3>循环</h3>
+<p>用 for 循环，发现 1..=50 是 [1,50], 1..50 是 [1,50)。和木兰的设计有点像，不过木兰的..是默认闭区间： 1..50 是 [1,50], 1..&lt;50 是 [1,50)。个人感觉木兰的设计更接近直观，因为 .. 两端对称对应着两端都是闭区间。</p>
+<pre><code>import std.random.*
+import std.math.*
+
+main() {
+  let 想的 = abs(Random().nextInt64()%50)
+
+  for(猜的 in 1..50) {
+    if (猜的 &gt; 想的) {
+      println("大了")
+    } else if (猜的 &lt; 想的) {
+      println("小了")
+    } else {
+      println("中了！")
+      break
+    }
+  }
+}
+</code></pre>
+<p>想输出最后 <code>猜的</code> 值，如果这样直接加会报错：</p>
+<pre><code>error: invalid binary operator '+' on type 'Int64' and 'Struct-String'
+  ==&gt; tests/hi.cj:13:22:
+   | 
+13 |       println(猜的 + "中了！")
+   |                    ^ 
+   | 
+   # note: you may want to implement 'operator func +(right: Struct-String)' for type 'Int64'
+</code></pre>
+<p>看文档改成插值：</p>
+<pre><code>import std.random.*
+import std.math.*
+
+main() {
+  let 想的 = abs(Random().nextInt64()%50)
+
+  for(猜的 in 0..50) {
+    if (猜的 &gt; 想的) {
+      println("大了")
+    } else if (猜的 &lt; 想的) {
+      println("小了")
+    } else {
+      println("${猜的} 中了！")
+      break
+    }
+  }
+}
+</code></pre>
+<p>另外，测试时发现 <code>想的</code> 可能为0，因此改成 0..50。</p>
+<p>到此基本完成 <a href="https://gitee.com/MulanRevive/mulan-rework/blob/master/%E6%96%87%E6%A1%A3/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BC%96%E7%A8%8B%E6%96%B0%E6%89%8B/1%E7%8C%9C%E6%95%B0%E5%AD%97.md">木兰入门的猜数字例程</a>。还有 input 部分，待续。</p>
+<p>另： @知乎小管家 可以在文章编辑器的代码高亮添加“仓颉”吗？</p>

@@ -14,9 +14,11 @@ tags: [web]</p>
 <p>Besides HTTP 206 status code, the server should respond with a <code>Content-Range</code> header, specifying the start byte, end byte and total size of the resource. <code>Content-Length</code> should be set to the length of the returned range, not the total size of the resource. Note that the server is allowed to change the range that was requested and even ignore the fact that it was a range request.</p>
 <h2>How videos load in browsers</h2>
 <p>By default when using video html tag, the <code>Range</code> header with value <code>bytes=0-</code> is sent. The client can know whether HTTP partial content is available by checking if the HTTP response header <code>Accept-Ranges: bytes</code> is included.</p>
-<p>If you load an video, the metadata allows the browser to map a time code to a byte offset in the file. I assume to look up the start and size of the footer data. (If the metadata is placed at the end of the file, it then sends another range request for the footer of the file.) Now that the browser knows the dimension, duration and other important data about the video, it can show the player controls and make a new request to buffer up the video data. <em>It’s worth noting that MP4 can actually have the necessary metadata at the start, which will save you a round trip and will make your MP4 play earlier.</em></p>
+<p>If you load an video, the metadata allows the browser to map a time code to a byte offset in the file. It assumes to look up the start and the footer data. (If the metadata is placed at the end of the file, it then sends another range request for the footer of the file.) Now that the browser knows the duration and other important data about the video, it can show the player controls and make a new request to buffer up the video data. <em>It’s worth noting that MP4 can actually have the necessary metadata at the start, which will save you a round trip and will make your MP4 play earlier.</em></p>
 <p>Look at this process in detail:</p>
-<pre><code>1. send request, read the onflight response header, close connection when range support detected
+<pre><code>1. send a normal request. By reading the response header from stream,
+   Chrome find the server side supports range, then abort the connection
+   and start sending range requests.
 
 Chrome                                            Server
 +------------------------+    ------------&gt;       +-------------------------------------+           
@@ -41,16 +43,6 @@ Chrome                                         Server
 </code></pre>
 <p><strong>Note that the data being sent from the server is only a small chunk, even though the <code>Range</code> header has value “bytes=0-”.</strong> Chrome and FireFox ask for ranges like <code>bytes=300-</code>, can server side return a smaller-range part, other than part from offset 300 to end of file? The answer is yes. When you play the video, browser will send range request for remaining bytes. Both Chrome and FireFox send range request using byte range (i.e <code>bytes=1867776-</code>) with last-byte-pos value absent. (The server sends TCP Keep-Alive to keep this TCP connection connected.)</p>
 <p>If you skip ahead in the video, the browser will cancel the currently on-going response for the video content. It will then use the the video file’s metadata to map your desired new position to a byte offset and use it for a new range request (<code>byte=offset-</code>). When the buffer is full and the browser stops the server from sending more data, the request is technically still on-going, just no data is being sent.</p>
-<blockquote><p>Some notes about compatibility issues especially on iOS:</p>
-<ol>
-<li>A <code>&lt;video&gt;</code> element can use the <code>play()</code> method to automatically play without user gestures only when it contains no audio tracks or has its muted property set to true.</li>
-<li>Mobile Safari will not download any part of the video file until it gets a user interaction (i.e. some kind of touch event). Once it starts playing, the <code>loadedmetadata</code> event will fire, and you can do what you want.</li>
-<li>On iPhone, <code>&lt;video playsinline&gt;</code> elements will be allowed to play inline, and will not automatically enter fullscreen mode when playback begins. <code>&lt;video&gt;</code> elements without <code>playsinline</code> attributes will continue to require fullscreen mode for playback on iPhone.</li>
-<li>Just treat <code>loadedmetadata</code> as an iOS specific <code>canplay</code> event as iOS does not seem to trigger <code>canplay</code> on its own.</li>
-<li>The <code>play</code> event is fired when the <code>paused</code> property is changed from <code>true</code> to <code>false</code>, as a result of the <code>play</code> method, but that's no guarantee that the video will actually start playing. The <code>play</code> method returns a Promise which is resolved when playback has been successfully started.</li>
-<li>HTTP servers hosting media files for iOS must support byte-range requests, which iOS uses to perform random access in media playback. The Safari browser is only asking for the first 2 bytes to be returned from the server initially: <code>Range: bytes=0-1</code>.</li>
-</ol>
-</blockquote>
 <h2>MP4 and WebM</h2>
 <p>MP4 and WebM formats are what we would call pseudo-streaming or "progressive download”. These formats do not support adaptive bitrate streaming (adjusts video quality based on network conditions). If you have ever taken an HTML video element and added a "src” attribute that points to an mp4, most players will progressively download the file. The good thing about progressive downloads is that you don’t have to wait for the player to download the entire file before you start watching. You can click play and start watching while the file is being downloaded in the background. Most players will also allow you to drag the playhead to specific places in the video timeline and the player will use byte-range requests to estimate which part of the file you are attempting to seek. What makes MP4 and WebM playback problematic is the lack of adaptive bitrate support. Every user who watches your content must have enough bandwidth available to download the file faster than it can playback the file.</p>
 <h2>M3U8</h2>
@@ -76,7 +68,7 @@ Chrome                                         Server
 </code></pre>
 <h2>Blob url video streaming</h2>
 <p>&lt;img alt="blob-url-video" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/12643918-81ad-47c1-8ea2-45205d1f23a9.png" width="500"&gt;</p>
-<p>All those websites actually still use the video tag. But instead of simply setting a video file in the src attribute, they make use of much more powerful web APIs, the Media Source Extensions (more often shortened to just “MSE”). Complex web-compatible video players are all based on MediaSource and <a href="https://developer.mozilla.org/en-US/docs/Web/API/SourceBuffer">SourceBuffer</a>.</p>
+<p>All those websites actually still use the video tag. But instead of simply setting a video file in the <code>src</code> attribute, they make use of much more powerful web APIs, the Media Source Extensions (more often shortened to just “MSE”). Complex web-compatible video players are all based on MediaSource and <a href="https://developer.mozilla.org/en-US/docs/Web/API/SourceBuffer">SourceBuffer</a>.</p>
 <p>Those “extensions” add the MediaSource object to JavaScript. As its name suggests, this will be the source of the video, or put more simply, this is the object representing our video’s data. The <code>URL.createObjectURL</code> API allows creating an URL, which will actually refer not to a resource available online, but directly to a JavaScript object created on the client.</p>
 <pre><code class="lang-js">// Create a MediaSource and attach it to the video
 const videoTag = document.getElementById("my-video");
@@ -170,6 +162,23 @@ fetchSegment("http://server.com/video/segment0.mp4")
 </blockquote>
 <h2>Video Glossary</h2>
 <p><strong><a href="https://ffmpeg.org">FFMPEG</a></strong> stands for Fast Forward Moving Picture Experts Group. It is a free and open source software project that offers many tools for video and audio processing. It's designed to run on a command line interface, and has many different libraries and programs to manipulate and handle video files. Most video programs include FFMPEG as a part of the video processing pipeline. <em>(FFmpeg powers all online video - Youtube, Facebook, Instagram, Disney+, Netflix etc, all run FFmpeg underneath.)</em></p>
+<p>WebAssembly enables developers to bring new performant functionality to the web from other languages. <a href="https://ffmpegwasm.netlify.app">FFmpeg.wasm</a> (WebAssembly / JavaScript port of FFmpeg) is one of a showcasing of the <a href="https://web.dev/wasm-libraries/">new functionality</a> being made available thanks to WebAssembly. It enables video &amp; audio record, convert and stream right inside browsers. There are two components inside <code>ffmpeg.wasm</code>: <code>@ffmpeg/ffmpeg</code> and <code>@ffmpeg/core</code>. <code>@ffmpeg/ffmpeg</code> contains kind of a wrapper to handle the complexity of loading core and calling low-level APIs. <code>@ffmpeg/core</code> contains WebAssembly code which is transpiled from original FFmpeg C code with minor modifications.</p>
+<pre><code class="lang-js">// AVI to MP4 Demo
+import { writeFile } from 'fs/promises';
+import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
+
+const ffmpeg = createFFmpeg({ log: true });
+
+(async () =&gt; {
+  await ffmpeg.load();
+  ffmpeg.FS('writeFile', 'test.avi', await fetchFile('./test.avi'));
+  await ffmpeg.run('-i', 'test.avi', 'test.mp4');
+  await fs.promises.writeFile('./test.mp4', ffmpeg.FS('readFile', 'test.mp4'));
+  process.exit(0);
+})();
+</code></pre>
+<blockquote><p><a href="https://ffmpeg-online.vercel.app">ffmpeg-online</a> is an online version of ffmpeg based on <code>ffmpeg.wasm</code>, which can be used to process audio and video online. The most straightforward example <code>ffmpeg -i input.mp4 output.avi</code> is used to convert an input media file to a different format.</p>
+</blockquote>
 <p>A <strong><a href="https://api.video/what-is/codec">codec</a></strong> is a hardware or software tool that is used to compress (and decompress) video files. Codec is a blend of coder/decoder. Common video codecs include h.264, h.265, VP8, VP9 and AV1.</p>
 <p><strong>VOD(Video on Demand)</strong> is videos that can be accessed on viewer request. Unlike live streaming, VODs are prerecorded programs. With VOD, viewers can watch content they enjoy as frequently as they like. They can also pause, rewind, and view additional content that was not previously available. Streaming is one of two ways to access Video On Demand. The other way is to permanently download video files to a device’s memory. VOD systems typically distribute media using internet connections, so good bandwidth is important for best results for viewers. Popular platforms include Netflix, Hulu, Disney, Amazon Prime Video and many others.</p>
 <p>Some of the most popular <strong>streaming protocols include RTMP, HLS, and WebRTC</strong>:</p>

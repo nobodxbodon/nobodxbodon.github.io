@@ -1,0 +1,167 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2024-07-22-仓颉语言试写猜数字（一）.md">仓库源文</a>，<a href="http://codeinchinese.com/2024/07/22/仓颉语言试写猜数字（一）">站点原文</a></h2>
+<p><a href="https://zhuanlan.zhihu.com/p/710454898">https://zhuanlan.zhihu.com/p/710454898</a></p>
+<p>仓颉语言 0.53.4，Mac 下试用编写 <a href="https://gitee.com/MulanRevive/mulan-rework/blob/master/%E6%96%87%E6%A1%A3/%E7%94%A8%E6%88%B7%E6%89%8B%E5%86%8C/%E7%BC%96%E7%A8%8B%E6%96%B0%E6%89%8B/1%E7%8C%9C%E6%95%B0%E5%AD%97.md">木兰入门用的猜数字例程</a>。</p>
+<p>在那之前，手痒先在最小的main例程里试加了个函数调用：</p>
+<pre><code>main() {
+  println("你好")
+  你好()
+}
+
+你好() {
+  println("吃了吗")
+}
+</code></pre>
+<p>报错：</p>
+<pre><code>error: expected declaration, found '你好'
+ ==&gt; tests/hi.cj:6:1:
+  | 
+6 | 你好() {
+  | ^^^^ expected declaration here
+  | 
+  # note: only declarations or macro expressions can be used in the top-level
+</code></pre>
+<p>看文档发现函数定义要用 func 关键词。</p>
+<h3>开始猜数字</h3>
+<pre><code>main() {
+  想的 = 40
+  猜的 = 50
+  println("你好")
+}
+</code></pre>
+<p>报错：</p>
+<pre><code>error: undeclared identifier '想的'
+ ==&gt; tests/hi.cj:2:3:
+  | 
+2 |   想的 = 40
+  |   ^ 
+  | 
+
+error: undeclared identifier '猜的'
+ ==&gt; tests/hi.cj:3:3:
+  | 
+3 |   猜的 = 50
+  |   ^ 
+  | 
+
+2 errors generated, 2 errors printed.
+</code></pre>
+<p>看文档发现有三种变量：可变/不可变变量、常量。第二不知何意，先略过。</p>
+<pre><code>main() {
+  const 想的 = 40
+  var 猜的 = 50
+  println("你好")
+}
+</code></pre>
+<p>报警：</p>
+<pre><code>warning: unused variable:'想的'
+ ==&gt; tests/hi.cj:2:9:
+  | 
+2 |   const 想的 = 40
+  |         ^^^^ unused variable
+  | 
+  # note: this warning can be suppressed by setting the compiler option `-Woff unused`
+</code></pre>
+<p>直接拷贝了木兰条件判断代码：</p>
+<pre><code>main() {
+  const 想的 = 40
+  var 猜的 = 50
+  if 猜的 &gt; 想的 {
+    println("大了")
+  } elif 猜的 &lt; 想的 {
+    println("小了")
+  } else {
+    println("中了！")
+  }
+}
+</code></pre>
+<p>报三错，看起来条件部分要加小括号：</p>
+<pre><code>error: expected '(' after 'if', found '猜的'
+ ==&gt; tests/hi.cj:4:6:
+  | 
+4 |   if 猜的 &gt; 想的 {
+  |   ~~ ^^^^ expected '(' here
+  |   |
+  |   after this
+  | 
+
+error: expected ';' or '&lt;NL&gt;', found '猜的'
+ ==&gt; tests/hi.cj:6:10:
+  | 
+6 |   } elif 猜的 &lt; 想的 {
+  |          ^^^^ expected ';' or '&lt;NL&gt;' here
+  | 
+
+error: expected expression or declaration, found '}'
+  ==&gt; tests/hi.cj:11:1:
+   | 
+11 | }
+   | ^ expected expression or declaration here
+   |
+</code></pre>
+<p>加了之后，第一个报错解决，但后两个仍在。看来是关键词有误，文档发现是 else if 而非 elif。这个设计让 if 判断仅用两个关键词，也更自然。</p>
+<p>改了之后，报三个警：</p>
+<pre><code>warning: unreachable block in 'if' expression
+  ==&gt; tests/hi.cj:6:10:
+   | 
+6  |     } else if (猜的 &lt; 想的) {
+   |  __________^
+7  | |     println("小了")
+   | | ...
+10 | |   }
+   | |___^ unreachable block in 'if' expression
+   | 
+   # note: this warning can be suppressed by setting the compiler option `-Woff unused`
+
+warning: unreachable block in 'if' expression
+ ==&gt; tests/hi.cj:6:31:
+  | 
+6 |     } else if (猜的 &lt; 想的) {
+  |  ___________________________^
+7 | |     println("小了")
+8 | |   } else {
+  | |___^ unreachable block in 'if' expression
+  | 
+  # note: this warning can be suppressed by setting the compiler option `-Woff unused`
+
+warning: unreachable block in 'if' expression
+  ==&gt; tests/hi.cj:8:10:
+   | 
+8  |     } else {
+   |  __________^
+9  | |     println("中了！")
+10 | |   }
+   | |___^ unreachable block in 'if' expression
+   | 
+   # note: this warning can be suppressed by setting the compiler option `-Woff unused`
+
+3 warnings generated, 3 warnings printed.
+</code></pre>
+<p>怎么觉得只应该有对应后两个block的两个报警呢？</p>
+<p>下面加随机数，拜托文档里例程支持拷贝代码吧省得手敲。文档里提到了不可变变量就是类型由初值表达式确定，哦那该叫“类型不变变量”吧。</p>
+<pre><code>from std import random.*
+
+main() {
+  let 想的 = Random()
+  var 猜的 = 50
+  if (猜的 &gt; 想的) {
+    println("大了")
+  } else if (猜的 &lt; 想的) {
+    println("小了")
+  } else {
+    println("中了！")
+  }
+}
+</code></pre>
+<p>报错：</p>
+<pre><code>error: expected declaration, found 'from'
+ ==&gt; tests/hi.cj:1:1:
+  | 
+1 | from std import random.*
+  | ^^^^ expected declaration here
+  | 
+  # note: only declarations or macro expressions can be used in the top-level
+
+1 error generated, 1 error printed.
+</code></pre>
+<p>卡住了，待续。</p>
+<p>对了，文档里标识符还只提了英文，早点更新吧。</p>

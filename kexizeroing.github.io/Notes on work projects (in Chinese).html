@@ -6,7 +6,7 @@ slug: work-project-notes-chinese
 description: ""
 added: "Oct 19 2021"
 tags: [web]</p>
-<h2>updatedDate: "Apr 22 2024"</h2>
+<h2>updatedDate: "Jult 17 2024"</h2>
 <h3>项目是怎么跑起来的</h3>
 <ul>
 <li>项目里面有很多子项目（<code>pages/*</code>），借助 webpack 多⼊⼝配置，打包成多个不同的子项目产出，总体结构来自于一个比较老的模板 <a href="https://github.com/vuejs-templates/webpack">https://github.com/vuejs-templates/webpack</a></li>
@@ -26,17 +26,31 @@ tags: [web]</p>
 <li>路由中加载组件的方式为 <code>component: () =&gt; import('@/views/About.vue')</code> 可以做到 code-splitting，这样会单独产出一个文件名为 <code>About.[hash].js</code> 的 chunk 文件，路由被访问时才会被加载。</li>
 </ul>
 <h3>Vue 项目</h3>
-<p>Vue npm 包有不同的 Vue.js 构建版本，可以在 <code>node_modules/vue/dist</code> 中看到它们，大致包括完整版、编译器（编译template）、运行时版本、UMD 版本（通过 <code>&lt;script&gt;</code> 标签直接用在浏览器中）、CommonJS 版本（用于很老的打包工具）、ES Module 版本（有两个，分别用于现代打包工具和浏览器 <code>&lt;script type="module"&gt;</code> 引入）。总的来说，Runtime + Compiler 版本是包含编译代码的，可以把编译过程放在运行时做，如果需要在客户端编译模板 (比如传入一个字符串给 template 选项)，就需要加上编译器的完整版。Runtime 版本不包含编译代码，需要借助 webpack 的 <code>vue-loader</code> 事先把 <code>*.vue</code> 文件内的模板编译成 <code>render</code> 函数，在最终打好的包里实际上是不需要编译器的，只用运行时版本即可。</p>
-<pre><code class="lang-js">// 需要编译器
+<p>Vue npm 包有不同的 Vue.js 构建版本，可以在 <code>node_modules/vue/dist</code> 中看到它们，大致包括完整版、编译器（编译template）、运行时版本、UMD 版本（通过 <code>&lt;script&gt;</code> 标签直接用在浏览器中）、CommonJS 版本（用于很老的打包工具）、ES Module 版本。总的来说，Runtime + Compiler 版本是包含编译代码的，可以把编译过程放在运行时做，如果需要在客户端编译模板 (比如传入一个字符串给 template 选项)，就需要加上编译器的完整版。Runtime 版本不包含编译代码，需要借助 webpack 的 <code>vue-loader</code> 事先把 <code>*.vue</code> 文件内的模板编译成 <code>render</code> 函数，在最终打好的包里实际上是不需要编译器的，只用运行时版本即可。</p>
+<ul>
+<li>Standalone build: includes both the compiler and the runtime.</li>
+<li>Runtime only build: since it doesn't include the compiler, you need to either pre-compiled templates in a compile step, or manually written render functions. The npm package will export this build by default, since when consuming Vue from npm, you will likely be using a compilation step (with Webpack), during which vue-loader will perform the template pre-compilation.</li>
+</ul>
+<pre><code class="lang-js">// Using Runtime + Compiler
 new Vue({
-  template: '&lt;div&gt;{{ hi }}&lt;/div&gt;'
+  el: '#app',
+  router,                  
+  template: '&lt;App/&gt;',                                     
+  components: { App }        
 })
 
-// 不需要编译器
-new Vue({
-  render (h) {
-    return h('div', this.hi)
+// build/webpack.base.conf.js
+resolve: {
+  alias: {
+    'vue$': 'vue/dist/vue.esm.js',
   }
+}
+</code></pre>
+<pre><code class="lang-js">// Using Runtime-only
+new Vue({
+  el: '#app',
+  router,
+  render: h =&gt; h(App)
 })
 </code></pre>
 <blockquote><p>Vue 是如何被编译的中文博客系列：<a href="https://juejin.cn/column/7340830470463242278">https://juejin.cn/column/7340830470463242278</a></p>
@@ -87,9 +101,9 @@ new Vue({
 </ul>
 <h4>resolve</h4>
 <ul>
-<li>extensions 数组，在 import 不带文件后缀时，webpack 会自动带上后缀去尝试访问文件是否存在，默认值 <code>['.js', '.json', '.wasm']</code></li>
-<li>mainFiles 设置解析目录时要使用的文件名，默认值 <code>['index']</code></li>
-<li>alias 配置别名，把导入路径映射成一个新的导入路径，比如 <code>"@": path.join(__dirname, 'src')</code></li>
+<li>extensions 数组，在 import 不带文件后缀时，webpack 会自动带上后缀去尝试访问文件是否存在，默认值 <code>['.js', '.json', '.wasm']</code>.</li>
+<li>mainFiles 数组，the filename to be used while resolving directories, defaults to <code>['index']</code>.</li>
+<li>alias 配置别名，把导入路径映射成一个新的导入路径，比如 <code>"@": path.join(__dirname, 'src')</code>.</li>
 <li>modules 数组，tell webpack what directories should be searched when resolving modules, 默认值 <code>['node_modules']</code>，即从 node_modules 目录下寻找。</li>
 </ul>
 <h4>css-loader and style-loader</h4>
@@ -154,10 +168,8 @@ app.use(express.static(process.cwd()));
 <li>import * as _ from "lodash-es"</li>
 </ul>
 </blockquote>
-</li>
-<li><p>Packages with side effects cannot be properly eliminated, even when completely unreachable. Use the <code>"sideEffects"</code> property in <code>package.json</code> to denote which files in your project are "pure" and therefore safe to prune if unused.</p>
 <pre><code class="lang-js"> // babel.config.js
- // Keeping Babel from transpiling ES6 modules to CommonJS modules
+ // keep Babel from transpiling ES6 modules to CommonJS modules
  export default {
    presets: [
      [
@@ -167,7 +179,21 @@ app.use(express.static(process.cwd()));
      ]
    ]
  }
+
+ // if you're using Webpack and `babel-loader`
+ {
+   test: /\.js$/,
+   exclude: /node_modules/,
+   use: {
+     loader: 'babel-loader',
+     options: {
+       type: 'module'
+     }
+   }
+ }
 </code></pre>
+</li>
+<li><p>The <code>sideEffects</code> property of <code>package.json</code> declares whether a module has side effects on import. When side effects are present, unused modules and unused exports may not be tree shaken due to the limitations of static analysis.</p>
 </li>
 </ol>
 <h4>webpack-bundle-analyzer（检查打包体积）</h4>
@@ -271,7 +297,7 @@ export * from './components/xxx'
   plugins: [...]
 }
 </code></pre>
-<h4>配置 babel-loader 不编译引入的 sdk 文件</h4>
+<h4>配置 babel-loader 选择性编译引入的 sdk 文件</h4>
 <p>Transpiling is an expensive process and many projects have thousands of lines of code imported in that babel would need to run over. Your <code>node_modules</code> should already be runnable without transpiling and there are simple ways to exclude your <code>node_modules</code> but transpile any code that needs it.</p>
 <pre><code class="lang-js">{
   test: /\.js$/,
@@ -307,7 +333,7 @@ export * from './components/xxx'
 <p>有些 url 请求是后端直出页面返回 html，通过类似 <code>render_to_response(template, data)</code> 的方法，将数据打到模板中，模板里会引用 <code>xx/static/js</code> 路径下的 js 文件，这些 js 使用 require 框架，导入需要的其他 js 文件或 tpl 模板，再结合业务逻辑使用 underscore 的 template 方法（<code>_.template(xx)</code>）可以将 tpl 渲染为 html，然后被 jquery <code>.html()</code> 方法插入到 DOM 中。</p>
 <ul>
 <li>请求 <code>/web?old=1</code> 后端会返回 html 扫码登录页面，这里面有一个 <code>/static/vue/login.js?_dt=xxxxx</code>，里面有登录和加载网页版首页的逻辑，这样就会展示出 h5 中的页面，其中的 iframe 可以嵌套任意 pc 或 h5 中的页面（只要有路由支持），这个 iframe 的链接自然也可以被单独访问。</li>
-<li>h5 发起的第一次页面请求是走服务器，后端返回一个模板 html，这里面有一个 app 元素是 Vue 挂载的地方，前端通过一个老的 vue router API <code>router.start(App, 'app')</code> 创建 vue 实例并进行挂载（<a href="https://github.com/vuejs/vue-router/blob/1.0/docs/en/api/start.md），这之后才会被前端路由接管。而且这个">https://github.com/vuejs/vue-router/blob/1.0/docs/en/api/start.md），这之后才会被前端路由接管。而且这个</a> html 只能在手机端访问（根据 ua），否则会跳到 web 端的逻辑。</li>
+<li>h5 发起的第一次页面请求是走服务器，后端返回一个模板 html，这里面有一个 app 元素是 Vue 挂载的地方，前端通过一个老的 vue router API <code>router.start(App, 'app')</code> 创建 vue 实例并进行挂载 (<a href="https://github.com/vuejs/vue-router/blob/1.0/docs/en/api/start.md)，这之后才会被前端路由接管。而且这个">https://github.com/vuejs/vue-router/blob/1.0/docs/en/api/start.md)，这之后才会被前端路由接管。而且这个</a> html 只能在手机端访问（根据 ua），否则会跳到 web 端的逻辑。</li>
 </ul>
 <pre><code class="lang-py"># urls.py
 urlpatterns = [
@@ -473,10 +499,10 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
   })
 </code></pre>
 <ol>
-<li>学习并使用 <a href="https://github.com/AttoJS/vue-request">VueRequest</a>，管理请求状态，支持 SWR、轮询、错误重试、缓存、分页等常用功能。<code>useRequest</code> 接收一个 service 函数，service 是一个异步的请求函数，换句话说，还可以使用 axios 来获取数据，然后返回一个 Promise。<code>useRequest</code> 会返回 data、loading、error 等，它们的值会根据请求状态和结果进行修改。返回的 run 方法，可以手动触发 service 请求。</li>
+<li>使用 <a href="https://github.com/AttoJS/vue-request">VueRequest</a>，管理请求状态，支持 SWR、轮询、错误重试、缓存、分页等常用功能。<code>useRequest</code> 接收一个 service 函数，service 是一个异步的请求函数，换句话说，还可以使用 axios 来获取数据，然后返回一个 Promise。<code>useRequest</code> 会返回 data、loading、error 等，它们的值会根据请求状态和结果进行修改。返回的 run 方法，可以手动触发 service 请求。</li>
 </ol>
 <h3>API 版本和 URI 连字符</h3>
-<p>API 版本可以放在两个地方: 在 url 中指定 API 的版本，例如 <a href="https://example.com/api/v1，这样不同版本的协议解析可以放在不同的服务器上，不用考虑协议兼容性，开发方便，升级也不受影响。另一种是放在">https://example.com/api/v1，这样不同版本的协议解析可以放在不同的服务器上，不用考虑协议兼容性，开发方便，升级也不受影响。另一种是放在</a> HTTP header 中，url 显得干净，符合 RESTful 惯例，毕竟版本号不属于资源的属性。缺点是需要解析头部，判断返回。</p>
+<p>API 版本可以放在两个地方: 在 url 中指定 API 的版本，例如 <code>example.com/api/v1</code>，这样不同版本的协议解析可以放在不同的服务器上，不用考虑协议兼容性，开发方便，升级也不受影响。另一种是放在 HTTP header 中，url 显得干净，符合 RESTful 惯例，毕竟版本号不属于资源的属性。缺点是需要解析头部，判断返回。</p>
 <p>URI 中尽量使用连字符 <code>-</code> 代替下划线 <code>_</code> 的使用，连字符用来分割 URI 中出现的单词，提高 URI 的可读性。下划线会和链接的样式冲突重叠。URI 是对大小写敏感的，为了避免歧义，我们尽量用小写字符。但主机名（Host）和协议名（Scheme）对大小写是不敏感的。</p>
 <h3>阿里云 CDN</h3>
 <p>阿里云 CDN 对于文件是否支持缓存是以 <code>X-Cache</code> 头部来确定，缓存时间是以 <code>X-Swift-CacheTime</code> 头部来确认。</p>
@@ -497,7 +523,7 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <a href="https://app-dev-tools.netlify.app">https://app-dev-tools.netlify.app</a></p>
 <h3>日常开发 Tips and Tricks</h3>
 <ul>
-<li><p>The <code>input</code> event is fired every time the value of the element changes. This is unlike the <code>change</code> event, which only fires when the value is committed, such as by pressing the enter key or selecting a value from a list of options.</p>
+<li><p>The <code>input</code> event is fired every time the value of the element changes. This is unlike the <code>change</code> event, which only fires when the value is committed, such as by pressing the enter key or selecting a value from a list of options. Note that <code>onChange</code> in React behaves like the browser <code>input</code> event. <em>(in React it is idiomatic to use <code>onChange</code> instead of <code>onInput</code>)</em></p>
 </li>
 <li><p>The order in which the events are fired: <code>mousedown</code> --&gt; <code>mouseup</code> --&gt; <code>click</code>. When you add a <code>blur</code> event, it is actually fired before the <code>mouseup</code> event and after the <code>mousedown</code> event of the button. Refer to <a href="https://codepen.io/mudassir0909/full/qBjvzL">https://codepen.io/mudassir0909/full/qBjvzL</a></p>
 </li>
@@ -507,16 +533,16 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 </li>
 <li><p>Sometimes I need to detect whether a click happens inside or outside of a particular element.</p>
 <pre><code class="lang-js">window.addEventListener('mousedown', e =&gt; {
-// Get the element that was clicked
-const clickedEl = e.target;
+  // Get the element that was clicked
+  const clickedEl = e.target;
 
-// `el` is the element you're detecting clicks outside of
-// https://developer.mozilla.org/en-US/docs/Web/API/Node/contains
-if (el.contains(clickedEl)) {
-  // Clicked inside of `el`
-} else {
-  // Clicked outside of `el`
-}
+  // `el` is the element you're detecting clicks outside of
+  // https://developer.mozilla.org/en-US/docs/Web/API/Node/contains
+  if (el.contains(clickedEl)) {
+    // Clicked inside of `el`
+  } else {
+    // Clicked outside of `el`
+  }
 });
 </code></pre>
 </li>
@@ -525,30 +551,31 @@ if (el.contains(clickedEl)) {
 style.setProperty('--background', 'red');
 </code></pre>
 <pre><code class="lang-css">.foo::before {
-background: var(--background);
-content: '';
-display: block;
-width: 200px;
-height: 200px;
+  background: var(--background);
+  content: '';
+  display: block;
+  width: 200px;
+  height: 200px;
 }
 </code></pre>
 </li>
-<li><p>The default behavior of <code>scrollIntoView()</code> is that the top of the element will be aligned to the top of the visible area of the scrollable ancestor. If it shifts the complete page, you could either call it with the parameter <code>false</code> to indicate that it should aligned to the bottom of the ancestor or just use <code>scrollTop</code> instead of <code>scrollIntoView()</code>.
-```js
-let target = document.getElementById("target");
-target.parentNode.scrollTop = target.offsetTop;</p>
-</li>
-</ul>
-<p>// can also add the css <code>scroll-behavior: smooth;</code></p>
-<pre><code>
-```js
-export function scrollToDocumentBottom() {
-  const scrollingElement = document.scrollingElement || document.body;
-  scrollingElement.scrollTop = scrollingElement.scrollHeight;
-}
+<li><p>The default behavior of <code>scrollIntoView()</code> is that the top of the element will be aligned to the top of the visible area of the scrollable ancestor. If it shifts the complete page, you could either call it with the parameter <code>false</code> to indicate that it should aligned to the bottom of the ancestor or just use <code>scrollTop</code> instead of <code>scrollIntoView()</code>.</p>
+<pre><code class="lang-js">let target = document.getElementById("target");
+target.parentNode.scrollTop = target.offsetTop;
+
+// can also add the css `scroll-behavior: smooth;`
 </code></pre>
-<ul>
+</li>
 <li><p>If several listeners are attached to the same element for the same event type, they are called in the order in which they were added. If <code>stopImmediatePropagation()</code> is invoked during one such call, no remaining listeners will be called.</p>
+</li>
+<li><p>To detect if a user has their keyboard's caps lock turn on, we'll employ KeyboardEvent's <code>getModifierState</code> method (which returns the current state of the specified modifier key, <code>true</code> if the modifier is active):</p>
+<pre><code class="lang-js">document.querySelector('input[type=password]').addEventListener('keyup', function (keyboardEvent) {
+  const capsLockOn = keyboardEvent.getModifierState('CapsLock');
+  if (capsLockOn) {
+    // Warn the user that their caps lock is on
+  }
+});
+</code></pre>
 </li>
 <li><p>npmmirror 已内置<a href="https://zhuanlan.zhihu.com/p/633904268">支持类似 unpkg cdn 解析能力</a>，可以简单理解为访问 unpkg 地址时，在回源服务里面根据 URL 参数，去 npm registry 下载对应的 npm 包，解压后响应对应的文件内容。即只需要遵循约定的 URL 进行访问，即可在页面中加载任意 npm 包里面的文件内容。</p>
 <pre><code># 获取目录信息 /${pkg}/${versionOrTag}/files?meta

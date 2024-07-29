@@ -1,0 +1,143 @@
+<h2><a href="https://github.com/caol64/caol64.github.io/blob/master/content/posts/2024/2024-07-24-create-a-rag-application-from-scratch.md">仓库源文</a>，<a href="https://babyno.top/posts/2024/07/24/create-a-rag-application-from-scratch">站点原文</a></h2>
+<hr/>
+<p>author: 路边的阿不
+title: 自己写一个RAG应用
+slug: create-a-rag-application-from-scratch
+description: Dive into the core principles and hands-on implementation of RAG, an AI framework that integrates external knowledge to enhance large language models. Learn how RAG works, its importance in grounding LLMs with accurate information, and its role in understanding generative processes.
+date: 2024-07-24 08:50:18
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>AI</li>
+<li>RAG
+categories:</li>
+<li>教程</li>
+</ul>
+<hr/>
+<p>在<a href="https://babyno.top/posts/2024/03/run-a-large-language-model-locally-2/">之前</a>的文章中，我们介绍过使用<code>RAG</code>技术给大语言模型添加外部知识库。今天我们就来详细了解下<code>RAG</code>，并且不用任何框架，自己动手做一个<code>RAG</code>应用，从原理上理解其运行逻辑。</p>
+<h2>什么是<code>RAG</code></h2>
+<blockquote><p>RAG is an AI framework for retrieving facts from an external knowledge base to ground large language models (LLMs) on the most accurate, up-to-date information and to give users insight into LLMs' generative process. —— from <a href="https://research.ibm.com/blog/retrieval-augmented-generation-RAG">IBM Research</a>.</p>
+<p>RAG 是一个人工智能框架，用于从外部知识库中检索事实，使大型语言模型（LLM）基于最准确的最新信息，并让用户深入了解 LLM 的生成过程。</p>
+</blockquote>
+<p>大语言模型训练完后，其内部知识库就已经确定了，所以它无法回答你超过其知识库内容的问题。除非你有能力对其进行微调，否则最简单的方法就是使用<code>RAG</code>检索外部知识库。</p>
+<p>有人可能会认为，<code>RAG</code>是不是就是让模型在回答问题前先去指定的外部知识库检索一下知识，然后再回答？这里只对了一半，模型没有那么智能，它不能主动去“检索”知识库，而是需要我们把检索到的知识“喂”给模型，让它结合“知识”和“问题”，做出合理解答。</p>
+<p><img alt="what is rag" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2024-07-24-create-a-rag-application-from-scratch/create-a-rag-application-from-scratch.jpg"/></p>
+<p>上图展示了没有使用<code>RAG</code>和使用<code>RAG</code>后的两种工作流程。黑色箭头就是没有使用<code>RAG</code>的工作流程。那这里为什么要引入一个嵌入模型呢？别急，我们这里还需要再了解一些基础知识。</p>
+<h2>非结构化数据和向量搜索</h2>
+<p>什么是<code>结构化</code>数据？二维表格（行和列）是最常见的结构化数据形式。它具有非常良好的关键字查询功能，只要找到对应的单元格，就能定位到行和列。它就好比传统的<code>SQL</code>搜索，能进行精确查询和模糊查询，但不能进行相关性查询。</p>
+<p>那什么是<code>非结构化</code>数据呢？答案是任何文本、图片、音频、视频文件等。将这些数据进行多维展开，实现空间上的向量化。任何两个数据向量化后，如果在空间上具有相似性，就可以认为这两个数据相关联。比如一张小孩一个人荡秋千的照片和单词“孤独”可能在空间中非常接近，这样一来，使用关键词“孤独”进行向量搜索，能把这张图片查询出来。这在传统数据库加<code>结构化</code>数据中是很难做到的。</p>
+<p>现在你知道什么是向量搜索了吧？向量搜索是一种基于向量空间模型的搜索技术。向量搜索的目标是在向量空间中找到与查询向量最相似的向量，即与查询向量距离最近的文档向量。</p>
+<p>向量搜索的最常见算法是“余弦相似度”，这个我们不做展开。</p>
+<p>到了这里，你一定了解了为什么<code>RAG</code>中要引入一个嵌入模型的原因了吧。</p>
+<h2>构建知识库</h2>
+<p>知识库可以是任意<code>非结构化</code>数据组成的，我们这里用一个<code>txt</code>文本做示例。</p>
+<h3>文本分割</h3>
+<p>首先第一步需要将文本分割，这一步很好理解，就是将大文本分割成多个小块。不管是<code>pdf</code>还是<code>word</code>，分割成小块后就可以用于检索了。因此这一步很重要，分割后的文本质量影响检索的准确性。这里给一个通用的算法，根据指定的文本长度进行分割。</p>
+<pre><code class="lang-python">def split_document_direct(document, chunk_size):  
+    separator = "\n"  
+    splits = [s for s in document.split(separator) if s != ""]  
+    chunks = []  
+    length = 0  
+    start = 0  
+    for i, split in enumerate(splits):  
+        if (length + len(split)) &gt; chunk_size:  
+            chunks.append("\n".join(splits[start: i]))  
+            start = i  
+            length = 0  
+        if i == len(splits) - 1:  
+            chunks.append("\n".join(splits[start: i + 1]))  
+        length += len(split)  
+    return chunks
+</code></pre>
+<p>你可以将分割后的文本保存至磁盘或任何你喜欢的数据库。</p>
+<h3>文本嵌入</h3>
+<p>接下来将分割后的文本嵌入成向量。我这里使用的模型是<a href="https://huggingface.co/moka-ai/m3e-base"><code>m3e-base</code></a>，它对中文支持良好。</p>
+<pre><code class="lang-python">embedding_model = SentenceTransformer("path/m3e-base",  
+                                      device="cpu",  
+                                      local_files_only=True)
+embeddings = embedding_model.encode(chunks, convert_to_tensor=True)
+</code></pre>
+<h3>构建索引</h3>
+<p><strong><em>不用现成向量数据库是为了让大家更深的理解<code>RAG</code>的整个原理。</em></strong></p>
+<p>对向量进行索引以提高搜索效率，使用<code>ANN</code>算法构建索引。</p>
+<pre><code class="lang-python">def build_faiss_index(embeddings: np.ndarray) -&gt; faiss.IndexFlatIP:
+    index = faiss.IndexFlatIP(EMBEDDING_DIMENSION)
+    index.add(embeddings)
+    return index
+</code></pre>
+<p>你可以将生成的索引保存至磁盘或任何你喜欢的数据库。</p>
+<p>至此知识库构建完毕。</p>
+<h2>实现<code>RAG</code></h2>
+<p>当知识库就位后，接下来就是提问了。</p>
+<h3>问题嵌入</h3>
+<p>非常简单的一步，将用户的提问转换成向量。</p>
+<pre><code class="lang-python">user_input = "中印两国的发展模式不同表现在哪些方面？其原因是什么？"  
+query_embedding = embedding_model.encode(user_input, convert_to_tensor=True)
+</code></pre>
+<h3>语义搜索</h3>
+<p>将嵌入后的数据在索引中搜索，根据语义查找相关度最高的几(<code>top_k</code>)条数据。</p>
+<pre><code class="lang-python">D, I = index.search(query_embedding.unsqueeze(0).cpu().numpy(), top_k * 2)  
+semantic_scores = torch.tensor(D[0])  
+semantic_indices = torch.tensor(I[0])
+</code></pre>
+<p><code>semantic_scores</code>语义得分，是一个语义相似度得分数组，类似于<code>[333.7204, 320.6714, 303.9030, 301.7744]</code>，得分越高，相似度越高。</p>
+<p><code>semantic_indices</code>与语义得分相对应，对应的是上面<code>chunks</code>的下标，类似于<code>[1, 3, 2, 0]</code>。</p>
+<h3>混合搜索</h3>
+<p><strong><em>本步骤可选。</em></strong></p>
+<p>语义搜索可以找到相似文本。但为了提高准确度，往往需要结合一种其它的相似度算法来重新计算相似度得分。接下来我们使用<code>BM25</code>算法来举例。注意，下面这段代码，需要加到“构建知识库”的步骤中。</p>
+<pre><code class="lang-python">import jieba
+from rank_bm25 import BM25Okapi
+from nltk.corpus import stopwords
+
+nltk.download("stopwords")
+
+def preprocess_text(text: str) -&gt; List[str]:  
+    tokens = jieba.lcut(text.lower().replace("\n", ""))  
+    stop_words = set(stopwords.words("chinese"))  
+    return [token for token in tokens if token.isalnum() and token not in stop_words]
+
+tokenized_corpus = [preprocess_text(chunk) for chunk in chunks]  
+bm25 = BM25Okapi(tokenized_corpus)
+</code></pre>
+<p>稍微解释一下，这段代码的核心步骤是预处理文本并构建<code>BM25</code>索引：</p>
+<ul>
+<li>下载 <code>nltk</code> 库中的停用词数据集，停用词是指在文本处理中需要过滤掉的一些高频但无意义的词语，如“的”、“是”、“在”等。</li>
+<li>用<code>jieba</code>分词对中文进行分词，并过滤掉停用词，使得剩下的词更具备实际意义。</li>
+<li><code>chunks</code>是上文“文本分割”后的小段文本，对每段文本进行索引构建。</li>
+</ul>
+<p>接下来结合<code>BM25</code>得分和语义得分来重新计算最终得分，选出排名靠前的文档。</p>
+<pre><code class="lang-python">tokenized_query = preprocess_text(user_input)  
+bm25_scores = torch.tensor(bm25.get_scores(tokenized_query))
+bm25_scores_rescored = bm25_scores[semantic_indices]
+semantic_scores = (semantic_scores - semantic_scores.min()) / (semantic_scores.max() - semantic_scores.min() + 1e-8)  
+bm25_scores_rescored = (bm25_scores_rescored - bm25_scores_rescored.min()) / (  
+            bm25_scores_rescored.max() - bm25_scores_rescored.min() + 1e-8)
+combined_scores = 2 / (1 / semantic_scores + 1 / bm25_scores_rescored)  
+top_indices = semantic_indices[torch.argsort(combined_scores, descending=True)][:top_k]  
+top_scores = combined_scores[torch.argsort(combined_scores, descending=True)][:top_k]
+result = [(idx.item(), score.item()) for idx, score in zip(top_indices, top_scores)]
+</code></pre>
+<ul>
+<li>用<code>jieba</code>分词对问题进行分词，并过滤掉停用词。</li>
+<li>计算<code>BM25</code>搜索得分。</li>
+<li>使用 <code>semantic_indices</code> 对<code>BM25</code>得分进行重排序或筛选，得到与语义得分相关的<code>BM25</code>得分 <code>bm25_scores_rescored</code>。</li>
+<li>标准化得分：将语义得分和<code>BM25</code>得分标准化到 <code>[0, 1]</code> 范围内。</li>
+<li>计算调和平均得分：将标准化后的语义得分和BM25得分结合起来，计算它们的调和平均数作为最终的组合得分 <code>combined_scores</code>。</li>
+<li>排序和选取前<code>K</code>个文档</li>
+</ul>
+<p>最终的<code>result</code>是类似于这样的结果：<code>[(3, 0.7433483727390585), (2, 0.11336547324137035)]</code>。这意味着查询到两条数据，下标分别是<code>3</code>和<code>2</code>，得分分别是<code>0.7433483727390585</code>和<code>0.11336547324137035</code>。</p>
+<h3>构建提示词</h3>
+<p>这一步也很简单，假设用户的问题是<code>question1</code>，查询到的结果是<code>result1</code>和<code>result2</code>。那么构建的提示词如下（仅供参考）：</p>
+<pre><code>Answer the question based only on the following context:  
+---------------------  
+result1
+result2
+---------------------  
+Question: question1
+Answer:
+</code></pre>
+<p>这里要注意的是不同模型的上下文长度，不要超过它的最大长度。</p>
+<h2>参考</h2>
+<p><a href="https://github.com/Rman410/hybrid-search/blob/main/hybrid-search.py">https://github.com/Rman410/hybrid-search/blob/main/hybrid-search.py</a></p>
