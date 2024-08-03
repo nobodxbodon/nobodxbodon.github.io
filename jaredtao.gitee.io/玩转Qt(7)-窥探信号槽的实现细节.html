@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/jaredtao/jaredtao/blob/master/source/_posts/%E7%8E%A9%E8%BD%ACQt(7">仓库源文</a>-窥探信号槽的实现细节.md)，<a href="https://jaredtao.gitee.io/%E7%8E%A9%E8%BD%ACQt(7">站点原文</a>-窥探信号槽的实现细节)</h2>
+<h2><a href="https://gitee.com/jaredtao/jaredtao/blob/master/source/_posts/玩转Qt(7">仓库源文</a>-窥探信号槽的实现细节.md)，<a href="https://jaredtao.gitee.io/玩转Qt(7">站点原文</a>-窥探信号槽的实现细节)</h2>
 <hr/>
 <p>title: 玩转Qt(7)-窥探信号槽的实现细节
 photos: /images/Qt4/signals-slot.png
@@ -28,10 +28,10 @@ date: 2019-08-30 18:44:23</li>
 <p>Qt在标准C++之外，使用元对象编译器(MOC)实现的语法糖。</p>
 <p>这次通过一个简单的案例，学习一些信号-槽的实现细节。</p>
 <h1>猫和老鼠的故事</h1>
-<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt4/1.jpg"/></p>
+<p><img alt="预览" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt4/1.jpg"/></p>
 <p>还是拿上次的设定来说明：Tom有个技能叫"喵"，就是发出猫叫，而正在偷吃东西的Jerry,听见猫叫声就会逃跑。</p>
 <p>我们用信号-槽的方式写出来。</p>
-<pre><code class="language-c++">//Tom.h
+<pre><code class="lang-c++">//Tom.h
 #pragma once
 
 #include &lt;QObject&gt;
@@ -52,7 +52,7 @@ signals:
     void miao();
 };
 </code></pre>
-<pre><code class="language-C++">//Jerry.h
+<pre><code class="lang-C++">//Jerry.h
 #pragma once
 
 #include &lt;QObject&gt;
@@ -75,7 +75,7 @@ public slots:
 <p>之后在"signals:" 字段之后声明一些函数，这些函数就是信号。</p>
 <p>在"public slots:" 之后声明的函数，就是槽函数。</p>
 <p>接下来看看我们的main函数:</p>
-<pre><code class="language-C++">//main.cpp
+<pre><code class="lang-C++">//main.cpp
 #include &lt;QCoreApplication&gt;
 #include "Tom.h"
 #include "Jerry.h"
@@ -92,12 +92,11 @@ int main(int argc, char *argv[])
 
     return a.exec();
 }
-
 </code></pre>
 <p>信号-槽都准备好了，接下来创建两个对象实例，并使用QObject::connect将信号和槽连接起来。</p>
 <p>最后使用emit发送信号，就会自动触发槽函数了。</p>
 <p>运行结果：</p>
-<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt5/1.jpg"/></p>
+<p><img alt="预览" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt5/1.jpg"/></p>
 <h1>声明与实现</h1>
 <p>信号和槽的本质都是函数。</p>
 <p>我们知道C++中的函数要有声明(declare)，也要有实现(implement),</p>
@@ -106,7 +105,7 @@ int main(int argc, char *argv[])
 <h1>Q_OBJECT宏</h1>
 <p>我们来看一下Q_OBJECT宏，展开如下：</p>
 <p>(不同的Qt版本有些差异，涛哥这里用的是5.12.4，以此为例)</p>
-<pre><code class="language-C++">public: \
+<pre><code class="lang-C++">public: \
     QT_WARNING_PUSH \
     Q_OBJECT_NO_OVERRIDE_WARNING \
     static const QMetaObject staticMetaObject; \
@@ -122,7 +121,7 @@ private: \
     QT_ANNOTATE_CLASS(qt_qobject, "")
 </code></pre>
 <p>我们看到，关键的地方，是声明了一个只读的静态成员变量staticMetaObject，以及3个public的成员函数</p>
-<pre><code class="language-C++">    static const QMetaObject staticMetaObject; 
+<pre><code class="lang-C++">    static const QMetaObject staticMetaObject; 
 
     virtual const QMetaObject *metaObject() const; 
 
@@ -131,14 +130,14 @@ private: \
     virtual int qt_metacall(QMetaObject::Call, int, void **);
 </code></pre>
 <p>还有一个private的静态成员函数qt_static_metacall</p>
-<pre><code class="language-c++">static void qt_static_metacall(QObject *, QMetaObject::Call, int, void **)
+<pre><code class="lang-c++">static void qt_static_metacall(QObject *, QMetaObject::Call, int, void **)
 </code></pre>
 <p>那么声明的这些成员变量/函数，在哪里实现？答案是moc生成的cpp文件。</p>
 <h1>信号的moc生成</h1>
-<p><img alt="预览" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt5/2.jpg"/></p>
+<p><img alt="预览" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt5/2.jpg"/></p>
 <p>如上图所示目录结构，项目编译完成后，在build文件夹中，自动生成了moc_Jerry.cpp 和 moc_Tom.cpp两个文件</p>
 <p>其中moc_Tom.cpp内容如下：</p>
-<pre><code class="language-C++">/****************************************************************************
+<pre><code class="lang-C++">/****************************************************************************
 ** Meta object code from reading C++ file 'Tom.h'
 **
 ** Created by: The Qt Meta Object Compiler version 67 (Qt 5.12.4)
@@ -271,7 +270,6 @@ void Tom::miao()
 }
 QT_WARNING_POP
 QT_END_MOC_NAMESPACE
-
 </code></pre>
 <p>可以大致看出，生成的cpp文件中，就是变量staticMetaObject以及 那几个函数的实现。</p>
 <p>staticMetaObject是一个结构体，用来存储Tom这个类的信号、槽等元信息，并把</p>
@@ -282,7 +280,7 @@ QT_END_MOC_NAMESPACE
 <p>转换成Tom类然后调用其miao函数</p>
 <p>如果是IndexOfMethod类型的调用，即获取元函数的索引号，则计算miao函数的偏移并返回。</p>
 <p>而moc_Tom.cpp末尾的</p>
-<pre><code class="language-C++">// SIGNAL 0
+<pre><code class="lang-C++">// SIGNAL 0
 void Tom::miao()
 {
     QMetaObject::activate(this, &amp;staticMetaObject, 0, nullptr);
@@ -295,7 +293,7 @@ void Tom::miao()
 <p>且不同版本的Qt，实现差异都比较大，这里总结一下大致的实现：</p>
 <p>先找出与当前信号连接的所有对象-槽函数，再逐个处理：</p>
 <p>这里处理的方式，分为三种：</p>
-<pre><code class="language-C++">if((c-&gt;connectionType == Qt::AutoConnection &amp;&amp; !receiverInSameThread)
+<pre><code class="lang-C++">if((c-&gt;connectionType == Qt::AutoConnection &amp;&amp; !receiverInSameThread)
                 || (c-&gt;connectionType == Qt::QueuedConnection)) {
     // 队列处理
 } else if (c-&gt;connectionType == Qt::BlockingQueuedConnection) {
@@ -320,7 +318,7 @@ void Tom::miao()
 <p>只有Q_OBJECT宏的展开，和前面的moc_Tom.cpp是一致的，不赘述了。</p>
 <h1>第三方信号槽实现</h1>
 <p>信号-槽是非常优秀的通信机制，但Qt的moc实现方式，被一些人诟病，所以他们造了新的轮子,比如：</p>
-<p>https://woboq.com/blog/verdigris-qt-without-moc.html</p>
-<p>http://sigslot.sourceforge.net/</p>
-<p>https://github.com/NoAvailableAlias/nano-signal-slot</p>
-<p>https://github.com/pbhogan/Signals</p>
+<p><a href="https://woboq.com/blog/verdigris-qt-without-moc.html">https://woboq.com/blog/verdigris-qt-without-moc.html</a></p>
+<p><a href="http://sigslot.sourceforge.net/">http://sigslot.sourceforge.net/</a></p>
+<p><a href="https://github.com/NoAvailableAlias/nano-signal-slot">https://github.com/NoAvailableAlias/nano-signal-slot</a></p>
+<p><a href="https://github.com/pbhogan/Signals">https://github.com/pbhogan/Signals</a></p>
