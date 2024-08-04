@@ -2,7 +2,7 @@
 <h1>React 实践心得：key 属性的原理和用法</h1>
 <p>我们知道，React 元素可以具有一个特殊的属性 key，这个属性不是给用户自己用的，而是给 React 自己用的。如果我们动态地创建 React 元素，而且 React 元素内包含数量或顺序不确定的子元素时，我们就需要提供 key 这个特殊的属性。</p>
 <p>如果你有下面这样的代码：</p>
-<pre><code class="language-jsx">const UserList = props =&gt; (
+<pre><code class="lang-jsx">const UserList = props =&gt; (
   &lt;div&gt;
     &lt;h3&gt;用户列表&lt;/h3&gt;
     {props.users.map(u =&gt; &lt;div&gt;{u.id}:{u.name}&lt;/div&gt;)}  // 没有提供 key
@@ -10,11 +10,10 @@
 );
 </code></pre>
 <p>React 会在控制台打印出报警信息：</p>
-<blockquote>
-<p>Warning: Each child in an array or iterator should have a unique "key" prop. Check the render method of <code>App</code>. See https://fb.me/react-warning-keys for more information.</p>
+<blockquote><p>Warning: Each child in an array or iterator should have a unique "key" prop. Check the render method of <code>App</code>. See <a href="https://fb.me/react-warning-keys">https://fb.me/react-warning-keys</a> for more information.</p>
 </blockquote>
 <p>你必须为数组中的元素提供唯一的 <code>key</code> 属性，就像下面这样：</p>
-<pre><code class="language-jsx">const UserList = props =&gt; (
+<pre><code class="lang-jsx">const UserList = props =&gt; (
   &lt;div&gt;
     &lt;h3&gt;用户列表&lt;/h3&gt;
     {props.users.map(u =&gt; &lt;div key={u.id}&gt;{u.id}:{u.name}&lt;/div&gt;)}  // 提供了 key
@@ -34,7 +33,7 @@
 </ul>
 <p>那么，为数组中的元素传一个唯一的 key（比如用户的 ID），就很好地解决了这个问题。React 比较更新前后的元素 key 值，如果相同则更新，如果不同则销毁之前的，重新创建一个元素。</p>
 <p>那么，为什么只有数组中的元素需要有唯一的 key，而其他的元素（比如上面的<code>&lt;h3&gt;用户列表&lt;/h3&gt;</code>）则不需要呢？答案是：React 有能力辨别出，更新前后元素的对应关系。这一点，也许直接看 JSX 不够明显，看 Babel 转换后的 React.createElement 则清晰很多：</p>
-<pre><code class="language-jsx">// 转换前
+<pre><code class="lang-jsx">// 转换前
 const element = (
   &lt;div&gt;
     &lt;h3&gt;example&lt;/h3&gt;
@@ -56,10 +55,7 @@ var element = React.createElement(
 );
 </code></pre>
 <p>不管 props 如何变化，数组外的每个元素始终出现在 React.createElement() 参数列表中的固定位置，这个位置就是天然的 key。</p>
-<blockquote>
-<p>题外话</p>
-</blockquote>
-<blockquote>
+<blockquote><p>题外话</p>
 <p>初学 React 时还容易产生另一个困惑，那就是为什么 JSX 不支持 if 表达式来有选择地输出（不能这样：<code>{if(yes){ &lt;div {...props}/&gt; }}</code>），而必须采用三元运算符来完成这项工作（必须这样：<code>{yes ? &lt;div {...props}/&gt;} : null</code>）。那是因为，React 需要一个 null 去占住那个元素本来的位置。</p>
 </blockquote>
 <p>曾经，我天真的以为 <code>key</code> 这个元素只应在数组中使用。直到我在一个复杂的项目中写出了及其恶心的 <code>componentWillReceiveProps</code>方法。我尝试寻找销毁和重建组件，触发 <code>componentDidMount</code> 方法，重置 <code>state</code>，然后才突然发现 <code>key</code> 这个属性已经在那里了。</p>
@@ -68,39 +64,32 @@ var element = React.createElement(
 <p>解决方案是什么？就是用 <code>key</code> 属性。在 JSX 中使用 <code>UserDashboard</code> 的时候，不仅把 <code>userInfo</code> 传入，把 <code>userInfo.id</code> 作为名为 <code>key</code> 的 <code>props</code> 传入（尽管 <code>UserDashboard</code> 不是数组中的组件）。这样切换目标用户的时候，<code>key</code> 属性也变了，React 会自动销毁之前的组件，用一个全新的组件来渲染新的用户：我们可以从容地在 <code>componentWillUnmount</code> 里作清理工作（注销请求的响应函数，防止其更新一个 unmounted component），至于重置 <code>state</code> 这些工作已经不需要做了，由于组件不再是更新，而是销毁和重建，已经是天然完成的。</p>
 <p>当然，你可以质疑这样做是否会影响性能。我认为，只要目标用户的切换不够频繁，对性能的影响是很小的。如果不使用 <code>key</code> 触发组件的销毁和重建，任由组件自行「更新」，每次切换时更新的内容也是很多的。这时，我们使用 <code>key</code> 带来的性能损耗是完全可以接受的，而带来的收益却非常大。</p>
 <p>所以，我想说的结论是：为了组件内部逻辑的清晰，你几乎应该在任何复杂的有状态组件（尤其是有具体<strong>对应</strong>对象的）上使用<code>key</code>属性（只要 <code>key</code> 属性的改变不是很频繁），这样做，才能在合适的时候触发组件的销毁与重建，组件才能有一个健康的生命周期。</p>
-<blockquote>
-<p>题外话</p>
-</blockquote>
-<blockquote>
+<blockquote><p>题外话</p>
 <p>配合 react-router 时，通常要为 route 组件赋 key，但通常情况下我们是没法传 props 给 route 组件的。解决的方案是 <code>createElement</code> 方法，如下所示。</p>
-</blockquote>
-<blockquote>
-<pre><code></code></pre>
-</blockquote>
-<p>class App extends Component {
-static createElement = (Component, ownProps) =&gt; {
-const {userId} = ownProps.params;
-switch (Component) {
-case UserDashboard:
-return &lt;Component key={userId} {...ownProps}/&gt;;
-default:
-return &lt;Component {...ownProps}/&gt;;
+<pre><code>class App extends Component {
+  static createElement = (Component, ownProps) =&gt; {
+    const {userId} = ownProps.params;
+    switch (Component) {
+      case UserDashboard:
+        return &lt;Component key={userId} {...ownProps}/&gt;;
+      default:
+        return &lt;Component {...ownProps}/&gt;;
+    }
+  };
+  render() {
+    return (
+      &lt;Provider store={store}&gt;
+        &lt;Router createElement={App.createElement} 
+                history={syncHistoryWithStore(hashHistory, store)}&gt;
+          &lt;Route path="/" component={Home}&gt;
+            &lt;IndexRoute component={Index}/&gt;
+            &lt;Route path="users/:userId" component={UserDashboard}/&gt;
+          &lt;/Route&gt;
+        &lt;/Router&gt;
+      &lt;/Provider&gt;
+    )
+  }
 }
-};
-render() {
-return (
-&lt;Provider store={store}&gt;
-&lt;Router createElement={App.createElement}
-history={syncHistoryWithStore(hashHistory, store)}&gt;
-&lt;Route path="/" component={Home}&gt;
-&lt;IndexRoute component={Index}/&gt;
-&lt;Route path="users/:userId" component={UserDashboard}/&gt;
-&lt;/Route&gt;
-&lt;/Router&gt;
-&lt;/Provider&gt;
-)
-}
-}</p>
-<pre><code>
-（完）
 </code></pre>
+</blockquote>
+<p>（完）</p>

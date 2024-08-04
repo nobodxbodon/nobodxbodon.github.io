@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-04-25-threadpool running.md)，<a href="https://objcoding.com/2019/04/25/threadpool-running">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-04-25-threadpool running.md">仓库源文</a>，<a href="https://objcoding.com/2019/04/25/threadpool-running">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "从源码的角度解析线程池运行原理"
 categories: Java
-tags: 线程池
-author: 张乘辉</h2>
+tags: 线程池</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -15,7 +15,7 @@ author: 张乘辉</h2>
 <p>在深入源码之前先来看看J.U.C包中的线程池类图：</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/threadpool_9.png"/></p>
 <p>它们的最顶层是一个Executor接口，它只有一个方法：</p>
-<pre><code class="language-java">public interface Executor {
+<pre><code class="lang-java">public interface Executor {
     void execute(Runnable command);
 }
 </code></pre>
@@ -25,7 +25,7 @@ author: 张乘辉</h2>
 <p>下面我们开始ThreadPoolExecutor的源码分析了（以下源码为JDK8版本）：</p>
 <h3>ctl变量</h3>
 <p>ctl是一个Integer值，它是对线程池运行状态和线程池中有效线程数量进行控制的字段，<strong>Integer值一共有32位，其中高3位表示"线程池状态"，低29位表示"线程池中的任务数量"</strong>。我们看看Doug Lea大神是如何实现的：</p>
-<pre><code class="language-java">private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
+<pre><code class="lang-java">private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
 private static final int COUNT_BITS = Integer.SIZE - 3;
 private static final int CAPACITY = (1 &lt;&lt; COUNT_BITS) - 1;
 
@@ -73,7 +73,7 @@ private static int ctlOf(int rs, int wc) { return rs | wc; }
 <h2>如何在线程池中添加任务？</h2>
 <p>线程池要执行任务，那么必须先添加任务，execute()虽说是执行任务的意思，但里面也包含了添加任务的步骤在里面，下面源码：</p>
 <p>java.util.concurrent.ThreadPoolExecutor#execute：</p>
-<pre><code class="language-java">public void execute(Runnable command) {
+<pre><code class="lang-java">public void execute(Runnable command) {
   // 如果添加订单任务为空，则空指针异常
   if (command == null)
     throw new NullPointerException();
@@ -103,7 +103,7 @@ private static int ctlOf(int rs, int wc) { return rs | wc; }
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/threadpool_10.png"/></p>
 <p>继续往下看，addWorker添加任务，方法源码有点长，我按照逻辑拆分成两部分讲解：</p>
 <p>java.util.concurrent.ThreadPoolExecutor#addWorker：</p>
-<pre><code class="language-java">retry:
+<pre><code class="lang-java">retry:
 for (;;) {
   int c = ctl.get();
   // 获取线程池当前运行状态
@@ -141,7 +141,7 @@ for (;;) {
 </code></pre>
 <p><strong>这里特别强调，firstTask是开启线程执行的首个任务，之后常驻在线程池中的线程执行的任务都是从阻塞队列中取出的，需要注意。</strong></p>
 <p>以上for循环代码主要作用是判断ctl变量当前的状态是否可以添加任务，特别说明了如果线程池处于SHUTDOWN状态时，可以继续执行阻塞队列中的任务，但不能继续往线程池中添加任务了；同时增加工作线程数量使用了AQS作同步，如果同步失败，则继续循环执行。</p>
-<pre><code class="language-java">// 任务是否已执行
+<pre><code class="lang-java">// 任务是否已执行
 boolean workerStarted = false;
 // 任务是否已添加
 boolean workerAdded = false;
@@ -196,14 +196,14 @@ return workerStarted;
 <p>以上源码主要的作用是创建一个Worker对象，并将新的任务装进Worker中，开启同步将Worker添加进workers中，<strong>这里需要注意workers的数据结构为HashSet，非线程安全，所以操作workers需要加同步锁</strong>。添加步骤做完后就启动线程来执行任务了，继续往下看。</p>
 <h2>如何执行任务？</h2>
 <p>我们注意到上面的代码中：</p>
-<pre><code class="language-java">// 启动线程执行任务
+<pre><code class="lang-java">// 启动线程执行任务
 if (workerAdded) {
   t.start();
   workerStarted = true;
 }
 </code></pre>
 <p>这里的t是w.thread得到的，即是Worker中用于执行任务的线程，该线程由ThreadFactory创建，我们再看看生成Worker的构造方法：</p>
-<pre><code class="language-java">Worker(Runnable firstTask) {
+<pre><code class="lang-java">Worker(Runnable firstTask) {
   setState(-1); // inhibit interrupts until runWorker
   this.firstTask = firstTask;
   this.thread = getThreadFactory().newThread(this);
@@ -211,12 +211,12 @@ if (workerAdded) {
 </code></pre>
 <p><strong>newThread传的参数是Worker本身，而Worker实现了Runnable接口，所以当我们执行t.start()时，执行的是Worker的run()方法</strong>，找到入口了：</p>
 <p>java.util.concurrent.ThreadPoolExecutor.Worker#run：</p>
-<pre><code class="language-java">public void run() {
+<pre><code class="lang-java">public void run() {
   runWorker(this);
 }
 </code></pre>
 <p>java.util.concurrent.ThreadPoolExecutor#runWorker：</p>
-<pre><code class="language-java">final void runWorker(Worker w) {
+<pre><code class="lang-java">final void runWorker(Worker w) {
   Thread wt = Thread.currentThread();
   Runnable task = w.firstTask;
   w.firstTask = null;
@@ -266,7 +266,7 @@ if (workerAdded) {
 }
 </code></pre>
 <p>这一步是执行任务的核心方法，首次执行不为空的firstTask任务，之后便一直从workQueue阻塞队列中获取任务并执行，如果你想在任务执行前后做点啥不可告人的小动作，你可以实现ThreadPoolExecutor以下两个方法：</p>
-<pre><code class="language-java">protected void beforeExecute(Thread t, Runnable r) { }
+<pre><code class="lang-java">protected void beforeExecute(Thread t, Runnable r) { }
 protected void afterExecute(Runnable r, Throwable t) { }
 </code></pre>
 <p>这样一来，我们就可以对任务的执行进行实时监控了。</p>
@@ -274,7 +274,7 @@ protected void afterExecute(Runnable r, Throwable t) { }
 <h2>如何保证核心线程不被销毁？</h2>
 <p>我们之前已经知道线程池中可维持corePoolSize数量的常驻核心线程，那么它们是如何保证执行完任务而不被线程池回收的呢？<strong>在前面的章节中你可能已经到从workQueue队列中会阻塞式地获取任务，如果没有获取任务，那么就会一直阻塞下去</strong>，很聪明，你已经知道答案了，现在我们来看Doug Lea大神是如何实现的。</p>
 <p>java.util.concurrent.ThreadPoolExecutor#getTask：</p>
-<pre><code class="language-java">private Runnable getTask() {
+<pre><code class="lang-java">private Runnable getTask() {
   // 超时标记，默认为false，如果调用workQueue.poll()方法超时了，会标记为true
   // 这个标记非常之重要，下面会说到
   boolean timedOut = false;
@@ -300,7 +300,7 @@ protected void afterExecute(Runnable r, Throwable t) { }
     // allowCoreThreadTimeOut默认为false，即默认不允许核心线程超时回收
     // 这里也说明了在核心线程以外的线程都为“临时”线程，随时会被线程池回收
     boolean timed = allowCoreThreadTimeOut || wc &gt; corePoolSize;
-    
+
     // 这里说明了两点销毁线程的条件：
     // 1.原则上线程池数量不可能大于maximumPoolSize，但可能会出现并发时操作了setMaximumPoolSize方法，如果此时将最大线程数量调少了，很可能会出现当前工作线程大于最大线程的情况，这时就需要线程超时回收，以维持线程池最大线程小于maximumPoolSize，
     // 2.timed &amp;&amp; timedOut 如果为true，表示当前操作需要进行超时控制，这里的timedOut为true，说明该线程已经从workQueue.poll()方法超时了

@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-10-26-kafka expansion.md)，<a href="https://objcoding.com/2019/10/26/kafka-expansion">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-10-26-kafka expansion.md">仓库源文</a>，<a href="https://objcoding.com/2019/10/26/kafka-expansion">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "记一次Kafka集群线上扩容"
 categories: Kafka
-tags: 集群 扩容
-author: 张乘辉</h2>
+tags: 集群 扩容</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -59,28 +59,28 @@ author: 张乘辉</h2>
 <ol>
 <li>生成需要执行分区重分配的主题列表 json 文件：</li>
 </ol>
-<pre><code class="language-bash">echo '{"version":1,"topics":[{"topic":"sjzn_spark_binlog_order_topic"}]}' &gt; sjzn_spark_binlog_order_topic.json
+<pre><code class="lang-bash">echo '{"version":1,"topics":[{"topic":"sjzn_spark_binlog_order_topic"}]}' &gt; sjzn_spark_binlog_order_topic.json
 </code></pre>
-<ol start="2">
+<ol>
 <li>生成主题的分配方案：</li>
 </ol>
-<pre><code class="language-bash">bin/kafka-reassign-partitions.sh  --zookeeper  --zookeeper xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181 --topics-to-move-json-file sjzn_spark_binlog_order_topic.json --broker-list "0,1,2,3,4,5,6,7,8" --generate
+<pre><code class="lang-bash">bin/kafka-reassign-partitions.sh  --zookeeper  --zookeeper xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181 --topics-to-move-json-file sjzn_spark_binlog_order_topic.json --broker-list "0,1,2,3,4,5,6,7,8" --generate
 </code></pre>
 <p>由于主题的有64个分区，每个分区3个副本，生成的分配数据还是挺大的，这里就不一一贴出来了</p>
-<ol start="3">
+<ol>
 <li>将分配方案保存到一个 json 文件中：</li>
 </ol>
-<pre><code class="language-bash">echo '{"version":1,"partitions":[{"topic":"sjzn_spark_binlog_order_topic","partition":59,"replicas":[4,8,0],"log_dirs":["any","any","any"]} ......' &gt; sjzn_spark_binlog_order_topic_reassignment.json
+<pre><code class="lang-bash">echo '{"version":1,"partitions":[{"topic":"sjzn_spark_binlog_order_topic","partition":59,"replicas":[4,8,0],"log_dirs":["any","any","any"]} ......' &gt; sjzn_spark_binlog_order_topic_reassignment.json
 </code></pre>
-<ol start="4">
+<ol>
 <li>执行分区重分配：</li>
 </ol>
-<pre><code class="language-bash"> bin/kafka-reassign-partitions.sh   --zookeeper xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181 --reassignment-json-file sjzn_spark_binlog_order_topic_reassignment.json --execute
+<pre><code class="lang-bash"> bin/kafka-reassign-partitions.sh   --zookeeper xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181 --reassignment-json-file sjzn_spark_binlog_order_topic_reassignment.json --execute
 </code></pre>
-<ol start="5">
+<ol>
 <li>验证分区重分配是否执行成功：</li>
 </ol>
-<pre><code class="language-bash">bin/kafka-reassign-partitions.sh  --zookeeper xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181 --reassignment-json-file sjzn_spark_order_unique_topic_resign.json --verify
+<pre><code class="lang-bash">bin/kafka-reassign-partitions.sh  --zookeeper xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181,xxx.xxx.xx.xxx:2181 --reassignment-json-file sjzn_spark_order_unique_topic_resign.json --verify
 </code></pre>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20191026160345.png"/></p>
 <p>由于该主题存在的数据量特别大，整个重分配过程需要维持了好几个小时：</p>

@@ -1,38 +1,58 @@
 <h2><a href="https://github.com/forecho/hugo-blog/blob/master/content/posts/php-mysql-biao-fei-zhu-jian-zi-zeng-chang.markdown">仓库源文</a>，<a href="https://blog.forecho.com/php-mysql-biao-fei-zhu-jian-zi-zeng-chang.markdown.html">站点原文</a></h2>
 <hr/>
-<h2>title: "PHP MySQL 表非主键自增长"
-date: 2014-11-13T20:34:00+08:00
-tags: ["MySQL"]</h2>
-<p>##场景
-一个活动表，一个活动记录表，活动记录表要根据活动 ID，记录每个人的活动分数和时间等用户参与信息，其中活动记录表有一个字段是用户的编号，每个活动的记录都要从 1 开始自增。现在的问题是怎么实现这个自增的效果？</p>
+<p>title: "PHP MySQL 表非主键自增长"
+date: 2014-11-13T20:34:00+08:00</p>
+<h2>tags: ["MySQL"] </h2>
+<h2>场景</h2>
+<p>一个活动表，一个活动记录表，活动记录表要根据活动 ID，记录每个人的活动分数和时间等用户参与信息，其中活动记录表有一个字段是用户的编号，每个活动的记录都要从 1 开始自增。现在的问题是怎么实现这个自增的效果？</p>
 <h2>表结构如下：</h2>
 <p>主要说一下活动记录表 activity_records 的 主要字段结构：</p>
-<p>| 字段               | 注释
-| :-----------------|-------------:
-| id                |  主键自增
-| activity_id       | 活动 ID
-| user_id           | 用户 ID
-| number            | 活动记录编号</p>
-<p>##解决方案</p>
-<p>&lt;!--more--&gt;</p>
+<table>
+<thead><tr>
+<th style="text-align:left">字段</th>
+<th style="text-align:right">注释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">id</td>
+<td style="text-align:right">主键自增</td>
+</tr>
+<tr>
+<td style="text-align:left">activity_id</td>
+<td style="text-align:right">活动 ID</td>
+</tr>
+<tr>
+<td style="text-align:left">user_id</td>
+<td style="text-align:right">用户 ID</td>
+</tr>
+<tr>
+<td style="text-align:left">number</td>
+<td style="text-align:right">活动记录编号</td>
+</tr>
+</tbody>
+</table>
+<h2>解决方案</h2>
+&lt;!--more--&gt;
+
 <h3>方案一（失败）</h3>
 <p>开始我用的是最方便的方法：使用 MySQL 的 count 一下活动记录表某个活动的数量，再 +1 就等于这个活动活动记录的编号。但是这个方案在并发的时候很容易出现编号重复的 BUG，显然这不是我们想要的。
 因为要执行两条分开的 MySQL 语句（下面的语句只是提供大概思路，具体代码要根据你的项目使用的框架写法不一样）：</p>
-<pre><code class="language-php">$count = mysql_query("SELECT COUNT(*) FROM activity_records WHERE `activity_id` = activityId");
+<pre><code class="lang-php">$count = mysql_query("SELECT COUNT(*) FROM activity_records WHERE `activity_id` = activityId");
 mysql_query("INSERT INTO activity_records (number, user_id, activity_id) VALUES ($count+1, userId, activityId)");
 </code></pre>
 <p>因为 MySQL 是单进程多线程架构的数据库。</p>
 <p>后来有朋友介绍用 MySQL 的<strong>联合唯一索引</strong>的方法把 number 字段和 activityId 字段联合一下。执行语句就可以了：</p>
-<pre><code class="language-sql">ALTER TABLE activity_records add unique index(number, activityId);
+<pre><code class="lang-sql">ALTER TABLE activity_records add unique index(number, activityId);
 </code></pre>
 <p>结果就是确实能阻止 number 字段的重复出现，但是这种方法是以提示插入数据库不成功并且抛出错误信息为方式的，显然是不是我们想要的。</p>
 <h3>方案二（成功）</h3>
 <p>使用 MySQL 的自定义函数功能，使用 MySQL 的存储过程。</p>
 <p><strong>（一）配置 MySQL</strong> 允许 function 的同步：</p>
-<pre><code class="language-sql">SET GLOBAL log_bin_trust_function_creators = 1;
+<pre><code class="lang-sql">SET GLOBAL log_bin_trust_function_creators = 1;
 </code></pre>
 <p><strong>（二）写自定义函数</strong>（这里我写了俩个，其实写成一个也可以）：</p>
-<pre><code class="language-sql">-- ----------------------------
+<pre><code class="lang-sql">-- ----------------------------
 -- Function structure for `currval`
 -- ----------------------------
 DROP FUNCTION IF EXISTS `currval`;
@@ -69,7 +89,7 @@ END
 DELIMITER ;
 </code></pre>
 <p><strong>（三）使用自定义函数</strong></p>
-<pre><code class="language-php">mysql_query("SELECT nextval($userId, $activityId)");
+<pre><code class="lang-php">mysql_query("SELECT nextval($userId, $activityId)");
 </code></pre>
 <p><strong>（四）值得注意的地方</strong></p>
 <ol>

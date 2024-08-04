@@ -1,20 +1,20 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2019-01-12-build-schema-lib.md">仓库源文</a>，<a href="https://qingbob.com/build-schema-lib">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title:  不如自己写一个 schema 类库吧
 modified: 2019-01-12
 tags: [javascript, schema]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>这篇文章里没有过多的技巧和经验，记录的是一个想法从诞生到实现的过程</p>
 <h2>背景需求</h2>
 <p>在上一篇文章 <a href="https://zhuanlan.zhihu.com/p/54291246">构建大型 Mobx 应用的几个建议</a> 中，我提到过使用 schema 来约定数据结构。但遗憾的事情是，在浏览器端，我一直没有能找到合适的 schmea 类库，所以只能用 Immutable.js 中的 Record 代替。</p>
 <p>如果你还不了解什么是 schema，在这里简单解释一下: 在应用内部的不同组件之间，应用端与服务端之间，都需要使用消息进行通信，而随着应用复杂度增长，消息的数据结构也变得复杂和庞大。对每一类需要使用的消息或者对象提前定义 schema，有利于确保通信的正确性，防止传入不存在的字段，或者传入字段的类型不正确；同时也具有自解释的文档的作用，有利于今后的维护。我们以 <a href="https://github.com/hapijs/joi">joi</a> 类库为例</p>
-<pre><code class="language-javascript">const Joi = require('joi');
+<pre><code class="lang-javascript">const Joi = require('joi');
 
 const schema = Joi.object().keys({
     username: Joi.string().alphanum().min(3).max(30).required(),
@@ -32,7 +32,7 @@ const result = Joi.validate({ username: 'abc', birthyear: 1994 }, schema);
 Joi.validate({ username: 'abc', birthyear: 1994 }, schema, function (err, value) { });  // err === null -&gt; valid
 </code></pre>
 <p>就像能在 <a href="https://www.npmjs.com/search?q=schema">npm</a> 上能找到的所有 schema 类库类似，它们始终在采取一种“事后验证”机制，即事先定义 schema 之后，再将需要验证的对象交给 schema 进行验证，这是让我不满意的。我更希望采取 Reacord 的方式：</p>
-<pre><code class="language-javascript">const Person = Record({
+<pre><code class="lang-javascript">const Person = Record({
   name: '',
   age: ''
 })
@@ -54,7 +54,7 @@ const team = new List(jsonData).map(Person) // =&gt; List&lt;Person&gt;
 <ul>
 <li>创建 Schema：</li>
 </ul>
-<pre><code class="language-javascript">const PersonSchema = Schema({
+<pre><code class="lang-javascript">const PersonSchema = Schema({
   name: '',
   age: ''
 })
@@ -63,7 +63,7 @@ const team = new List(jsonData).map(Person) // =&gt; List&lt;Person&gt;
 <ul>
 <li>实例化 Schema:</li>
 </ul>
-<pre><code class="language-javascript">const person = PersonSchema({
+<pre><code class="lang-javascript">const person = PersonSchema({
   name: 'Lee',
   age: 22
 })
@@ -71,7 +71,7 @@ const team = new List(jsonData).map(Person) // =&gt; List&lt;Person&gt;
 <ul>
 <li>对字段进行约束：</li>
 </ul>
-<pre><code class="language-javascript">const PersonSchema = Schema({
+<pre><code class="lang-javascript">const PersonSchema = Schema({
   name: Types().string().default('').required(),
   age: Types().number().required()
 })
@@ -97,7 +97,7 @@ const team = new List(jsonData).map(Person) // =&gt; List&lt;Person&gt;
 <ul>
 <li>支持 schema 嵌套</li>
 </ul>
-<pre><code class="language-javascript">const PersonSchema = Schema({
+<pre><code class="lang-javascript">const PersonSchema = Schema({
   name: Types().string().default('').required(),
   age: Types().number().required(),
   job: Schema({
@@ -110,14 +110,14 @@ const team = new List(jsonData).map(Person) // =&gt; List&lt;Person&gt;
 <h3><code>Types</code></h3>
 <p>关于 Types 的链式调用 <code>Types().string().required()</code> 让我想到了什么？jQuery. jQuery 是如何实现链式调用的？函数调用的结束始终返回对 jQuery 的引用。</p>
 <p><code>Types</code>是一个类，<code>Types()</code>用于生成一个实例。你可能注意到没有使用关键词<code>new</code>，因为我认为使用关键词<code>new</code>是很鸡肋很累赘的事情。技术上不使用<code>new</code>关键词生成实例也很容易，只要 1) 使用函数而不是 <code>class</code> 定义类； 2) 在构造函数中添加对实例的判断：</p>
-<pre><code class="language-javascript">function Types() {
+<pre><code class="lang-javascript">function Types() {
   if (!(this instanceof Types)) {
     return new Types();
   }
 }
 </code></pre>
 <p>而至于对各种数据类型的验证，我们借助并且封装<code>lodash</code>的方法进行实现。用户每执行一个约束（<code>.string()</code>）函数，我们会生成一个内部的验证函数，存储在 <code>Types</code> 实例的 <code>validators</code> 变量中，用于将来对该字段值的判断</p>
-<pre><code class="language-javascript">import _ from 'lodash'
+<pre><code class="lang-javascript">import _ from 'lodash'
 
 const lodashWrap = fn =&gt; {
   return value =&gt; {
@@ -139,7 +139,7 @@ Types.prototype = {
   },
 </code></pre>
 <p>同理，我们也实现了<code>default</code>、<code>required</code>和<code>valueof</code></p>
-<pre><code class="language-javascript">
+<pre><code class="lang-javascript">
 function Types() {
   if (!(this instanceof Types)) {
     return new Types();
@@ -166,14 +166,14 @@ Types.prototype = {
 </code></pre>
 <h3><code>Schema</code></h3>
 <p>通过我们之前约定的 <code>Schema()</code> 的用法不难判断出 <code>Schema</code> 的基本结构应该如下：</p>
-<pre><code class="language-javascript">export const Schema = definition =&gt; {
+<pre><code class="lang-javascript">export const Schema = definition =&gt; {
   return function(inputObj = {}) {
     return {}
   }
 }
 </code></pre>
 <p><code>Schema</code> 的代码实现中绝大部分并没有什么特别的，基本上就是通过遍历 <code>definition</code> 来获得不同字段的各种约束信息：</p>
-<pre><code class="language-javascript">export const Schema = definition =&gt; {
+<pre><code class="lang-javascript">export const Schema = definition =&gt; {
   const fieldValidator = {};
   const fieldDefaults = {};
   const fieldPossibleValues = {};
@@ -187,7 +187,7 @@ Types.prototype = {
 <li>如果值是函数，表示用户定义了一个嵌套的 Schema，在校验时需要使用这个定义的 Schema 进行校验</li>
 </ul>
 <p>承接以上代码：</p>
-<pre><code class="language-javascript">const fields = Object.keys(definition);
+<pre><code class="lang-javascript">const fields = Object.keys(definition);
 fields.forEach(field =&gt; {
   const fieldValue = definition[field];
   if (_.isFunction(fieldValue)) {
@@ -215,7 +215,7 @@ fields.forEach(field =&gt; {
 <li>使用 Proxy 机制</li>
 </ul>
 <p><code>Object.defineProperty</code>的本质是对对象进行修改（当然你也能够深度拷贝一份原对象再进行修改，以避免污染）；而 Proxy 从“语义”上来说更适合这个场景，也不存在污染的问题。并且在同时尝试了两个方案之后，使用 Proxy 的成本更低。于是决定使用 Proxy 机制，那么代码结构大致变为：</p>
-<pre><code class="language-javascript">export const Schema = definition =&gt; {
+<pre><code class="lang-javascript">export const Schema = definition =&gt; {
   return function(inputObj = {}) {
     const proxyHandler = {
       get: (target, prop) =&gt; {

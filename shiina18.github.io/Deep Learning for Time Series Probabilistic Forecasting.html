@@ -12,23 +12,24 @@ mathjax: true</li>
 </ul>
 <hr/>
 <p>主要介绍 <a href="https://arxiv.org/pdf/1704.04110.pdf">DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks</a>, 其他方法暂时略讲. 附带讲一些我知道的统计学领域的方法. 例子依然主要以销量预测为例.</p>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <h2>Model</h2>
-<p>尽量和原论文记号保持一致. 假设我们有 $N$ 条时间序列, $T$ 个时间点. 第 $i$ 条时间序列在时间 $t$ 的值记为 $z_{i, t}$, 特征记为 $x_{i,t}$ (向量). 为了符号简便, 去掉下标 $i$, 简记为 $z_t$, $x_t$. 记</p>
+<p>尽量和原论文记号保持一致. 假设我们有 $N$ 条时间序列, $T$ 个时间点. 第 $i$ 条时间序列在时间 $t$ 的值记为 $z<em>{i, t}$, 特征记为 $x</em>{i,t}$ (向量). 为了符号简便, 去掉下标 $i$, 简记为 $z_t$, $x_t$. 记</p>
 <p>$$
-z_{t_1:t_2} := (z_{t_1}, z_{t_1+1},\dots, z_{t_2})
+z_{t_1:t<em>2} := (z</em>{t<em>1}, z</em>{t<em>1+1},\dots, z</em>{t_2})
 $$</p>
-<p>为时间段 $[t_1, t_2]$ 的序列. 类似地定义 $x_{t_1:t_2}$, 并假设特征在所有时间点 (包括未来) 都是已知的. 假设历史序列时间段为 $[1, t_0-1]$, 未来为 $[t_0, T]$, 我们要建模条件似然</p>
+<p>为时间段 $[t_1, t<em>2]$ 的序列. 类似地定义 $x</em>{t_1:t_2}$, 并假设特征在所有时间点 (包括未来) 都是已知的. 假设历史序列时间段为 $[1, t_0-1]$, 未来为 $[t_0, T]$, 我们要建模条件似然</p>
 <p>$$
-P(z_{t_0:T} | z_{1:t_0-1}, x_{1:T}).
+P(z_{t<em>0:T} | z</em>{1:t<em>0-1}, x</em>{1:T}).
 $$</p>
 <p>假设模型的条件似然为</p>
 <p>$$
-Q_\Theta(z_{ t_0:T} | z_{1:t_0-1}, x_{1:T}) = \prod_{t=t_0}^T Q_\Theta(z_{t} | z_{1:t_0-1}, x_{1:T}) = \prod_{t=t_0}^T \ell(z_{t}|\theta(h_{t}, \Theta)),
+Q<em>\Theta(z</em>{ t<em>0:T} | z</em>{1:t<em>0-1}, x</em>{1:T}) = \prod_{t=t<em>0}^T Q</em>\Theta(z<em>{t} | z</em>{1:t<em>0-1}, x</em>{1:T}) = \prod_{t=t<em>0}^T \ell(z</em>{t}|\theta(h_{t}, \Theta)),
 $$</p>
 <p>其中 (省略 $h$ 下标 $i$)</p>
 <p>$$
-h_t = f(h_{t-1}, z_{t-1}, x_t, \Theta),
+h<em>t = f(h</em>{t-1}, z_{t-1}, x_t, \Theta),
 $$</p>
 <p>而  $f$ 表示多层 LSTM, 似然 $\ell$ 是根据指定的参数分布来取的 (如 Gauss, negative binomial).</p>
 <p>生成预测样本的方法是迭代式 (很常见的做法): 根据选定的参数分布 sample 出一个值, 之后将这个值当成真实值继续 sample 下一个时间点的样本. 重复若干次, 再根据多条模拟样本估计感兴趣的分位数.</p>
@@ -36,7 +37,7 @@ $$</p>
 <h3>Training</h3>
 <p>Gauss 和 negative binomial 分布可以用一阶矩和二阶矩完全刻画, 神经网络干的事情就是学习这俩参数. 目标是极大化 log 似然</p>
 <p>$$
-\sum_{i=1}^N\sum_{t=t_0}^T \log \ell(z_{i, t}|\theta(h_{i,t})).
+\sum<em>{i=1}^N\sum</em>{t=t<em>0}^T \log \ell(z</em>{i, t}|\theta(h_{i,t})).
 $$</p>
 <p>特征: 价格, 促销, 'age' (the distance to the first observation in that time series), day-of-the-week, category embedding 等.</p>
 <h3>Data Augmentation</h3>
@@ -49,7 +50,7 @@ $$</p>
 <h3>Scale Handling</h3>
 <ul>
 <li>对参数进行 item-dependent 的 scale $\nu_i$, 便于对不同 scale 的时间序列的学习.</li>
-<li>序列不平衡. 有少量的物品销量会很大, 而销量大的物品和销量小的物品行为可能不同. 由于使用的是随机梯度下降, 如果我们均匀地从时间序列中抓几条来更新参数, 可能会导致销量大的物品欠拟合. 论文作者采用的方法是以学习到的 scale $\nu_i$ 作为权重进行采样, 这样销量大的物品会被多关照一些.</li>
+<li>序列不平衡. 有少量的物品销量会很大, 而销量大的物品和销量小的物品行为可能不同. 由于使用的是随机梯度下降, 如果我们均匀地从时间序列中抓几条来更新参数, 可能会导致销量大的物品欠拟合. 论文作者采用的方法是以学习到的 scale $\nu_i$ 作为权重进行采样, 这样销量大的物品会被多关照一些. </li>
 <li>直接用均值作为 $\nu_i$ 在实际中效果不错.</li>
 </ul>
 <h3>State-Space Model</h3>
@@ -77,7 +78,7 @@ $$</p>
 <li><a href="https://github.com/awslabs/gluon-ts/issues/469">time_features</a></li>
 <li><a href="https://github.com/awslabs/gluon-ts/issues/335">data aug</a></li>
 <li><a href="https://github.com/awslabs/gluon-ts/issues/637">hyper params tuning</a></li>
-<li>官方教程里给出了定义 data transformation 的方法, 却从来没有用过它. 实际上各个 estimator 类都自带一个 transformer, 里面有一个 spliter 就是数据增强用的.</li>
+<li>官方教程里给出了定义 data transformation 的方法, 却从来没有用过它. 实际上各个 estimator 类都自带一个 transformer, 里面有一个 spliter 就是数据增强用的. </li>
 <li>LSTM 的 dropout 使用的是 mxnet 的 zoneout.</li>
 <li>虽然在 data 中可以定义 feat_dynamic_cat, 但是模型并不能使用这个特征.</li>
 </ul>

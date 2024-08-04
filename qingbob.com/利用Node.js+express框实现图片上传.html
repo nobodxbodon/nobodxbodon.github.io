@@ -1,43 +1,43 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2013-02-27-nodejs-express-upload-image.md">仓库源文</a>，<a href="https://qingbob.com/nodejs-express-upload-image">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 利用Node.js+express框实现图片上传
 description: "Just about everything you'll need to style in the theme: headings, paragraphs, blockquotes, tables, code blocks, and more."
 modified: 2013-05-31
 tags: [javascript, nodejs, back-end]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>在开发自己的博客引擎的过程中，遇到的第一个问题就是如何实现图片的上传。</p>
-<p>如果对express中的<code>app.post('/', function (req, res)) </code>方法熟悉的话，方法中的<code>req.files</code>已经代表的是上传的文件，打印出来之后可以看到文件的一系列属性，比如说通过上传的路由，重命名之后的名称，存放的路径，文件的大小等等：</p>
+<p>如果对express中的<code>app.post('/', function (req, res))</code>方法熟悉的话，方法中的<code>req.files</code>已经代表的是上传的文件，打印出来之后可以看到文件的一系列属性，比如说通过上传的路由，重命名之后的名称，存放的路径，文件的大小等等：</p>
 <p>{% highlight javascript %}
-{
-size: 74643,
-path: '/tmp/8ef9c52abe857867fd0a4e9a819d1876',
-name: 'edge.png',
-type: 'image/png',
-hash: false,
-lastModifiedDate: Thu Aug 09 2012 20:07:51 GMT-0700 (PDT),
-_writeStream:
-{
-path: '/tmp/8ef9c52abe857867fd0a4e9a819d1876',
-fd: 13,
-writable: false,
-flags: 'w',
-encoding: 'binary',
-mode: 438,
-bytesWritten: 74643,
-busy: false,
-_queue: [],
-_open: [Function],
-drainable: true },
-length: [Getter],
-filename: [Getter],
-mime: [Getter]
-}
+{ 
+    size: 74643,
+    path: '/tmp/8ef9c52abe857867fd0a4e9a819d1876',
+    name: 'edge.png',
+    type: 'image/png',
+    hash: false,
+    lastModifiedDate: Thu Aug 09 2012 20:07:51 GMT-0700 (PDT),
+    _writeStream: 
+    { 
+        path: '/tmp/8ef9c52abe857867fd0a4e9a819d1876',
+        fd: 13,
+        writable: false,
+        flags: 'w',
+        encoding: 'binary',
+        mode: 438,
+        bytesWritten: 74643,
+        busy: false,
+        _queue: [],
+        _open: [Function],
+        drainable: true },
+        length: [Getter],
+        filename: [Getter],
+        mime: [Getter]
+    }
 }
 {% endhighlight %}</p>
 <p>但有几个非常常规的功能无法通过这些个参数实现的，比如</p>
@@ -49,42 +49,39 @@ mime: [Getter]
 <p>{% highlight javascript %}
 var formidable = require('formidable');
 app.post('/upload', function (req, res) {
-var form = new formidable.IncomingForm({
-form.keepExtensions = false; //keep .jpg/.png
-form.uploadDir = "upload/"; //upload path
-});
-form.parse(req, function(err, fields, files) {
-console.log("parse!");
-});
-//bind event handler
-form.on("progress", function (err) {
-})
-form.on("complete", function (err) {
-})<br/>
+    var form = new formidable.IncomingForm({
+        form.keepExtensions = false; //keep .jpg/.png
+        form.uploadDir = "upload/"; //upload path
+    });
+    form.parse(req, function(err, fields, files) {
+        console.log("parse!");
+    });
+    //bind event handler
+    form.on("progress", function (err) {
+    })
+    form.on("complete", function (err) {
+    })<br/>
 })
 {% endhighlight %}</p>
 <p>但运行之后，发现所有的事件回调并没有被触发（因为所有handler中的 console.log都没有被打印出来）。 可图片却正常上传了! ，或许是 我们使用formidable的方式不对，忽略了什么吧。</p>
 <p>Google了几篇关于formidable使用的文章。确定我们使用formidable的方式是没有问题的。于是尝试把问题定位到是不是这个组件在整体架构中的问题，比如和express的组件有了冲突？</p>
 <p>首先看看是不是express的问题，先从和上传文件相关的 req.files 入手。果然，在关于 <code>req.files</code> 的<a href="http://expressjs.com/api.html#req.files">API</a>中看到，其实 <code>bodyParser()</code>和 <code>node-formidable</code> 模块其实早已经被整合在一起，甚至参数都已经可以通用：</p>
-<blockquote>
-<p>The bodyParser() middleware utilizes the node-formidable module internally, and accepts the same options. An example of this is the keepExtensions formidable option, defaulting to false which in this case gives you the filename "/tmp/8ef9c52abe857867fd0a4e9a819d1876" void of the ".png" extension. To enable this, and others you may pass them to bodyParser():</p>
+<blockquote><p>The bodyParser() middleware utilizes the node-formidable module internally, and accepts the same options. An example of this is the keepExtensions formidable option, defaulting to false which in this case gives you the filename "/tmp/8ef9c52abe857867fd0a4e9a819d1876" void of the ".png" extension. To enable this, and others you may pass them to bodyParser():</p>
 </blockquote>
 <p>也就是说，我们在初始化<code>bodyParser()</code>的时候就可以设置有关上传的一些参数了，比如可以限制上传文件的大小，改变上传路径，自动重命名后保留文件后缀</p>
 <p>{% highlight javascript %}
 app.use(express.bodyParser({
-uploadDir: "media/upload/",
-keepExtensions: true,
-limit: 10000000
-}));
+        uploadDir: "media/upload/",
+        keepExtensions: true,
+        limit: 10000000
+})); 
 {% endhighlight %}</p>
 <p>非常好！但是仍然不够，只有给上传的不同阶段绑定不同的处理函数，这样才能更灵活的控制。
 这次去express在github上托管的代码看看，看看在issue中有没有相同问题的人——果然是有的，比如这个<a href="https://github.com/visionmedia/express/issues/1015">问题</a>:</p>
-<blockquote>
-<p>Is there an event I can listen to to get the progress of an file upload? Apologies for posting this as an issue.</p>
+<blockquote><p>Is there an event I can listen to to get the progress of an file upload? Apologies for posting this as an issue.</p>
 </blockquote>
 <p>但是express的作者的回答差点让我石化了：</p>
-<blockquote>
-<p>not currently no. modern browsers and moving on in the future the client-side can report progress fine so I feel like the average case wont really need this, maybe even some do now, but that being said you can still disable the multipart support and use formidable directly for the events. Maybe sometime I'll add some event handlers but that wouldn't really be very middleware-like so it would be kinda awkward I think.</p>
+<blockquote><p>not currently no. modern browsers and moving on in the future the client-side can report progress fine so I feel like the average case wont really need this, maybe even some do now, but that being said you can still disable the multipart support and use formidable directly for the events. Maybe sometime I'll add some event handlers but that wouldn't really be very middleware-like so it would be kinda awkward I think.</p>
 </blockquote>
 <p>他认为现代浏览器在不远的将来就会有报告上传文件进度的功能，所以他反而删除了？但万幸的是他告诉我们如果真的有这个需求的话，可以在禁用multipart这个中间件(middleware)的同时，使用formidable。于是我尝试这么做:</p>
 <p>{% highlight javascript %}
@@ -92,30 +89,29 @@ app.disable("multipart");
 {% endhighlight %}</p>
 <p>但是没有起任何作用。
 继续按图索骥，考虑到multipart应该算作是一个属于connect的中间件，我们来到了multipart的 <a href="http://www.senchalabs.org/connect/multipart.html">官方文档</a>，找到了关于它的说明，更关键的说关于初始化时option的说明：</p>
-<blockquote>
-<p>The options passed are merged with formidable's IncomingForm object, allowing you to configure the upload directory, size limits, etc. For example if you wish to change the upload dir do the following.</p>
+<blockquote><p>The options passed are merged with formidable's IncomingForm object, allowing you to configure the upload directory, size limits, etc. For example if you wish to change the upload dir do the following.</p>
 </blockquote>
 <p>更关键的是关于它 defer 这个参数的说明：</p>
-<blockquote>
-<p>defer defers processing and exposes the Formidable form object as req.form. next() is called without waiting for the form's "end" event. This option is useful if you need to bind to the "progress" event, for example.</p>
+<blockquote><p>defer defers processing and exposes the Formidable form object as req.form. next() is called without waiting for the form's "end" event. This option is useful if you need to bind to the "progress" event, for example.</p>
 </blockquote>
 <p>一切豁然开朗了！只要开启defer这个参数，就可以开启关于各种上传事件的绑定。不多说了，展示完整的代码吧：</p>
 <p>{% highlight javascript %}
 app.configure(function () {
-app.use(express.bodyParser({
-keepExtensions: true,
-limit: 10000000, // 10M limit
-defer: true  //enable event<br/>
-}));
+    app.use(express.bodyParser({
+          keepExtensions: true,
+          limit: 10000000, // 10M limit
+          defer: true  //enable event<br/>
+    }));
 })</p>
 <p>app.post('/upload', function (req, res) {
-//bind event handler
-req.form.on('progress', function(bytesReceived, bytesExpected) {</p>
+    //bind event handler
+    req.form.on('progress', function(bytesReceived, bytesExpected) {</p>
 <pre><code>});
 req.form.on('end', function() {
     console.log(req.files);
     res.send("done");
-});</code></pre>
+});
+</code></pre>
 <p>})
 {% endhighlight %}</p>
 <p>所有的事件列表和事件的参数列表都可以参照 node-formidable 的文档，在这里就不多赘述了。
@@ -124,13 +120,13 @@ req.form.on('end', function() {
 <p>{% highlight javascript %}
 if(req.files.image.size &gt; 307200) // 300 * 1024
 {
-msg += 'File size no accepted. Max: 300k;
+    msg += 'File size no accepted. Max: 300k;
 }
 {% endhighlight %}</p>
 <p>问：如何显示上传进度</p>
 <p>{% highlight javascript %}
 req.form.on('progress', function(bytesReceived, bytesExpected) {
-console.log(((bytesReceived / bytesExpected)*100) + "% uploaded");
+    console.log(((bytesReceived / bytesExpected)*100) + "% uploaded");
 });
 {% endhighlight %}</p>
 <p>问：如何修改文件名</p>

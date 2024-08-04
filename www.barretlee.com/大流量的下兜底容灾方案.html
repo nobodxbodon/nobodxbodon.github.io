@@ -14,7 +14,8 @@ date: 2015-09-16 20:03:53</li>
 </ul>
 <hr/>
 <p>随着网络的普及，上网的成本和门槛越来越低，很多网站的流量也是蹭蹭蹭的往上涨，而页面上的数据来源也不确定，可能来自多个平台，也可能是有专门的人员在手动维护。由于数据来源众多，出错的概率也会增加，为了降低页面在大流量下的维护成本，本文做了一些阐述。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h3>兜底容灾的必要性</h3>
 <p>一个日均承载几千万上亿流量的网页，会经常出现哪些问题呢？</p>
 <ul>
@@ -27,7 +28,7 @@ date: 2015-09-16 20:03:53</li>
 <p>兜底容灾的方案有很多，目的就是让请求失败而页面展示依然正常。下面说一说常用的几个方案：</p>
 <p><strong>1. 再请求一次</strong></p>
 <p>照顾到用户体验，同时也考虑到一个请求的正常发送、接受时间，我们把超时时间设置为 5s，超过 5s 或者请求的结果状态为 failed ，则重新请求一次。所以我们可以重新封装下 Ajax 模块，如：</p>
-<pre><code class="language-javascript">// 设置请求次数
+<pre><code class="lang-javascript">// 设置请求次数
 var tryTimes = 2;
 Ajax({
   url: url,
@@ -40,7 +41,7 @@ Ajax({
 <p>这种处理方案对于提交订单、选中商品到购物车的页面比较合适，因为操作流是确定的，提交一次不成功，很自然的想到再提交一次，只是用户等待的不同阶段应该用不同的文案来提醒。而对于展示类的数据请求，不太适合多次失败尝试。所以首页未采用这种方案。</p>
 <p><strong>2. 缓存每一次请求到本地</strong></p>
 <p>现在的浏览器都支持本地储存（无论使用 userData 还是 localStorage），当每次请求到达用户浏览器的时候，把请求的数据缓存一份到本地储存，那么下次请求失败就可以使用上次的数据啦~</p>
-<pre><code class="language-javascript">Ajax({
+<pre><code class="lang-javascript">Ajax({
   url: url,
   dataType: "jsonp",
   success: function(data){
@@ -63,7 +64,7 @@ Ajax({
 <p>当然，有总比没有好吧，就算是第一次访问，这个概率是相当低的，就算数据过期，但是依然是正确的链接，所以基本可以接受。</p>
 <p><strong>3. 备用接口（硬兜底）</strong></p>
 <p>会给自己的网页接口准备备用接口的网站，估计不会很多。我们可以做一个包装：</p>
-<pre><code class="language-javascript">Ajax({
+<pre><code class="lang-javascript">Ajax({
   url: url,
   // 备份接口
   backUrl: backUrl
@@ -77,7 +78,7 @@ Ajax({
 </ul>
 <h3>兜底容错实践</h3>
 <p>我们很容易得到如下的操作流程：</p>
-<p><img alt="异步容错实践" src="/media/wwww/share/study/聚聚/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2015/09/16/20150903_1de15c2d.jpg"/></p>
+<p><img alt="异步容错实践" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2015/09/16/20150903_1de15c2d.jpg"/></p>
 <p>而这里存在的问题是：</p>
 <ul>
 <li>获取缓存数据后，不好对数据格式进行判断，一般来说，只有有效的数据才能存到本地储存中，而判断是否有效往往存在误差</li>
@@ -90,12 +91,12 @@ Ajax({
 <li>如果兜底数据也存在错误，则页面一定出现空白天窗</li>
 </ul>
 <p>所以对整个流程做了一些改进：</p>
-<p><img alt="异步容错改进" src="/media/wwww/share/study/聚聚/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2015/09/16/20150903_224d72cc.jpg"/></p>
+<p><img alt="异步容错改进" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2015/09/16/20150903_224d72cc.jpg"/></p>
 <p>数据经过统一平台输出，在输出之前，我们将数据推一份到 CDN 作为备份，产生另一个接口，一旦原始接口请求失败，则直接请求备份的接口，这个在规则对应和即时更新上可以做到很赞！那么基本的流程就是这样：</p>
-<p><img alt="异步容错改进流程" src="/media/wwww/share/study/聚聚/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2015/09/16/20150903_8fdbadcc.jpg"/></p>
+<p><img alt="异步容错改进流程" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2015/09/16/20150903_8fdbadcc.jpg"/></p>
 <p>不过为了确保无误，我的建议是，页面上每个接口必须对应一个运营手填的数据，这个作为最后的硬兜底，而这个硬兜底也会被缓存到本地，整个流程就形成一个闭环。那么，剩下的工作就只有监控和警报了。</p>
 <p>下面是一串伪代码：</p>
-<pre><code class="language-javascript">var url = interfaceURL;
+<pre><code class="lang-javascript">var url = interfaceURL;
 var backUrl = interfaceBackURL;
 var hardBackUrl = hardDataURL;
 var cacheTime = 10day;

@@ -1,12 +1,12 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E6%A6%82%E5%BF%B5%E7%A9%BA%E9%97%B4%E5%88%86%E6%9E%90/%E6%B6%88%E6%81%AF%E4%B8%AD%E6%96%AD.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/概念空间分析/消息中断.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2021</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.0
 :Date: 2021-06-15
 :Status: Release
 :Abstract: 本文分析MSI/MSI-X这些消息中断在软硬件中的处理逻辑，硬件部分的行为主
-要从PCIE 5的规范和qemu的实现中分析，软件部分主要从Linux主线内核5.x中
-分析。</p>
+           要从PCIE 5的规范和qemu的实现中分析，软件部分主要从Linux主线内核5.x中
+           分析。</p>
 <p>消息中断</p>
 <hr/>
 <p>:index:<code>msi</code></p>
@@ -35,9 +35,9 @@ RC上的设备过滤，过滤到了对应的地址，就产生中断。</p>
 封装成MSIMessage消息：</p>
 <p>.. code-block:: C</p>
 <p>struct MSIMessage {
-uint64_t address;
-uint32_t data;
-};</p>
+     uint64_t address;
+     uint32_t data;
+   };</p>
 <p>两个参数都直接从设备的配置空间获取。这一点印证了：PCI子系统不关心谁来处理这个地
 址访问，它只关心往这个地址写东西。</p>
 <p>但这个地址访问可以经过IOMMU，因为它使用的是设备的地址空间，这里面是可以有IOMMU
@@ -53,22 +53,23 @@ MR的：</p>
 <h1>Linux中的实现</h1>
 <p>Linux中PCI设备通过这个函数使能设备的msi功能：</p>
 <p>.. code-block:: C</p>
-<p>int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
-unsigned int max_vecs, unsigned int flags,
-struct irq_affinity *affd);</p>
+<p>int pci_alloc_irq_vectors_affinity(struct pci_dev <em>dev, unsigned int min_vecs,
+                                      unsigned int max_vecs, unsigned int flags,
+                                      struct irq_affinity </em>affd);</p>
 <p>它的原理是给每个设备创建一个msi_list，保存所有msi中断的信息（包括在PCI配置空间
-中的capa位置），然后找设备所在的irq_domain\ [1]_\，从这个domain上分配irq。这样
+中的capa位置），然后找设备所在的irq<em>domain\ [1]</em>\，从这个domain上分配irq。这样
 设备的MSI中断就和系统的IRQ关联在一起了。</p>
 <p>.. [1] irq_domain是Linux中管理中断控制器中断（hwirq）和全局中断（irq）关系的数
-据结构。它是个树状分层结构，顶层是irq_default_domain（全局变量），下面是
-一个个irqchip创建的domain，分层加上去，下层的地址总向上层申请，这样ID分
-配就没有冲突了。</p>
+       据结构。它是个树状分层结构，顶层是irq_default_domain（全局变量），下面是
+       一个个irqchip创建的domain，分层加上去，下层的地址总向上层申请，这样ID分
+       配就没有冲突了。</p>
 <pre><code>   irq_find_mapping(domain, hwirq)可以从hwirq求irq。
 
    irq_to_desc(irq)-&gt;irq_data-&gt;hwirq可以从irq求hwirq。
 
    每个dev有一个msi_domain记住设备所在的msi专用domain，由支持MSI的设备注册
-   上来（比如IOMMU）。</code></pre>
+   上来（比如IOMMU）。
+</code></pre>
 <h1>总结</h1>
 <p>现在让我们综合一下这个逻辑：</p>
 <p>软件控制着两类设备：中断控制器和产生消息中断的设备。产生消息中断的设备不知道要

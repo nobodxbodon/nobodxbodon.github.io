@@ -1,16 +1,16 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/nginx-swrr.md">仓库源文</a>，<a href="https://claude-ray.github.io/nginx-swrr">站点原文</a></h2>
 <hr/>
-<h2>title: Nginx SWRR 算法解读
+<p>title: Nginx SWRR 算法解读
 date: 2019-08-10 13:13:49
-tags: [Nginx, load balance]
-categories: Nginx</h2>
+tags: [Nginx, load balance]</p>
+<h2>categories: Nginx</h2>
 <p>Smooth Weighted Round-Robin (SWRR) 是 nginx 默认的加权负载均衡算法，它的重要特点是平滑，避免低权重的节点长时间处于空闲状态，因此被称为平滑加权轮询。</p>
-<blockquote>
-<p>该算法来自 nginx 的一次 commit：<a href="https://github.com/nginx/nginx/commit/52327e0627f49dbda1e8db695e63a4b0af4448b1">Upstream: smooth weighted round-robin balancing</a></p>
+<blockquote><p>该算法来自 nginx 的一次 commit：<a href="https://github.com/nginx/nginx/commit/52327e0627f49dbda1e8db695e63a4b0af4448b1">Upstream: smooth weighted round-robin balancing</a></p>
 </blockquote>
 <p>在阅读之前，你应该已经了解过 nginx 的几种负载均衡算法，并阅读了 SWRR 的实现。</p>
 <p>介绍此算法的文章有很多，但用数学角度给出证明过程的较少，尽管并不复杂。这里把自己的思路分享一下，为了便于理解，只考虑算法核心的 current_weight，忽略受异常波动影响的 effective_weight。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>更新说明</h2>
 <p>在写下博客之前，我还没有翻到其他靠谱的证明过程，就草草记录了自己粗鄙的思路。可发布文章一年之后，再来回顾的我不禁汗颜，为了照顾读者（更未来的自己），参考 <a href="https://tenfy.cn/2018/11/12/smooth-weighted-round-robin/">nginx平滑的基于权重轮询算法分析</a> 重新梳理了文章脉络。</p>
 <p>以至于现在的内容更像是他人博客的学习笔记，和初版大不相同。这让患有原创洁癖的我深感羞愧，之后的自己务必用更数学的风格去做解析。</p>
@@ -46,17 +46,41 @@ categories: Nginx</h2>
 <h2>证明思路</h2>
 <p>假设有三个服务器节点 A B C，它们的权重分别为 a、b、c 并保持不变，W 表示所有服务器节点权重的总和，即 W = a + b + c。</p>
 <p>根据 SWRR 算法，每台服务器的初始权重均为 0。</p>
-<p>| A | B | C |
-|---|---|---|
-| 0 | 0 | 0 |</p>
+<table>
+<thead><tr>
+<th>A</th>
+<th>B</th>
+<th>C</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
 <p>也可以用等式表达当前的权重（状态）之和</p>
 <pre><code>Sum = 0 + 0 + 0 = 0
 </code></pre>
 <p>每次开始选择，各节点的状态会增加对应权重的大小。从中选择 CW 最大的节点，并将其值减去 W。</p>
 <p>首先，所有节点加权，不妨设 A 为权重最大的节点，经过第一轮变换之后</p>
-<p>| A     | B | C |
-|-------|---|---|
-| a - W | b | c |</p>
+<table>
+<thead><tr>
+<th>A</th>
+<th>B</th>
+<th>C</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a - W</td>
+<td>b</td>
+<td>c</td>
+</tr>
+</tbody>
+</table>
 <p>此时，节点的状态和仍然为 0</p>
 <pre><code>Sum = (a - W) + b + c
     = (a - a - b - c) + b + c

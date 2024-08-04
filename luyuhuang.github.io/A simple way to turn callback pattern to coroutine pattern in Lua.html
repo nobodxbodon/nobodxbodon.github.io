@@ -1,11 +1,11 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2020-09-13-callback-to-coroutine.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2020/09/13/callback-to-coroutine">站点原文</a></h2>
 <hr/>
-<h2>key: 40
+<p>key: 40
 title: A simple way to turn callback pattern to coroutine pattern in Lua
-tag: [lua, english]
-aside: false</h2>
+tag: [lua, english]</p>
+<h2>aside: false</h2>
 <p>My game project is written by Lua. However, its framework does not provide a coroutine pattern, it uses a simple callback pattern instead. For example, to send an http request and receive the response, you must write like this:</p>
-<pre><code class="language-lua">http_get("https://luyuhuang.tech/sitemap.xml", function(code, content)
+<pre><code class="lang-lua">http_get("https://luyuhuang.tech/sitemap.xml", function(code, content)
     if code ~= 200 then
         print("an error occured:", content)
         return
@@ -14,7 +14,7 @@ aside: false</h2>
 end)
 </code></pre>
 <p>For simple requests, it' OK. However, in some scenarios, maybe there are several successive requests in one procedure. For example, you must request A and then request B, and then request C. It makes you fall in the <strong>callback hell</strong>. Worse yet, sometimes you should call A again if request C fails. As we all know, coroutines can resolve this problem easily, but how can we use coroutines without changing the framework? Inspired by Javascript's Promise, I found an easy way to turn callback pattern to coroutine pattern. Review how JS's Promise is made:</p>
-<pre><code class="language-js">async function get_sitemap(url) {
+<pre><code class="lang-js">async function get_sitemap(url) {
     const [code, content] = await new Promise((resolve) =&gt; {
         http_get(url, resolve);
     });
@@ -27,7 +27,7 @@ end)
 </code></pre>
 <p>JS can await for a Promise object and then suspend the coroutine. After calling <code>resolve</code>, the coroutine resumes. That's a good idea but I don't need a Promise object since I dont't need so many methods like <code>then</code> and <code>catch</code>. So I decided to implement a simple mechanism.</p>
 <p>The key is we should suspend the coroutine and resume it after calling the callback <code>resolve</code>. Therefore, instead of yield an object, we can just yield a function whose parameter is the callback function <code>resolve</code>. We pass the <code>resolve</code> function to the yielded function after the coroutine suspended. In the <code>resolve</code> function, we resume the coroutine and pass its parameters to the coroutine, so the coroutine will be resumed after calling the <code>resolve</code> function. The code is as follows:</p>
-<pre><code class="language-lua">function coroutinize(f, ...)
+<pre><code class="lang-lua">function coroutinize(f, ...)
     local co = coroutine.create(f)
     local function exec(...)
         local ok, data = coroutine.resume(co, ...)
@@ -42,7 +42,7 @@ end)
 end
 </code></pre>
 <p>Well, it's a very simple implementation. No such sophisticated mechanism as JS's Promise, but it works well! You can use it like this:</p>
-<pre><code class="language-lua">function get_sitemap(url)
+<pre><code class="lang-lua">function get_sitemap(url)
     local code, content = coroutine.yield(function(resolve)
         http_get(url, resolve)
     end)
@@ -56,7 +56,7 @@ end
 coroutinize(get_sitemap, "https://luyuhuang.tech/sitemap.xml")
 </code></pre>
 <p>It's easy for several successive requests too. You can also encapsulate a function suitable for coroutines. Here is a complex example that is hard to write in callback pattern:</p>
-<pre><code class="language-lua">function http_get_co(url)
+<pre><code class="lang-lua">function http_get_co(url)
     return coroutine.yield(function(resolve)
         http_get(url, resolve)
     end)

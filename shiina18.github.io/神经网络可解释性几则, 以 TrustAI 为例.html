@@ -4,7 +4,7 @@
 categories:</p>
 <ul>
 <li>Machine Learning
-updated:
+updated: 
 comments: true
 mathjax: false</li>
 </ul>
@@ -17,7 +17,8 @@ mathjax: false</li>
 <li><a href="https://zhuanlan.zhihu.com/p/74602449">神经网络的可解释性是我们的错觉吗</a></li>
 </ul>
 <p>Side note: 有些地方还会区分 interpretability 和 explainability, 我觉得没什么实际意义.</p>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <h2>一些典型方法: 以 TrustAI 为例</h2>
 <p>通常我们更关心性能 (比如准确率等指标), 寻求可解释性是为了提升性能 (通过分析数据集构造更好的数据集).</p>
 <p>Paddle 系列一直是缝合怪, 而且绑定 Paddle 框架, 但是它们包里提到或者实现的方法一般都很经典, 可以作为起步时的参考. 下文主线参考 PaddleNLP 中 <a href="https://github.com/PaddlePaddle/PaddleNLP/tree/develop/applications/text_classification">applications/text_classification</a> 提到的调优方案针对数据集分析的方法 (Paddle 的 <a href="https://github.com/PaddlePaddle/TrustAI">TrustAI</a>).</p>
@@ -35,7 +36,7 @@ mathjax: false</li>
 <p>这里的 features 可以换成梯度等其他向量.</p>
 <p>Side note: 从既有网络中取中间值可以通过各种框架的 hook 实现, 比如 PyTorch 的 <code>register_forward_hook</code>.</p>
 <p>Paddle 筛选稀疏数据也是通过这个. 验证集和训练集两两求相似度, 如果某个验证集中的数据与它最相似的几个训练样本相似度低则视为稀疏数据.</p>
-<pre><code class="language-python">def get_sparse_data(analysis_result, sparse_num):
+<pre><code class="lang-python">def get_sparse_data(analysis_result, sparse_num):
     """
     Get sparse data
     """
@@ -62,109 +63,112 @@ mathjax: false</li>
 <p><strong>方法二.</strong> 如果已经有训练好的模型, 还是 loss + L2, 但只重新训练全连接层: 原模型得到 features -&gt; 全连接层权重根据原模型最后一层初始化 -&gt; 新 logits -&gt; 新 probs -&gt; <strong>把原模型输出的 probs 视为真实标签</strong> 求 loss + <strong>L2 正则</strong></p>
 <p><img alt="" src="https://shiina18.github.io/assets/posts/images/100761913249368.png"/></p>
 <p>通过对待 L2 正则的新 loss 求导取驻点 (梯度为零), 可以把最终输出分解成训练集数据 features 的加权平均.</p>
-<p>![仅仅是形式模仿了 representer theorem, 这个东西的 "证明" 只是令导数为零而已](https://shiina18.github.io/assets/posts/images/317714213237235.png "仅仅是形式模仿了 representer theorem, 这个东西的 "证明" 只是令导数为零而已")</p>
+<p><img alt='仅仅是形式模仿了 representer theorem, 这个东西的 "证明" 只是令导数为零而已' src="https://shiina18.github.io/assets/posts/images/317714213237235.png" title='仅仅是形式模仿了 representer theorem, 这个东西的 "证明" 只是令导数为零而已'/></p>
 <h4>记号</h4>
 <p>记原始样本 $x_i$ 经过中间层后得到的 feature 为 $m$ 维列向量 $f_i$, 经过全连接层后得到 logits 为 $c$ 维 ($c$ 为多分类类别数量) 列向量 $z_i$, 经过 softmax 后得到概率分布列向量 $p_i$. 记真实标签向量为 $y_i$ ($c$ 维的 0-1 值列向量), 重新训练全连接层后经过 softmax 得到的概率分布为 $q_i$.</p>
 <p>文中所谓的对第 $i$ 个样本全局权重 $\alpha_i = -\frac{1}{2\lambda n}\frac{\partial L}{\partial z_i}$, 其中 $n$ 为样本总数, $\lambda$ 为 L2 正则系数, $L$ 为不带正则的原始 loss. 在交叉熵 loss 下, 这个梯度为 $p_i$ - $y_i$ 或者 $q_i$ - $p_i$.</p>
-<p>根据上述记号全连接层 (不考虑 bias) 是 $c\times m$ 的矩阵 $A = \sum_{i=1}^n \alpha_i f_i'$. 对任意样本 $x_t$ 得到的 feature $f_t$, 通过全连接层得到的 logits 为 $Af = \sum_{i=1}^n \alpha_i f_i'f_t$, 也就是新样本与每个训练样本的特征求内积相似度 (feature similarity), 然后和对应的权重 (global sample importance) 相乘. 而这个权重就是梯度乘个常数, 对交叉熵损失其梯度就是简单的预测概率与真实概率相减.</p>
+<p>根据上述记号全连接层 (不考虑 bias) 是 $c\times m$ 的矩阵 $A = \sum_{i=1}^n \alpha_i f_i'$. 对任意样本 $x_t$ 得到的 feature $f<em>t$, 通过全连接层得到的 logits 为 $Af = \sum</em>{i=1}^n \alpha_i f_i'f_t$, 也就是新样本与每个训练样本的特征求内积相似度 (feature similarity), 然后和对应的权重 (global sample importance) 相乘. 而这个权重就是梯度乘个常数, 对交叉熵损失其梯度就是简单的预测概率与真实概率相减.</p>
 <p>文中称 $f_i'f_t$ 是 representer value for $x_i$ given $x_t$, 以及 $\alpha_i f_i'f_t$ 为 representer point.</p>
-<blockquote>
-<p><strong>Intuition for the Representer Theorem and examples of prototypes</strong>: For the representer value to be positive, we must have both global sample importance and the feature similarity to have the same sign. For a particular test image, this means that both the test image and training image look similar to each other, and (likely) have the same classification label. Similarly, for this value to be negative, the global sample importance and the feature similarity should have different signs e.g. one is negative <em>and</em> the other is positive. For a particular test image, this means that the images may look similar to each other, but they have different classification labels.</p>
+<blockquote><p><strong>Intuition for the Representer Theorem and examples of prototypes</strong>: For the representer value to be positive, we must have both global sample importance and the feature similarity to have the same sign. For a particular test image, this means that both the test image and training image look similar to each other, and (likely) have the same classification label. Similarly, for this value to be negative, the global sample importance and the feature similarity should have different signs e.g. one is negative <em>and</em> the other is positive. For a particular test image, this means that the images may look similar to each other, but they have different classification labels.</p>
 </blockquote>
 <p><strong>个人疑惑.</strong> 上面这段是作者原话, 但是注意 $\alpha$ 正比于 $y-p$ (或者 $p-q$). 为简便起见下面靠考虑二分类 ($y$ 只有一维). 若 $y=1$ 则 $\alpha$ 为正; 若 $y=0$ 则 $\alpha$ 为负. 和上文说的是不是很可能有相同的 label 并没有关系, 意味着这段话是 nonsense.</p>
-<p>&lt;details&gt;&lt;summary&gt;&lt;b&gt;原作者代码写得很迷, 下面是我写的版本&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more &amp;raquo;)&lt;/font&gt;&lt;/summary&gt;
+&lt;details&gt;&lt;summary&gt;&lt;b&gt;原作者代码写得很迷, 下面是我写的版本&lt;/b&gt;&lt;font color="deepskyblue"&gt; (Show more »)&lt;/font&gt;&lt;/summary&gt;
 &lt;pre&gt;&lt;code class="language-python"&gt;import torch
-import torch.nn as nn</p>
-<p>class Classifier(nn.Module):
-def <strong>init</strong>(self, pretrained_linear: nn.Linear):
-super().<strong>init</strong>()
-assert pretrained_linear.bias is not None  # changeable
-self.linear = nn.Linear(
-in_features=pretrained_linear.in_features,
-out_features=pretrained_linear.out_features,
-bias=True,
-)
-self.linear.weight.data = pretrained_linear.weight.data.clone()
-self.linear.bias.data = pretrained_linear.bias.data.clone()</p>
-<pre><code>def forward(self, x):
-    return self.linear(x)</code></pre>
-<p>def calculate_alphas(
-classifier: Classifier, features, target_probs,
-learning_rate=1, lambda_=0.003, num_epochs=40000,
-device='cpu',
-):
-&amp;quot;&amp;quot;&amp;quot;
-features (N, m)
-target_probs (N, num_classes)
-alphas (N, num_classes)
-&amp;quot;&amp;quot;&amp;quot;
-features = torch.Tensor(features).to(device)
-target_probs = torch.Tensor(target_probs).to(device)
-classifier = classifier.to(device)</p>
-<pre><code># loss_fn = nn.CrossEntropyLoss()  # changeable
-loss_fn = nn.BCEWithLogitsLoss()
-optimizer = torch.optim.SGD(classifier.parameters(), lr=learning_rate)
-min_loss = float('inf')
-min_grad = float('inf')
-patience = 3000
-steps_without_improvement = 0
-best_weights = None
+import torch.nn as nn
 
-for epoch in range(num_epochs):
-    optimizer.zero_grad()
-    l2_norm = torch.sum(
-        torch.square(
-            torch.cat(
-                [
-                    classifier.linear.weight.data,
-                    classifier.linear.bias.data.unsqueeze(dim=1),
-                ],
-                axis=1,
-            )
+class Classifier(nn.Module):
+    def __init__(self, pretrained_linear: nn.Linear):
+        super().__init__()
+        assert pretrained_linear.bias is not None  # changeable
+        self.linear = nn.Linear(
+            in_features=pretrained_linear.in_features,
+            out_features=pretrained_linear.out_features,
+            bias=True,
         )
-    )  # changeable, bias included
+        self.linear.weight.data = pretrained_linear.weight.data.clone()
+        self.linear.bias.data = pretrained_linear.bias.data.clone()
+
+    def forward(self, x):
+        return self.linear(x)
+
+
+def calculate_alphas(
+    classifier: Classifier, features, target_probs,
+    learning_rate=1, lambda_=0.003, num_epochs=40000,
+    device='cpu',
+):
+    """
+    features (N, m)
+    target_probs (N, num_classes)
+    alphas (N, num_classes)
+    """
+    features = torch.Tensor(features).to(device)
+    target_probs = torch.Tensor(target_probs).to(device)
+    classifier = classifier.to(device)
+
+    # loss_fn = nn.CrossEntropyLoss()  # changeable
+    loss_fn = nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.SGD(classifier.parameters(), lr=learning_rate)
+    min_loss = float('inf')
+    min_grad = float('inf')
+    patience = 3000
+    steps_without_improvement = 0
+    best_weights = None
+
+    for epoch in range(num_epochs):
+        optimizer.zero_grad()
+        l2_norm = torch.sum(
+            torch.square(
+                torch.cat(
+                    [
+                        classifier.linear.weight.data,
+                        classifier.linear.bias.data.unsqueeze(dim=1),
+                    ],
+                    axis=1,
+                )
+            )
+        )  # changeable, bias included
+        logits = classifier(features)
+        loss = loss_fn(logits, target_probs) + lambda_ * l2_norm
+        loss.backward()
+        optimizer.step()
+
+        grad = torch.cat(
+            [
+                classifier.linear.weight.grad,
+                classifier.linear.bias.grad.unsqueeze(dim=1),
+            ],
+            axis=1,
+        )
+        # grad_norm = torch.norm(grad).item()
+        grad_norm = torch.mean(torch.abs(grad)).item()
+        if grad_norm &lt; min_grad:
+            min_grad = grad_norm
+            best_weights = classifier.state_dict()
+
+        # TODO: stop criterion
+        if loss.item() &lt; min_loss:
+            min_loss = loss.item()
+            steps_without_improvement = 0
+        else:
+            steps_without_improvement += 1
+            if (steps_without_improvement &gt;= patience) and (min_grad &lt; 1e-6):
+                break
+
+        if (epoch + 1) % 100 == 0:
+            print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss.item()}, Min Grad: {min_grad}')
+
+    classifier.load_state_dict(best_weights)
     logits = classifier(features)
-    loss = loss_fn(logits, target_probs) + lambda_ * l2_norm
-    loss.backward()
-    optimizer.step()
-
-    grad = torch.cat(
-        [
-            classifier.linear.weight.grad,
-            classifier.linear.bias.grad.unsqueeze(dim=1),
-        ],
-        axis=1,
-    )
-    # grad_norm = torch.norm(grad).item()
-    grad_norm = torch.mean(torch.abs(grad)).item()
-    if grad_norm &amp;lt; min_grad:
-        min_grad = grad_norm
-        best_weights = classifier.state_dict()
-
-    # TODO: stop criterion
-    if loss.item() &amp;lt; min_loss:
-        min_loss = loss.item()
-        steps_without_improvement = 0
-    else:
-        steps_without_improvement += 1
-        if (steps_without_improvement &amp;gt;= patience) and (min_grad &amp;lt; 1e-6):
-            break
-
-    if (epoch + 1) % 100 == 0:
-        print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss.item()}, Min Grad: {min_grad}')
-
-classifier.load_state_dict(best_weights)
-logits = classifier(features)
-# changeable, different derivative for different loss_fn
-# pred_probs = F.softmax(logits, dim=1)
-pred_probs = torch.sigmoid(logits)
-derivative = pred_probs - target_probs
-num_samples = len(features)
-alphas = - derivative / (2.0 * lambda_ * num_samples)
-return alphas</code></pre>
-<p>&lt;/code&gt;&lt;/pre&gt;&lt;/details&gt;</p>
-<p>下面再来看看 Paddle 的应用, <a href="https://github.com/PaddlePaddle/PaddleNLP/blob/develop/applications/text_classification/multi_label/analysis/dirty.py">applications/text_classification/multi_label/analysis/dirty.py</a>. 把对模型影响大的数据视为脏数据取出来. 下面 <code>weight_matrix</code> 就是 $\alpha$.</p>
-<pre><code class="language-python">def get_dirty_data(weight_matrix, dirty_num, threshold=0):
+    # changeable, different derivative for different loss_fn
+    # pred_probs = F.softmax(logits, dim=1)
+    pred_probs = torch.sigmoid(logits)
+    derivative = pred_probs - target_probs
+    num_samples = len(features)
+    alphas = - derivative / (2.0 * lambda_ * num_samples)
+    return alphas
+&lt;/code&gt;&lt;/pre&gt;&lt;/details&gt;<p>下面再来看看 Paddle 的应用, <a href="https://github.com/PaddlePaddle/PaddleNLP/blob/develop/applications/text_classification/multi_label/analysis/dirty.py">applications/text_classification/multi_label/analysis/dirty.py</a>. 把对模型影响大的数据视为脏数据取出来. 下面 <code>weight_matrix</code> 就是 $\alpha$.</p>
+<pre><code class="lang-python">def get_dirty_data(weight_matrix, dirty_num, threshold=0):
     """
     Get index of dirty data from train data
     """
@@ -189,14 +193,13 @@ return alphas</code></pre>
 <h3>Feature level: integrated gradient</h3>
 <p><code>trustai.interpretation.IntGradInterpreter</code></p>
 <p>直接看苏剑林的 <a href="https://spaces.ac.cn/archives/7533">积分梯度: 一种新颖的神经网络可视化方法</a>.</p>
-<blockquote>
-<p><a href="https://zhuanlan.zhihu.com/p/148105536">Qs.Zhang张拳石</a></p>
+<blockquote><p><a href="https://zhuanlan.zhihu.com/p/148105536">Qs.Zhang张拳石</a></p>
 <p>这类方法的缺陷不是已经被理论证明了吗？好多论文已经否定其可靠性。解释权重对积分路径敏感，路径不唯一，结果就不同，没有一个确切的真理性结果。退一步说，如果穷举积分路径，那跟前人Shapley value就没有区别了。很多类似论文的作者，自己都清楚这些毛病，文章里面浅浅的聊几句，又不点透。。。呵呵了。</p>
 </blockquote>
 <h2>其他</h2>
 <ul>
 <li><a href="https://github.com/cleanlab/cleanlab">cleanlab</a>: 置信学习.</li>
-<li><a href="https://captum.ai/docs/introduction">Captum</a>: Captum ("comprehension" in Latin) is an open source, extensible library for model interpretability built on PyTorch (同一团队写的). 大多示例用的是积分梯度, 比如 <a href="https://captum.ai/tutorials/IMDB_TorchText_Interpret">这个</a> 文本分类 token 归因.</li>
+<li><a href="https://captum.ai/docs/introduction">Captum</a>: Captum ("comprehension" in Latin) is an open source, extensible library for model interpretability built on PyTorch (同一团队写的). 大多示例用的是积分梯度, 比如 <a href="https://captum.ai/tutorials/IMDB_TorchText_Interpret">这个</a> 文本分类 token 归因. </li>
 <li><a href="https://github.com/shap/shap">shap</a> (Github): <strong>SHAP (SHapley Additive exPlanations)</strong> is a game theoretic approach to explain the output of any machine learning model. It connects optimal credit allocation with local explanations using the classic Shapley values from game theory and their related extensions (see <a href="https://github.com/shap/shap#citations">papers</a> for details and citations). 特征级别可视化归因.</li>
 <li>LIME</li>
 <li><a href="https://zhuanlan.zhihu.com/p/287126616">2020年了，你还在用注意力作可解释吗？</a></li>

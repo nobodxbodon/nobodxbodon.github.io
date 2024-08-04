@@ -1,23 +1,24 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Netty%E8%A7%A3%E5%86%B3%E9%80%9A%E4%BF%A1%E4%B8%AD%E7%9A%84%E7%B2%98%E5%8C%85%E5%92%8C%E6%8B%86%E5%8C%85%E9%97%AE%E9%A2%98.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/01/01/Netty%E8%A7%A3%E5%86%B3%E9%80%9A%E4%BF%A1%E4%B8%AD%E7%9A%84%E7%B2%98%E5%8C%85%E5%92%8C%E6%8B%86%E5%8C%85%E9%97%AE%E9%A2%98">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Netty解决通信中的粘包和拆包问题.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/01/01/Netty解决通信中的粘包和拆包问题">站点原文</a></h2>
 <hr/>
-<h2>title: Netty解决通信中的粘包和拆包问题
+<p>title: Netty解决通信中的粘包和拆包问题
 toc: true
 date: 2020-01-01 09:12:25
-cover: https://img.paulzzh.com/touhou/random?17
+cover: <a href="https://img.paulzzh.com/touhou/random?17">https://img.paulzzh.com/touhou/random?17</a>
 categories: Netty
-tags: [Netty,  计算机网络]
-description: 在进行Java NIO学习时，如果客户端连续不断的向服务端发送数据包时，服务端接收的数据会出现两个数据包粘在一起的情况，这就是TCP协议中经常会遇到的粘包以及拆包的问题</h2>
+tags: [Netty,  计算机网络]</p>
+<h2>description: 在进行Java NIO学习时，如果客户端连续不断的向服务端发送数据包时，服务端接收的数据会出现两个数据包粘在一起的情况，这就是TCP协议中经常会遇到的粘包以及拆包的问题</h2>
 <p>在进行Java NIO学习时，如果客户端连续不断的向服务端发送数据包时，服务端接收的数据会出现两个数据包粘在一起的情况，这就是TCP协议中经常会遇到的粘包以及拆包的问题</p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>一、什么是粘包和拆包？</h2>
 <p>现在假设客户端向服务端连续发送了两个数据包，用packet1和packet2来表示，那么服务端收到的数据可以分为三种，现列举如下:</p>
 <p>1.接收端正常收到两个数据包，即没有发生拆包和粘包的现象，此种情况不在本文的讨论范围内:</p>
-<p><img alt="接收端正常收到两个数据包.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/%E6%8E%A5%E6%94%B6%E7%AB%AF%E6%AD%A3%E5%B8%B8%E6%94%B6%E5%88%B0%E4%B8%A4%E4%B8%AA%E6%95%B0%E6%8D%AE%E5%8C%85.png"/></p>
+<p><img alt="接收端正常收到两个数据包.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/接收端正常收到两个数据包.png"/></p>
 <p>2.接收端只收到一个数据包，由于TCP是不会出现丢包的，所以这一个数据包中包含了发送端发送的两个数据包的信息，这种现象即为粘包。这种情况由于接收端不知道这两个数据包的界限，所以对于接收端来说很难处理</p>
-<p><img alt="接收端只收到一个数据包.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/%E6%8E%A5%E6%94%B6%E7%AB%AF%E5%8F%AA%E6%94%B6%E5%88%B0%E4%B8%80%E4%B8%AA%E6%95%B0%E6%8D%AE%E5%8C%85.png"/></p>
+<p><img alt="接收端只收到一个数据包.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/接收端只收到一个数据包.png"/></p>
 <p>3.这种情况有两种表现形式，如下图。接收端收到了两个数据包，但是这两个数据包要么是不完整的，要么就是多出来一块，这种情况即发生了拆包和粘包。这两种情况如果不加特殊处理，对于接收端同样是不好处理的</p>
-<p><img alt="两种表现形式.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/%E4%B8%A4%E7%A7%8D%E8%A1%A8%E7%8E%B0%E5%BD%A2%E5%BC%8F.png"/></p>
+<p><img alt="两种表现形式.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/两种表现形式.png"/></p>
 <p>TCP是个“流”协议，没有界限的一串数据。TCP底层并不了解上层业务数据的具体含义，它会根据TCP缓冲区的实际情况进行包的划分，所以在业务上认为，一个完整的包可能会被TCP拆分成多个包进行发送，也有可能把多个小的包封装成一个大的数据包发送，这就是所谓的TCP粘包和拆包问题</p>
 <p>&lt;br/&gt;</p>
 <h2>二、粘包、拆包发生的原因</h2>

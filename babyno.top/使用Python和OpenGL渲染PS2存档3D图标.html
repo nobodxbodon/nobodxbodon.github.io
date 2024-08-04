@@ -17,7 +17,7 @@ categories:</li>
 <li>教程</li>
 </ul>
 <hr/>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/1.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/1.jpg"/></p>
 <p>经过前面一系列文章的铺垫，PS2存档3D图标的文件已经全部解析完毕。本篇开始将介绍使用如下工具将3D图标渲染出来，并尽可能接近PS2主机原生的效果。</p>
 <ul>
 <li>Python3</li>
@@ -28,7 +28,7 @@ categories:</li>
 </ul>
 <h2>01 初始化<code>PyGame</code>和<code>ModernGL</code></h2>
 <p>第一步先初始化<code>PyGame</code>，设置窗口大小为<code>640x480</code>，<code>FPS</code>为<code>60</code>。开启<code>OpenGL</code>渲染模式，<code>OpenGL</code>的版本号设置为<code>3.3</code>。</p>
-<pre><code class="language-python">import pygame as pg
+<pre><code class="lang-python">import pygame as pg
 
 pg.init()
 pg.display.gl_set_attribute(pg.GL_CONTEXT_MAJOR_VERSION, 3)
@@ -39,14 +39,14 @@ self.clock = pg.time.Clock()
 self.clock.tick(60)
 </code></pre>
 <p>接着初始化<code>ModernGL</code>，非常简单，只要创建一个<code>context</code>，开启深度测试和面剔除。</p>
-<pre><code class="language-python">import moderngl as mgl
+<pre><code class="lang-python">import moderngl as mgl
 
 self.ctx = mgl.create_context()
 self.ctx.enable(flags=mgl.DEPTH_TEST | mgl.CULL_FACE)
 </code></pre>
 <h2>02 获取顶点、纹理、法线等数据</h2>
 <p>这部分内容在上一篇<a href="">解析PS2游戏存档3D图标</a>有详细描述，就不展开了，这里只贴一下<code>icon.sys</code>的数据结构供参考。</p>
-<pre><code class="language-c++">struct IconSys {
+<pre><code class="lang-c++">struct IconSys {
     char magic[4];
     uint16 unknown; // ignore
     uint16 subtitle_line_break;
@@ -72,21 +72,21 @@ self.ctx.enable(flags=mgl.DEPTH_TEST | mgl.CULL_FACE)
 </code></pre>
 <h2>03 坐标系统</h2>
 <p>这里以右手系统创建坐标系，但是原始的顶点是y轴颠倒的，如下图A。因此我们之后的工作将在转换后的图B坐标系下进行。
-<img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/%E5%AD%98%E5%82%A8%E5%8D%A1-%E5%9D%90%E6%A0%87%E7%B3%BB.jpg"/></p>
+<img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/%E5%AD%98%E5%82%A8%E5%8D%A1-%E5%9D%90%E6%A0%87%E7%B3%BB.jpg"/></p>
 <h2>04 变换矩阵</h2>
 <h3>观察矩阵</h3>
 <p>上图B中，摄像机位置在z轴的负延伸方向，我们稍稍向y轴负方向移动一小段距离，这样可以使视线不是对着图标的脚部，而是稍稍靠上一点，因此将摄像机位置坐标设为<code>(0, -2, -10)</code>。因为要将y轴颠倒，可以直接将摄像机向上的方向设置为y轴的负方向。这样一来<code>lookAt</code>矩阵创建如下：</p>
-<pre><code class="language-python">self.position = glm.vec3(0, -2, -10)
+<pre><code class="lang-python">self.position = glm.vec3(0, -2, -10)
 self.up = glm.vec3(0, -1, 0)
 self.view = glm.lookAt(self.position, glm.vec3(0, -2, 0), self.up)
 </code></pre>
 <h3>投影矩阵</h3>
 <p>投影矩阵可以用如下公式获得</p>
-<pre><code class="language-python">self.proj = glm.perspective(glm.radians(50), window_width / window_height, 0.1, 100)
+<pre><code class="lang-python">self.proj = glm.perspective(glm.radians(50), window_width / window_height, 0.1, 100)
 </code></pre>
 <h3>模型矩阵</h3>
 <p>创建模型矩阵的目的是控制模型对象在3D空间中的位置变化，在这里模型对象需要在空间里绕着y轴做360度的旋转。</p>
-<pre><code class="language-python"># 初始化模型矩阵
+<pre><code class="lang-python"># 初始化模型矩阵
 self.m_model = glm.mat4()
 # 使模型绕y轴旋转，转过的角度为经过的时间。
 # 初始化的180度是为了让模型在开始的时候背对着画面，更接近PS2主机的行为
@@ -103,7 +103,7 @@ m_model = glm.rotate(self.m_model, glm.radians(180) + animation_time / 2,
 </ul>
 <h3>背景着色器</h3>
 <p>背景着色器比较简单，只要创建一个覆盖整个坐标系的矩形，并且设置在离摄像机最远的那个坐标平面上即可。参考上面的图B，这个平面应该是z轴的0.9999。这个矩形的四个顶点的坐标分别为(-1, 1), (-1, -1), (1, -1), (1, 1)，对应的颜色在<code>icon.sys</code>中可以解析出来。根据这四个顶点和颜色，就可以构建背景VBO及VAO，这里不做过多描述。</p>
-<pre><code class="language-glsl">// bg.vert
+<pre><code class="lang-glsl">// bg.vert
 #version 330 core
 
 in vec2 vertexPos;
@@ -116,7 +116,7 @@ void main() {
     gl_Position = vec4(vertexPos.xy, 0.9999, 1.0);
 }
 </code></pre>
-<pre><code class="language-glsl">// bg.frag
+<pre><code class="lang-glsl">// bg.frag
 #version 330 core
 
 in vec3 fragColor0;
@@ -131,7 +131,7 @@ void main() {
 </code></pre>
 <h3>Icon着色器</h3>
 <p>Icon着色器会比较复杂，我们先尝试着把Icon顶点渲染出来。还记得每个图标有多个形状吗？形状与动画相关，我们现在只取其中的一个形状组成VBO和VAO。</p>
-<pre><code class="language-glsl">// icon.vert
+<pre><code class="lang-glsl">// icon.vert
 #version 330 core
 
 in vec4 vertexPos;
@@ -144,7 +144,7 @@ void main() {
     gl_Position = proj * view * model * vec4(vertexPos.xyz, 1);
 }
 </code></pre>
-<pre><code class="language-glsl">// icon.frag
+<pre><code class="lang-glsl">// icon.frag
 #version 330 core
 
 out vec4 fragColor;
@@ -154,10 +154,10 @@ void main() {
 }
 </code></pre>
 <p>以下是运行代码后的效果：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/3.gif"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/3.gif"/></p>
 <h3>添加纹理</h3>
 <p>在上面的基础上，引入纹理坐标和纹理数据。</p>
-<pre><code class="language-glsl">// icon.vert
+<pre><code class="lang-glsl">// icon.vert
 #version 330 core
 
 in vec4 vertexPos;
@@ -177,7 +177,7 @@ void main() {
     gl_Position = proj * view * model * vec4(vertexPos.xyz, 1);
 }
 </code></pre>
-<pre><code class="language-glsl">// icon.frag
+<pre><code class="lang-glsl">// icon.frag
 #version 330 core
 
 in vec2 uv0;
@@ -193,10 +193,10 @@ void main() {
     fragColor = vec4(color, alpha);
 }
 </code></pre>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/4.gif"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/4.gif"/></p>
 <h3>添加光照</h3>
 <p>在上面的基础上，引入光源，环境光以及法线数据。</p>
-<pre><code class="language-glsl">// icon.vert
+<pre><code class="lang-glsl">// icon.vert
 #version 330 core
 
 in vec4 vertexPos;
@@ -221,7 +221,7 @@ void main() {
     fragPos0 = gl_Position.xyz;
 }
 </code></pre>
-<pre><code class="language-glsl">// icon.frag
+<pre><code class="lang-glsl">// icon.frag
 #version 330 core
 #define MAX_NUM_TOTAL_LIGHTS 3
 
@@ -256,7 +256,7 @@ void main() {
     fragColor = vec4(color, alpha);
 }
 </code></pre>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/5.gif"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/5.gif"/></p>
 <h3>动画效果</h3>
 <p>动画效果是让着色器按照时间渲染不同形状的顶点数据。我们可以设计一个计时器和一个计数器，以确定当前时间应该渲染哪个形状的顶点。</p>
 <ul>
@@ -265,21 +265,21 @@ void main() {
 <li><code>anim_speed</code> 动画播放速度</li>
 <li><code>frame_length</code> / animation_shapes 一个形状包含多少帧</li>
 </ul>
-<pre><code class="language-python">animation_time = time.time() - self.start_time
+<pre><code class="lang-python">animation_time = time.time() - self.start_time
 curr_frame = int(animation_time * self.window.fps * self.icon.anim_speed)
              % self.icon.frame_length
 curr_shape = int(curr_frame // (self.icon.frame_length / self.icon.animation_shapes))
 </code></pre>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/6.gif"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/6.gif"/></p>
 <h3>使动画平滑过渡</h3>
 <p>使动画平滑过渡需要使用着色器的顶点插值技术。我们在发送着色器顶点的时候，将当前形状和下一个形状的顶点数据同时发送。这样再根据时间因子，着色器会自动计算两个形状之间的顶点。</p>
 <ul>
 <li><code>tween_factor</code> 计算当前时间戳在整个形状中所占帧的百分比</li>
 </ul>
-<pre><code class="language-python">curr_frame_in_shape = curr_frame % frames_in_shape / frames_in_shape
+<pre><code class="lang-python">curr_frame_in_shape = curr_frame % frames_in_shape / frames_in_shape
 tween_factor = glm.float32(curr_frame_in_shape)
 </code></pre>
-<pre><code class="language-glsl">// icon.vert
+<pre><code class="lang-glsl">// icon.vert
 #version 330 core
 
 in vec4 vertexPos;
@@ -307,7 +307,7 @@ void main() {
     fragPos0 = gl_Position.xyz;
 }
 </code></pre>
-<pre><code class="language-glsl">// icon.frag
+<pre><code class="lang-glsl">// icon.frag
 #version 330 core
 #define MAX_NUM_TOTAL_LIGHTS 3
 
@@ -343,9 +343,9 @@ void main() {
 }
 </code></pre>
 <p>最终效果：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/7.gif"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-10-09-rendering-ps2-3d-icon/7.gif"/></p>
 <h2>06 尾声</h2>
-<p>所有代码均可在 https://github.com/caol64/ps2mc-browser 下载到。在我的第一篇文章中，我也提到了这个系列的创作初衷：为了纪念逝去的青春，以及对技术永不磨灭的热情。在此收尾，也算还了年少时的一个梦想。</p>
+<p>所有代码均可在 <a href="https://github.com/caol64/ps2mc-browser">https://github.com/caol64/ps2mc-browser</a> 下载到。在我的第一篇文章中，我也提到了这个系列的创作初衷：为了纪念逝去的青春，以及对技术永不磨灭的热情。在此收尾，也算还了年少时的一个梦想。</p>
 <h2>07 参考文献</h2>
 <ul>
 <li><a href="https://www.ps2savetools.com/documents/iconsys-format/">gothi - icon.sys format</a></li>

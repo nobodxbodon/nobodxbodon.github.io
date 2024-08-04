@@ -1,28 +1,24 @@
 <h2><a href="https://github.com/stevedsun/stevedsun.github.io/blob/master/content/posts/2017/python-3.md">仓库源文</a>，<a href="https://sund.site/posts/2017/python-3">站点原文</a></h2>
 <hr/>
-<h2>title: "《Python源码剖析》第三部分——Python虚拟机进阶"
+<p>title: "《Python源码剖析》第三部分——Python虚拟机进阶"
 date: 2017-07-14T00:00:00
 categories: [Python]
-tags: [python]
-aliases: [/posts/python-3/]</h2>
+tags: [python]</p>
+<h2>aliases: [/posts/python-3/]</h2>
 <h2>Python 环境初始化</h2>
 <p>进程启动后创建 PyInterpreterObject，PyInterpreterObject 里面维护了全局 module 映射表<code>interp-&gt;modules</code>，该表默认初始化为<strong>buildin</strong>模块，</p>
 <h2>Python 的 import 机制</h2>
-<blockquote>
-<p>Python 虚拟机在执行“import A”时，会为 package A 创建一个 module 对象，同时会在该 module 维护的 dict 中添加两个表示元信息的属性：<strong>name</strong>和<strong>path</strong>。而 Python 虚拟机从 A/<strong>init</strong>.py 中执行“import mod1”时，也会为 mod1 创建一个 module 对象，同时也会设置<strong>name</strong>属性，但是这时就不设置<strong>path</strong>属性了。</p>
-</blockquote>
-<blockquote>
+<blockquote><p>Python 虚拟机在执行“import A”时，会为 package A 创建一个 module 对象，同时会在该 module 维护的 dict 中添加两个表示元信息的属性：<strong>name</strong>和<strong>path</strong>。而 Python 虚拟机从 A/<strong>init</strong>.py 中执行“import mod1”时，也会为 mod1 创建一个 module 对象，同时也会设置<strong>name</strong>属性，但是这时就不设置<strong>path</strong>属性了。</p>
 <p>package 是由 module 聚合而成。更清楚的表述是：module 属于一个 package。我们不能说，module1 属于 module2。我们前面已经看到，module 的路径实际上是一种树状结构，从图 14-11 中可以看到，在这个树状结构中，module 的父节点只能是 package，而不可能是另一个 module。</p>
 </blockquote>
 <h2>GIL</h2>
 <p>Python 虚拟机使用一个全局解释器锁（Global Interpreter Lock，GIL）来互斥线程对 python 虚拟机的使用。</p>
 <p>注意这里 GIL 是解释器一级的互斥锁，也就是同一时间只能有一个线程占用 python 解释器。所以<strong>GIL 是用来让操作系统中分配的多个线程互斥的使用 python 解释器的，是建立在系统线程调度基础之上的一套 C API 互斥机制</strong>，是比操作系统线程资源更大粒度的锁。</p>
 <p>Python 的线程是基于操作系统原生线程的，所以 python 的线程不是「虚拟出来的」。</p>
-<blockquote>
-<p>那么究竟 Python 会在众多的等待线程中选择哪一个幸运儿呢？答案是，不知道。没错，对于这个问题，Python 完全没有插手，而是交给了底层的操作系统来解决。也就是说，Python 借用了底层操作系统所提供的线程调度机制来决定下一个进入 Python 解释器的线程究竟是谁。</p>
+<blockquote><p>那么究竟 Python 会在众多的等待线程中选择哪一个幸运儿呢？答案是，不知道。没错，对于这个问题，Python 完全没有插手，而是交给了底层的操作系统来解决。也就是说，Python 借用了底层操作系统所提供的线程调度机制来决定下一个进入 Python 解释器的线程究竟是谁。</p>
 </blockquote>
 <p>GIL 在 C 里对应的结构：</p>
-<pre><code class="language-c">[thread_nt.h]
+<pre><code class="lang-c">[thread_nt.h]
 typedef struct NRMUTEX {
     LONG   owned ;
     DWORD  thread_id ;
@@ -31,8 +27,7 @@ typedef struct NRMUTEX {
 </code></pre>
 <p>其中<code>owned</code>初始化为-1，表示锁可用，否则为不可用。<code>thread_id</code>代表线程 id，最后一个是平台相关的变量，win32 上是一个 event 内核对象。</p>
 <h2>多线程 - 标准调度</h2>
-<blockquote>
-<p>当 Python 启动时，是并不支持多线程的。换句话说，Python 中支持多线程的数据结构以及 GIL 都是没有创建的，Python 之所以有这种行为是因为大多数的 Python 程序都不需要多线程的支持</p>
+<blockquote><p>当 Python 启动时，是并不支持多线程的。换句话说，Python 中支持多线程的数据结构以及 GIL 都是没有创建的，Python 之所以有这种行为是因为大多数的 Python 程序都不需要多线程的支持</p>
 </blockquote>
 <p>书中指出，由于 python 的多线程标准调度机制是有代价的，所以默认单线程不初始化 GIL。</p>
 <ol>
@@ -51,7 +46,7 @@ typedef struct NRMUTEX {
 </ol>
 <p><strong>可见 python 在保证线程安全的前提下，允许线程在某些时刻脱离 GIL 标准调度流程。</strong></p>
 <p>其中<code>Py_BEGIN_ALLOW_THREADS</code>和<code>Py_END_ALLOW_THREADS</code>两个负责释放和等待 GIL 的宏的实现如下。</p>
-<pre><code class="language-c">[ceval.h]
+<pre><code class="lang-c">[ceval.h]
 #define Py_BEGIN_ALLOW_THREADS { \
             PyThreadState *_save; \
             _save = PyEval_SaveThread();
@@ -85,27 +80,24 @@ void PyEval_RestoreThread(PyThreadState *tstate)
 <li>线程 a 被系统唤醒，获取 GIL，一气呵成。</li>
 </ol>
 <h2>子线程的销毁</h2>
-<blockquote>
-<p>在线程的全部计算完成之后，Python 将销毁线程。需要注意的是，Python 主线程的销毁与子线程的销毁是不同的，因为主线程的销毁动作必须要销毁 Python 的运行时环境，而子线程的销毁则不需要进行这些动作。</p>
+<blockquote><p>在线程的全部计算完成之后，Python 将销毁线程。需要注意的是，Python 主线程的销毁与子线程的销毁是不同的，因为主线程的销毁动作必须要销毁 Python 的运行时环境，而子线程的销毁则不需要进行这些动作。</p>
 </blockquote>
 <h2>内存管理</h2>
 <p>大块内存管理直接调用 C 的 malloc 和 free 接口，小块内存分配则由 python 的内存池管理机制调度。</p>
 <h3>小块内存管理的对象</h3>
 <p>Python 的内存块叫 block，每个 block 大小不同，都是 8 的整数倍。管理 block 的叫 pool，一个 pool 是 4K。pool 管理<strong>相同大小</strong>的一堆 block。pool 对象的 szindex 变量保存了这个 pool 对应的 block 大小。</p>
-<blockquote>
-<p>，一个 pool 可能管理了 100 个 32 个字节的 block，也可能管理了 100 个 64 个字节的 block，但是绝不会有一个管理了 50 个 32 字节的 block 和 50 个 64 字节的 block 的 pool 存在</p>
+<blockquote><p>，一个 pool 可能管理了 100 个 32 个字节的 block，也可能管理了 100 个 64 个字节的 block，但是绝不会有一个管理了 50 个 32 字节的 block 和 50 个 64 字节的 block 的 pool 存在</p>
 </blockquote>
 <p>Python 对于内存块的管理类似对象的策略，每次内存分配一整个 block，回收时先将不用的 Block 加入闲置的队列里等待重新利用，不是直接回收。(惰性回收策略)</p>
 <p>管理多个 pool 的数据对象是 arena。下图可见，pool 结构是一次性分配好一块内存，而 arena 则是通过指针连向一块 pool。</p>
 <p><img alt="" src="https://i.loli.net/2021/03/05/2duvofnkP9LEO8x.jpg"/></p>
 <p>而 python 维护一个名叫 arenas 的数组，数组元素就是 arena 对象。arena 之间通过由两条链表相连。它们分别是：</p>
 <ul>
-<li><em>unused_arena_objects</em> 是单向量表，指向未分配 pool 的 arena</li>
-<li><em>usable_arenas</em> 是双向链表，表示已经分配了 pool 的 arena</li>
+<li>_unused_arena<em>objects</em> 是单向量表，指向未分配 pool 的 arena</li>
+<li>_usable<em>arenas</em> 是双向链表，表示已经分配了 pool 的 arena</li>
 </ul>
 <p><img alt="" src="https://i.loli.net/2021/03/05/duFq5I6lWACjQyw.jpg"/></p>
-<blockquote>
-<p>当一个 arena 的 area_object 没有与 pool 集合建立联系时，这时的 arena 处于“未使用”状态；一旦建立了联系，这时 arena 就转换到了“可用”状态。对于每一种状态，都有一个 arena 的链表。“未使用”的 arena 的链表表头是 unused_arena_objects、arena 与 arena 之间通过 nextarena 连接，是一个单向链表；而“可用”的 arena 的链表表头是 usable_arenas、arena 与 arena 之间通过 nextarena 和 prevarena 连接，是一个双向链表。</p>
+<blockquote><p>当一个 arena 的 area_object 没有与 pool 集合建立联系时，这时的 arena 处于“未使用”状态；一旦建立了联系，这时 arena 就转换到了“可用”状态。对于每一种状态，都有一个 arena 的链表。“未使用”的 arena 的链表表头是 unused_arena_objects、arena 与 arena 之间通过 nextarena 连接，是一个单向链表；而“可用”的 arena 的链表表头是 usable_arenas、arena 与 arena 之间通过 nextarena 和 prevarena 连接，是一个双向链表。</p>
 </blockquote>
 <p><strong>Pool 是 python 管理内存的对象，arena 虽然更上层，但是 arena 内的 pool 集合可能管理 32 字节的 block，也可能管理 64 字节的 block，所以 arena 无法决定销毁和分配内存。Python 仍然以 pool 为单位管理内存开销。(pool 有 size 概念，arena 没有 size 概念)</strong></p>
 <p>Pool 有三种状态 full、empty 和 used。其中 full 不需要连接起来，其他两种状态会被 freepools 和 usedpools 连接起来方便管理。</p>
@@ -119,8 +111,7 @@ void PyEval_RestoreThread(PyThreadState *tstate)
 <li>usedpools 没有可用的 pool，就从 freepools 链表分配一个 empty 状态的 pool</li>
 </ol>
 <h3>Python 编译时指定内存上限</h3>
-<blockquote>
-<p>当 Python 在 WITH_MEMORY_LIMITS 编译符号打开的背景下进行编译时，Python 内部的另一个符号会被激活，这个名为 SMALL_MEMORY_LIMIT 的符号限制了整个内存池的大小，同时，也就限制了可以创建的 arena 的个数。在默认情况下，不论是 Win32 平台，还是 unix 平台，这个编译符号都是没有打开的，所以通常 Python 都没有对小块内存的内存池的大小做任何的限制。</p>
+<blockquote><p>当 Python 在 WITH_MEMORY_LIMITS 编译符号打开的背景下进行编译时，Python 内部的另一个符号会被激活，这个名为 SMALL_MEMORY_LIMIT 的符号限制了整个内存池的大小，同时，也就限制了可以创建的 arena 的个数。在默认情况下，不论是 Win32 平台，还是 unix 平台，这个编译符号都是没有打开的，所以通常 Python 都没有对小块内存的内存池的大小做任何的限制。</p>
 </blockquote>
 <h3>小块内存管理的流程</h3>
 <p><em>(此部分摘自书中代码注释)</em></p>
@@ -161,12 +152,10 @@ void PyEval_RestoreThread(PyThreadState *tstate)
 <li>有一些 container 对象的<code>PyGC_Head.gc.gc_ref</code>还不为 0，这就意味着存在对这些对象的外部引用，这些对象，就是开始标记 - 清除算法的 root object 集合。</li>
 </ol>
 <h3>分代回收</h3>
-<blockquote>
-<p>这种以空间换时间的总体思想是：将系统中的所有内存块根据其存活时间划分为不同的集合，每一个集合就称为一个“代”，垃圾收集的频率随着“代”的存活时间的增大而减小，也就是说，活得越长的对象，就越可能不是垃圾，就应该越少去收集。</p>
+<blockquote><p>这种以空间换时间的总体思想是：将系统中的所有内存块根据其存活时间划分为不同的集合，每一个集合就称为一个“代”，垃圾收集的频率随着“代”的存活时间的增大而减小，也就是说，活得越长的对象，就越可能不是垃圾，就应该越少去收集。</p>
 </blockquote>
 <p><img alt="" src="https://i.loli.net/2021/03/05/mQuPrwyD73ZjhBv.jpg"/></p>
-<blockquote>
-<p>Python 采用了三代的分代收集机制，如果当前收集的是第 1 代，那么在开始垃圾收集之前，Python 会将比其“年轻”的所有代的内存链表（当然，在这里只有第 0 代）整个地链接到第 1 代内存链表之后，这个操作是通过 gc_list_merge 实现的。</p>
+<blockquote><p>Python 采用了三代的分代收集机制，如果当前收集的是第 1 代，那么在开始垃圾收集之前，Python 会将比其“年轻”的所有代的内存链表（当然，在这里只有第 0 代）整个地链接到第 1 代内存链表之后，这个操作是通过 gc_list_merge 实现的。</p>
 </blockquote>
 <h3>总结</h3>
 <ol>

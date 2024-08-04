@@ -1,12 +1,11 @@
-<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2024-03-01-%E8%AF%AD%E6%B3%95%E8%A7%A3%E6%9E%90%E5%99%A8%E4%BE%8B%E7%A8%8B%E7%BC%96%E5%86%99%E4%B8%AD%E9%81%87%E5%88%B0%E7%9A%84%E5%B8%B8%E8%A7%81%E6%8A%A5%E9%94%99%E4%B8%8E%E8%A7%A3%E5%86%B3.md">仓库源文</a>，<a href="http://codeinchinese.com/2024/03/01/%E8%AF%AD%E6%B3%95%E8%A7%A3%E6%9E%90%E5%99%A8%E4%BE%8B%E7%A8%8B%E7%BC%96%E5%86%99%E4%B8%AD%E9%81%87%E5%88%B0%E7%9A%84%E5%B8%B8%E8%A7%81%E6%8A%A5%E9%94%99%E4%B8%8E%E8%A7%A3%E5%86%B3">站点原文</a></h2>
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2024-03-01-语法解析器例程编写中遇到的常见报错与解决.md">仓库源文</a>，<a href="http://codeinchinese.com/2024/03/01/语法解析器例程编写中遇到的常见报错与解决">站点原文</a></h2>
 <p>前两天一位私信问：</p>
-<blockquote>
-<p>在语言中有矩阵的语法如下:a=[1 2 3],但是如果矩阵中带有符号,那么会错误解析.例如[1 -2 3]会被解析为[-1 3],在处理中空格全部都被过滤掉了</p>
+<blockquote><p>在语言中有矩阵的语法如下:a=[1 2 3],但是如果矩阵中带有符号,那么会错误解析.例如[1 -2 3]会被解析为[-1 3],在处理中空格全部都被过滤掉了</p>
 </blockquote>
 <p>于是用 <a href="https://zhuanlan.zhihu.com/p/415732605">rply定制版</a> 做一简单演示。很久没用，碰到不少报错，最后的语法实现很不如意，但至少通过了最基本测试。</p>
 <p>演示分支 <a href="https://github.com/nobodxbodon/rply/commit/d26dcf29e48c98b5a81d9b4633c6272b3b452c8e">在此</a>，运行 <code>% pytest tests/test_按语法分词.py</code> 进行测试。此文将各种报错尽量还原并记录下如何解决。</p>
 <p>起初草稿如下（在 tests/test_语法分析器.py，以为不需无空格语法支持）：</p>
-<pre><code class="language-python">    def test_数组(self):
+<pre><code class="lang-python">    def test_数组(self):
         分词母机 = 分词器母机()
         分词母机.添了("左括号", r"[")
         分词母机.添了("右括号", r"]")
@@ -14,7 +13,7 @@
         分词母机.添了("数", r"\d")
 
         分析器母机 = 语法分析器母机(["数", "左括号", "右括号", "减"])
-        
+
         @分析器母机.语法规则("数组 : 左括号 数列 右括号")
         def 数组(p):
             return [] + p[0]
@@ -50,7 +49,7 @@ tests/test_语法分析器.py:55:
 FAILED tests/test_语法分析器.py::TestParser::test_数组 - re.error: unterminated character set at position 0
 </code></pre>
 <p>加上转义符：</p>
-<pre><code class="language-python">        分词母机.添了("左括号", r"\[")
+<pre><code class="lang-python">        分词母机.添了("左括号", r"\[")
         分词母机.添了("右括号", r"\]")
 </code></pre>
 <p>报错：</p>
@@ -62,7 +61,7 @@ FAILED tests/test_语法分析器.py::TestParser::test_数组 - re.error: unterm
 E           AttributeError: '词' object has no attribute 'getint'
 </code></pre>
 <p><code>片段[0]</code> 为一个词（token），本身没有getint方法。因为草稿是从另一个测试用例改出来的，而该用例用了 BoxInt。于是改为自带的getstr：</p>
-<pre><code class="language-python">        @分析器母机.语法规则("正负数 : 数")
+<pre><code class="lang-python">        @分析器母机.语法规则("正负数 : 数")
         @分析器母机.语法规则("正负数 : 减 数")
         def 正负数(片段):
             if len(片段) == 1:
@@ -74,7 +73,7 @@ E           AttributeError: '词' object has no attribute 'getint'
 <pre><code>ParserGeneratorWarning: 规则 '正负数' 无用
 </code></pre>
 <p>发现 <code>数列</code> 规则未使用 <code>正负数</code>，改为：</p>
-<pre><code class="language-python">
+<pre><code class="lang-python">
         @分析器母机.语法规则("数列 : 正负数")
         @分析器母机.语法规则("数列 : 数列 正负数")
         def 数列(片段):
@@ -93,7 +92,7 @@ rply/分词器.py:114: 分词报错
 FAILED tests/test_语法分析器.py::TestParser::test_数组 - rply.报错.分词报错: (None, SourcePosition(idx=2, lineno=1, colno=3))
 </code></pre>
 <p>想起 <code>[1</code> 这种无空格设计，估计需要无空格语法解析支持，于是改为（顺便放到 tests/test_按语法分词.py）：</p>
-<pre><code class="language-python">        assert 分析器.按语法分词(分词器.lex('[1 -2 3]')) == [1, -2, 3]
+<pre><code class="lang-python">        assert 分析器.按语法分词(分词器.lex('[1 -2 3]')) == [1, -2, 3]
 </code></pre>
 <p>没好多少：</p>
 <pre><code>rply.报错.按语法分词报错: [(0, '左括号'), (1, '数'), (2, None)]
@@ -107,7 +106,7 @@ FAILED tests/test_语法分析器.py::TestParser::test_数组 - rply.报错.分�
 栈已空！
 </code></pre>
 <p>看来是根据语法分词失败。于是简化用例：</p>
-<pre><code class="language-python">        assert 分析器.按语法分词(分词器.分词('[1]')) == [1]
+<pre><code class="lang-python">        assert 分析器.按语法分词(分词器.分词('[1]')) == [1]
         #assert 分析器.按语法分词(分词器.分词('[1 -2 3]')) == [1, -2, 3]
 </code></pre>
 <p>至少分词通过。报错看得懂了：</p>
@@ -119,12 +118,12 @@ E       TypeError: can only concatenate list (not "词") to list
 找到匹配词：], 路径历史：{0: 词名：左括号, 模式=re.compile('\\['), 1: 词名：数, 模式=re.compile('\\d'), 2: 词名：右括号, 模式=re.compile('\\]')}
 </code></pre>
 <p>改正错误：</p>
-<pre><code class="language-python">        @分析器母机.语法规则("数组 : 左括号 数列 右括号")
+<pre><code class="lang-python">        @分析器母机.语法规则("数组 : 左括号 数列 右括号")
         def 数组(p):
             return p[1]
 </code></pre>
 <p>第一个用例通过~ 加负数测试：</p>
-<pre><code class="language-python">assert 分析器.按语法分词(分词器.分词('[-1]')) == [-1]
+<pre><code class="lang-python">assert 分析器.按语法分词(分词器.分词('[-1]')) == [-1]
 </code></pre>
 <p>继续报错：</p>
 <pre><code>        if len(片段) == 2:
@@ -132,11 +131,11 @@ E       TypeError: can only concatenate list (not "词") to list
 E           ValueError: invalid literal for int() with base 10: '-'
 </code></pre>
 <p>继续改：</p>
-<pre><code class="language-python">            if len(片段) == 2:
+<pre><code class="lang-python">            if len(片段) == 2:
                 return -int(片段[1].getstr())
 </code></pre>
 <p>第二个用例通过~ 第三个：</p>
-<pre><code class="language-python">assert 分析器.按语法分词(分词器.分词('[1 3]')) == [1, 3]
+<pre><code class="lang-python">assert 分析器.按语法分词(分词器.分词('[1 3]')) == [1, 3]
 </code></pre>
 <p>分词失败：</p>
 <pre><code>变长模式已试完：词名：左括号, 模式=re.compile('\\[')
@@ -149,7 +148,7 @@ E           ValueError: invalid literal for int() with base 10: '-'
 FAILED tests/test_按语法分词.py::Test按语法分词::test_数组 - rply.报错.按语法分词报错: [(0, '左括号'), (1, '数'), (2, None)]
 </code></pre>
 <p>看来是空格导致的。头痛医头吧：</p>
-<pre><code class="language-python">        分词母机.添了("数", r"\d\s*")
+<pre><code class="lang-python">        分词母机.添了("数", r"\d\s*")
 </code></pre>
 <p>报错：</p>
 <pre><code>    @分析器母机.语法规则("数列 : 数列 正负数")
@@ -161,11 +160,11 @@ FAILED tests/test_按语法分词.py::Test按语法分词::test_数组 - rply.�
 E           TypeError: can only concatenate list (not "int") to list
 </code></pre>
 <p>片段[0] 是列表，片段[1] 是数，于是：</p>
-<pre><code class="language-python">            if len(片段) == 2:
+<pre><code class="lang-python">            if len(片段) == 2:
                 return 片段[0] + [片段[1]]
 </code></pre>
 <p>第三个通过~继续测试：</p>
-<pre><code class="language-python">        assert 分析器.按语法分词(分词器.分词('[-1 3]')) == [-1, 3]
+<pre><code class="lang-python">        assert 分析器.按语法分词(分词器.分词('[-1 3]')) == [-1, 3]
         assert 分析器.按语法分词(分词器.分词('[1 -2 3]')) == [1, -2, 3]
         assert 分析器.按语法分词(分词器.分词('[1 -2 3 -4 5 6 -7]')) == [1, -2, 3, -4, 5, 6, -7]
 </code></pre>

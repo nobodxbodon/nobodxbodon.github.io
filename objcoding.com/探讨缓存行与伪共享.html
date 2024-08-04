@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-08-16-cache line and false sharing.md)，<a href="https://objcoding.com/2020/08/16/cache-line-and-false-sharing">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-08-16-cache line and false sharing.md">仓库源文</a>，<a href="https://objcoding.com/2020/08/16/cache-line-and-false-sharing">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "探讨缓存行与伪共享"
 categories: Java
-tags: cacheline falsesharing 缓存行 伪共享
-author: 张乘辉</h2>
+tags: cacheline falsesharing 缓存行 伪共享</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -15,7 +15,7 @@ author: 张乘辉</h2>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200815234310.png"/></p>
 <p>当 CPU 运算时，首先会从 L1 缓存查找所需要的数据，如果没有找到，再去 L2 缓存中去找，以此类推，直到从内存中获取数据，这也就意味着，越长的调用链，所耗费的执行时间也越长。那是不是可以从主内存拿数据的时候，顺便多拿一些呢？这样就可以避免频繁从主内存中获取数据了。聪明的计算机科学家已经想到了这个法子，这就是缓存行的由来。缓存是由多个缓存行组成的，而每个缓存行大小通常来说，大小为 64 字节，并且每个缓存行有效地引用主内存中的一块儿地址，CPU 每次从主内存中获取数据时，会将相邻的数据也一同拉取到缓存行中，这样当 CPU 执行运算时，就大大减少了与主内存的交互。</p>
 <p>下面我用一个例子让大家体会一下用缓存行和不用缓存行在性能上的差异：</p>
-<pre><code class="language-java">// 以下源码例子来源：https://tech.meituan.com/2016/11/18/disruptor.html
+<pre><code class="lang-java">// 以下源码例子来源：https://tech.meituan.com/2016/11/18/disruptor.html
 public class CacheLineEffect {
 
   //考虑一般缓存行大小是64字节，一个 long 类型占8字节
@@ -65,7 +65,7 @@ public class CacheLineEffect {
 <p>可见，如果同一个 Cache line 的内容被多个线程读取，就会产生相互竞争，频繁回写主内存，降低了性能。</p>
 <h2>如何解决伪共享问题</h2>
 <p>要解决伪共享这个问题最简单的做法就是将线程间共享元素分开到不同的 Cache line 中，这种做法叫用空间换取时间，具体做法如下：</p>
-<pre><code class="language-java">public final static class ValuePadding {
+<pre><code class="lang-java">public final static class ValuePadding {
   // 前置填充对象
   protected long p1, p2, p3, p4, p5, p6, p7;
   // value 值
@@ -77,7 +77,7 @@ public class CacheLineEffect {
 <p>JDK1.8 有专门的注解 @Contended 来避免伪共享，为了更加直观，我使用了对象填充的方法，其中 <code>protected long p1, p2, p3, p4, p5, p6, p7</code> 作为前置填充对象，<code>protected long p9, p10, p11, p12, p13, p14, p15</code>作为后置填充对象，这样任意线程访问 ValuePadding 时，value 都处于不同的 Cache line 中，不会产生伪共享问题。</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200816011538.png"/></p>
 <p>下面的例子用来演示伪共享与解决伪共享后的性能差异：</p>
-<pre><code class="language-java">public class MyFalseSharing {
+<pre><code class="lang-java">public class MyFalseSharing {
 
   public static void main(String[] args) throws InterruptedException {
     for (int i = 1; i &lt; 10; i++) {

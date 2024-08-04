@@ -1,24 +1,24 @@
 <h2><a href="https://github.com/mabbs/mabbs.github.io/blob/master/_posts/2020-05-29-encrypt.md">仓库源文</a>，<a href="https://mabbs.github.io/2020/05/29/encrypt">站点原文</a></h2>
 <hr/>
-<h2>layout: post
-title: 写一个加密传输的Demo
-tags: [加密, Demo]</h2>
+<p>layout: post
+title: 写一个加密传输的Demo</p>
+<h2>tags: [加密, Demo]</h2>
 <p>非专业密码学，仅供娱乐！&lt;!--more--&gt;</p>
 <h1>起因</h1>
 <p>最近我们学校搞了一个工程项目，要求是研究关于信息安全等级保护的一些东西，一开始我以为这就是搞个权限啥的，后来发现和云计算一样是个定义，话说我明明是网络工程专业的为啥还要了解信息安全……<br/>
-当然这个什么等级保护的内容很多，我们不可能全都涉及，所以老师允许我们只选其中的一部分进行研究。我想了想，我之前还想搞什么<a href="/2019/07/02/encmail.html">加密邮件</a>啥的，所以我选了通信安全方面的板块，这样也可以对那个项目有些参考。</p>
+  当然这个什么等级保护的内容很多，我们不可能全都涉及，所以老师允许我们只选其中的一部分进行研究。我想了想，我之前还想搞什么<a href="/2019/07/02/encmail.html">加密邮件</a>啥的，所以我选了通信安全方面的板块，这样也可以对那个项目有些参考。</p>
 <h1>实现思路</h1>
 <p>我本来是想按着TLS的标准来写，后来看了看发现那样不太方便，我写Demo也就是玩玩而已，不用费那么大劲。<br/>
-像正常来说，建立加密通道是要有握手环节的，但是那个实现起来实在是太麻烦，所以想了想就算了。<br/>
-所以我的实现方式是生成一个随机数，用AES以随机数为密码加密数据，用RSA加密随机数。这样做的主要目的是利用RSA的特性保证传输内容不会被泄露，但是RSA相对来说太慢，所以用了AES来加密数据，这样就能提高传输的效率。<br/>
-传送方式我之前还想着要不要建一个TCP Socket或者是Unix Domain Socket来传输，但是后来觉得这样太麻烦，不如直接用文件的方式传，这样还简单好理解。 ~~（就是嫌麻烦嘛）~~<br/>
-另外在通信安全中还有一点是要求校验数据，我想了想就用MD5吧，正常来说得到MD5后还要数字签名啥的，我觉得麻烦也就没搞，所以最终传输的内容就是AES加密后的数据、原数据的MD5(Hash)以及用RSA加密的密钥。<br/>
-虽然我学Python的时间不长，不过我现在发现Python在做这些事情的时候远比Shell、PHP和JS简单，所以这次的Demo也是用Python实现的。<br/>
-不过我的Python并不怎么样，所以大多数代码都是从网上Copy的，像Crypto的库我不搜一下肯定是不会用嘛。<br/>
-既然用到了Crypto库，那么如果有人有兴趣执行下面的代码，自然需要执行一下<code>pip3 install pycryptodome</code>才可以正常运行啦。</p>
+  像正常来说，建立加密通道是要有握手环节的，但是那个实现起来实在是太麻烦，所以想了想就算了。<br/>
+  所以我的实现方式是生成一个随机数，用AES以随机数为密码加密数据，用RSA加密随机数。这样做的主要目的是利用RSA的特性保证传输内容不会被泄露，但是RSA相对来说太慢，所以用了AES来加密数据，这样就能提高传输的效率。<br/>
+  传送方式我之前还想着要不要建一个TCP Socket或者是Unix Domain Socket来传输，但是后来觉得这样太麻烦，不如直接用文件的方式传，这样还简单好理解。 <del>（就是嫌麻烦嘛）</del><br/>
+  另外在通信安全中还有一点是要求校验数据，我想了想就用MD5吧，正常来说得到MD5后还要数字签名啥的，我觉得麻烦也就没搞，所以最终传输的内容就是AES加密后的数据、原数据的MD5(Hash)以及用RSA加密的密钥。<br/>
+  虽然我学Python的时间不长，不过我现在发现Python在做这些事情的时候远比Shell、PHP和JS简单，所以这次的Demo也是用Python实现的。<br/>
+  不过我的Python并不怎么样，所以大多数代码都是从网上Copy的，像Crypto的库我不搜一下肯定是不会用嘛。<br/>
+  既然用到了Crypto库，那么如果有人有兴趣执行下面的代码，自然需要执行一下<code>pip3 install pycryptodome</code>才可以正常运行啦。</p>
 <h1>代码</h1>
 <h2>server.py</h2>
-<pre><code class="language-python"># -*- coding: utf-8 -*-
+<pre><code class="lang-python"># -*- coding: utf-8 -*-
 
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
@@ -50,14 +50,14 @@ def rsa_decode(cipher_text, private_key):
     # 将密文解密成明文，返回的是一个bytes类型数据，需要自己转换成str
     text = cipher.decrypt(base64.b64decode(cipher_text), "ERROR")
     return text.decode()
-    
+
 class PrpCrypt(object):
- 
+
     def __init__(self, key):
         self.key = key.encode('utf-8')
         self.mode = AES.MODE_CBC
 
- 
+
     # 解密后，去掉补足的空格用strip() 去掉
     def decrypt(self, text):
         cryptor = AES.new(self.key, self.mode, b'0000000000000000')
@@ -80,7 +80,7 @@ while not input("按回车读取客户端的信息，输入其他内容结束"):
     print(message)
 </code></pre>
 <h2>client.py</h2>
-<pre><code class="language-python"># -*- coding: utf-8 -*-
+<pre><code class="lang-python"># -*- coding: utf-8 -*-
 
 import random
 from Crypto.PublicKey import RSA
@@ -108,11 +108,11 @@ def rsa_encode(message, public_key):
     return cipher_text.decode()
 
 class PrpCrypt(object):
- 
+
     def __init__(self, key):
         self.key = key.encode('utf-8')
         self.mode = AES.MODE_CBC
- 
+
     # 加密函数，如果text不足16位就用空格补足为16位，
     # 如果大于16当时不是16的倍数，那就补足为16的倍数。
     def encrypt(self, text):
@@ -136,7 +136,7 @@ class PrpCrypt(object):
         # 因为AES加密时候得到的字符串不一定是ascii字符集的，输出到终端或者保存时候可能存在问题
         # 所以这里统一把加密后的字符串转化为16进制字符串
         return base64.b64encode(self.ciphertext)
-    
+
 message=" "
 while message:
     message = input("请输入需要传输的信息（不输入则结束）：")
@@ -150,5 +150,5 @@ while message:
 </code></pre>
 <h1>感想</h1>
 <p>我在写这个代码的时候在网上搜到的资料也真的是算少了，就像我当时打算写加密邮件那时一样，基本上大多数的资料都有问题，像有些代码还是Python2的，还有时候经常遇到什么bytearray、json转换之类乱七八糟的问题。<br/>
-希望中文网络环境能多一些大家遇到的冷门知识的解决方法啊……<br/>
-对了，这个代码实际上只有防止中间人窥探信息的能力，并没有防篡改的能力，毕竟没有两端握手，没法做验证，所以这就是一个业余的加密传输代码，仅供参考。</p>
+  希望中文网络环境能多一些大家遇到的冷门知识的解决方法啊……<br/>
+  对了，这个代码实际上只有防止中间人窥探信息的能力，并没有防篡改的能力，毕竟没有两端握手，没法做验证，所以这就是一个业余的加密传输代码，仅供参考。</p>

@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-03-12-kafka startup fail.md)，<a href="https://objcoding.com/2020/03/12/kafka-startup-fail">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-03-12-kafka startup fail.md">仓库源文</a>，<a href="https://objcoding.com/2020/03/12/kafka-startup-fail">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "记一次 Kafka 重启失败问题排查"
 categories: Kafka
-tags: log 节点重启 日志分析
-author: 张乘辉</h2>
+tags: log 节点重启 日志分析</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}</li>
@@ -31,7 +31,7 @@ author: 张乘辉</h2>
 <p>索引文件与日志文件对应关系图如下：</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200311195627.png"/></p>
 <p>判断索引文件是否损坏的依据是：</p>
-<pre><code class="language-scala">_entries == 0 || _lastOffset &gt; baseOffset = false // 损坏
+<pre><code class="lang-scala">_entries == 0 || _lastOffset &gt; baseOffset = false // 损坏
 _entries == 0 || _lastOffset &gt; baseOffset = true // 正常
 </code></pre>
 <p>这个判断逻辑我的理解是：</p>
@@ -39,14 +39,14 @@ _entries == 0 || _lastOffset &gt; baseOffset = true // 正常
 <p>那为什么会出现这种情况呢？</p>
 <p>我在相关 issue 中似乎找到了一些答案：</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200314231948.png"/></p>
-<p>https://issues.apache.org/jira/browse/KAFKA-1112</p>
-<p>https://issues.apache.org/jira/browse/KAFKA-1554</p>
+<p><a href="https://issues.apache.org/jira/browse/KAFKA-1112">https://issues.apache.org/jira/browse/KAFKA-1112</a></p>
+<p><a href="https://issues.apache.org/jira/browse/KAFKA-1554">https://issues.apache.org/jira/browse/KAFKA-1554</a></p>
 <p>总的来说，非正常退出在旧版本似乎会可能发生这个问题？</p>
 <p>有意思的来了，导致开机不了并不是这个问题导致的，因为这个问题已经在后续版本修复了，从日志可看出，它会将损坏的日志文件删除并重建，我们接下来继续看导致重启不了的错误信息：</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200312212611.png"/></p>
 <p>问题就出在这里，在<strong>删除并重建索引过程中，就可能出现如上问题</strong>，在 issues.apache.org 网站上有很多关于这个 bug 的描述，我这里贴两个出来：</p>
-<p>https://issues.apache.org/jira/browse/KAFKA-4972</p>
-<p>https://issues.apache.org/jira/browse/KAFKA-3955</p>
+<p><a href="https://issues.apache.org/jira/browse/KAFKA-4972">https://issues.apache.org/jira/browse/KAFKA-4972</a></p>
+<p><a href="https://issues.apache.org/jira/browse/KAFKA-3955">https://issues.apache.org/jira/browse/KAFKA-3955</a></p>
 <p>这些 bug 很隐晦，而且非常难复现，既然后续版本不存在该问题，当务之急还是升级 Kafka 版本，后续等我熟悉 scala 后，再继续研究下源码，细节一定是会在源码中呈现。</p>
 <h2>解决思路分析</h2>
 <p>针对背景两个问题，矛盾点都是因为 broker0 重启失败导致的，那么我们要么把 broker0 启动成功，才能恢复 A 主题 34 分区。</p>

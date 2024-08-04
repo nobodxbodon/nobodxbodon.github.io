@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-03-17-mybatis plus inject sql.md)，<a href="https://objcoding.com/2019/03/17/mybatis-plus-inject-sql">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-03-17-mybatis plus inject sql.md">仓库源文</a>，<a href="https://objcoding.com/2019/03/17/mybatis-plus-inject-sql">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "mybatis-plus源码分析之sql注入器"
 categories: Mybatis
-tags: sql注入器 MappedStatement
-author: 张乘辉</h2>
+tags: sql注入器 MappedStatement</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}</li>
@@ -28,7 +28,7 @@ author: 张乘辉</h2>
 <h2>源码分析</h2>
 <p>从Mapper的注册与绑定过程的时序图看，要想将sql注入器无缝链接地添加到mybatis里面，那就得从Mapper注册步骤添加，果然，mp很鸡贼地继承了MapperRegistry这个类然后重写了addMapper方法：</p>
 <p>com.baomidou.mybatisplus.MybatisMapperRegistry#addMapper：</p>
-<pre><code class="language-java">public &lt;T&gt; void addMapper(Class&lt;T&gt; type) {
+<pre><code class="lang-java">public &lt;T&gt; void addMapper(Class&lt;T&gt; type) {
     if (type.isInterface()) {
         if (hasMapper(type)) {
             // TODO 如果之前注入 直接返回
@@ -56,7 +56,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>方法中将MapperAnnotationBuilder替换成了自家的MybatisMapperAnnotationBuilder，<strong>在这里特别说明一下，mp为了不更改mybatis原有的逻辑，会用继承或者直接粗暴地将其复制过来，然后在原有的类名上加上前缀“Mybatis”。</strong></p>
 <p>com.baomidou.mybatisplus.MybatisMapperAnnotationBuilder#parse：</p>
-<pre><code class="language-java">public void parse() {
+<pre><code class="lang-java">public void parse() {
     String resource = type.toString();
     if (!configuration.isResourceLoaded(resource)) {
         loadXmlResource();
@@ -85,7 +85,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>sql注入器就是从这个方法里面添加上去的，首先判断Mapper是否是BaseMapper的超类或者超接口，BaseMapper是mp的基础Mapper，里面定义了很多默认的基础方法，意味着我们一旦使用上mp，通过sql注入器，很多基础的数据库操作都可以直接继承BaseMapper实现了，开发效率爆棚有木有！</p>
 <p>com.baomidou.mybatisplus.toolkit.GlobalConfigUtils#getSqlInjector：</p>
-<pre><code class="language-java">public static ISqlInjector getSqlInjector(Configuration configuration) {
+<pre><code class="lang-java">public static ISqlInjector getSqlInjector(Configuration configuration) {
   // fix #140
   GlobalConfiguration globalConfiguration = getGlobalConfig(configuration);
   ISqlInjector sqlInjector = globalConfiguration.getSqlInjector();
@@ -99,9 +99,9 @@ author: 张乘辉</h2>
 <p>GlobalConfiguration是mp的全局缓存类，用于存放mp自带的一些功能，很明显，sql注入器就存放在GlobalConfiguration中。</p>
 <p>这个方法是先从全局缓存类中获取自定义的sql注入器，如果在GlobalConfiguration中没有找到自定义sql注入器，就会设置一个mp默认的sql注入器AutoSqlInjector。</p>
 <p>sql注入器接口：</p>
-<pre><code class="language-java">// SQL 自动注入器接口
+<pre><code class="lang-java">// SQL 自动注入器接口
 public interface ISqlInjector {
-  
+
   // 根据mapperClass注入SQL
   void inject(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mapperClass);
 
@@ -115,15 +115,15 @@ public interface ISqlInjector {
 </code></pre>
 <p>所有自定义的sql注入器都需要实现ISqlInjector接口，mp已经为我们默认实现了一些基础的注入器：</p>
 <ul>
-<li><p>com.baomidou.mybatisplus.mapper.AutoSqlInjector</p>
-</li>
-<li><p>com.baomidou.mybatisplus.mapper.LogicSqlInjector</p>
-</li>
+<li>com.baomidou.mybatisplus.mapper.AutoSqlInjector</li>
+</ul>
+<ul>
+<li>com.baomidou.mybatisplus.mapper.LogicSqlInjector</li>
 </ul>
 <p>其中AutoSqlInjector提供了最基本的sql注入，以及一些通用的sql注入与拼装的逻辑，LogicSqlInjector在AutoSqlInjector的基础上复写了删除逻辑，因为我们的数据库的数据删除实质上是软删除，并不是真正的删除。</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/mybatis4.png"/></p>
 <p>com.baomidou.mybatisplus.mapper.AutoSqlInjector#inspectInject：</p>
-<pre><code class="language-java">public void inspectInject(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mapperClass) {
+<pre><code class="lang-java">public void inspectInject(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mapperClass) {
     String className = mapperClass.toString();
     Set&lt;String&gt; mapperRegistryCache = GlobalConfigUtils.getMapperRegistryCache(builderAssistant.getConfiguration());
     if (!mapperRegistryCache.contains(className)) {
@@ -133,7 +133,7 @@ public interface ISqlInjector {
 }
 </code></pre>
 <p>该方法是sql注入器的入口，在入口处添加了注入过后不再注入的判断功能。</p>
-<pre><code class="language-java">// 注入单点 crudSql
+<pre><code class="lang-java">// 注入单点 crudSql
 @Override
 public void inject(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mapperClass) {
   this.configuration = builderAssistant.getConfiguration();
@@ -158,7 +158,7 @@ public void inject(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mappe
 </code></pre>
 <p>注入之前先将Mapper类提取泛型模型，因为继承BaseMapper需要将Mapper对应的model添加到泛型里面，这时候我们需要将其提取出来，提取出来后还需要将其初始化成一个TableInfo对象，TableInfo存储了数据库对应的model所有的信息，包括表主键ID类型、表名称、表字段信息列表等等信息，这些信息通过反射获取。</p>
 <p>com.baomidou.mybatisplus.mapper.AutoSqlInjector#injectSql：</p>
-<pre><code class="language-java">protected void injectSql(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mapperClass, Class&lt;?&gt; modelClass, TableInfo table) {
+<pre><code class="lang-java">protected void injectSql(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mapperClass, Class&lt;?&gt; modelClass, TableInfo table) {
   if (StringUtils.isNotEmpty(table.getKeyProperty())) {
     /** 删除 */
     this.injectDeleteByIdSql(false, mapperClass, modelClass, table);
@@ -173,7 +173,7 @@ public void inject(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mappe
 </code></pre>
 <p>所有需要注入的sql都是通过该方法进行调用，AutoSqlInjector还提供了一个inject方法，自定义sql注入器时，继承AutoSqlInjector，实现该方法就行了。</p>
 <p>com.baomidou.mybatisplus.mapper.AutoSqlInjector#injectDeleteByIdSql：</p>
-<pre><code class="language-java">protected void injectSelectByIdSql(boolean batch, Class&lt;?&gt; mapperClass, Class&lt;?&gt; modelClass, TableInfo table) {
+<pre><code class="lang-java">protected void injectSelectByIdSql(boolean batch, Class&lt;?&gt; mapperClass, Class&lt;?&gt; modelClass, TableInfo table) {
   SqlMethod sqlMethod = SqlMethod.SELECT_BY_ID;
   SqlSource sqlSource;
   if (batch) {
@@ -193,7 +193,7 @@ public void inject(MapperBuilderAssistant builderAssistant, Class&lt;?&gt; mappe
 </code></pre>
 <p>我随机选择一个删除sql的注入，其它sql注入都是类似这么写，SqlMethod是一个枚举类，里面存储了所有自动注入的sql与方法名，如果是批量操作，SqlMethod的定义的sql语句在添加批量操作的语句。再根据table和sql信息创建一个SqlSource对象。</p>
 <p>com.baomidou.mybatisplus.mapper.AutoSqlInjector#addMappedStatement：</p>
-<pre><code class="language-java">public MappedStatement addMappedStatement(Class&lt;?&gt; mapperClass, String id, SqlSource sqlSource,
+<pre><code class="lang-java">public MappedStatement addMappedStatement(Class&lt;?&gt; mapperClass, String id, SqlSource sqlSource,
                                           SqlCommandType sqlCommandType, Class&lt;?&gt; parameterClass, String resultMap, Class&lt;?&gt; resultType,
                                           KeyGenerator keyGenerator, String keyProperty, String keyColumn) {
   // MappedStatement是否存在

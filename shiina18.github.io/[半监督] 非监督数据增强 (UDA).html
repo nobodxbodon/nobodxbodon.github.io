@@ -13,25 +13,24 @@ mathjax: true</li>
 <ul>
 <li>Xie, Q., Dai, Z., Hovy, E., Luong, M.-T., &amp; Le, Q. V. (2019). <a href="https://arxiv.org/abs/1904.12848">Unsupervised data augmentation for consistency training</a>. <em>arXiv Preprint arXiv:1904.12848</em>. [<a href="https://github.com/google-research/uda">Code</a>] [<a href="https://github.com/SanghunYun/UDA_pytorch">Code for PyTorch</a>]</li>
 </ul>
-<blockquote>
-<p>Consistency training methods simply regularize model predictions to be invariant to small noise applied to either input examples or hidden states. This framework makes sense intuitively because a good model should be robust to any small change in an input example or hidden states.</p>
+<blockquote><p>Consistency training methods simply regularize model predictions to be invariant to small noise applied to either input examples or hidden states. This framework makes sense intuitively because a good model should be robust to any small change in an input example or hidden states.</p>
 </blockquote>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <p>一类半监督学习方法是, 对输入注入扰动后, 使模型依然输出类似的分布, 从而让模型对小扰动不敏感 (类似对抗学习), 对输入空间或者隐空间的变动更平滑. 可以总结如下:</p>
 <ol>
-<li>给定输入 $x$, 得到输出分布 $p_\theta (y \mid x)$,  其中 $\theta$ 为模型参数. 给 $x$ 或者 hidden state 加入小扰动 $\varepsilon$ 后, 得到输出分布 $p_\theta(y\mid x, \varepsilon)$.</li>
-<li>最小化两个分布之间的 divergence metric (交叉熵, KL 散度, MSE 等) $\mathcal D\left(p_\theta (y \mid x) ;\Vert; p_\theta(y\mid x, \varepsilon)\right)$.</li>
+<li>给定输入 $x$, 得到输出分布 $p<em>\theta (y \mid x)$,  其中 $\theta$ 为模型参数. 给 $x$ 或者 hidden state 加入小扰动 $\varepsilon$ 后, 得到输出分布 $p</em>\theta(y\mid x, \varepsilon)$.</li>
+<li>最小化两个分布之间的 divergence metric (交叉熵, KL 散度, MSE 等) $\mathcal D\left(p<em>\theta (y \mid x) \;\Vert\; p</em>\theta(y\mid x, \varepsilon)\right)$. </li>
 </ol>
 <p>这里施加的扰动通常是 Gauss 噪声等简单的增强方法.</p>
-<blockquote>
-<p>An early work by Bishop (1995) showed that adding Gaussian perturbation to inputs during the training process is equivalent to adding an extra regularization term to the objective function. (Miyato, et al., 2018)</p>
+<blockquote><p>An early work by Bishop (1995) showed that adding Gaussian perturbation to inputs during the training process is equivalent to adding an extra regularization term to the objective function. (Miyato, et al., 2018)</p>
 </blockquote>
 <p><strong>不同点</strong>: UDA 总体结构如下图, 提出用监督学习中的 state-of-the-art 增强方法替换原先的简单增强方法, 包括图中的回译, 图像的随机增强, 以及基于 TF-IDF 的词替换 (替换非关键词) 等.</p>
 <p><img alt="" src="https://shiina18.github.io/assets/posts/images/20211206122225526_8393.png"/></p>
 <p>损失函数分为两个部分:</p>
 <ul>
 <li>第一部分对于标注数据, 按照通常的方法处理, 其中 $y^\ast$ 表示真实标签, 计算交叉熵.</li>
-<li>第二部分对未标注数据, 用原本的参数 $\tilde\theta$ 得到分布预测 $p_{\tilde\theta}(y\mid x)$. 注意这里 $\tilde\theta$ 是 <em>fixed</em> copy of the current parameters $\theta$, 不参与反向传播, 这个 $p_{\tilde\theta}$ 是对真实分布的估计, 在求解优化时固定. 对输入 $x$ 增强得到 $\hat x$, 计算 $p_\theta(y\mid \hat x)$, 计算这两个分布的交叉熵. 因为希望这两个分布相近, 即对于扰动后的样本, 模型输出一致的预测, 这部分称为 consistency loss.</li>
+<li>第二部分对未标注数据, 用原本的参数 $\tilde\theta$ 得到分布预测 $p<em>{\tilde\theta}(y\mid x)$. 注意这里 $\tilde\theta$ 是 <em>fixed</em> copy of the current parameters $\theta$, 不参与反向传播, 这个 $p</em>{\tilde\theta}$ 是对真实分布的估计, 在求解优化时固定. 对输入 $x$ 增强得到 $\hat x$, 计算 $p_\theta(y\mid \hat x)$, 计算这两个分布的交叉熵. 因为希望这两个分布相近, 即对于扰动后的样本, 模型输出一致的预测, 这部分称为 consistency loss.</li>
 </ul>
 <p>最后把这两个部分加权相加.</p>
 <p>UDA 一个比较惊艳的实验结果是在 IMDb 电影评论分类任务上, 只用 20 个标注数据就达到了不错的效果.</p>
@@ -44,7 +43,7 @@ mathjax: true</li>
 <p><strong>Confidence-based masking.</strong> 在无标注数据上, 去掉模型不自信的样本. We find it to be helpful to mask out examples that the current model is not confident about. Specifically, in each minibatch, the consistency loss term is computed only on examples whose highest probability among classification categories is greater than a relatively high threshold.</p>
 <p><strong>Sharpening predictions.</strong> 对无标注数据 Since regularizing the predictions to have low entropy has been shown to be beneficial (Grandvalet and Bengio, 2005; Miyato et al., 2018), we sharpen predictions when computing the target distribution on unlabeled examples by using a low softmax temperature $\tau$ (知识蒸馏用到过的, 文中用了 0.4),</p>
 <p>$$
-p_{\tilde\theta}^{\text{(sharpen)}}(y\mid x) = \frac{\exp(z_y / \tau)}{\sum_{y'} \exp(z_{y'} / \tau)}.
+p_{\tilde\theta}^{\text{(sharpen)}}(y\mid x) = \frac{\exp(z<em>y / \tau)}{\sum</em>{y'} \exp(z_{y'} / \tau)}.
 $$</p>
 <p>Sharpening 和平滑相对, 后者让分布趋向均匀分布, 而前者让突出的更突出 (趋向 one-hot).</p>
 <p><strong>Domain-relevance data filtering.</strong> We use our baseline model trained on the in-domain data to infer the labels of data in a large out-of-domain dataset and pick out examples that the model is most confident about. Specifically, for each category, we sort all examples based on the classified probabilities of being in that category and select the examples with the highest probabilities.</p>
@@ -61,15 +60,15 @@ $$</p>
 </ul>
 <p>实践</p>
 <ul>
-<li>李渔. (2020, Jul 5). <a href="https://zhuanlan.zhihu.com/p/151021586">半监督学习在金融文本分类上的探索和实践</a>.</li>
+<li>李渔. (2020, Jul 5). <a href="https://zhuanlan.zhihu.com/p/151021586">半监督学习在金融文本分类上的探索和实践</a>. </li>
 <li>贝壳智搜. (2020, Nov 5). <a href="https://mp.weixin.qq.com/s/RA-qKd845qaYYsAp_0a_BQ">数据增强在贝壳找房文本分类中的应用</a>.</li>
-<li>延陵既智. (2020, Aug 16). <a href="https://zhuanlan.zhihu.com/p/186211797">Google 无监督数据增强方法 UDA 在文本分类上的实验</a>.</li>
+<li>延陵既智. (2020, Aug 16). <a href="https://zhuanlan.zhihu.com/p/186211797">Google 无监督数据增强方法 UDA 在文本分类上的实验</a>. </li>
 </ul>
 <p>其他 NLP 数据增强</p>
 <ul>
 <li>Nozhihu. (2021, Nov 30). <a href="https://zhuanlan.zhihu.com/p/437980355">如果你用 BERT, 那你的数据增强方法应该比 BERT "懂更多"</a>.</li>
 <li>李渔. (2020, Mar 17). <a href="https://mp.weixin.qq.com/s/CHSDi2LpDOLMjWOLXlvSAg">文本增强技术的研究进展及应用实践</a>.</li>
-<li>JayJay. (2020, Jun 10). <a href="https://zhuanlan.zhihu.com/p/146777068">标注样本少怎么办?「文本增强+半监督学习」总结 (从 PseudoLabel 到 UDA / FixMatch)</a>.</li>
-<li>JayJay. (2021, Jan 12). <a href="https://zhuanlan.zhihu.com/p/342032812">打开你的脑洞: NER 如何进行数据增强?</a>.</li>
+<li>JayJay. (2020, Jun 10). <a href="https://zhuanlan.zhihu.com/p/146777068">标注样本少怎么办?「文本增强+半监督学习」总结 (从 PseudoLabel 到 UDA / FixMatch)</a>. </li>
+<li>JayJay. (2021, Jan 12). <a href="https://zhuanlan.zhihu.com/p/342032812">打开你的脑洞: NER 如何进行数据增强?</a>. </li>
 <li>JayJay. (2020, Sep 8). <a href="https://zhuanlan.zhihu.com/p/142615620">中文 NER 的正确打开方式: 词汇增强方法总结 (从 Lattice LSTM 到 FLAT)</a>.</li>
 </ul>

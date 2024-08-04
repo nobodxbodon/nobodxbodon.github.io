@@ -1,27 +1,29 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1LVS-%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%9E%8B%E6%8E%A8%E5%AF%BC.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/04/08/%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1LVS-%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%9E%8B%E6%8E%A8%E5%AF%BC">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/负载均衡LVS-三种模型推导.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/04/08/负载均衡LVS-三种模型推导">站点原文</a></h2>
 <hr/>
-<h2>title: 负载均衡LVS-三种模型推导
-cover: https://img.paulzzh.com/touhou/random?78
+<p>title: 负载均衡LVS-三种模型推导
+cover: <a href="https://img.paulzzh.com/touhou/random?78">https://img.paulzzh.com/touhou/random?78</a>
 date: 2020-04-08 08:43:02
 categories: 分布式
 toc: true
-tags: [分布式, 负载均衡, LVS]
-description: 在解决高并发时常用的策略就是通过一个负载均衡服务器将用户的请求进行转发给后方真正处理请求的服务器集群, 从而实现HA. 负载均衡通常有基于四层协议的LVS和基于七层协议的Nginx. 本文主要探讨基于四层协议的LVS负载均衡的三种模型的实现</h2>
+tags: [分布式, 负载均衡, LVS]</p>
+<h2>description: 在解决高并发时常用的策略就是通过一个负载均衡服务器将用户的请求进行转发给后方真正处理请求的服务器集群, 从而实现HA. 负载均衡通常有基于四层协议的LVS和基于七层协议的Nginx. 本文主要探讨基于四层协议的LVS负载均衡的三种模型的实现</h2>
 <p>在解决高并发时常用的策略就是通过一个负载均衡服务器将用户的请求进行转发给后方真正处理请求的服务器集群, 从而实现HA. 负载均衡通常有基于四层协议的LVS和基于七层协议的Nginx.</p>
 <p>本文主要探讨基于四层协议的LVS负载均衡的三种模型的实现</p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
-<p>&lt;!-- **目录:** --&gt;</p>
-<p>&lt;!-- toc --&gt;</p>
-<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+&lt;!--more--&gt;
+
+&lt;!-- **目录:** --&gt;
+
+&lt;!-- toc --&gt;
+
+&lt;!-- &lt;br/&gt; --&gt;
+
 <h2>前言</h2>
 <p>在进行LVS负载均衡的三种模型推导之前, 需要有一些计算机网络相关的基础知识, 即ISO七层网络模型.</p>
 <p>不太了解的小伙伴可以通过下面的视频复习一下相关知识:</p>
-<p>&lt;iframe src="//player.bilibili.com/player.html?aid=35028934&amp;bvid=BV1Nb411P7Mf&amp;cid=61333294&amp;page=24" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"&gt; &lt;/iframe&gt;</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+&lt;iframe src="//player.bilibili.com/player.html?aid=35028934&amp;bvid=BV1Nb411P7Mf&amp;cid=61333294&amp;page=24" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"&gt; &lt;/iframe&gt;<blockquote><p>&lt;br/&gt;</p>
 <p>原视频地址:</p>
-<p>https://www.bilibili.com/video/BV1Nb411P7Mf/?p=24</p>
+<p><a href="https://www.bilibili.com/video/BV1Nb411P7Mf/?p=24">https://www.bilibili.com/video/BV1Nb411P7Mf/?p=24</a></p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3>LVS和Nginx的区别</h3>
@@ -32,23 +34,18 @@ description: 在解决高并发时常用的策略就是通过一个负载均衡�
 <p>LVS主要完成对用户请求的转发, 并且以DR(Direct Routing, 直接路由)模式为主要场景</p>
 <p><strong>② 优点</strong></p>
 <p>由于LVS是基于四层(传输层/TCP层)实现的负载均衡, 所以<strong>LVS在进行负载均衡时并不需要建立三次握手和四次挥手的过程(而Nginx是基于七层模型实现的, 所以进行负载均衡时需要经过三次握手的过程)</strong></p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>注: 对百度的请求过程</strong></p>
 <p>在通过浏览器登入百度时, 首先进行的是三次握手的过程.</p>
-<p>&lt;font color="#f00"&gt;<strong>需要注意的是, 三次握手的过程是发生在四层(传输层/TCP层)的. 此时七层发出的<code>GET</code>请求是一直被阻塞的.</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>只有当四层的三次握手真正完成, <code>GET</code>请求才会真正的被传输.</strong>&lt;/font&gt;</p>
-</blockquote>
-<blockquote>
+<p>&lt;font color="#f00"&gt;**需要注意的是, 三次握手的过程是发生在四层(传输层/TCP层)的. 此时七层发出的`GET`请求是一直被阻塞的.**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**只有当四层的三次握手真正完成, `GET`请求才会真正的被传输.**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <p><strong>注2:</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>虽然LVS仅仅将数据包转发. 但是LVS会通过窥看数据包传输层的状态标志位来保证三次握手和四次分手的过程不被分隔</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>即确保一个请求和同一个server建立TCP连接</strong>&lt;/font&gt;</p>
-</blockquote>
-<blockquote>
+<p>&lt;font color="#f00"&gt;**虽然LVS仅仅将数据包转发. 但是LVS会通过窥看数据包传输层的状态标志位来保证三次握手和四次分手的过程不被分隔**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**即确保一个请求和同一个server建立TCP连接**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <p><strong>注3:</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>LVS由于不知道数据包的真正内容, 所以一般要求后端请求处理服务器部署的是完全相同的内容</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**LVS由于不知道数据包的真正内容, 所以一般要求后端请求处理服务器部署的是完全相同的内容**&lt;/font&gt;</p>
 </blockquote>
 <p>即LVS可承受的并发量要高于Nginx(几十万并发量)</p>
 <p>并且通常<strong>数据包的返回可以不再经由负载均衡服务器</strong>(直接建立客户端-&gt;服务器的点对点连接), 所以可以减少负载均衡服务器压力;</p>
@@ -59,8 +56,7 @@ description: 在解决高并发时常用的策略就是通过一个负载均衡�
 <hr/>
 <h4>Nginx</h4>
 <p>Nginx是基于七层实现的负载均衡, 也就是说Nginx在每一次转发请求时都会首先建立三次握手. 但是建立三次握手后就可以得到用户请求的url, 然后可以灵活的对请求进行转发.</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>注: 在Nginx 1.9版本以后也支持4层</strong></p>
 </blockquote>
 <p><strong>① 优点</strong></p>
@@ -78,24 +74,57 @@ description: 在解决高并发时常用的策略就是通过一个负载均衡�
 <p>&lt;br/&gt;</p>
 <h3>LVS场景术语</h3>
 <p>LVS中有一些常见的术语，如下表所示：</p>
-<p>|      <strong>名称</strong>      | <strong>解释</strong>                                                     |
-| :----------------: | :----------------------------------------------------------- |
-|      ipvsadm       | 用户空间的命令行工具，用于管理集群服务及集群服务上的RS等；   |
-|        IPVS        | 工作于内核上的netfilter INPUT HOOK之上的程序，可根据用户定义的集群实现请求转发； |
-|         VS         | Virtual Server ,虚拟服务                                     |
-| Director, Balancer | 负载均衡器、分发器                                           |
-|       <strong>RS</strong>       | <strong>Real Server  后端请求处理服务器</strong>                          |
-|      <strong>CIP</strong>       | <strong>Client IP,客户端IP</strong>                                       |
-|      <strong>VIP</strong>       | <strong>Director Virtual IP,负载均衡器虚拟IP</strong>                     |
-|      <strong>DIP</strong>       | <strong>Director IP,负载均衡器IP(转发的网络地址)</strong>                 |
-|      <strong>RIP</strong>       | <strong>Real Server IP,后端真正处理请求的服务器IP</strong>                |</p>
+<table>
+<thead><tr>
+<th style="text-align:center"><strong>名称</strong></th>
+<th style="text-align:left"><strong>解释</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">ipvsadm</td>
+<td style="text-align:left">用户空间的命令行工具，用于管理集群服务及集群服务上的RS等；</td>
+</tr>
+<tr>
+<td style="text-align:center">IPVS</td>
+<td style="text-align:left">工作于内核上的netfilter INPUT HOOK之上的程序，可根据用户定义的集群实现请求转发；</td>
+</tr>
+<tr>
+<td style="text-align:center">VS</td>
+<td style="text-align:left">Virtual Server ,虚拟服务</td>
+</tr>
+<tr>
+<td style="text-align:center">Director, Balancer</td>
+<td style="text-align:left">负载均衡器、分发器</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>RS</strong></td>
+<td style="text-align:left"><strong>Real Server  后端请求处理服务器</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>CIP</strong></td>
+<td style="text-align:left"><strong>Client IP,客户端IP</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>VIP</strong></td>
+<td style="text-align:left"><strong>Director Virtual IP,负载均衡器虚拟IP</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>DIP</strong></td>
+<td style="text-align:left"><strong>Director IP,负载均衡器IP(转发的网络地址)</strong></td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>RIP</strong></td>
+<td style="text-align:left"><strong>Real Server IP,后端真正处理请求的服务器IP</strong></td>
+</tr>
+</tbody>
+</table>
 <p>对应如下图所示:</p>
-<p><img alt="lvs四层.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/lvs%E5%9B%9B%E5%B1%82.png"/></p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<p><img alt="lvs四层.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/lvs四层.png"/></p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>注:</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>无论使用什么样的负载均衡技术, 对于客户端来说都应该是透明的</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>即: CIP不会随着负载均衡的变化而变化, CIP就是向VIP发送请求</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**无论使用什么样的负载均衡技术, 对于客户端来说都应该是透明的**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**即: CIP不会随着负载均衡的变化而变化, CIP就是向VIP发送请求**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3>SNAT</h3>
@@ -109,8 +138,7 @@ description: 在解决高并发时常用的策略就是通过一个负载均衡�
 <p>212: 192.168.1.66:21212</p>
 <p>然后, 路由器将两个请求的内网IP替换为公网IP(18.18.18.8). 然后以公网IP的形式对外进行访问<strong>(内网IP是不允许存在于公网中的!)</strong></p>
 <p>在123.123.123.88返回请求时, 根据路由器对应的端口号寻找到对应请求的客户端, 并返回数据;</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>所以SNAT本质上就是做了源IP地址层的替换</strong></p>
 </blockquote>
 <p>&lt;br/&gt;</p>
@@ -135,27 +163,23 @@ description: 在解决高并发时常用的策略就是通过一个负载均衡�
 <p>DR模型即直接路由模型(Direct Routing). 就是在服务器返回响应时, 不再经由LVS转发, 而是直接由服务器响应客户端请求;</p>
 <p>DR模型如下图所示:</p>
 <p><img alt="lvs_dr.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/lvs_dr.png"/></p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>说明:</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>DR模型是通过在RS中配置隐藏的VIP实现的</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**DR模型是通过在RS中配置隐藏的VIP实现的**&lt;/font&gt;</p>
 <p>原因是:</p>
-<p>&lt;font color="#f00"&gt;<strong>在RS中必须包含VIP信息才能实现在响应客户端请求时发送出VIP-&gt;CIP的数据包</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>也即: RS中存在两个IP地址, 一个是其本身对外的IP地址, 另一个是VIP(对外隐藏, 对内可见)</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**在RS中必须包含VIP信息才能实现在响应客户端请求时发送出VIP-&gt;CIP的数据包**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**也即: RS中存在两个IP地址, 一个是其本身对外的IP地址, 另一个是VIP(对外隐藏, 对内可见)**&lt;/font&gt;</p>
 </blockquote>
 <p>首先, 客户端还是发送CIP-&gt;VIP请求;</p>
 <p>然后经由LVS服务器将请求转发. 此时由于RS中也存在对内可见的VIP, 所以数据包可以直接发送给后端的RS;</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>注:</strong></p>
 <p><strong>在LVS服务器中也存在VIP. 此时如果不对用户的请求包做处理, 请求包将会直接转发会LVS自己!</strong></p>
-</blockquote>
-<blockquote>
 <p>&lt;br/&gt;</p>
 <p><strong>注2: 隐藏VIP的方法</strong></p>
 <p>在Linux内核中有两个参数<code>arp_ignore</code>和<code>arp_announce</code>, 可以通过修改<code>/proc/sys/net/ipv4/conf/*IF*/</code>目录下的两个文件即可;</p>
 <p>每一个<code>/*IF*/</code>目录代表一个网卡的配置(也包括虚拟网卡), 例如:</p>
-<pre><code class="language-bash">zk@zk:/proc/sys/net/ipv4/conf$ ll
+<pre><code class="lang-bash">zk@zk:/proc/sys/net/ipv4/conf$ ll
 dr-xr-xr-x 1 root root 0 4月  10 08:53 ./
 dr-xr-xr-x 1 root root 0 4月  10 08:53 ../
 dr-xr-xr-x 1 root root 0 4月  10 08:53 all/
@@ -199,13 +223,12 @@ dr-xr-xr-x 1 root root 0 4月  10 11:57 lo/
 <p>&lt;br/&gt;</p>
 <h4>DR模型的不足</h4>
 <p>根据上述的分析可知, 在LVS向RS进行请求包转发时, 需要修改数据链路层中的目标MAC地址(MAC地址欺骗):</p>
-<p>&lt;font color="#f00"&gt;<strong>所以就要求LVS和RS在同一个局域网之中</strong>&lt;/font&gt;</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<p>&lt;font color="#f00"&gt;**所以就要求LVS和RS在同一个局域网之中**&lt;/font&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p>如果LVS和RS不在同一个局域网:</p>
 <p><strong>此时请求包将再次被路由转发, 而在转发时MAC地址会再次被修改, 就无法到达RS</strong></p>
 </blockquote>
-<p>此外, 在RS和客户端建立连接之后. 要求&lt;font color="#f00"&gt;<strong>RS后不可再经历NAT模式, 即RS要有公网IP并直接接入互联网</strong>&lt;/font&gt;</p>
+<p>此外, 在RS和客户端建立连接之后. 要求&lt;font color="#f00"&gt;**RS后不可再经历NAT模式, 即RS要有公网IP并直接接入互联网**&lt;/font&gt;</p>
 <p>所以RS的默认网关应当指向ISP, 并获取到了PIP(公网IP)</p>
 <p>&lt;br/&gt;</p>
 <h3>TUN模型</h3>
@@ -221,7 +244,7 @@ dr-xr-xr-x 1 root root 0 4月  10 11:57 lo/
 <p>文章内容参考:</p>
 <ul>
 <li><a href="https://blog.csdn.net/gui951753/article/details/80316565">图解LVS的工作原理</a></li>
-<li>https://www.bilibili.com/video/BV1Nb411P7Mf?p=25</li>
+<li><a href="https://www.bilibili.com/video/BV1Nb411P7Mf?p=25">https://www.bilibili.com/video/BV1Nb411P7Mf?p=25</a></li>
 </ul>
 <p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
 <p>内容和博客同步更新~</p>

@@ -1,9 +1,9 @@
 <h2><a href="https://github.com/djyde/blog-2022/blob/master/src/pages/blog/electron-sqlite.md">仓库源文</a>，<a href="https://lutaonan.com/blog/electron-sqlite">站点原文</a></h2>
 <hr/>
-<h2>title: 在 Electron 中使用 SQLite 的最好方式
+<p>title: 在 Electron 中使用 SQLite 的最好方式
 layout: '../../layouts/Post.astro'
-date: 2024-04-22
-tags: blog</h2>
+date: 2024-04-22</p>
+<h2>tags: blog</h2>
 <p>上周刚刚发布了一个用 Electron 的应用 <a href="https://epubkit.app">EpubKit</a>. EpubKit 是一个把网页制作成电子书的工具。在 EpubKit 里，我需要一个数据库来存储内容，最好的选择是 SQLite.</p>
 <p><img alt="" src="https://epubkit.app/intro.png"/></p>
 <p>但是，由于 Electron 有 renderer 和 main 区分开的机制，所以在 Electron 中使用 SQLite 会非常麻烦 —— SQLite 的执行要在 Main process, 但调用要在 Renderer process. 在 Electron 里，Renderer 和 Main process 之间的通信是通过 IPC (Inter-Process Communication) 实现的。也就是说，我可能需要把每一个有关数据库操作的业务逻辑单独写成一个 IPC 通信的事件，然后在 Renderer 里调用这些事件。</p>
@@ -15,7 +15,7 @@ tags: blog</h2>
 <p>接下来我会简单描述一下我在 EpubKit 里是怎么做的。</p>
 <h2>编写 Schema</h2>
 <p>在你的项目里找一个地方，把 drizzle schema 写下来:</p>
-<pre><code class="language-ts">import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
+<pre><code class="lang-ts">import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const posts = sqliteTable('posts', {
   id: int("id").primaryKey().default(0),
@@ -24,7 +24,7 @@ export const posts = sqliteTable('posts', {
 </code></pre>
 <h2>在 Renderer 里创建一个 drizzle database 实例</h2>
 <p>根据 <a href="https://orm.drizzle.team/docs/get-started-sqlite#http-proxy">文档</a>, 在创建 drizzle db 实例的时候，可以传入一个函数，这就是 proxy 的本体。我们要做的是在这个 proxy 里，拿到 ORM 最终生成的 sql 语句、执行方法、变量，然后通过 IPC 发送到 Main process.</p>
-<pre><code class="language-ts">export const database = drizzle(async (...args) =&gt; {
+<pre><code class="lang-ts">export const database = drizzle(async (...args) =&gt; {
   try {
     // 通过 IPC 把 SQL 发送到 Main process
     const result = await window.api.execute(...args)
@@ -38,7 +38,7 @@ export const posts = sqliteTable('posts', {
 })
 </code></pre>
 <p>这里有一个 <code>window.api.execute()</code>, 是怎么来的呢？其实是在 <a href="https://www.electronjs.org/docs/latest/tutorial/tutorial-preload">preload</a> 进程里面定义然后暴露的, 它的作用就是通过 IPC 发送 sql 语句到 Main process:</p>
-<pre><code class="language-ts">// preload.ts
+<pre><code class="lang-ts">// preload.ts
 
 const api = {
   execute: (...args) =&gt; ipcRenderer.invoke('db:execute', ...args),
@@ -47,11 +47,11 @@ const api = {
 <p>也就是说，实际上我们以上做的事情就是，通过 proxy, 把 SQL 语句通过 Main process 里的 <code>db:execute</code> handler 最终执行。</p>
 <h2>Main process</h2>
 <p>在 Main process, 我们创建一个 IPC handler:</p>
-<pre><code class="language-ts">// main.ts
+<pre><code class="lang-ts">// main.ts
 ipcMain.handle('db:execute', execute)
 </code></pre>
 <p>这里的 <code>execute</code> 就是 Main process 里最终执行 SQL 语句的函数。</p>
-<pre><code class="language-tsx">import { drizzle } from 'drizzle-orm/better-sqlite3'
+<pre><code class="lang-tsx">import { drizzle } from 'drizzle-orm/better-sqlite3'
 import Database from 'better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import * as schema from '../renderer/src/db/schema'
@@ -92,11 +92,10 @@ function toDrizzleResult(rows: Record&lt;string, any&gt; | Array&lt;Record&lt;st
     return Object.keys(rows).map((key) =&gt; rows[key])
   }
 }
-
 </code></pre>
 <p>在上面的代码中，我额外实现了一个 <code>toDrizzleResult</code> 的方法，是为了把 better-sqlite3 的返回值按照 drizzle 需要的结构返回。</p>
 <p>到这里，你就已经可以在 Renderer process 里直接用 drizzle 了：</p>
-<pre><code class="language-tsx">function App(): JSX.Element {
+<pre><code class="lang-tsx">function App(): JSX.Element {
 
   const [postList, setPosts] = useState([] as any[])
 
@@ -144,7 +143,7 @@ export default App
 </code></pre>
 <p>但这时候执行，会报错。原因是我们还没有初始化数据库。我们需要在 Main process 里初始化数据库。</p>
 <p>首先需要用 drizzle-kit 生成 migration 文件。在 <code>drizzle.config.ts</code> 中指定了 migration 文件的地址：</p>
-<pre><code class="language-ts">// drizzle.config.ts
+<pre><code class="lang-ts">// drizzle.config.ts
 import type { Config } from 'drizzle-kit'
 
 export default {
@@ -152,10 +151,9 @@ export default {
   out: './drizzle',
   driver: 'better-sqlite'
 } satisfies Config
-
 </code></pre>
 <p>然后写一个 <code>runMigrations</code> 方法，用来初始化数据库：</p>
-<pre><code class="language-ts">export const runMigrate = async () =&gt; {
+<pre><code class="lang-ts">export const runMigrate = async () =&gt; {
   migrate(db, {
     // 在 drizzle.config.ts 里指定的路径
     migrationsFolder: path.join(__dirname, '../../drizzle')
@@ -163,7 +161,7 @@ export default {
 }
 </code></pre>
 <p>这个方法需要在 Main process 启动时执行的：</p>
-<pre><code class="language-ts">async function createWindow() {
+<pre><code class="lang-ts">async function createWindow() {
   // ...
 
   await runMigrate()

@@ -1,11 +1,13 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2020-04-28-gzip-and-deflate.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2020/04/28/gzip-and-deflate">站点原文</a></h2>
 <hr/>
-<h2>key: 30
+<p>key: 30
 title: Gzip 格式和 DEFLATE 压缩算法
 math: true
-tag:
-- algorithms
-- featured</h2>
+tag:</p>
+<pre><code>- algorithms
+- featured
+</code></pre>
+<hr/>
 <h2>1. 引言</h2>
 <p>当你键入 <code>tar -zcf src.tar.gz src</code>, 就可以将 <code>src</code> 下的所有文件打包成一个 tar.gz 格式的压缩包. 这里的 "tar" 是归档格式, 将多个文件组合成一个文件; 而 "gz" 指的就是 gzip 压缩格式, 使用 DEFLATE 算法压缩得到. 作为使用最广泛的无损压缩算法, DEFLATE 是怎样工作的, 背后的原理是什么? 这篇文章我们来讨论下这个问题.</p>
 <p>DEFLATE 算法结合了 LZ77 算法和 Huffman 编码, 由 Phil Katz 设计, 并被 <a href="https://tools.ietf.org/html/rfc1951">RFC1951</a> 标准化. 本文是笔者对 <a href="https://tools.ietf.org/html/rfc1951">RFC1951</a> 和 <a href="http://www.zlib.net/">zlib</a> 研究的总结, 首先介绍 LZ77 算法, 再阐述 Huffman 编码在 DEFLATE 中的作用; 最后介绍 gzip 的格式.</p>
@@ -13,12 +15,10 @@ tag:
 <p>J. Ziv 和 A. Lempel 在 1977 发表了一篇名为 <a href="https://ieeexplore.ieee.org/abstract/document/1055714/">A Universal Algorithm for Sequential Data Compression</a> 的论文, 提出了一种顺序数据的通用压缩算法. 这个算法后来被称为 LZ77 算法. 事实上 DEFLATE 算法使用的 LZ77 跟原版有所不同, 这里我们以 DEFLATE 中的为准.</p>
 <h3>2.1 基本原理</h3>
 <p>我们平时使用的文件总是会有很多重复的部分, LZ77 压缩算法正是利用了这一点. 它会试图尽可能地找出文件中重复的内容, 然后用一个标记代替重复的部分, 这个标记能够明确地指示这部分在哪里出现过. 举个例子, 以 <em>葛底斯堡演说</em> 的第一段为例:</p>
-<blockquote>
-<p>Four score and seven years ago our fathers brought forth, on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal.</p>
+<blockquote><p>Four score and seven years ago our fathers brought forth, on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal.</p>
 </blockquote>
 <p>我们可以找出不少重复的片段. 我们规定, 只要有两个以上的字符与前文重复, 就使用重复标记 <code>&lt;d,l&gt;</code> 代替它. <code>&lt;d,l&gt;</code> 表示这个位置的字符串等价与 <code>d</code> 个字符前, 长度为 <code>l</code> 的字符串. 于是上面的内容就可以表示为:</p>
-<blockquote>
-<p>Four score and seven years ago &lt;30,4&gt;fathe&lt;16,3&gt;brought forth, on this continent, a new nation,&lt;25,4&gt;ceived in Liberty&lt;36,3&gt;&lt;102,3&gt;dedicat&lt;26,3&gt;to&lt;69,3&gt;e proposi&lt;56,4&gt;&lt;85,3&gt;at all m&lt;138,3&gt;a&lt;152,3&gt;cre&lt;44,5&gt;equal.</p>
+<blockquote><p>Four score and seven years ago &lt;30,4&gt;fathe&lt;16,3&gt;brought forth, on this continent, a new nation,&lt;25,4&gt;ceived in Liberty&lt;36,3&gt;&lt;102,3&gt;dedicat&lt;26,3&gt;to&lt;69,3&gt;e proposi&lt;56,4&gt;&lt;85,3&gt;at all m&lt;138,3&gt;a&lt;152,3&gt;cre&lt;44,5&gt;equal.</p>
 </blockquote>
 <p>呃, 你可能已经发现了这样 "压缩" 后的结果比原文还长. 别急, 这只是个演示, 稍后我们能看到如何解决这个问题.</p>
 <p>实现这个算法最简单的方式就是遍历字符串, 对于每个字符都在前文中顺序查找是否有重复的字符, 然后求出最长重复子串. 这种做法时间复杂度为 $\mathrm{O}(n^2)$, 效率较低, 特别是在处理大文件的时候. 为了提高效率, 我们使用哈希表和滑动窗口优化.</p>
@@ -27,24 +27,24 @@ tag:
 <p>举个例子, 考虑字符串 <code>abcabcdabcde</code>, 算法运行时有以下几步:</p>
 <ol>
 <li><p>扫描到第 0 个字符 <code>a</code>, 哈希表为空, 原样输出字符 <code>a</code>, 并且将字符串 <code>abc</code> 插入哈希表中.</p>
-<pre><code>hash table: {}
-abcabcdabcde
-^
-output: a
+<pre><code> hash table: {}
+ abcabcdabcde
+ ^
+ output: a
 </code></pre>
 </li>
 <li><p>扫描到第 3 个字符 <code>a</code>, 哈希表指示 <code>abc</code> 在 <code>0</code> 处出现过. 最长的匹配就是 <code>abc</code>, 因此输出 <code>&lt;3,3&gt;</code>. 同时把当前位置插入到 <code>abc</code> 映射的列表中.</p>
-<pre><code>hash table: {"abc":[0],"bca":[1],"cab":[2]}
-abcabcdabcde
-   ^
-output: abc&lt;3,3&gt;
+<pre><code> hash table: {"abc":[0],"bca":[1],"cab":[2]}
+ abcabcdabcde
+    ^
+ output: abc&lt;3,3&gt;
 </code></pre>
 </li>
 <li><p>扫描到第 7 个字符 <code>a</code>, 哈希表指示 <code>abc</code> 在 <code>0</code>, <code>3</code> 处出现过. 依次与当前位置匹配, <code>0</code> 处只能匹配到 <code>abc</code>, 而 <code>3</code> 处能匹配到 <code>abcd</code>, 最长的匹配为 <code>abcd</code>, 于是输出 <code>&lt;4,4&gt;</code>. 同时把当前位置插入到 <code>abc</code> 映射的列表中.</p>
-<pre><code>hash table: {"abc":[0,3],"bca":[1],"cab":[2],"bcd":[4],"cda":[5],"dab":[6]}
-abcabcdabcde
-       ^
-output: abc&lt;3,3&gt;d&lt;4,4&gt;
+<pre><code> hash table: {"abc":[0,3],"bca":[1],"cab":[2],"bcd":[4],"cda":[5],"dab":[6]}
+ abcabcdabcde
+        ^
+ output: abc&lt;3,3&gt;d&lt;4,4&gt;
 </code></pre>
 </li>
 </ol>
@@ -71,59 +71,103 @@ output: abcbcd&lt;6,3&gt;
 <h3>3.1 前缀编码</h3>
 <p>为什么每个字符占的位数都不同却能明确地区分它们呢? 这就是前缀编码的作用. 为了说明什么是前缀编码, 试想我们在打电话. 电话号码的长度是不一样的: 有三位的, 如 110, 119; 有五位的, 如 10086, 10010; 有 7 位或 8 位的固定电话, 又有 11 位的手机号码等等. 然而拨号的时候依次输入号码, 总能正确识别 (固定电话摘机拨号无需按呼叫键). 这是因为除了匪警 110 之外不会有任何一个电话号码以 110 开头, 任何一个固定电话号都不可能是某个手机号的前缀. 电话号码就是一种前缀编码. 所以, 虽然 Huffman 编码中每个字符的编码位数都不同, 但是短的编码不会是长的编码的前缀. 这样就保证了 Huffman 编码没有歧义.</p>
 <p>我们使用 Huffman 树构造 Huffman 编码. 前文说了, Huffman 编码有长有短, 那么显然让使用频率高的字符编码短, 使用频率高的字符编码长比较合理. 假设我们要对字符 a, b, c, d, e 进行编码, 它们的使用频率如下表所示:</p>
-<p>| character | times |
-|:----------|:------|
-| a         | 1     |
-| b         | 4     |
-| c         | 4     |
-| d         | 3     |
-| e         | 1     |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">character</th>
+<th style="text-align:left">times</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">a</td>
+<td style="text-align:left">1</td>
+</tr>
+<tr>
+<td style="text-align:left">b</td>
+<td style="text-align:left">4</td>
+</tr>
+<tr>
+<td style="text-align:left">c</td>
+<td style="text-align:left">4</td>
+</tr>
+<tr>
+<td style="text-align:left">d</td>
+<td style="text-align:left">3</td>
+</tr>
+<tr>
+<td style="text-align:left">e</td>
+<td style="text-align:left">1</td>
+</tr>
+</tbody>
+</table>
 <p>构造方式非常简单. 我们把字符的出现频率视为优先级, 放入一个最小优先队列中:</p>
-<p><img alt="queue" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_1.png"/></p>
+<p><img alt="queue" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_1.png"/></p>
 <p>然后弹出两个优先级最低的字符作为子节点, 构造出第一个二叉树; 父节点的优先级视为两个字节优先级之和, 然后把父节点插入队列中:</p>
-<p><img alt="construct" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_2.png"/></p>
+<p><img alt="construct" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_2.png"/></p>
 <p>重复这个操作, 最后我们会得到一颗二叉树. 这便是 Huffman 树.</p>
-<p><img alt="tree" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_3.png"/></p>
+<p><img alt="tree" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_3.png"/></p>
 <p>我们把这棵树的左支编码为 <code>0</code>, 右支编码为 <code>1</code>, 那么从根节点向下遍历到叶子节点, 即可得出相应字符的 Huffman 编码. 因此我们得到上面例子的 Huffman 编码表为:</p>
-<p>| character | code  |
-|:----------|:------|
-| a         | 000   |
-| b         | 10    |
-| c         | 11    |
-| d         | 01    |
-| e         | 001   |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">character</th>
+<th style="text-align:left">code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">a</td>
+<td style="text-align:left">000</td>
+</tr>
+<tr>
+<td style="text-align:left">b</td>
+<td style="text-align:left">10</td>
+</tr>
+<tr>
+<td style="text-align:left">c</td>
+<td style="text-align:left">11</td>
+</tr>
+<tr>
+<td style="text-align:left">d</td>
+<td style="text-align:left">01</td>
+</tr>
+<tr>
+<td style="text-align:left">e</td>
+<td style="text-align:left">001</td>
+</tr>
+</tbody>
+</table>
 <p>假设有字符串 <code>badbec</code>, 使用 Huffman 编码后得到 <code>10000011000111</code>. 解码也很简单, 依次读入每个比特, 利用 Huffman 树, 自根节点开始逢 <code>0</code> 向左逢 <code>1</code> 向右, 到达叶子节点即输出相应的字符, 然后回到根节点继续扫描.</p>
 <h3>3.2 对距离和长度进行编码</h3>
 <p>一个字节有 8 位, 因此我们需要 0 至 255 一共 256 个 Huffman 编码. 统计文件各个字符的使用频率, 构造出 Huffman 树即可计算出这 256 个编码. 那么如何用 Huffman 编码表示重复标记中的距离和长度呢? DEFLATE 算法是这样做的:</p>
 <ul>
 <li><p>对于距离, 它有 0 至 29 一共 30 个编码. 距离编码的含义如下表所示:</p>
 <p>| code | extra | distance  | | code | extra | distance  | | code | extra | distance    |
-|:-----|:------|:----------|-|:-----|:------|:----------|-|:-----|:------|:------------|
-| 0    | 0     | 1         | | 10   | 4     | 33-48     | | 20   |  9    | 1025-1536   |
-| 1    | 0     | 2         | | 11   | 4     | 49-64     | | 21   |  9    | 1537-2048   |
-| 2    | 0     | 3         | | 12   | 5     | 65-96     | | 22   | 10    | 2049-3072   |
-| 3    | 0     | 4         | | 13   | 5     | 97-128    | | 23   | 10    | 3073-4096   |
-| 4    | 1     | 5,6       | | 14   | 6     | 129-192   | | 24   | 11    | 4097-6144   |
-| 5    | 1     | 7,8       | | 15   | 6     | 193-256   | | 25   | 11    | 6145-8192   |
-| 6    | 2     | 9-12      | | 16   | 7     | 257-384   | | 26   | 12    | 8193-12288  |
-| 7    | 2     | 13-16     | | 17   | 7     | 385-512   | | 27   | 12    | 12289-16384 |
-| 8    | 3     | 17-24     | | 18   | 8     | 513-768   | | 28   | 13    | 16385-24576 |
-| 9    | 3     | 25-32     | | 19   | 8     | 769-1024  | | 29   | 13    | 24577-32768 |</p>
+  |:-----|:------|:----------|-|:-----|:------|:----------|-|:-----|:------|:------------|
+  | 0    | 0     | 1         | | 10   | 4     | 33-48     | | 20   |  9    | 1025-1536   |
+  | 1    | 0     | 2         | | 11   | 4     | 49-64     | | 21   |  9    | 1537-2048   |
+  | 2    | 0     | 3         | | 12   | 5     | 65-96     | | 22   | 10    | 2049-3072   |
+  | 3    | 0     | 4         | | 13   | 5     | 97-128    | | 23   | 10    | 3073-4096   |
+  | 4    | 1     | 5,6       | | 14   | 6     | 129-192   | | 24   | 11    | 4097-6144   |
+  | 5    | 1     | 7,8       | | 15   | 6     | 193-256   | | 25   | 11    | 6145-8192   |
+  | 6    | 2     | 9-12      | | 16   | 7     | 257-384   | | 26   | 12    | 8193-12288  |
+  | 7    | 2     | 13-16     | | 17   | 7     | 385-512   | | 27   | 12    | 12289-16384 |
+  | 8    | 3     | 17-24     | | 18   | 8     | 513-768   | | 28   | 13    | 16385-24576 |
+  | 9    | 3     | 25-32     | | 19   | 8     | 769-1024  | | 29   | 13    | 24577-32768 |</p>
 <p>每个编码都表示一个或多个距离. 当它表示多个距离时, 意味着接下来会有 extra 位表示具体的距离是多少. 例如假设编码 14 接下来的 6 位为 <code>011010</code>, 则表示距离为 129 + 0b011010 = 129 + 26 = 155. 这样距离编码能表示的距离范围为 1 至 32768.</p>
 </li>
 <li><p>对于长度, 它与普通字符共用同一编码空间. 这个编码空间一共有 286 个编码, 范围是从 0 至 285. 其中 0 至 255 为普通字符编码, 256 表示压缩块的结束; 而 257 至 285 则表示长度. 长度编码的含义如下表所示:</p>
 <p>| code | extra | length(s) | | code | extra | length(s) | | code | extra | length(s) |
-|:-----|:------|:----------|-|:-----|:------|:----------|-|:-----|:------|:----------|
-| 257  | 0     | 3         | | 267  | 1     | 15,16     | | 277  | 4     | 67-82     |
-| 258  | 0     | 4         | | 268  | 1     | 17,18     | | 278  | 4     | 83-98     |
-| 259  | 0     | 5         | | 269  | 2     | 19-22     | | 279  | 4     | 99-114    |
-| 260  | 0     | 6         | | 270  | 2     | 23-26     | | 280  | 4     | 115-130   |
-| 261  | 0     | 7         | | 271  | 2     | 27-30     | | 281  | 5     | 131-162   |
-| 262  | 0     | 8         | | 272  | 2     | 31-34     | | 282  | 5     | 163-194   |
-| 263  | 0     | 9         | | 273  | 3     | 35-42     | | 283  | 5     | 195-226   |
-| 264  | 0     | 10        | | 274  | 3     | 43-50     | | 284  | 5     | 227-257   |
-| 265  | 1     | 11,12     | | 275  | 3     | 51-58     | | 285  | 0     | 258       |
-| 266  | 1     | 13,14     | | 276  | 3     | 59-66     | |</p>
+  |:-----|:------|:----------|-|:-----|:------|:----------|-|:-----|:------|:----------|
+  | 257  | 0     | 3         | | 267  | 1     | 15,16     | | 277  | 4     | 67-82     |
+  | 258  | 0     | 4         | | 268  | 1     | 17,18     | | 278  | 4     | 83-98     |
+  | 259  | 0     | 5         | | 269  | 2     | 19-22     | | 279  | 4     | 99-114    |
+  | 260  | 0     | 6         | | 270  | 2     | 23-26     | | 280  | 4     | 115-130   |
+  | 261  | 0     | 7         | | 271  | 2     | 27-30     | | 281  | 5     | 131-162   |
+  | 262  | 0     | 8         | | 272  | 2     | 31-34     | | 282  | 5     | 163-194   |
+  | 263  | 0     | 9         | | 273  | 3     | 35-42     | | 283  | 5     | 195-226   |
+  | 264  | 0     | 10        | | 274  | 3     | 43-50     | | 284  | 5     | 227-257   |
+  | 265  | 1     | 11,12     | | 275  | 3     | 51-58     | | 285  | 0     | 258       |
+  | 266  | 1     | 13,14     | | 276  | 3     | 59-66     | |</p>
 <p>与距离编码类似, 每个编码都表示一个或多个长度, 表示多个长度时后面会有 extra 位指示具体的长度. 长度编码能表示的长度范围为 3 至 258.</p>
 </li>
 </ul>
@@ -132,26 +176,67 @@ output: abcbcd&lt;6,3&gt;
 <p>我们知道, Huffman 编码是根据字符的出现频率构造的. 不同的文件字符出现的频率都不同, 因此 Huffman 编码也不同. 为了能够正确地解压, 压缩块中还必须存储 Huffman 编码表. 这一节我们来讨论如何用最小的空间存储这个 Huffman 编码表.</p>
 <h4>3.2.1 将 Huffman 编码表表示为长度序列</h4>
 <p>为了高效地存储 Huffman 编码表, DEFLATE 算法规定, Huffman 树的每一层的叶子节点必须从这一层的最左侧开始, 按照 Huffman 编码的数值大小从小到大依次排列; 内部节点排列在随后. 此外同一层的字符应该按照字符表(如 ASCII 码表)的顺序依次排列. 这样 3.1 节中的 Huffman 树就应该调整为:</p>
-<p><img alt="adjusted" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_4.png"/></p>
+<p><img alt="adjusted" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/gzip-and-deflate_4.png"/></p>
 <p>调整后的 Huffman 编码表就是:</p>
-<p>| character | code  |
-|:----------|:------|
-| a         | 110   |
-| b         | 00    |
-| c         | 01    |
-| d         | 10    |
-| e         | 111   |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">character</th>
+<th style="text-align:left">code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">a</td>
+<td style="text-align:left">110</td>
+</tr>
+<tr>
+<td style="text-align:left">b</td>
+<td style="text-align:left">00</td>
+</tr>
+<tr>
+<td style="text-align:left">c</td>
+<td style="text-align:left">01</td>
+</tr>
+<tr>
+<td style="text-align:left">d</td>
+<td style="text-align:left">10</td>
+</tr>
+<tr>
+<td style="text-align:left">e</td>
+<td style="text-align:left">111</td>
+</tr>
+</tbody>
+</table>
 <p>注意调整后的 Huffman 编码并不影响压缩率: 各个字符编码的长度不变, 最常用的字符的编码仍是最短的. 不难发现, 相同长度的编码都是依次递增的, 且某个长度的编码的最小值取决于上个长度的编码的最小值和数量. 现设长度为 $i$ 的编码的最小值为 $m_i$, 有 $n_i$ 个; 又设长度为 0 的编码的最小值为 0, 有 0 个. 那么易得</p>
 <p>$$m_{i+1} = (m_i + n_i) \ll 1$$</p>
 <p>这里的 "$\ll$" 表示左移. 这样, 我们只需要知道每个字符的 Huffman 编码长度, 即可推算出所有字符的 Huffman 编码了. 对如上面的例子, 我们只需存储长度序列 $&lt;3, 2, 2, 2, 3&gt;$ 即可. 解压时扫描这个序列, 得到各个长度的编码的数量, 即可求算出各个长度的编码的最小值; 相同长度的编码都是依次递增的, 所以依次加一, 即可得出所有字符的 Huffman 编码. 特别地, 长度 0 表示这个字符没有在压缩块中出现过, 构造 Huffman 编码的时候会排除它.</p>
 <h4>3.2.2 对长度序列编码</h4>
 <p>长度序列中很容易出现连续重复的值; 并且由于文件中可能有很多未使用的字符, 也会出现很多 0.  因此 DEFLATE 会对这个长度序列编码, 如下所示:</p>
-<p>| code | meaning |
-|:-----|:--------|
-| 0-15 | 表示长度 0 至 15 |
-| 16   | 前面的长度重复 3 到 6 次. 接下来的两位指示具体重复多少次, 这与 3.2 节中的长度和距离编码类似. |
-| 17   | 长度 0 重复 3 至 10 次. 接下来的 3 位指示具体重复多少次. |
-| 18   | 长度 0 重复 11 至 138 次. 接下来的 7 位指示具体重复多少次. |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">code</th>
+<th style="text-align:left">meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">0-15</td>
+<td style="text-align:left">表示长度 0 至 15</td>
+</tr>
+<tr>
+<td style="text-align:left">16</td>
+<td style="text-align:left">前面的长度重复 3 到 6 次. 接下来的两位指示具体重复多少次, 这与 3.2 节中的长度和距离编码类似.</td>
+</tr>
+<tr>
+<td style="text-align:left">17</td>
+<td style="text-align:left">长度 0 重复 3 至 10 次. 接下来的 3 位指示具体重复多少次.</td>
+</tr>
+<tr>
+<td style="text-align:left">18</td>
+<td style="text-align:left">长度 0 重复 11 至 138 次. 接下来的 7 位指示具体重复多少次.</td>
+</tr>
+</tbody>
+</table>
 <h4>3.2.3 使用 Huffman 编码压缩 Huffman 编码表</h4>
 <p>将 Huffman 编码表表示成编码后的长度序列已经比较精简了, 但是 DEFLATE 算法认为这还不够. 它决定对这个编码后的长度序列再次使用 Huffman 编码压缩. 这一步就有一点点绕了. 为了做到这一点, 我们需要为长度序列的编码 -- -- 0 至 18, 构造 Huffman 编码表(然而这个长度序列表示的就是一个 Huffman 编码表, 等于我们是在为一个 Huffman 编码表构造 Huffman 编码表). 问题来了, 怎么表示这个 Huffman 编码表的 Huffman 编码表呢? 首先, DEFLATE 算法定义了一个神秘数组:</p>
 <p>$$A = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15}$$</p>
@@ -163,29 +248,105 @@ output: abcbcd&lt;6,3&gt;
 <p>压缩主体由一个或多个<strong>区块(block)</strong>组成. 每个区块的长度不固定, 都有自己的压缩和编码方式. 区块可能起始或结束于任何一个比特, 不必对齐字节. 需要说明的是, 重复标记指示的距离有可能跨越区块.</p>
 <p>上文阐述的都是使用动态 Huffman 编码压缩. 事实上一个区块还有可能使用静态 Huffman 编码压缩或者不压缩. 使用静态 Huffman 编码压缩的区块会使用算法预设的 Huffman 编码进行压缩和解压, 不需要存储 Huffman 编码表.</p>
 <p>所有的区块都以一个 3 位的头部开始, 包含以下数据:</p>
-<p>| name   | length | description
-|:-------|:-------|:------------
-| BFINAL | 1 位   | 标识是否是最后一个区块
-| BTYPE  | 2 位   | 标识类型. <code>00</code>: 未压缩; <code>01</code>: 静态 Huffman 编码压缩; <code>10</code>: 动态 Huffman 编码压缩; <code>11</code>: 保留</p>
+<table>
+<thead><tr>
+<th style="text-align:left">name</th>
+<th style="text-align:left">length</th>
+<th style="text-align:left">description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">BFINAL</td>
+<td style="text-align:left">1 位</td>
+<td style="text-align:left">标识是否是最后一个区块</td>
+</tr>
+<tr>
+<td style="text-align:left">BTYPE</td>
+<td style="text-align:left">2 位</td>
+<td style="text-align:left">标识类型. <code>00</code>: 未压缩; <code>01</code>: 静态 Huffman 编码压缩; <code>10</code>: 动态 Huffman 编码压缩; <code>11</code>: 保留</td>
+</tr>
+</tbody>
+</table>
 <h3>4.1 未压缩区块</h3>
 <p>未压缩区块包含以下数据(紧接着头部):</p>
-<p>| name   | length | description
-|:-------|:-------|:------------
-| LEN    | 2 位   | 区块数据长度
-| NLEN   | 2 位   | LEN 的补码
-| DATA   | LEN 字节 | 有效数据</p>
+<table>
+<thead><tr>
+<th style="text-align:left">name</th>
+<th style="text-align:left">length</th>
+<th style="text-align:left">description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">LEN</td>
+<td style="text-align:left">2 位</td>
+<td style="text-align:left">区块数据长度</td>
+</tr>
+<tr>
+<td style="text-align:left">NLEN</td>
+<td style="text-align:left">2 位</td>
+<td style="text-align:left">LEN 的补码</td>
+</tr>
+<tr>
+<td style="text-align:left">DATA</td>
+<td style="text-align:left">LEN 字节</td>
+<td style="text-align:left">有效数据</td>
+</tr>
+</tbody>
+</table>
 <h3>4.2 压缩区块</h3>
 <p>动态 Huffman 编码压缩区块包含以下数据(紧接着头部):</p>
-<p>| name   | length | description
-|:-------|:-------|:------------
-| HLIT   | 5 位   | 长度/字符编码的最大值减 257. 因为并不是所有的长度编码都被使用, 因此这里标记最大的长度/字符编码(长度与普通字符共用同一编码空间).
-| HDIST  | 5 位   | 距离编码最大值减 1. 原理同上.
-| HCLEN  | 4 位   | 3.2.3 节中的 k 减 4. 标识使用了神秘数组中的前几个编码.
-| &lt;u&gt;编码后的长度序列的 Huffman 编码表&lt;/u&gt; | (HCLEN + 4) * 3 位 | 如 3.2.3 节所述的 "k 个数字". 因为长度序列编码只有 19 个, 因此每个数字 3 位就够了.
-| 长度/字符编码的 Huffman 编码表 | 变长 | 根据上述 Huffman 编码表编码的长度序列, 用于表示长度/字符编码的 Huffman 编码表.
-| 距离编码的 Huffman 编码表 | 变长 | 根据上述 Huffman 编码表编码的长度序列, 用于表示距离编码的 Huffman 编码表.
-| DATA | 变长 | 有效压缩数据
-| 256 结束标记 | 变长 | 标识区块的结束</p>
+<table>
+<thead><tr>
+<th style="text-align:left">name</th>
+<th style="text-align:left">length</th>
+<th style="text-align:left">description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">HLIT</td>
+<td style="text-align:left">5 位</td>
+<td style="text-align:left">长度/字符编码的最大值减 257. 因为并不是所有的长度编码都被使用, 因此这里标记最大的长度/字符编码(长度与普通字符共用同一编码空间).</td>
+</tr>
+<tr>
+<td style="text-align:left">HDIST</td>
+<td style="text-align:left">5 位</td>
+<td style="text-align:left">距离编码最大值减 1. 原理同上.</td>
+</tr>
+<tr>
+<td style="text-align:left">HCLEN</td>
+<td style="text-align:left">4 位</td>
+<td style="text-align:left">3.2.3 节中的 k 减 4. 标识使用了神秘数组中的前几个编码.</td>
+</tr>
+<tr>
+<td style="text-align:left">&lt;u&gt;编码后的长度序列的 Huffman 编码表&lt;/u&gt;</td>
+<td style="text-align:left">(HCLEN + 4) * 3 位</td>
+<td style="text-align:left">如 3.2.3 节所述的 "k 个数字". 因为长度序列编码只有 19 个, 因此每个数字 3 位就够了.</td>
+</tr>
+<tr>
+<td style="text-align:left">长度/字符编码的 Huffman 编码表</td>
+<td style="text-align:left">变长</td>
+<td style="text-align:left">根据上述 Huffman 编码表编码的长度序列, 用于表示长度/字符编码的 Huffman 编码表.</td>
+</tr>
+<tr>
+<td style="text-align:left">距离编码的 Huffman 编码表</td>
+<td style="text-align:left">变长</td>
+<td style="text-align:left">根据上述 Huffman 编码表编码的长度序列, 用于表示距离编码的 Huffman 编码表.</td>
+</tr>
+<tr>
+<td style="text-align:left">DATA</td>
+<td style="text-align:left">变长</td>
+<td style="text-align:left">有效压缩数据</td>
+</tr>
+<tr>
+<td style="text-align:left">256 结束标记</td>
+<td style="text-align:left">变长</td>
+<td style="text-align:left">标识区块的结束</td>
+</tr>
+</tbody>
+</table>
 <p>静态压缩区块比较简单, 头部后紧接着就是有效压缩数据, 最后在加一个 256 结束标记.</p>
 <h2>5. 总结</h2>
 <p>DEFLATE 算法为了尽可能地压缩数据可谓是煞费苦心, 整体看下来还是比较复杂的. 由于时间和精力有限, 笔者也没有仔细阅读 zlib 源码, 因此本文主要基于 RFC1951, 对于实现细节讨论较少. 如有错误或者讲得不明白的地方, 欢迎指正. 对实现感兴趣的同学可以参阅 zlib 源码.</p>

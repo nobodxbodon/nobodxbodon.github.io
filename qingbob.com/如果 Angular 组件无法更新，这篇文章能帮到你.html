@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2019-12-28-angular-onpush-explain.md">仓库源文</a>，<a href="https://qingbob.com/angular-onpush-explain">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 如果 Angular 组件无法更新，这篇文章能帮到你
 modified: 2019-12-28
 tags: [javascript, angular]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>这原本不是一篇文章，是一封对内的邮件。在我们的项目里有一个传统：如果你发现了任何对他人有帮助的事情，不仅于技术上，可以通过邮件的形式告诉大家，邮件上需要加上 tag: #Aha moment#</p>
 <p>虽然说这封邮件看上去只是为了解决某个特定问题，但实际上它涉及到了 Angular 和 AngularJS 后的运行原理和优化技巧，如果你感兴趣，对你也许有帮助</p>
 <p>文章提到的项目 T 是一个 Angular 1.x 版本和 Angular 8 框架共存的应用，问题就发生在其中</p>
@@ -20,7 +20,7 @@ share: true</h2>
 <p>因为涉及到很多基本原理，这篇文章也能够让你一窥 Angular 和 AngularJS 的运行机制以及优化技巧</p>
 <h2>也许是 <code>ChangeDetectionStrategy.onPush</code> 的问题</h2>
 <p>我们怀疑是我们的 Angular 组件出了问题。如果你有心留意的话，大部分 Angular 组件的声明中会包含一个名为 <code>changeDetection</code> 的配置，例如：</p>
-<pre><code class="language-javascript">@Component({
+<pre><code class="lang-javascript">@Component({
   selector: 'app-system',
   template: ``,
   styles: [require('./system.component.scss')],
@@ -34,7 +34,7 @@ export class SystemTemplateSectionsComponent {}
 <p>我们先简单了解 CD 是如何工作的</p>
 <p>想象一个最简单的场景：你在页面上点击了一个按钮。但如果你在点击事件的回调函数中更改了一些数值，Angular 是怎么知道的？</p>
 <p>因为 Angular 采用 monkey patch 的方式重写并覆盖了浏览器的 <code>addEventListenter</code> 接口，在调用回调函数的同时手动触发了 CD，代码类似于：</p>
-<pre><code class="language-javascript">// this is the new version of addEventListener
+<pre><code class="lang-javascript">// this is the new version of addEventListener
 function addEventListener(eventName, callback) {
      // call the real addEventListener
      callRealAddEventListener(eventName, function() {
@@ -56,7 +56,7 @@ function addEventListener(eventName, callback) {
 <ul>
 <li><code>ChangeDetectorRef.detach()</code> 手动和 CD 断绝关系</li>
 </ul>
-<pre><code class="language-javascript">@Component({
+<pre><code class="lang-javascript">@Component({
   selector: 'ns-demo',
   template: ``
 })
@@ -68,7 +68,7 @@ export class DemoComponent {
 <ul>
 <li>使用 zone.js 提供的 <code>runOutsideAngular</code> API 在 zone 之外执行代码：</li>
 </ul>
-<pre><code class="language-javascript">@Component({
+<pre><code class="lang-javascript">@Component({
   selector: 'ns-demo',
   template: ``
 })
@@ -76,12 +76,11 @@ export class DemoComponent {
   constructor(private zone: NgZone) {
     this.zone.runOutsideAngular(() =&gt; {})
   }
-
 </code></pre>
 <h3>Change Detection VS Dirty Checking</h3>
 <p>你可能听说过 AngularJS 使用某种 loop 机制来判断 scope 上的值是否发生了变化，但这种 loop 并不是主动的轮询，而是被动触发。准确来说这种 loop 称之为 <code>$digest</code> loop / cycle，也就是我们常说的 dirty checking</p>
 <p>对于每一个绑定在 <code>$scope</code> 上并且在 UI 里使用到的属性，比如 <code>&lt;div&gt;{{myModel}}&lt;/div&gt;</code>，AngularJS 都会给它添加一个 <code>watcher</code>以便在它发生改变的时候能够及时的更新 UI，并且添加到 <code>$watch</code> 列表中，类似于：</p>
-<pre><code class="language-javascript">$scope.$watch('myModel', function(newValue, oldValue) {
+<pre><code class="lang-javascript">$scope.$watch('myModel', function(newValue, oldValue) {
   //update the DOM with newValue
 });
 </code></pre>
@@ -94,14 +93,14 @@ export class DemoComponent {
 </ol>
 <p>所以你当然也可以使用原生的 <code>setTimeout</code>和 <code>addEventListener</code>，只是别忘了最后手动调用 <code>$apply</code> 确保 dirty checking 的发生。</p>
 <p>最后 dirty checking  与 change detection 相比特殊的地方在于，它会遍历 <code>$watch</code> 列表多次直到确保没有新的更改发生，因为它担心某个 <code>watcher</code> 的回调里会级联的修改另一个变量。而 Angular 的 change detection 因为遵循的是单向数据流的缘故并不会出现这样的行为</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/angular-onpush-explain%5Cdigest.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/angular-onpush-explain\digest.png"/></p>
 <h3>OnPush  策略</h3>
 <p>回到我们的问题，<code>changeDetection: ChangeDetectionStrategy.OnPush</code> 意味我们将默认的 CD 策略改为 OnPush。这个策略只有在以下几种情况下才会触发 CD:</p>
 <ul>
 <li>组件的任意一个 inputs 的<strong>引用</strong>发生了修改</li>
 </ul>
 <p>Angular 组件支持类似于 React 父组件传递属性给子组件的机制，OnPush 策略下将 Angular 组件变成了类似于 React 中 PureComponent ，即仅在属性引用发生改变时才重新渲染。例如我们有一个 UserName 子组件用于展示用户的名称：</p>
-<pre><code class="language-javascript">@Component({
+<pre><code class="lang-javascript">@Component({
     selector: 'app-user-name'，
     template: `&lt;div&gt;{{userName.lastName}}, {userName.firstName}&lt;/div&gt;`
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -111,7 +110,7 @@ export class UserName {
 }
 </code></pre>
 <p>在父组件中我们使用它：</p>
-<pre><code class="language-javascript">@Component({
+<pre><code class="lang-javascript">@Component({
     selector: 'app-user',
     tempalte: `&lt;app-user-name [userName]="userNameInParentComponent"&gt;`
 })
@@ -120,13 +119,13 @@ export class User {
         firstName: 'firstName',
         lastName: 'lastName'
     }
-	onClick() {
+    onClick() {
         this.userNameInParentComponent.fistName = Math.random()
     }
 }
 </code></pre>
 <p>即使 <code>onClick</code> 回调函数执行后 <code>userNameInParentComponent</code> 变量发生了更改，但子组件在页面上并不会进行更新。因为我们只是修改了这个对象的内部状态，它的引用却没有发生变化。如果想要生效，应该重新给 <code>userNameInParentComponent</code> 赋值：</p>
-<pre><code class="language-javascript">onClick() {
+<pre><code class="lang-javascript">onClick() {
     this.userNameInParentComponent = {
         fistName: Math.random(),
         lastName: 'lastName'
@@ -138,7 +137,7 @@ export class User {
 <li>组件的事件处理函数被触发调用</li>
 </ul>
 <p>注意这里仅限于<strong>事件处理函数</strong>，比如下面的代码：</p>
-<pre><code class="language-javascript">
+<pre><code class="lang-javascript">
 @Component({
  template: `
     &lt;button (click)="add()"&gt;Add&lt;/button&gt;
@@ -177,12 +176,12 @@ export class CounterComponent {
 <p>但是即使在尝试了上面各种能够触发 CD 的方法，甚至移除 <code>ChangeDetectionStrategy.OnPush</code> 之后都无法触发 AngularJS 组件的渲染之后。我们陷入了僵局。</p>
 <h2>因为降级</h2>
 <p>于是我们决定重新审视我们代码，追踪代码的实现。我们目前出现问题的代码是通过  service 触发 AngularJS 的 message box 功能，调用代码类似如下:</p>
-<pre><code class="language-javascript">constructor(private messageBox: MessageBox) {
+<pre><code class="lang-javascript">constructor(private messageBox: MessageBox) {
     this.messageBox.error(error);
 }
 </code></pre>
 <p>而 AngularJS 那边的实现主要代码如下，以上面的 <code>error</code> 方法为例，实际上只是给 <code>message</code> 变量赋值而已：</p>
-<pre><code class="language-javascript">export function messageBoxFactory(i18n) {
+<pre><code class="lang-javascript">export function messageBoxFactory(i18n) {
   let messageStore = null;
   return {
     error(message) {
@@ -190,7 +189,7 @@ export class CounterComponent {
     },
 </code></pre>
 <p>另一端代码里，正用着 <code>$watch</code> 监视着 <code>messageStore</code> 变量是否发生变化，如果发生了变化则在页面上提示消息：</p>
-<pre><code class="language-javascript">(((coreModule) =&gt; {
+<pre><code class="lang-javascript">(((coreModule) =&gt; {
   coreModule.directive('myMessageBox', ['messageBox', '$sanitize', function MyMessageBox(messageBox, $sanitize) {
     return {
       link(scope, iElement) {
@@ -211,17 +210,15 @@ export class CounterComponent {
 <li>Downgrade? 将 Angular 组件降级为 AngularJS 组件</li>
 </ol>
 <p>在尝试选择 upgrade 之后，我们发现性能出现了很大的问题，因为这和 upgrade 的原理有关，以下引用来自 Angular 的官方文档：</p>
-<blockquote>
-<ul>
+<blockquote><ul>
 <li>Everything that happens in the application runs inside the Angular zone. This is true whether the event originated in AngularJS or Angular code. The zone triggers Angular change detection after every event.</li>
 <li>The <code>UpgradeModule</code> will invoke the AngularJS <code>$rootScope.$apply()</code> after every turn of the Angular zone. This also triggers AngularJS change detection after every event.</li>
 </ul>
 </blockquote>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/angular-onpush-explain/change_detection.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/angular-onpush-explain/change_detection.png"/></p>
 <p>过于频繁的 CD / DC 是造成性能问题的主要原因</p>
 <p>所以最终我们选择了 downgrade 方案，downgrade 与 upgrade 的区别在于：</p>
-<blockquote>
-<ol>
+<blockquote><ol>
 <li>Unlike <code>UpgradeModule</code>, <code>downgradeModule()</code> does not bootstrap the main AngularJS module inside the <a href="https://angular.io/api/core/NgZone">Angular zone</a>.</li>
 <li>Unlike <code>UpgradeModule</code>, <code>downgradeModule()</code> does not automatically run a <a href="https://docs.angularjs.org/api/ng/type/$rootScope.Scope#$digest">$digest()</a> when changes are detected in the Angular part of the application.</li>
 </ol>
@@ -232,7 +229,7 @@ export class CounterComponent {
 <p>那么我们只要触发 AngularJS 里的 <code>$digest</code> 就好了。例如我们可以新建一个 service 作为管道将 AngularJS 里的 <code>$rootScope</code> 传送到 Angular 里，然后手动触发 <code>$apply</code></p>
 <p>又或者，不就是为了触发 <code>$apply</code> 吗？点击事件也可以，那么不如我们就用代码模拟鼠标的点击 <code>document.body.click()</code> 就好了</p>
 <p>但如果在每个调用 <code>messageBox.error</code> 的地方都同时调用 <code>document.body.click()</code> 代码未免太丑了，于是我们新建一个 Angular service, 来封装这两种行为</p>
-<pre><code class="language-javascript">import {Injectable} from '@angular/core';
+<pre><code class="lang-javascript">import {Injectable} from '@angular/core';
 import {MessageBox} from '@app/ajs-upgraded-services';
 
 @Injectable()

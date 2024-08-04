@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2018-11-29-cas.md">仓库源文</a>，<a href="https://objcoding.com/2018/11/29/cas">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "Java并发之CAS原理分析"
 categories: Java
-tags: CAS concurrent 乐观锁
-author: 张乘辉</h2>
+tags: CAS concurrent 乐观锁</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -13,7 +13,7 @@ author: 张乘辉</h2>
 <p>CAS 全称是 compare and swap，即比较并交换，它是一种原子操作，同时 CAS 是一种乐观机制。java.util.concurrent 包很多功能都是建立在 CAS 之上，如 ReenterLock 内部的 AQS，各种原子类，其底层都用 CAS来实现原子操作。</p>
 <h2>如何解决并发安全问题</h2>
 <p>在我们认识 CAS 之前，我们是通过什么来解决并发带来的安全问题呢？volatile 关键字可以保证变量的可见性，但保证不了原子性，synchronized 关键字利用 JVM 字节码层面来实现同步机制，它是一个悲观锁机制。</p>
-<pre><code class="language-java">public class AddTest {
+<pre><code class="lang-java">public class AddTest {
   public volatile int i;
   public void add() {
     i++;
@@ -21,7 +21,7 @@ author: 张乘辉</h2>
 }
 </code></pre>
 <p>通过<code>javap -c AddTest</code>看看 add 方法的字节码指令：</p>
-<pre><code class="language-java">public void add();
+<pre><code class="lang-java">public void add();
     Code:
        0: aload_0
        1: dup
@@ -37,11 +37,11 @@ author: 张乘辉</h2>
 <li>执行<code>iadd</code>进行加 1 操作；</li>
 <li>执行<code>putfield</code>写把累加后的值写回 i。</li>
 </ol>
-<p><em>以上例子来源于：https://www.jianshu.com/p/fb6e91b013cc</em></p>
+<p><em>以上例子来源于：<a href="https://www.jianshu.com/p/fb6e91b013cc">https://www.jianshu.com/p/fb6e91b013cc</a></em></p>
 <p>当线程 1 执行到加 1 步骤时，由于还没有执行赋值改变变量的值，这时候并不会刷新主内存区中的变量，如果此时线程 2 正好要拷贝该变量的值到自己私有缓存中，问题就出现了，当线程 2 拷贝完以后，线程1正好执行赋值运算，立马更新主内存区的值，那么此时线程 2 的副本就是旧的了，脏读又出现了。</p>
 <p>怎么解决这个问题呢？</p>
 <p>在 add 方法加上 synchronized 修饰解决。</p>
-<pre><code class="language-java">public class AddTest {
+<pre><code class="lang-java">public class AddTest {
   public volatile int i;
   public synchronized void add() {
     i++;
@@ -54,7 +54,7 @@ author: 张乘辉</h2>
 <p>CAS 的思想很简单：<strong>三个参数，一个当前内存值 V、旧的预期值 A、即将更新的值 B，当且仅当预期值 A 和内存值 V 相同时，将内存值修改为 B 并返回 true，否则什么都不做，并返回 false</strong>。</p>
 <p><em>上面那段话来源于官方解析</em></p>
 <p>我们拿 AtomicInteger 类来分析，先来看看 AtomicInteger 静态代码块片段：</p>
-<pre><code class="language-java">public class AtomicInteger extends Number implements java.io.Serializable {
+<pre><code class="lang-java">public class AtomicInteger extends Number implements java.io.Serializable {
   private static final long serialVersionUID = 6214790243416807050L;
 
   // setup to use Unsafe.compareAndSwapInt for updates
@@ -69,14 +69,14 @@ author: 张乘辉</h2>
   }
 
   private volatile int value;
-  
+
   // 省略部分代码
 }
 </code></pre>
 <p>这里用到了 sun.misc.Unsafe 类，它可以提供硬件级别的原子操作，它可以获取某个属性在内存中的位置，也可以修改对象的字段值，只不过该类对一般开发而言，很少会用到，其底层是用 C/C++ 实现的，所以它的方式都是被 native 关键字修饰过的。</p>
 <p>可以看得出 AtomicInteger 类存储的值是在 value 字段中，并且获取了 Unsafe 实例，在静态代码块中，还获取了 value 字段在内存中的偏移量 valueOffset。</p>
 <p>接下来我们看个例子：</p>
-<pre><code class="language-java">public class AddIntTest {
+<pre><code class="lang-java">public class AddIntTest {
   public AtomicInteger i;
   public void add() {
     i.getAndIncrement();
@@ -84,12 +84,12 @@ author: 张乘辉</h2>
 }
 </code></pre>
 <p>如上，getAndIncrement() 方法底层利用 CAS 技术保证了并发安全。</p>
-<pre><code class="language-java">public final int getAndIncrement() {
+<pre><code class="lang-java">public final int getAndIncrement() {
   return unsafe.getAndAddInt(this, valueOffset, 1);
 }
 </code></pre>
 <p>getAndAddInt 方法：</p>
-<pre><code class="language-java">public final int getAndAddInt(Object var1, long var2, int var4) {
+<pre><code class="lang-java">public final int getAndAddInt(Object var1, long var2, int var4) {
   int var5;
   do {
     var5 = this.getIntVolatile(var1, var2);
@@ -107,12 +107,12 @@ author: 张乘辉</h2>
 <li>这时线程 1 恢复执行<code>compareAndSwapInt</code>方法比较，发现自己手里的值 A 和内存的值 B 不一致，说明该值已经被其它线程提前修改过了。</li>
 <li>线程 1 重新执行<code>getIntVolatile(var1, var2)</code>再次获取 value 值，因为变量 value 被 volatile 修饰，所以其它线程对它的修改，线程 A 总是能够看到，线程A继续执行<code>compareAndSwapInt</code>进行比较替换，直到成功。</li>
 </ol>
-<p><em>以上举例1、2、3、4、5步骤来源于：https://www.jianshu.com/p/fb6e91b013cc</em></p>
+<p><em>以上举例1、2、3、4、5步骤来源于：<a href="https://www.jianshu.com/p/fb6e91b013cc">https://www.jianshu.com/p/fb6e91b013cc</a></em></p>
 <p>compareAndSwapInt 方法是一个本地方法：</p>
-<pre><code class="language-java">public final native boolean compareAndSwapInt(Object paramObject, long paramLong, int paramInt1, int paramInt2);
+<pre><code class="lang-java">public final native boolean compareAndSwapInt(Object paramObject, long paramLong, int paramInt1, int paramInt2);
 </code></pre>
 <p>Java 并没有直接实现 CAS，CAS 相关的实现是通过 C++ 内联汇编的形式实现的。Java 代码需通过 JNI 才能调用，位于 unsafe.cpp，查看源码：</p>
-<pre><code class="language-c++">UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapInt(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jint e, jint x))
+<pre><code class="lang-c++">UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapInt(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jint e, jint x))
   UnsafeWrapper("Unsafe_CompareAndSwapInt");
   oop p = JNIHandles::resolve(obj);
   jint* addr = (jint *) index_oop_from_field_offset_long(p, offset);
@@ -124,7 +124,7 @@ UNSAFE_END
 <li>先想办法拿到变量 value 在内存中的地址。</li>
 <li>通过<code>Atomic::cmpxchg</code>实现比较替换，其中参数 x 是即将更新的值，参数 e 是原内存的值。</li>
 </ol>
-<p><em>以上1、2解析步骤来源于：https://www.jianshu.com/p/fb6e91b013cc</em></p>
+<p><em>以上1、2解析步骤来源于：<a href="https://www.jianshu.com/p/fb6e91b013cc">https://www.jianshu.com/p/fb6e91b013cc</a></em></p>
 <h2>CAS 常见问题</h2>
 <h3>ABA 问题</h3>
 <p>CAS 看起来很爽，但它也有缺点，那就是“ABA”问题。</p>
@@ -134,7 +134,7 @@ UNSAFE_END
 <p>有线程 1 获取了元素 A，此时线程 1 被挂起，线程 2 也获取了元素 A，并将 A、B 出栈，再 push D、C、A，这时线程 1 恢复执行 CAS，因为此时栈顶元素依然为 A，线程 1 执行成功，栈顶元素变成了 B，但 B.next 为 null，这就会导致 C、D 被丢掉了。</p>
 <p>这个例子充分说明了 CAS 的 ABA 问退带来的隐患，通常，我们的乐观锁实现中都会带一个 version 字段来记录更改的版本，避免并发操作带来的问题。在 Java 中，AtomicStampedReference 也实现了这个处理方式。</p>
 <p>AtomicStampedReference 的内部类 Pair：</p>
-<pre><code class="language-java">private static class Pair&lt;T&gt; {
+<pre><code class="lang-java">private static class Pair&lt;T&gt; {
   final T reference;
   final int stamp;
   private Pair(T reference, int stamp) {
@@ -148,7 +148,7 @@ UNSAFE_END
 </code></pre>
 <p>如上，每个 Pair 维护一个值，其中 reference 维护对象的引用，stamp 维护修改的版本号。</p>
 <p>compareAndSet 方法：</p>
-<pre><code class="language-java">	/**
+<pre><code class="lang-java">    /**
      * Atomically sets the value of both the reference and stamp
      * to the given update values if the
      * current reference is {@code ==} to the expected reference
@@ -175,7 +175,7 @@ public boolean compareAndSet(V   expectedReference,
 </code></pre>
 <p>从 compareAndSet 方法得知，如果要更改内存中的值，不但要值相同，还要版本号相同。</p>
 <p>举例分析：</p>
-<pre><code class="language-java">public class AtomicStampedReferenceTest {
+<pre><code class="lang-java">public class AtomicStampedReferenceTest {
 
   // 初始值为1，版本号为0
   private static AtomicStampedReference&lt;Integer&gt; a = new AtomicStampedReference&lt;&gt;(1, 0);
@@ -217,7 +217,7 @@ public boolean compareAndSet(V   expectedReference,
 </code></pre>
 <p>这里我用 CountDownLatch 计数器实现线程先后执行顺序，线程2先执行完后，线程1才开始执行。</p>
 <p>打印结果：</p>
-<pre><code class="language-bash">线程名字：Thread[线程1,5,main], 当前 value = 1
+<pre><code class="lang-bash">线程名字：Thread[线程1,5,main], 当前 value = 1
 线程名字Thread[线程2,5,main]value = 2
 线程名字Thread[线程2,5,main]value = 1
 线程名字：Thread[线程1,5,main],CAS操作结果: false

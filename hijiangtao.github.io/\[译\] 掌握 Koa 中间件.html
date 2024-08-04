@@ -1,23 +1,22 @@
 <h2><a href="https://github.com/hijiangtao/hijiangtao.github.io/blob/master/_posts/2017-11-10-Mastering-Koa-Middleware.md">仓库源文</a>，<a href="https://hijiangtao.github.io/2017/11/10/Mastering-Koa-Middleware">站点原文</a></h2>
 <hr/>
-<h2>title: [译] 掌握 Koa 中间件
+<p>title: [译] 掌握 Koa 中间件
 layout: post
 thread: 181
 date: 2017-11-10
 author: Joe Jiang
 categories: Document
-tags: [Koa, JavaScript, Middleware, Nodejs, Koajs, Expressjs, Translation]
-excerpt: 随着 Node 默默的实现了 async-await 的用法，Koa2 也在最近发布了。Express 似乎还占领着这场人气比赛的上风，但自 Koa2 发布以来我一直愉快的使用着，并且总是害怕回到老项目中去使用 Express...</h2>
+tags: [Koa, JavaScript, Middleware, Nodejs, Koajs, Expressjs, Translation]</p>
+<h2>excerpt: 随着 Node 默默的实现了 async-await 的用法，Koa2 也在最近发布了。Express 似乎还占领着这场人气比赛的上风，但自 Koa2 发布以来我一直愉快的使用着，并且总是害怕回到老项目中去使用 Express...</h2>
 <p>随着 Node 默默的<a href="https://www.infoq.com/news/2017/02/node-76-async-await">实现了 async-await</a> 的用法，Koa2 也在最近<a href="https://github.com/koajs/koa/commit/6c6aa4dab41bd3d11a62afe5de9fc144f9b2add3">发布</a>了。Express 似乎还占领着这场人气比赛的上风，但自 Koa2 发布以来我一直愉快的使用着，并且总是害怕回到老项目中去使用 Express.</p>
 <p>我偶尔出没在 <a href="https://gitter.im/koajs/koa">Koa Gitter</a> 为大家答疑解惑，而我回答最多的是与魔法般的Koa中间件系统有关的问题，所以我居然定在这个问题上好好写写。</p>
 <p>有很多 Koa 新手曾经使用过 Express，所以我会在两者之间进行大量的比较。</p>
-<blockquote>
-<p>这篇文章针对的是 Koa 新人，以及正在考虑在他们下一个项目中使用 Koa 的人。</p>
+<blockquote><p>这篇文章针对的是 Koa 新人，以及正在考虑在他们下一个项目中使用 Koa 的人。</p>
 </blockquote>
 <h2>基本概念</h2>
 <p>让我们从最重要的开始。在 Koa 和 Express 中，所有关于 HTTP 请求的事情都是在中间件内部完成的，最重要的则是理解<strong>中间件延续传递</strong>的概念。这听起来很奇特，但事实并非如此。它的思想是，一旦中间件完成了它的事情，它可以选择调用链中的下一个中间件。</p>
 <h3>Express</h3>
-<pre><code class="language-javascript">const express = require('express')
+<pre><code class="lang-javascript">const express = require('express')
 const app = express()
 // Middleware 1
 app.use((req, res, next) =&gt; {
@@ -34,7 +33,7 @@ app.use((req, res) =&gt; {
 app.listen(3001, () =&gt; console.log('Express app listening on 3001'))
 </code></pre>
 <h3>Koa</h3>
-<pre><code class="language-javascript">const Koa = require('koa')
+<pre><code class="lang-javascript">const Koa = require('koa')
 const app = new Koa()
 // Middleware 1
 app.use(async (ctx, next) =&gt; {
@@ -65,7 +64,6 @@ Setting body
 <p>让我们看看如果我们在两个例子中都省略了 <code>next()</code>，会发生什么。</p>
 <h3>Express</h3>
 <pre><code>$ curl http://localhost:3001
- 
 </code></pre>
 <p>...它永不结束。这是因为在 Express 中，你必须在调用 <code>next()</code> 和发送 response 两个做法中二选一——否则请求永远不会完成。</p>
 <h3>Koa</h3>
@@ -75,7 +73,7 @@ OK
 <p>啊，所有 Koa 会完成请求，它虽然有状态码信息，但是没有任何 body 信息。所以第二个中间件是没有被调用的。</p>
 <p>但是对于 Koa 来说还有一件事情至关重要。如果你调用 <code>next()</code>，你必须等待它！</p>
 <p>下面就是最好的例子：</p>
-<pre><code class="language-javascript">// Simple Promise delay
+<pre><code class="lang-javascript">// Simple Promise delay
 function delay (ms) {
   return new Promise((resolve) =&gt; {
     setTimeout(resolve, ms)
@@ -98,7 +96,7 @@ OK
 </code></pre>
 <p>嗯，我们调用了 <code>next()</code>，但是没有任何 body 信息传递？这是因为 Koa 在中间件 Promise 链被解析了之后就结束了请求。这意味着在我们设置 <code>ctx.body</code> 之前，<em>response 就已经被发送给了客户端</em>！</p>
 <p>另一个需要明白的是如果你在使用纯粹的 <code>Promise.then()</code> 替代 <code>async-await</code> 时，你的中间件需要返回一个 promise。当返回的 promise 被解析时，Koa 会在此时恢复之前的中间件。</p>
-<pre><code class="language-javascript">app.use((ctx, next) =&gt; {
+<pre><code class="lang-javascript">app.use((ctx, next) =&gt; {
   ctx.status = 200
   console.log('Setting status')
   // need to return here, not using async-await
@@ -106,7 +104,7 @@ OK
 })
 </code></pre>
 <p>一个更好的使用纯粹 promise 的例子：</p>
-<pre><code class="language-javascript">// We don't call `next()` because
+<pre><code class="lang-javascript">// We don't call `next()` because
 // we don't want anything else to happen.
 app.use((ctx) =&gt; {
   return delay(1000).then(() =&gt; {
@@ -117,14 +115,13 @@ app.use((ctx) =&gt; {
 </code></pre>
 <h2>Koa 中间件——改变游戏规则的特性</h2>
 <p>在之前的章节我写到：</p>
-<blockquote>
-<p>Koa 会在此时恢复之前的中间件</p>
+<blockquote><p>Koa 会在此时恢复之前的中间件</p>
 </blockquote>
 <p>这可能会让你有些失望，请允许我解释一下。</p>
 <p>在 Express，一个中间件只能在调用 <code>next()</code> 之前做相关操作，而不是之后。一旦你调用 <code>next()</code>，请求将永远不再接触到这个中间件。这可能会有些失望，人们（包括 Express 作者自己）已经找到了一些聪明的解决方法，比如当 header 获得写入时观察响应流，但是对于普通用户来说只会感觉到尴尬。</p>
 <p>举个例子，要实现一个记录完成请求所需的时间并将其发送到 X-ResponseTime 头部的中间件，需要一个“在下一个调用之前”的代码点和一个“在下一个调用之后”的代码点。在 Express 中，它使用流观察的技术来实现。</p>
 <p>让我们在 Koa 中来实现它。</p>
-<pre><code class="language-javascript">async function responseTime (ctx, next) {
+<pre><code class="lang-javascript">async function responseTime (ctx, next) {
   console.log('Started tracking response time')
   const started = Date.now()
   await next()
@@ -167,7 +164,7 @@ Response time is: 1001ms
 <p>为了做好度量，让我们看看我们如何在 Express 中做到这一点。</p>
 <h3>Express</h3>
 <p>错误处理是在一个特殊签名的中间件中完成的，他必须被添加到链的最后才能工作。</p>
-<pre><code class="language-javascript">app.use((req, res) =&gt; {
+<pre><code class="lang-javascript">app.use((req, res) =&gt; {
   if (req.query.greet !== 'world') {
     throw new Error('can only greet "world"')
   }
@@ -186,34 +183,33 @@ app.use((err, req, res, next) =&gt; {
 })
 </code></pre>
 <p>这是一个最好的例子。如果您正在处理来自回调或 Promise 的异步错误，则会变得非常冗长。 例如：</p>
-<pre><code class="language-javascript">app.use((req, res, next) =&gt; {
+<pre><code class="lang-javascript">app.use((req, res, next) =&gt; {
   loadCurrentWeather(req.query.city, (err, weather) =&gt; {
     if (err) {
       return next(err)
     }
-    
+
     loadForecast(req.query.city, (err, forecast) =&gt; {
       if (err) {
         return next(err)
       }
-      
+
       res.status(200).send({
         weather: weather,
         forecast: forecast
       })
     })
   })
-  
+
   next()
 })
 </code></pre>
-<blockquote>
-<p>我完全知道使用模块来处理回调地狱更容易，这里仅仅是为了证明在 Express 中简单的错误处理变得笨拙，更不用说你还需要考虑异步错误与同步错误等。</p>
+<blockquote><p>我完全知道使用模块来处理回调地狱更容易，这里仅仅是为了证明在 Express 中简单的错误处理变得笨拙，更不用说你还需要考虑异步错误与同步错误等。</p>
 </blockquote>
 <h3>Koa</h3>
 <p>错误处理也是使用 promise 完成的。Koa 总是为我们将 <code>next()</code> 包装在一个 promise 中，所以我们甚至不必担心异步与同步错误。</p>
 <p><strong>错误处理中间件在最顶端运行</strong>，因为它“<em>绕过</em>”了每一个后续的中间件。这意味着在错误处理之后添加的任何错误都会被捕获（<em>是的，感受一下！</em>）</p>
-<pre><code class="language-javascript">app.use(async (ctx, next) =&gt; {
+<pre><code class="lang-javascript">app.use(async (ctx, next) =&gt; {
   try {
     await next()
   } catch (err) {
@@ -226,14 +222,14 @@ app.use(async (ctx) =&gt; {
   if (ctx.query.greet !== 'world') {
     throw new Error('can only greet "world"')
   }
-  
+
   console.log('Sending response')
   ctx.status = 200
   ctx.body = `Hello ${ctx.query.greet} from Koa`
 })
 </code></pre>
 <p>是的，一个 <code>try-catch</code>。对于错误处理，<em>这是多么合适！</em>非 <code>async-await</code> 的方式如下所示：</p>
-<pre><code class="language-javascript">app.use((ctx, next) =&gt; {
+<pre><code class="lang-javascript">app.use((ctx, next) =&gt; {
   return next().catch(err =&gt; {
     ctx.status = 400
     ctx.body = `Uh-oh: ${err.message}`
@@ -253,7 +249,7 @@ Uh-oh: can only greet "world"
 <p>在 Koa 有许多路由的选择，例如 <code>koa-route</code> 和 <code>koa-router</code>。我更喜欢后者。</p>
 <h3>Express</h3>
 <p>Express 中的路由是内置的。</p>
-<pre><code class="language-javascript">app.get('/todos', (req, res) =&gt; {
+<pre><code class="lang-javascript">app.get('/todos', (req, res) =&gt; {
   res.status(200).send([{
     id: 1,
     text: 'Switch to Koa'
@@ -268,7 +264,7 @@ Uh-oh: can only greet "world"
 </code></pre>
 <h3>Koa</h3>
 <p>在这个例子中我选择 <code>koa-router</code> 因为它是我正在使用的路由。</p>
-<pre><code class="language-javascript">const Router = require('koa-router')
+<pre><code class="lang-javascript">const Router = require('koa-router')
 const router = new Router()
 router.get('/todos', (ctx) =&gt; {
   ctx.status = 200

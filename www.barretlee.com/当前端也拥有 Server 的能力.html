@@ -17,12 +17,13 @@ date: 2016-02-16 20:00:00</li>
 </ul>
 <hr/>
 <p>今天看了不少文章，比较感兴趣的是 Cache API。它是浏览器 Request/Response 的缓存管理工具，其使用风格和运用场景让我瞬间联想到了 ServiceWorker 和 Fetch API，相信很多同学也多次看到过这两个东西，本文会对它们做一个简洁的介绍，并谈一谈我对这些新玩具的看法。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h3>Fetch API</h3>
 <p>传统的 XMLHttpRequest，出了两个版本，在 XHR2.0 中引入了跨源请求、上传进度事件和对二进制数据的支持等，这些 API 的增强让 AJAX 可以很方便地与 HTML5 API 相结合，例如 File System API、Web Audio API、WebGL 等，让前端对音视频的处理和富客户端元素的处理更加有亲和力。</p>
 <p>作为一个与后端交互的通道，XHR2.0 的接口封装依然过于底层。看看 jQuery 对 AJAX 的封装，再回头看看我们今天要介绍的 Fetch API，不得不惊叹，浏览器已经在应用层面思考着功能的拓展，依托着 Promise 产出了十分友好的新一套接口。</p>
 <p>以前我们使用 XHR 去请求一个资源，会这么做：</p>
-<pre><code class="language-javascript">// Just getting XHR is a mess!
+<pre><code class="lang-javascript">// Just getting XHR is a mess!
 if (window.XMLHttpRequest) {
   request = new XMLHttpRequest();
 } else if (window.ActiveXObject) {
@@ -43,7 +44,7 @@ request.open('GET', 'http://barretlee.com/test.json', true);
 request.send(null);
 </code></pre>
 <p>而使用 Fetch API，我们只需要：</p>
-<pre><code class="language-javascript">fetch('http://barretlee.com/test.json').then(function(response) { 
+<pre><code class="lang-javascript">fetch('http://barretlee.com/test.json').then(function(response) { 
   // Convert to JSON
   return response.json();
 }).then(function(val) {
@@ -51,7 +52,7 @@ request.send(null);
 });
 </code></pre>
 <p>对于 Text/HTML 和 Blob 等格式的请求和转化也是异常方便：</p>
-<pre><code class="language-javascript">// Text/HTML 请求
+<pre><code class="lang-javascript">// Text/HTML 请求
 fetch('/next/page').then(function(response) {
     return response.text();
 }).then(function(text) {
@@ -70,7 +71,7 @@ fetch('flowers.jpg').then(function(response) {
 <p>我也相信，Fetch API 有能力提供这些状态信息和附加的 API，只是在这个不成熟的环境下，它目前不需要迈这么大的步子。</p>
 <h3>ServiceWorker</h3>
 <p>ServiceWorker，简单而言就是一个放在前端的 HTTP 拦截器，比如我们要请求一个不存在的 URI 如：<code>/test/a.html</code>，直接请求就会响应 404，而如果我们预先在 ServiceWorker 中注册了这个地址，并且指定响应内容，当再次请求时，你会看到结果是存在的，举个例子：</p>
-<pre><code class="language-html">&lt;!-- demo.html --&gt;
+<pre><code class="lang-html">&lt;!-- demo.html --&gt;
 &lt;script&gt;
 navigator.serviceWorker.register("worker.js", {
   scope: "/test/a.html"
@@ -84,14 +85,14 @@ navigator.serviceWorker.register("worker.js", {
 &lt;/script&gt;
 </code></pre>
 <p>在 demo.html 文件中，我们看到，将 <code>/test/a.html</code> 的请求交给 <code>worker.js</code> 来处理，处理方式为：</p>
-<pre><code class="language-javascript">// workker.js
+<pre><code class="lang-javascript">// workker.js
 addEventListener("fetch", function(evt) {
   evt.respondWith(new Response(“Hi, Barret Lee”));
 });
 </code></pre>
 <p>在 <code>demo.html</code> 的回调中使用 Fetch  获取<code>/test/a.html</code> 这个并不存在的内容，被 ServiceWorker 捕获，交给 <code>worker.js</code> 处理并响应 <code>Hi, Barret Lee</code> 的文本，整个设计思路十分清晰，很轻松地拦截了来自客户端的请求，并作出了响应。</p>
 <p>由于 ServiceWorker 是对 Promise 友好的，响应时也可以模拟服务器休眠状态：</p>
-<pre><code class="language-javascript">addEventListener("fetch", function(evt) {
+<pre><code class="lang-javascript">addEventListener("fetch", function(evt) {
   evt.respondWith(new Promise(function(resolve, reject){
     setTimeout(function(){
       resolve(new Response(“Hi, Barret Lee”));
@@ -104,12 +105,12 @@ addEventListener("fetch", function(evt) {
 <p>当我们的目光放在 HTTP 的交互上，ServiceWorker 会有无限的想象空间，比如对 History API 的延伸思考，跨页面共享问题，前端请求合并和分拆问题，mock 数据问题，前后端的联调问题，类 graphQL 问题，数据的缓存更新和复用问题等等。</p>
 <h3>Cache API</h3>
 <p>Cache API，简而言之就是一个 Request/Response 的缓存对象组，它的生命周期跟 ServiceWorker 是紧密相连的，它没有失效时间，不删除就会一直保持原样。</p>
-<pre><code class="language-javascript">caches.open('test-cache').then(function(cache) {
+<pre><code class="lang-javascript">caches.open('test-cache').then(function(cache) {
   cache.add('/index.html');
 });
 </code></pre>
 <p>一个简单的操作，就将 <code>/index.html</code> 这个页面缓存了下来，如果你使用的是最新版的 Chrome，可以打开 DevTools &gt; Resources &gt; Cache Storage，多了一个 <code>test-cache</code> 的缓存表，表中多出一项，Request 为 <code>http://barretlee.com/index.html</code>, Response 为 <code>OK</code>。如下方式可以查看缓存内容：</p>
-<pre><code class="language-javascript">caches.open('test-cache').then(function(cache) { 
+<pre><code class="lang-javascript">caches.open('test-cache').then(function(cache) { 
   cache.keys().then(function(cachedRequests) { 
     console.log(cachedRequests);
   });
@@ -122,9 +123,9 @@ addEventListener("fetch", function(evt) {
 <p>本文没有对 API 的使用做深入的说明，一方面是因为这些东西能在 Google 上找到，其次，我觉得有些 API 的设计上还不够成熟，今后会有增删，感兴趣的同学可以去 W3C 提供的文档中深入学习下。</p>
 <h3>拓展阅读</h3>
 <ul>
-<li>http://www.html5rocks.com/zh/tutorials/file/xhr2/</li>
-<li>http://www.web-tinker.com/article/20882.html</li>
-<li>http://davidwalsh.name/fetch</li>
-<li>http://developer.mozilla.org/en-US/docs/Web/API/Cache</li>
-<li>http://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API</li>
+<li><a href="http://www.html5rocks.com/zh/tutorials/file/xhr2/">http://www.html5rocks.com/zh/tutorials/file/xhr2/</a></li>
+<li><a href="http://www.web-tinker.com/article/20882.html">http://www.web-tinker.com/article/20882.html</a></li>
+<li><a href="http://davidwalsh.name/fetch">http://davidwalsh.name/fetch</a></li>
+<li><a href="http://developer.mozilla.org/en-US/docs/Web/API/Cache">http://developer.mozilla.org/en-US/docs/Web/API/Cache</a></li>
+<li><a href="http://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API">http://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API</a></li>
 </ul>

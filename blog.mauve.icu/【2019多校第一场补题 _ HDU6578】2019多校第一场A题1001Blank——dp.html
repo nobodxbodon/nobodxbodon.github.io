@@ -16,28 +16,27 @@ math: true</li>
 <h1>分析题意</h1>
 <p>因为前几天刚刚写了牛客暑期多校第二场，其中有一道题：ABBA（<a href="https://blog.csdn.net/m0_43448982/article/details/96778336">我的题解</a>）感觉有点接近，所以第一想法就是dp了。但是这道题的字符多，不能像ABBA一样压缩至一维。所以只能想想看当时牛客官方给的题解的方法了。
 考虑到之后需要判断条件是否满足，所以我第一感觉就是得定义一个超多维度的dp数组：</p>
-<pre><code class="language-c">const int MAXN = 110;
+<pre><code class="lang-c">const int MAXN = 110;
 long long dp[MAXN][MAXN][MAXN][MAXN][MAXN];
 </code></pre>
 <p>各个维度的定义如下：</p>
-<blockquote>
-<p>对于 dp[a][b][c][d][t]
+<blockquote><p>对于 dp[a][b][c][d][t]
 表示整个字符串长度为 t ，最后一次出现 0 的位置为 a，最后一次出现 1 的位置为 b ，最后一次出现 2 的位置为 c ，最后一次出现 3 的位置为d</p>
 </blockquote>
 <p>然后可以得到状态转移方程</p>
-<pre><code class="language-c">dp[t + 1][b][c][d][t + 1] += dp[a][b][c][d][t];
+<pre><code class="lang-c">dp[t + 1][b][c][d][t + 1] += dp[a][b][c][d][t];
 dp[a][t + 1][c][d][t + 1] += dp[a][b][c][d][t];
 dp[a][b][t + 1][d][t + 1] += dp[a][b][c][d][t];
 dp[a][b][c][t + 1][t + 1] += dp[a][b][c][d][t];
 </code></pre>
 <p>当然这个数组肯定是没法开的，所以把 t 压缩了，变成滚动dp</p>
-<pre><code class="language-c">const int MAXN = 110;
+<pre><code class="lang-c">const int MAXN = 110;
 long long dp[MAXN][MAXN][MAXN][MAXN][2];
 </code></pre>
 <p>然后通过滚动的方式来实现。
 但是这并不是卡死这种方法的原因。
 根据上面这些，可以写出整个dp过程，大概就是这样：</p>
-<pre><code class="language-c">for (int t = 1; t &lt;= n; t++) {
+<pre><code class="lang-c">for (int t = 1; t &lt;= n; t++) {
     for (int a = 0; a &lt;= t; a++)
         for (int b = 0; b &lt;= t; b++)
             for (int c = 0; c &lt;= t; c++)
@@ -58,23 +57,22 @@ long long dp[MAXN][MAXN][MAXN][MAXN][2];
 无论是时间是还是空间上，估计都悬（时间上应该是一定过不了了）
 然后只能继续压缩。
 考虑到最后无论哪种状态下，$a, b, c, d$ 四个变量中，必定有一个且仅有一个变量的值为 t 。而且在这道题中，字符 ${0, 1, 2, 3}$ 完全等价。所以我们再压缩一维</p>
-<pre><code class="language-c">const int MAXN = 110;
+<pre><code class="lang-c">const int MAXN = 110;
 long long dp[MAXN][MAXN][MAXN][2];
 </code></pre>
 <p>此时的意义如下：</p>
-<blockquote>
-<p>对于变量 dp[x][y][z]
+<blockquote><p>对于变量 dp[x][y][z]
 表示字符 ${0, 1, 2, 3}$ 中，其中一个最后出现的位置为当前的字符最后（由于这个条件恒成立，所以并未被记录在数组中），剩下的三个字符分别出现在$x, y, z$处，且保证 $i &lt; x \leq y \leq z (i 为当前字符长度)$ （仅当 $x = y = 0$ 时满足前面一个等于号，后面的等于号同理。而字符串长度至少为1，且此时$x、y、z$均为0，所以不存在 $i = x$ 的情况。）而后面的长度为 2 的维度指代当前状态和 上一个状态（滚动dp）</p>
 </blockquote>
 <p>可以得到状态转移方程：</p>
-<pre><code class="language-c">// i 为当前字符串长度，cur 为当前状态，last 为上一个状态
-dp[x][y][z][cur] += dp[x][y][z][last];					// 加入的字符与上一个加入的字符相同
+<pre><code class="lang-c">// i 为当前字符串长度，cur 为当前状态，last 为上一个状态
+dp[x][y][z][cur] += dp[x][y][z][last];                  // 加入的字符与上一个加入的字符相同
 dp[i - 1][y][z][cur] += dp[x][y][z][last];
 dp[i - 1][x][z][cur] += dp[x][y][z][last];
 dp[i - 1][x][y][cur] += dp[x][y][z][last];
 </code></pre>
 <p>得到整个 dp 过程：</p>
-<pre><code class="language-c">dp[0][0][0][0] = 1;
+<pre><code class="lang-c">dp[0][0][0][0] = 1;
 int cur = 1;
 int last = 0;
 for (int i = 1; i &lt;= n; i++)
@@ -101,7 +99,7 @@ swap(cur, last);
 需要判断一个区间内是否满足有多个不同的字符
 我们可以根据区间右端为基准，当前dp的字符串长度到达一个条件的右端的时候，通过 $x、y、z$ 的值来判断是否到达了要求，如果没有则将此 dp 的赋值为0。如果懒得思考可以直接分类讨论一下就行了。虽然代码会比较长。</p>
 <h1>AC代码</h1>
-<pre><code class="language-c">#include &lt;bits/stdc++.h&gt;
+<pre><code class="lang-c">#include &lt;bits/stdc++.h&gt;
 
 using namespace std;
 

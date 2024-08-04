@@ -1,12 +1,12 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/%E4%BD%BF%E7%94%A8Golang%E5%BB%BA%E7%AB%8B%E4%B8%80%E4%B8%AA%E7%AE%80%E5%8D%95%E7%9A%84%E5%85%A8%E6%96%87%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/08/31/%E4%BD%BF%E7%94%A8Golang%E5%BB%BA%E7%AB%8B%E4%B8%80%E4%B8%AA%E7%AE%80%E5%8D%95%E7%9A%84%E5%85%A8%E6%96%87%E6%90%9C%E7%B4%A2%E5%BC%95%E6%93%8E">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/使用Golang建立一个简单的全文搜索引擎.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/08/31/使用Golang建立一个简单的全文搜索引擎">站点原文</a></h2>
 <hr/>
-<h2>title: '使用Golang建立一个简单的全文搜索引擎'
+<p>title: '使用Golang建立一个简单的全文搜索引擎'
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?21'
+cover: '<a href="https://img.paulzzh.com/touhou/random?21">https://img.paulzzh.com/touhou/random?21</a>'
 date: 2020-08-31 15:48:14
 categories: [ElasticSearch]
-tags: [ElasticSearch, Golang]
-description: 全文搜索是我们每天都在不知不觉中使用的工具之一。如果你曾经在google上搜索过“golang coverage report”或试图在电商网站上搜索“indoor wireless camera”，你就会使用全文搜索。全文搜索（FTS, Full-Text Search）是一种在文档集合中搜索文本的技术。文档可以引用网页、报纸文章、电子邮件或任何结构化文本。今天我们尝试建造我们自己的FTS引擎。在这篇文章的最后，我们将能够在不到一毫秒的时间内搜索数百万个文档。我们将从简单的搜索查询开始，比如搜索含有“cat”的文章，然后扩展引擎以支持更复杂的布尔查询。</h2>
+tags: [ElasticSearch, Golang]</p>
+<h2>description: 全文搜索是我们每天都在不知不觉中使用的工具之一。如果你曾经在google上搜索过“golang coverage report”或试图在电商网站上搜索“indoor wireless camera”，你就会使用全文搜索。全文搜索（FTS, Full-Text Search）是一种在文档集合中搜索文本的技术。文档可以引用网页、报纸文章、电子邮件或任何结构化文本。今天我们尝试建造我们自己的FTS引擎。在这篇文章的最后，我们将能够在不到一毫秒的时间内搜索数百万个文档。我们将从简单的搜索查询开始，比如搜索含有“cat”的文章，然后扩展引擎以支持更复杂的布尔查询。</h2>
 <p>全文搜索是我们每天都在不知不觉中使用的工具之一。如果你曾经在google上搜索过“golang coverage report”或试图在电商网站上搜索“indoor wireless camera”，你就会使用全文搜索</p>
 <p>全文搜索（FTS, Full-Text Search）是一种在文档集合中搜文本的技术。文档可以引用网页、报纸文章、电子邮件或任何结构化文本</p>
 <p>今天我们尝试建造我们自己的FTS引擎。在这篇文章的最后，我们将能够在不到一毫秒的时间内搜索数百万个文档。我们将从简单的搜索查询开始，比如搜索含有“cat”的文章，然后扩展引擎以支持更复杂的布尔查询</p>
@@ -17,118 +17,122 @@ description: 全文搜索是我们每天都在不知不觉中使用的工具之�
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/fts-demo</li>
+<li><a href="https://github.com/JasonkayZK/fts-demo">https://github.com/JasonkayZK/fts-demo</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <p>&lt;br/&gt;</p>
 <h2>使用Golang建立一个简单的全文搜索引擎</h2>
 <h3>为什么要构造FTS</h3>
 <p>有的人可能会问：“我们难道不能使用grep，或者使用一个循环来检查每个文档是否包含我要查找的单词吗？”。</p>
 <p>是的，我们当然可以。然而，有时候这样做的效率并不是很高；</p>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h3>全文搜索资源</h3>
 <p>我们将搜索英文维基百科摘要的一部分，最新的dump文件可在<a href="https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-abstract1.xml.gz">dumps.wikimedia.org</a>获取；</p>
 <p>到目前为止，解压后的文件大小为913MB，XML文件包含超过60万个文档；</p>
 <p>文档实例：</p>
-<pre><code class="language-xml">&lt;title&gt;Wikipedia: Kit-Cat Klock&lt;/title&gt;
+<pre><code class="lang-xml">&lt;title&gt;Wikipedia: Kit-Cat Klock&lt;/title&gt;
 &lt;url&gt;https://en.wikipedia.org/wiki/Kit-Cat_Klock&lt;/url&gt;
 &lt;abstract&gt;The Kit-Cat Klock is an art deco novelty wall clock shaped like a grinning cat with cartoon eyes that swivel in time with its pendulum tail.&lt;/abstract&gt;
 </code></pre>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h3>加载文档</h3>
 <p>首先我们从下载下来的gz压缩包中直接读取文件：</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"compress/gzip"
-	"encoding/xml"
-	"os"
+    "compress/gzip"
+    "encoding/xml"
+    "os"
 )
 
 // Document represents a Wikipedia abstract dump Document.
 type Document struct {
-	Title string `xml:"title"`
-	URL   string `xml:"url"`
-	Text  string `xml:"abstract"`
-	ID    int
+    Title string `xml:"title"`
+    URL   string `xml:"url"`
+    Text  string `xml:"abstract"`
+    ID    int
 }
 
 // loadDocuments loads a Wikipedia abstract dump and returns a slice of documents.
 // Dump example: https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-abstract1.xml.gz
 func loadDocuments(path string) ([]Document, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
+    f, err := os.Open(path)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
 
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return nil, err
-	}
-	defer gz.Close()
+    gz, err := gzip.NewReader(f)
+    if err != nil {
+        return nil, err
+    }
+    defer gz.Close()
 
-	dec := xml.NewDecoder(gz)
-	dump := struct {
-		Documents []Document `xml:"doc"`
-	}{}
-	if err := dec.Decode(&amp;dump); err != nil {
-		return nil, err
-	}
-	docs := dump.Documents
-	for i := range docs {
-		docs[i].ID = i
-	}
-	return docs, nil
+    dec := xml.NewDecoder(gz)
+    dump := struct {
+        Documents []Document `xml:"doc"`
+    }{}
+    if err := dec.Decode(&amp;dump); err != nil {
+        return nil, err
+    }
+    docs := dump.Documents
+    for i := range docs {
+        docs[i].ID = i
+    }
+    return docs, nil
 }
 </code></pre>
 <p>每个加载的文档都会被分配一个唯一的标识符。</p>
 <p>为了简单起见，第一个加载的文档分配ID=0，第二个ID=1，依此类推……</p>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h3>首次尝试</h3>
 <h4>直接匹配内容</h4>
 <p>现在我们已经将所有文档加载到内存中，我们可以尝试找到包含“cat”的文档；</p>
 <p>首先，让我们遍历所有文档并检查它们是否包含子字符串cat：</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"log"
-	"strings"
-	"testing"
-	"time"
+    "log"
+    "strings"
+    "testing"
+    "time"
 )
 
 func TestSearchContent(t *testing.T) {
-	dumpPath := "enwiki-latest-abstract1.xml.gz"
-	query := "cat"
+    dumpPath := "enwiki-latest-abstract1.xml.gz"
+    query := "cat"
 
-	log.Println("Starting")
+    log.Println("Starting")
 
-	start := time.Now()
-	docs, err := loadDocuments(dumpPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Loaded %d documents in %v", len(docs), time.Since(start))
+    start := time.Now()
+    docs, err := loadDocuments(dumpPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("Loaded %d documents in %v", len(docs), time.Since(start))
 
-	start = time.Now()
-	matchedDocs := searchContent(docs, query)
-	log.Printf("Search found %d documents in %v", len(matchedDocs), time.Since(start))
+    start = time.Now()
+    matchedDocs := searchContent(docs, query)
+    log.Printf("Search found %d documents in %v", len(matchedDocs), time.Since(start))
 }
 
 func searchContent(docs []Document, term string) []Document {
-	var r []Document
-	for _, doc := range docs {
-		if strings.Contains(doc.Text, term) {
-			r = append(r, doc)
-		}
-	}
-	return r
+    var r []Document
+    for _, doc := range docs {
+        if strings.Contains(doc.Text, term) {
+            r = append(r, doc)
+        }
+    }
+    return r
 }
 </code></pre>
 <p>最终输出：</p>
-<pre><code class="language-bash">2020/08/31 23:57:28 Starting
+<pre><code class="lang-bash">2020/08/31 23:57:28 Starting
 2020/08/31 23:58:02 Loaded 613149 documents in 34.0629694s
 2020/08/31 23:58:02 Search found 29658 documents in 58.0522ms
 </code></pre>
@@ -139,7 +143,8 @@ func searchContent(docs []Document, term string) []Document {
 <li>使搜索不区分大小写（因此Cat也匹配）</li>
 <li>匹配单词边界而不是子字符串（因此caterpiller和communication不匹配）</li>
 </ul>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h4>正则匹配内容</h4>
 <p>一个很容易实现这两个需求的解决方案是：使用正则表达式</p>
 <p>正则模式在这里：<code>(?i)\bcat\b:</code></p>
@@ -148,47 +153,47 @@ func searchContent(docs []Document, term string) []Document {
 <li><code>\b</code>匹配单词边界（一边是单词字符，另一边不是单词字符的位置）</li>
 </ul>
 <p>下面是测试代码：</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"log"
-	"regexp"
-	"testing"
-	"time"
+    "log"
+    "regexp"
+    "testing"
+    "time"
 )
 
 func TestRegexpSearch(t *testing.T) {
-	dumpPath := "enwiki-latest-abstract1.xml.gz"
-	query := "cat"
+    dumpPath := "enwiki-latest-abstract1.xml.gz"
+    query := "cat"
 
-	log.Println("Starting")
+    log.Println("Starting")
 
-	start := time.Now()
-	docs, err := loadDocuments(dumpPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Loaded %d documents in %v", len(docs), time.Since(start))
+    start := time.Now()
+    docs, err := loadDocuments(dumpPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("Loaded %d documents in %v", len(docs), time.Since(start))
 
-	start = time.Now()
-	matchedDocs := regexpSearch(docs, query)
-	log.Printf("Search found %d documents in %v", len(matchedDocs), time.Since(start))
+    start = time.Now()
+    matchedDocs := regexpSearch(docs, query)
+    log.Printf("Search found %d documents in %v", len(matchedDocs), time.Since(start))
 }
 
 func regexpSearch(docs []Document, term string) []Document {
-	// Don't do this in production, it's a security risk. term needs to be sanitized.
-	re := regexp.MustCompile(`(?i)\b` + term + `\b`)
-	var r []Document
-	for _, doc := range docs {
-		if re.MatchString(doc.Text) {
-			r = append(r, doc)
-		}
-	}
-	return r
+    // Don't do this in production, it's a security risk. term needs to be sanitized.
+    re := regexp.MustCompile(`(?i)\b` + term + `\b`)
+    var r []Document
+    for _, doc := range docs {
+        if re.MatchString(doc.Text) {
+            r = append(r, doc)
+        }
+    }
+    return r
 }
 </code></pre>
 <p>输出结果如下：</p>
-<pre><code class="language-bash">2020/09/01 00:17:55 Starting
+<pre><code class="lang-bash">2020/09/01 00:17:55 Starting
 2020/09/01 00:18:30 Loaded 613149 documents in 34.9838063s
 2020/09/01 00:18:33 Search found 292 documents in 2.2390365s
 </code></pre>
@@ -197,12 +202,13 @@ func regexpSearch(docs []Document, term string) []Document {
 <p>该算法的时间复杂度是线性的-需要扫描的文档数等于文档总数；</p>
 <p>如果我们有600万份文档，而不是60万份，搜索需要20秒！</p>
 <p>所以我们需要更优的算法；</p>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h3>倒排索引</h3>
 <p>为了使搜索查询更快，我们将对文本进行预处理并预先建立索引；</p>
 <p>FTS的核心是使用一种称为倒排索引的数据结构，倒排索引将文档中的每个单词与包含该单词的文档相关联；</p>
 <p>例如：</p>
-<pre><code class="language-go">documents = {
+<pre><code class="lang-go">documents = {
     1: "a donut on a glass plate",
     2: "only the donut",
     3: "listen to the drum machine",
@@ -225,7 +231,8 @@ index = {
 <p>下面是一个倒排索引的真实例子：</p>
 <p>书名索引书中一个术语引用页码的索引：</p>
 <p><img alt="book_index.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/book_index.png"/></p>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h4>文本分析器</h4>
 <p>在开始构建索引之前，我们需要将原始文本分解为一个适合索引和搜索的单词（标记）列表；</p>
 <p>文本分析器由一个分词器和多个过滤器组成：</p>
@@ -233,42 +240,42 @@ index = {
 <p><strong>① 分词器</strong></p>
 <p>分词器是文本分析的第一步：它的工作是将文本转换为标记列表；</p>
 <p>我们的实现在单词边界上拆分文本并删除标点符号：</p>
-<pre><code class="language-go">// tokenize returns a slice of tokens for the given text.
+<pre><code class="lang-go">// tokenize returns a slice of tokens for the given text.
 func tokenize(text string) []string {
-	return strings.FieldsFunc(text, func(r rune) bool {
-		// Split on any character that is not a letter or a number.
-		return !unicode.IsLetter(r) &amp;&amp; !unicode.IsNumber(r)
-	})
+    return strings.FieldsFunc(text, func(r rune) bool {
+        // Split on any character that is not a letter or a number.
+        return !unicode.IsLetter(r) &amp;&amp; !unicode.IsNumber(r)
+    })
 }
 
 func TestTokenizer(t *testing.T) {
-	testCases := []struct {
-		text   string
-		tokens []string
-	}{
-		{
-			text:   "",
-			tokens: []string{},
-		},
-		{
-			text:   "a",
-			tokens: []string{"a"},
-		},
-		{
-			text:   "small wild,cat!",
-			tokens: []string{"small", "wild", "cat"},
-		},
-	}
+    testCases := []struct {
+        text   string
+        tokens []string
+    }{
+        {
+            text:   "",
+            tokens: []string{},
+        },
+        {
+            text:   "a",
+            tokens: []string{"a"},
+        },
+        {
+            text:   "small wild,cat!",
+            tokens: []string{"small", "wild", "cat"},
+        },
+    }
 
-	for _, tc := range testCases {
-		t.Run(tc.text, func(st *testing.T) {
-			assert.EqualValues(st, tc.tokens, tokenize(tc.text))
-		})
-	}
+    for _, tc := range testCases {
+        t.Run(tc.text, func(st *testing.T) {
+            assert.EqualValues(st, tc.tokens, tokenize(tc.text))
+        })
+    }
 }
 </code></pre>
 <p>例如：</p>
-<pre><code class="language-go">&gt; tokenize("A donut on a glass plate. Only the donuts.")
+<pre><code class="lang-go">&gt; tokenize("A donut on a glass plate. Only the donuts.")
 ["A", "donut", "on", "a", "glass", "plate", "Only", "the", "donuts"]
 </code></pre>
 <hr/>
@@ -281,7 +288,7 @@ func TestTokenizer(t *testing.T) {
 <p>为了使搜索不区分大小写，小写过滤器将标记转换为小写；</p>
 <p>cAt、cAt和cAt规范化为cat；</p>
 <p>稍后，当我们查询索引时，我们也会使用小写作为搜索词，这将使搜索词cAt与文本Cat匹配；</p>
-<pre><code class="language-go">func lowercaseFilter(tokens []string) []string {
+<pre><code class="lang-go">func lowercaseFilter(tokens []string) []string {
     r := make([]string, len(tokens))
     for i, token := range tokens {
         r[i] = strings.ToLower(token)
@@ -290,16 +297,16 @@ func TestTokenizer(t *testing.T) {
 }
 </code></pre>
 <p>输出如下：</p>
-<pre><code class="language-bash">&gt; lowercaseFilter([]string{"A", "donut", "on", "a", "glass", "plate", "Only", "the", "donuts"}
+<pre><code class="lang-bash">&gt; lowercaseFilter([]string{"A", "donut", "on", "a", "glass", "plate", "Only", "the", "donuts"}
 ["a", "donut", "on", "a", "glass", "plate", "only", "the", "donuts"]
 </code></pre>
-<ol start="2">
+<ol>
 <li><strong>删除常用词</strong></li>
 </ol>
 <p>几乎所有的英语文本都包含了像a，I，the或be这样的常用词，这样的词叫做停止语；我们将删除它们，因为几乎所有文档都会匹配停止字。</p>
 <p>没有“官方”的停止语列表，我们会把<a href="https://en.wikipedia.org/wiki/Most_common_words_in_English">OEC rank</a>上前10名排除在外；</p>
 <p>你也可以随意添加：</p>
-<pre><code class="language-go">var stopwords = map[string]struct{}{ // I wish Go had built-in sets.
+<pre><code class="lang-go">var stopwords = map[string]struct{}{ // I wish Go had built-in sets.
     "a": {}, "and": {}, "be": {}, "have": {}, "i": {},
     "in": {}, "of": {}, "that": {}, "the": {}, "to": {},
 }
@@ -315,17 +322,17 @@ func stopwordFilter(tokens []string) []string {
 }
 </code></pre>
 <p>输出如下：</p>
-<pre><code class="language-bash">&gt; stopwordFilter([]string{"a", "donut", "on", "a", "glass", "plate", "only", "the", "donuts"})
+<pre><code class="lang-bash">&gt; stopwordFilter([]string{"a", "donut", "on", "a", "glass", "plate", "only", "the", "donuts"})
 ["donut", "on", "glass", "plate", "only", "donuts"]
 </code></pre>
-<ol start="3">
+<ol>
 <li><strong>提取词根</strong></li>
 </ol>
 <p>由于语法规则，文档可能包含同一单词的不同形式，词干分析将单词简化为基本形式；</p>
 <p>例如， <em>fishing</em>, <em>fished</em> 和 <em>fisher</em>可以变为基形fish；</p>
 <p>实现词干分析器是一项非常复杂的任务，本文暂不讨论它；</p>
 <p>我们将使用现有模块<a href="https://github.com/kljensen/snowball">github.com/kljensen/snowball/english</a>：</p>
-<pre><code class="language-go">import snowballeng "github.com/kljensen/snowball/english"
+<pre><code class="lang-go">import snowballeng "github.com/kljensen/snowball/english"
 
 func stemmerFilter(tokens []string) []string {
     r := make([]string, len(tokens))
@@ -336,17 +343,16 @@ func stemmerFilter(tokens []string) []string {
 }
 </code></pre>
 <p>效果如下：</p>
-<pre><code class="language-BASH">&gt; stemmerFilter([]string{"donut", "on", "glass", "plate", "only", "donuts"})
+<pre><code class="lang-BASH">&gt; stemmerFilter([]string{"donut", "on", "glass", "plate", "only", "donuts"})
 ["donut", "on", "glass", "plate", "only", "donut"]
 </code></pre>
-<blockquote>
-<p><strong>注意：词干并不总是合法的词；</strong></p>
+<blockquote><p><strong>注意：词干并不总是合法的词；</strong></p>
 <p>例如，一些词干分析器可能会将<em>airline</em> 转为 <em>airlin</em>；</p>
 </blockquote>
-<ol start="4">
+<ol>
 <li><strong>整合所有过滤器</strong></li>
 </ol>
-<pre><code class="language-go">func analyze(text string) []string {
+<pre><code class="lang-go">func analyze(text string) []string {
     tokens := tokenize(text)
     tokens = lowercaseFilter(tokens)
     tokens = stopwordFilter(tokens)
@@ -355,19 +361,20 @@ func stemmerFilter(tokens []string) []string {
 }
 </code></pre>
 <p>标记器和过滤器可以将句子转换为标记列表：</p>
-<pre><code class="language-BASH">&gt; analyze("A donut on a glass plate. Only the donuts.")
+<pre><code class="lang-BASH">&gt; analyze("A donut on a glass plate. Only the donuts.")
 ["donut", "on", "glass", "plate", "only", "donut"]
 </code></pre>
 <p>下面我们利用这些标记来建立倒排索引；</p>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h4>创建倒排索引</h4>
 <p>回到倒排索引，它将文档中的每个单词映射到文档id；</p>
 <p>内置map是存储映射的一个很好的候选对象；</p>
 <p>映射中的键是一个令牌（字符串），值是一个文档ID列表：</p>
-<pre><code class="language-go">type index map[string][]int
+<pre><code class="lang-go">type index map[string][]int
 </code></pre>
 <p>建立索引包括分析文档并将其ID添加到map中：</p>
-<pre><code class="language-go">func (idx index) add(docs []document) {
+<pre><code class="lang-go">func (idx index) add(docs []document) {
     for _, doc := range docs {
         for _, token := range analyze(doc.Text) {
             ids := idx[token]
@@ -388,12 +395,13 @@ func main() {
 }
 </code></pre>
 <p>map中的每个token引用包含该token的文档的ID：</p>
-<pre><code class="language-bash">map[donut:[1 2] glass:[1] is:[2] on:[1] only:[1] plate:[1]]
+<pre><code class="lang-bash">map[donut:[1 2] glass:[1] is:[2] on:[1] only:[1] plate:[1]]
 </code></pre>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h4>使用倒排索引查询</h4>
 <p>要查询索引，我们使用索引的相同标记器和过滤器：</p>
-<pre><code class="language-go">func (idx index) search(text string) [][]int {
+<pre><code class="lang-go">func (idx index) search(text string) [][]int {
     var r [][]int
     for _, token := range analyze(text) {
         if ids, ok := idx[token]; ok {
@@ -404,12 +412,13 @@ func main() {
 }
 </code></pre>
 <p>结果如下：</p>
-<pre><code class="language-bash">&gt; idx.search("Small wild cat")
+<pre><code class="lang-bash">&gt; idx.search("Small wild cat")
 [[24, 173, 303, ...], [98, 173, 765, ...], [[24, 51, 173, ...]]
 </code></pre>
 <p>最后，我们可以找到所有提到cat的文件：检索60万个文档所用时间不到1毫秒（18微秒）！</p>
 <p>使用反向索引时，搜索查询的时间复杂度与搜索令牌的数量成线性关系：在上面的示例查询中，除了分析输入文本外，search只需执行三次map查找；</p>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h3>多关键字布尔查询</h3>
 <p>上一节中的查询为每个token返回一个分离的文档列表；</p>
 <p>但是，当我们在搜索框中输入<code>small wild cat</code>时，我们通常期望找到的是同时包含small、wild和cat的结果列表；</p>
@@ -417,7 +426,7 @@ func main() {
 <p><img alt="venn.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/venn.png"/></p>
 <p>由于我们的倒排索引中的id是按升序排序插入的，所以可以在线性时间内计算两个列表之间的交集：</p>
 <p>intersection函数同时迭代两个列表，并收集两个列表中存在的ID：</p>
-<pre><code class="language-go">func intersection(a []int, b []int) []int {
+<pre><code class="lang-go">func intersection(a []int, b []int) []int {
     maxLen := len(a)
     if len(b) &gt; maxLen {
         maxLen = len(b)
@@ -440,7 +449,7 @@ func main() {
 </code></pre>
 <p>同时，我们需要更新search函数：</p>
 <p>分析给定的查询文本、查找标记并计算ID列表之间的集合交集：</p>
-<pre><code class="language-go">func (idx index) search(text string) []int {
+<pre><code class="lang-go">func (idx index) search(text string) []int {
     var r []int
     for _, token := range analyze(text) {
         if ids, ok := idx[token]; ok {
@@ -458,12 +467,13 @@ func main() {
 }
 </code></pre>
 <p>通过多关键字查询，我们可以发现，Wikipedia dump只包含同时匹配small、wild和cat的两个文档：</p>
-<pre><code class="language-go">&gt; idx.search("Small wild cat")
+<pre><code class="lang-go">&gt; idx.search("Small wild cat")
 
 130764  The wildcat is a species complex comprising two small wild cat species, the European wildcat (Felis silvestris) and the African wildcat (F. lybica).
 131692  Catopuma is a genus containing two Asian small wild cat species, the Asian golden cat (C. temminckii) and the bay cat.
 </code></pre>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h3>结论</h3>
 <p>我们刚刚建立了一个全文搜索引擎，尽管它简单，它可以为更复杂的项目奠定坚实的基础。</p>
 <p>以下是一些可以进一步优化的想法：</p>
@@ -484,6 +494,6 @@ func main() {
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/fts-demo</li>
+<li><a href="https://github.com/JasonkayZK/fts-demo">https://github.com/JasonkayZK/fts-demo</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

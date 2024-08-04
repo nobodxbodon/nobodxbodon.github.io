@@ -1,34 +1,35 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/%E4%BD%BF%E7%94%A8Uber%E5%BC%80%E6%BA%90%E7%9A%84goleak%E5%BA%93%E8%BF%9B%E8%A1%8Cgoroutine%E6%B3%84%E9%9C%B2%E6%A3%80%E6%B5%8B.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2021/04/21/%E4%BD%BF%E7%94%A8Uber%E5%BC%80%E6%BA%90%E7%9A%84goleak%E5%BA%93%E8%BF%9B%E8%A1%8Cgoroutine%E6%B3%84%E9%9C%B2%E6%A3%80%E6%B5%8B">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/使用Uber开源的goleak库进行goroutine泄露检测.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2021/04/21/使用Uber开源的goleak库进行goroutine泄露检测">站点原文</a></h2>
 <hr/>
-<h2>title: 使用Uber开源的goleak库进行goroutine泄露检测
+<p>title: 使用Uber开源的goleak库进行goroutine泄露检测
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?9'
+cover: '<a href="https://img.paulzzh.com/touhou/random?9">https://img.paulzzh.com/touhou/random?9</a>'
 date: 2021-04-21 15:40:13
 categories: Golang
-tags: [Golang, 技术杂谈, Goroutine]
-description: goroutine 作为 golang 并发实现的核心组成部分，非常容易上手使用，但却很难驾驭得好。我们经常会遭遇各种形式的 goroutine 泄漏，这些泄漏的 goroutine 会一直存活直到进程终结。它们的占用的栈内存一直无法释放、关联的堆内存也不能被GC清理，系统的可用内存会随泄漏 goroutine 的增多越来越少，直至崩溃！Uber开源了goleak库可以帮助我们检测代码中可能存在的goroutine泄露问题；</h2>
+tags: [Golang, 技术杂谈, Goroutine]</p>
+<h2>description: goroutine 作为 golang 并发实现的核心组成部分，非常容易上手使用，但却很难驾驭得好。我们经常会遭遇各种形式的 goroutine 泄漏，这些泄漏的 goroutine 会一直存活直到进程终结。它们的占用的栈内存一直无法释放、关联的堆内存也不能被GC清理，系统的可用内存会随泄漏 goroutine 的增多越来越少，直至崩溃！Uber开源了goleak库可以帮助我们检测代码中可能存在的goroutine泄露问题；</h2>
 <p>goroutine 作为 golang 并发实现的核心组成部分，非常容易上手使用，但却很难驾驭得好。我们经常会遭遇各种形式的 goroutine 泄漏，这些泄漏的 goroutine 会一直存活直到进程终结。它们的占用的栈内存一直无法释放、关联的堆内存也不能被GC清理，系统的可用内存会随泄漏 goroutine 的增多越来越少，直至崩溃！</p>
 <p>Uber开源了goleak库可以帮助我们检测代码中可能存在的goroutine泄露问题；</p>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/Go_Learn/tree/goleak-demo</li>
+<li><a href="https://github.com/JasonkayZK/Go_Learn/tree/goleak-demo">https://github.com/JasonkayZK/Go_Learn/tree/goleak-demo</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2><strong>使用Uber开源的goleak库进行goroutine泄露检测</strong></h2>
 <h3><strong>什么是Goroutine泄露</strong></h3>
 <p><code>goroutine leak</code> 的意思是go协程泄漏，那么什么又是协程泄漏呢？</p>
-<p>&lt;font color="#f00"&gt;<strong>我们知道，每次使用go关键字开启一个gorountine任务，经过一段时间的运行，最终是会结束，从而进行系统资源的释放回收。而如果由于操作不当导致一些goroutine一直处于阻塞状态或者永远运行中，永远也不会结束，这就必定会一直占用系统资源；最坏的情况下是随着系统运行，一直在创建此类goroutine，那么最终结果就是程序崩溃或者系统崩溃；这种情况我们一般称为goroutine leak；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**我们知道，每次使用go关键字开启一个gorountine任务，经过一段时间的运行，最终是会结束，从而进行系统资源的释放回收。而如果由于操作不当导致一些goroutine一直处于阻塞状态或者永远运行中，永远也不会结束，这就必定会一直占用系统资源；最坏的情况下是随着系统运行，一直在创建此类goroutine，那么最终结果就是程序崩溃或者系统崩溃；这种情况我们一般称为goroutine leak；**&lt;/font&gt;</p>
 <p>例如下面的一段代码：</p>
-<pre><code class="language-go">package main
- 
+<pre><code class="lang-go">package main
+
 import (  
     "fmt"  
     "math/rand"  
     "runtime"  
     "time"  
 )
- 
+
 func query() int {  
     n := rand.Intn(100)  
     time.Sleep(time.Duration(n) * time.Millisecond)  
@@ -72,42 +73,40 @@ func main() {
 <li>第三次：7 + 再个浪费的2个goroutine = 9；</li>
 </ul>
 <p>正好是程序的输出结果；</p>
-<blockquote>
-<p><strong>解决方案：</strong></p>
+<blockquote><p><strong>解决方案：</strong></p>
 <p>可以看到，主要是ch写入值次数与读取的值的次数不一致导致的有ch一直处于阻塞浪费的状态，我们所以我们只要保存写与读的次数完全一样就可以了；</p>
 <p><strong>这里我们把上面queryAll() 函数代码注释掉的 &lt;-ch 两行取消掉，再执行就正常了，输出内容如下：</strong></p>
-<pre><code>#goroutines: 1
-#goroutines: 1
-#goroutines: 1
-#goroutines: 1
+<pre><code>  #goroutines: 1
+  #goroutines: 1
+  #goroutines: 1
+  #goroutines: 1
 </code></pre>
 <p>当然对于解决goroutine的方法不是仅仅这一种，也可以利用context来解决，参考：</p>
 <ul>
-<li>https://www.cnblogs.com/chenqionghe/p/9769351.html</li>
+<li><a href="https://www.cnblogs.com/chenqionghe/p/9769351.html">https://www.cnblogs.com/chenqionghe/p/9769351.html</a></li>
 </ul>
 </blockquote>
 <p>总结如下：</p>
 <h4><strong>产生goroutine leak的原因</strong></h4>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>goroutine由于channel的读/写端退出而一直阻塞，导致goroutine一直占用资源，而无法退出，如只有写入，没有接收，反之一样；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>goroutine进入死循环中，导致资源一直无法释放；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**goroutine由于channel的读/写端退出而一直阻塞，导致goroutine一直占用资源，而无法退出，如只有写入，没有接收，反之一样；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**goroutine进入死循环中，导致资源一直无法释放；**&lt;/font&gt;</li>
 </ul>
-<blockquote>
-<p><strong>提醒：垃圾收集器不会收集以下形式的goroutines：</strong></p>
-<pre><code class="language-go">go func() {
-// &lt;操作会在这里永久阻塞&gt;
-}()
-// Do work
+<blockquote><p><strong>提醒：垃圾收集器不会收集以下形式的goroutines：</strong></p>
+<pre><code class="lang-go">  go func() {
+  // &lt;操作会在这里永久阻塞&gt;
+  }()
+  // Do work
 </code></pre>
 <p>这个goroutine将一直存在，直到整个程序退出；</p>
-<p>是否属于goroutine leak 还需要看如何使用了，如https://www.jianshu.com/p/b524c6762662。如果处理不好，如for{} 根本就不可能结束，此时就属于泄漏；</p>
+<p>是否属于goroutine leak 还需要看如何使用了，如<a href="https://www.jianshu.com/p/b524c6762662。如果处理不好，如for{}">https://www.jianshu.com/p/b524c6762662。如果处理不好，如for{}</a> 根本就不可能结束，此时就属于泄漏；</p>
 <p>所以我们写程序时，至少要保证他们结束的条件，且一定可以结束才算正常；</p>
 </blockquote>
 <h4><strong>goroutine终止的场景</strong></h4>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>goroutine完成它的工作</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>由于发生了没有处理的错误</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>收到结束信号，直接终止任务</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**goroutine完成它的工作**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**由于发生了没有处理的错误**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**收到结束信号，直接终止任务**&lt;/font&gt;</li>
 </ul>
 <p><strong>可以看出来，goroutine 的泄漏通常伴随着复杂的协程间通信，而代码评审和常规的单元测试通常更专注于业务逻辑正确，很难完全覆盖 goroutine 泄漏的场景；</strong></p>
 <p><strong>同时，<code>pprof</code> 等性能分析工具更多是作用于监控报警/故障之后的复盘。我们需要一款能在编译部署前识别 goroutine 泄漏的工具，从更上游把控工程质量；</strong></p>
@@ -116,37 +115,37 @@ func main() {
 <h3><strong>使用 uber-go/goleak 工具检测goleak</strong></h3>
 <p>上面我们是手动通过获取 groutine数量来判断是否存在泄漏的，下面我们使用 uber-go/goleak工具来检测是否存在泄漏问题；</p>
 <p>下面的函数在每次调用时都会造成一个goroutine泄露：</p>
-<pre><code class="language-go">func leak() {
-	ch := make(chan struct{})
-	go func() {
-		ch &lt;- struct{}{}
-	}()
+<pre><code class="lang-go">func leak() {
+    ch := make(chan struct{})
+    go func() {
+        ch &lt;- struct{}{}
+    }()
 }
 </code></pre>
 <p>通常我们会为 <code>leak</code>函数写类似下面的测试：</p>
-<pre><code class="language-go">func TestLeak(t *testing.T) {
+<pre><code class="lang-go">func TestLeak(t *testing.T) {
     leak()
 }
 </code></pre>
 <p>用 <code>go test</code> 执行测试看看结果：</p>
-<pre><code class="language-bash">$ go test -v -run ^TestLeak$
+<pre><code class="lang-bash">$ go test -v -run ^TestLeak$
 === RUN   TestLeak
 --- PASS: TestLeak (0.00s)
 PASS
 ok      cool-go.gocn.vip/goleak 0.007s
 </code></pre>
 <p><strong>测试不出意外地顺利通过了！</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>go 内置的测试显然无法帮我们识别 <code>leak</code>中的 goroutine 泄漏！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**go 内置的测试显然无法帮我们识别 `leak`中的 goroutine 泄漏！**&lt;/font&gt;</p>
 <p>在使用goleak进行goroutine泄露测试时，通常我们只需关注 <code>VerifyNone</code> 和 V<code>erifyTestMain</code> 两个方法，它们也对应了 <code>goleak</code> 的两种集成方式；</p>
 <h4><strong>随用例集成</strong></h4>
 <p>在现有测试的首行添加 <code>defer goleak.VerifyNone(t)</code>，即可集成 goleak 泄漏检测：</p>
-<pre><code class="language-go">func TestLeakWithGoleak(t *testing.T) {
+<pre><code class="lang-go">func TestLeakWithGoleak(t *testing.T) {
     defer goleak.VerifyNone(t)
     leak()
 }
 </code></pre>
 <p>这次的 go test 失败了：</p>
-<pre><code class="language-bash">$ go test -v -run ^TestLeakWithGoleak$
+<pre><code class="lang-bash">$ go test -v -run ^TestLeakWithGoleak$
 === RUN   TestLeakWithGoleak
     leaks.go:78: found unexpected goroutines:
         [Goroutine 19 in state chan send, with cool-go.gocn.vip/goleak.leak.func1 on top of the stack:
@@ -165,12 +164,12 @@ FAIL    cool-go.gocn.vip/goleak 0.459s
 <p>我们成功通过 <code>goleak</code> 找到了 goroutine 泄漏；</p>
 <h4><strong>通过 TestMain 集成</strong></h4>
 <p>如果觉得逐用例集成 <code>goleak</code> 的方式太过繁琐或 “入侵” 性太强，可以试试完全不改变原有测试用例，通过在 <code>TestMain</code>中添加 <code>goleak.VerifyTestMain(m)</code> 的方式集成 <code>goleak</code>：</p>
-<pre><code class="language-go">func TestMain(m *testing.M) {
+<pre><code class="lang-go">func TestMain(m *testing.M) {
     goleak.VerifyTestMain(m)
 }
 </code></pre>
 <p>这次的 <code>go test</code> 输出如下：</p>
-<pre><code class="language-bash">$ go test -v -run ^TestLeak$
+<pre><code class="lang-bash">$ go test -v -run ^TestLeak$
 === RUN   TestLeak
 --- PASS: TestLeak (0.00s)
 PASS
@@ -186,12 +185,11 @@ exit status 1
 FAIL    cool-go.gocn.vip/goleak 0.455s
 </code></pre>
 <p>可见，<code>goleak</code> 再次成功检测到了 goroutine 泄漏；</p>
-<p>&lt;font color="#f00"&gt;<strong>但与逐用例集成不同的是，<code>goleak.VerifyTestMain</code>会先报告用例执行的结果，然后再进行泄漏分析；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>同时，如果单次测试执行了多个用例且最终发生泄漏，那么以 <code>TestMain</code> 方式集成的 <code>goleak</code> 并不能精准定位发生 goroutine 泄漏的用例，还需进一步分析；</strong>&lt;/font&gt;</p>
-<blockquote>
-<p><strong><code>goleak</code> 提供了如下脚本用于进一步推断具体发生 goroutine 泄漏的用例，其本质是逐一执行所有用例进行分析：</strong></p>
+<p>&lt;font color="#f00"&gt;**但与逐用例集成不同的是，`goleak.VerifyTestMain`会先报告用例执行的结果，然后再进行泄漏分析；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**同时，如果单次测试执行了多个用例且最终发生泄漏，那么以 `TestMain` 方式集成的 `goleak` 并不能精准定位发生 goroutine 泄漏的用例，还需进一步分析；**&lt;/font&gt;</p>
+<blockquote><p><strong><code>goleak</code> 提供了如下脚本用于进一步推断具体发生 goroutine 泄漏的用例，其本质是逐一执行所有用例进行分析：</strong></p>
 </blockquote>
-<pre><code class="language-bash"># Create a test binary which will be used to run each test individually
+<pre><code class="lang-bash"># Create a test binary which will be used to run each test individually
 $ go test -c -o tests
 
 # Run each test individually, printing "." for successful tests, or the test name
@@ -208,11 +206,11 @@ done
 <h2><strong>附录</strong></h2>
 <p>文章参考：</p>
 <ul>
-<li>https://mp.weixin.qq.com/s/3iPqxiK2mf9Fl5CSZ9U7RQ</li>
-<li>https://blog.haohtml.com/archives/19308</li>
+<li><a href="https://mp.weixin.qq.com/s/3iPqxiK2mf9Fl5CSZ9U7RQ">https://mp.weixin.qq.com/s/3iPqxiK2mf9Fl5CSZ9U7RQ</a></li>
+<li><a href="https://blog.haohtml.com/archives/19308">https://blog.haohtml.com/archives/19308</a></li>
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/Go_Learn/tree/goleak-demo</li>
+<li><a href="https://github.com/JasonkayZK/Go_Learn/tree/goleak-demo">https://github.com/JasonkayZK/Go_Learn/tree/goleak-demo</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

@@ -1,23 +1,24 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/%E6%B5%85%E8%B0%88%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/06/01/%E6%B5%85%E8%B0%88%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/浅谈函数调用.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/06/01/浅谈函数调用">站点原文</a></h2>
 <hr/>
-<h2>title: 浅谈函数调用
+<p>title: 浅谈函数调用
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?88'
+cover: '<a href="https://img.paulzzh.com/touhou/random?88">https://img.paulzzh.com/touhou/random?88</a>'
 date: 2022-06-01 21:16:20
 categories: C++
-tags: [C++, 技术杂谈]
-description: 在任意一门编程语言中，函数调用基本上都是非常常见的操作；我们都知道，函数是由调用栈实现的，不同的函数调用会切换上下文；但是，你是否好奇，对于一个函数调用而言，其底层到底是如何实现的呢？本文讲解了函数调用的底层逻辑实现；</h2>
+tags: [C++, 技术杂谈]</p>
+<h2>description: 在任意一门编程语言中，函数调用基本上都是非常常见的操作；我们都知道，函数是由调用栈实现的，不同的函数调用会切换上下文；但是，你是否好奇，对于一个函数调用而言，其底层到底是如何实现的呢？本文讲解了函数调用的底层逻辑实现；</h2>
 <p>在任意一门编程语言中，函数调用基本上都是非常常见的操作；</p>
 <p>我们都知道，函数是由调用栈实现的，不同的函数调用会切换上下文；</p>
 <p>但是，你是否好奇，对于一个函数调用而言，其底层到底是如何实现的呢？</p>
 <p>本文讲解了函数调用的底层逻辑实现；</p>
 <p>相关文章：</p>
 <ul>
-<li><a href="/2022/06/01/%E6%B5%85%E8%B0%88%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8/">《浅谈函数调用》</a></li>
-<li><a href="/2022/06/03/%E6%B5%85%E8%B0%88%E5%8D%8F%E7%A8%8B/">《浅谈协程》</a></li>
+<li><a href="/2022/06/01/浅谈函数调用/">《浅谈函数调用》</a></li>
+<li><a href="/2022/06/03/浅谈协程/">《浅谈协程》</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h1><strong>浅谈函数调用</strong></h1>
 <h2><strong>汇编概述</strong></h2>
 <p>既然要讲解函数调用的底层逻辑实现，那么汇编语言我们是绕不过的；</p>
@@ -27,7 +28,7 @@ description: 在任意一门编程语言中，函数调用基本上都是非常�
 <p>&lt;br/&gt;</p>
 <h3><strong>一个简单的汇编例子</strong></h3>
 <p>上面讲的有些空洞，来看一个实际的例子：</p>
-<pre><code class="language-assembly">; 将寄存器rsp的值存储到寄存器rbp中
+<pre><code class="lang-assembly">; 将寄存器rsp的值存储到寄存器rbp中
 mov rbp, rsp
 
 ; 将四个字节的4存储到地址为rbp-4的栈上
@@ -36,16 +37,16 @@ mov DWORD PTR [rbp-4], 4
 ; 将rsp的值减去16
 sub rsp, 16
 </code></pre>
-<p>&lt;font color="#f00"&gt;<strong>需要注意的是：汇编语言是和实际底层的 CPU 息息相关的；上面的汇编格式使用的便是 Intel 的语法格式；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**需要注意的是：汇编语言是和实际底层的 CPU 息息相关的；上面的汇编格式使用的便是 Intel 的语法格式；**&lt;/font&gt;</p>
 <p><strong>常见的汇编语言有两种截然不同的语法：</strong></p>
 <ul>
 <li><strong>Intel 格式；</strong></li>
 <li><strong>AT&amp;T 格式；</strong></li>
 </ul>
-<p>&lt;font color="#f00"&gt;<strong>Intel 的格式是：<code>optcode destination, source</code>，类似于语法 int i = 4；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>而 AT&amp;T 的格式是：<code>optcode source, destination</code>，直观理解为 move from source to destination；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**Intel 的格式是：`optcode destination, source`，类似于语法 int i = 4；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**而 AT&amp;T 的格式是：`optcode source, destination`，直观理解为 move from source to destination；**&lt;/font&gt;</p>
 <p>若将上面的 Intel 汇编改写为 AT&amp;T 汇编，则为：</p>
-<pre><code class="language-assembly">movq %rsp, %rbp
+<pre><code class="lang-assembly">movq %rsp, %rbp
 
 movl $4, -4(%rbp)
 
@@ -57,29 +58,84 @@ subq $16, %rsp
 <p>&lt;br/&gt;</p>
 <h3><strong>常用汇编指令</strong></h3>
 <p>下面是一些非常常用的汇编指令，在后文中都会用到：</p>
-<p>| <strong>指令</strong>       | <strong>简单解释</strong>         |
-| -------------- | -------------------- |
-| mov obj source | 把 source 赋值给 obj |
-| call           | 调用子程序           |
-| ret            | 子程序以 ret 结尾    |
-| jmp            | 无条件跳             |
-| int            | 中断指令             |
-| add            | 加法，a=a+b          |
-| or             | 或运算               |
-| xor            | 异或运算             |
-| shl            | 逻辑左移             |
-| ahr            | 逻辑右移             |
-| push xxx       | 压xxx入栈            |
-| pop xxx        | xxx出栈              |
-| inc            | 加一                 |
-| dec            | 减一                 |
-| sub a b        | a=a-b                |
-| cmp ax,bx      | 减法比较，修改标志位 |</p>
+<table>
+<thead><tr>
+<th><strong>指令</strong></th>
+<th><strong>简单解释</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mov obj source</td>
+<td>把 source 赋值给 obj</td>
+</tr>
+<tr>
+<td>call</td>
+<td>调用子程序</td>
+</tr>
+<tr>
+<td>ret</td>
+<td>子程序以 ret 结尾</td>
+</tr>
+<tr>
+<td>jmp</td>
+<td>无条件跳</td>
+</tr>
+<tr>
+<td>int</td>
+<td>中断指令</td>
+</tr>
+<tr>
+<td>add</td>
+<td>加法，a=a+b</td>
+</tr>
+<tr>
+<td>or</td>
+<td>或运算</td>
+</tr>
+<tr>
+<td>xor</td>
+<td>异或运算</td>
+</tr>
+<tr>
+<td>shl</td>
+<td>逻辑左移</td>
+</tr>
+<tr>
+<td>ahr</td>
+<td>逻辑右移</td>
+</tr>
+<tr>
+<td>push xxx</td>
+<td>压xxx入栈</td>
+</tr>
+<tr>
+<td>pop xxx</td>
+<td>xxx出栈</td>
+</tr>
+<tr>
+<td>inc</td>
+<td>加一</td>
+</tr>
+<tr>
+<td>dec</td>
+<td>减一</td>
+</tr>
+<tr>
+<td>sub a b</td>
+<td>a=a-b</td>
+</tr>
+<tr>
+<td>cmp ax,bx</td>
+<td>减法比较，修改标志位</td>
+</tr>
+</tbody>
+</table>
 <p>&lt;br/&gt;</p>
 <h2><strong>通用寄存器概述</strong></h2>
 <p>对于汇编语言，仅仅了解其语法内容是远远不够的！</p>
 <p>由于汇编语言和 CPU 是息息相关的，因此在硬件层面我们还需要关注 CPU 的通用寄存器；</p>
-<p>&lt;font color="#f00"&gt;<strong>在所有 CPU 体系架构中，每个寄存器通常都是有建议的使用方法的，而编译器也通常依照 CPU 架构的建议来使用这些寄存器，因而我们可以认为这些建议是强制性的；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**在所有 CPU 体系架构中，每个寄存器通常都是有建议的使用方法的，而编译器也通常依照 CPU 架构的建议来使用这些寄存器，因而我们可以认为这些建议是强制性的；**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h3><strong>8086架构(16bit)</strong></h3>
 <p>让我们把视线首先转移到 8086；</p>
@@ -96,12 +152,11 @@ subq $16, %rsp
 <p>8086 处理器内部有 8 个 16 位的通用寄存器，也就是 CPU 内部的数据单元，分别是：AX、BX、CX、DX、SP、BP、SI、DI；</p>
 <p>这些寄存器的作用主要是：<strong>暂存计算机过程中的数据</strong>；</p>
 <p>另外，AX、BX、CX、DX 这四个寄存器又可以分为两个 8 位的寄存器来使用，分别是 AH、AL、BH、BL、CH、CL、DH、DL；</p>
-<blockquote>
-<p><strong>其中 H 表示高位（high），L 表示低位（low）的意思；</strong></p>
+<blockquote><p><strong>其中 H 表示高位（high），L 表示低位（low）的意思；</strong></p>
 </blockquote>
 <p>下面来看下控制单元：</p>
-<p>&lt;font color="#f00"&gt;<strong>IP 寄存器就是指令指针寄存器（Instruction Pointer Register），指向代码段中下一条指令的位置；CPU 会根据它不断地从内存的代码段中取出指令并加载到 CPU 的指令队列中，然后交给运算单元去执行；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>CS、DS、SS、ES 这四个寄存器都是 16 位寄存器，用来存储进程的地址空间信息；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**IP 寄存器就是指令指针寄存器（Instruction Pointer Register），指向代码段中下一条指令的位置；CPU 会根据它不断地从内存的代码段中取出指令并加载到 CPU 的指令队列中，然后交给运算单元去执行；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**CS、DS、SS、ES 这四个寄存器都是 16 位寄存器，用来存储进程的地址空间信息；**&lt;/font&gt;</p>
 <p>比如：</p>
 <ul>
 <li><strong>CS 是代码段寄存器（Code Segment Register），通过它可以找到代码在内存中的位置；</strong></li>
@@ -147,75 +202,173 @@ subq $16, %rsp
 <li>指向下一条指令的指令指针寄存器也从 16 位变成了 32 位，被称为 EIP，但是同样兼容 16 位的使用方式；</li>
 <li><strong>段寄存器改动比较大：在 32 位架构中段寄存器还是 16 位，但是它不再表示段的起始地址，而是表示索引；32 位架构中，引入了段描述符表，表格中的每一项都是段描述符（Segment Descriptor），记录了段在内存中的起始位置，而这张表则存放在内存的某个地址；那么，段寄存器中存的就是对应段在段表中的位置，称为选择子（selector）；</strong></li>
 </ul>
-<blockquote>
-<p><strong>关于选择子：</strong></p>
+<blockquote><p><strong>关于选择子：</strong></p>
 <p><strong>先根据段寄存器拿到段的起始地址，再根据段寄存器中保存的选择子，找到对应的段描述符，然后从这个段描述符中取出这个段的起始地址；就相当于由之前的直接找到段起始地址变成了间接找到段起始地址；这样改变之后，段起始地址会变得很灵活；</strong></p>
 <p>但是这样就跟原来的 8086 架构不兼容了，因此为了兼容 8086 架构，32 位架构中引入了实模式和保存模式：<strong>8086 架构中的方式就称为实模式，32 位这种模式就被称为保护模式；</strong></p>
 <p>当系统刚刚启动的时候，CPU 是处于实模式的，这个时候和 8086 模式是兼容的；当需要更多内存时，进行一系列的操作，将其切换到保护模式，这样就能使用 32 位了；</p>
 <p><strong>模式可以理解为：CPU 和操作系统的一起干活的模式：</strong></p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>在实模式下，两者约定好了这些寄存器是干这个的，总线是这样的，内存访问是这样的；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>在保护模式下，两者约定好了这些寄存器是干那个的，总线是那样的，内存访问是那样的；</strong>&lt;/font&gt;</li>
-</ul>
+<li>&lt;font color="#f00"&gt;**在实模式下，两者约定好了这些寄存器是干这个的，总线是这样的，内存访问是这样的；**&lt;/font&gt;</li>
+<li><p>&lt;font color="#f00"&gt;**在保护模式下，两者约定好了这些寄存器是干那个的，总线是那样的，内存访问是那样的；**&lt;/font&gt;</p>
 <p><strong>这样操作系统给CPU下命令，CPU按照约定好的，就能得到操作系统预料的结果，操作系统也按照约定好的，将一些数据结构，例如段描述符表放在一个约定好的地方，这样CPU就能找到。两者就可以配合工作了；</strong></p>
+</li>
+</ul>
 </blockquote>
 <p>下面是 x86 平台下一些寄存器的调用特殊约定：</p>
-<p>| <strong>寄存器</strong> | <strong>说明</strong>                                                     |
-| ---------- | ------------------------------------------------------------ |
-| EAX        | 一般用作累加器（Adder），函数调用的返回值一般也放在这里      |
-| EBX        | 一般用作基址寄存器（Base）                                   |
-| ECX        | 一般用作计数器（Count），比如for循环                         |
-| EDX        | 一般用来存放数据（Data），读写I/O端口时，EDX 用来存放端口号  |
-| ESP        | 一般用作栈指针（Stack Pointer），栈顶指针，指向栈的顶部      |
-| EBP        | 一般用作基址指针（Base Pointer），栈底指针，指向栈的底部，通常用<code>ebp+偏移量</code>的形式来定位函数存放在栈中的局部变量 |
-| ESI        | 一般用作源变址（Source Index），字符串操作时，用于存放数据源的地址 |
-| EDI        | 一般用作目标变址（Destinatin Index），字符串操作时，用于存放目的地址的，和esi两个经常搭配一起使用，执行字符串的复制等操作 |</p>
+<table>
+<thead><tr>
+<th><strong>寄存器</strong></th>
+<th><strong>说明</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EAX</td>
+<td>一般用作累加器（Adder），函数调用的返回值一般也放在这里</td>
+</tr>
+<tr>
+<td>EBX</td>
+<td>一般用作基址寄存器（Base）</td>
+</tr>
+<tr>
+<td>ECX</td>
+<td>一般用作计数器（Count），比如for循环</td>
+</tr>
+<tr>
+<td>EDX</td>
+<td>一般用来存放数据（Data），读写I/O端口时，EDX 用来存放端口号</td>
+</tr>
+<tr>
+<td>ESP</td>
+<td>一般用作栈指针（Stack Pointer），栈顶指针，指向栈的顶部</td>
+</tr>
+<tr>
+<td>EBP</td>
+<td>一般用作基址指针（Base Pointer），栈底指针，指向栈的底部，通常用<code>ebp+偏移量</code>的形式来定位函数存放在栈中的局部变量</td>
+</tr>
+<tr>
+<td>ESI</td>
+<td>一般用作源变址（Source Index），字符串操作时，用于存放数据源的地址</td>
+</tr>
+<tr>
+<td>EDI</td>
+<td>一般用作目标变址（Destinatin Index），字符串操作时，用于存放目的地址的，和esi两个经常搭配一起使用，执行字符串的复制等操作</td>
+</tr>
+</tbody>
+</table>
 <p><strong>作为通用寄存器，过程调用中，调用者栈帧需要寄存器暂存数据，被调用者栈帧也需要寄存器暂存数据；</strong></p>
 <p><strong>为防止调用过程中数据不会被破坏丢失，C/C++编译器遵守如下约定的规则：</strong></p>
 <p><img alt="" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/register-x32-1.jpg"/></p>
-<p>&lt;font color="#f00"&gt;<strong>当产生函数调用时，子函数内通常也会使用到通用寄存器，那么这些寄存器中之前保存的调用者(父函数）的值就会被覆盖！为了避免数据覆盖而导致从子函数返回时寄存器中的数据不可恢复，CPU 体系结构中就规定了通用寄存器的保存方式；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>如果一个寄存器被标识为<code>Caller Save</code>， 那么在进行子函数调用前，就需要由调用者提前保存好这些寄存器的值，保存方法通常是把寄存器的值压入堆栈中，调用者保存完成后，在被调用者（子函数）中就可以随意覆盖这些寄存器的值了；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>如果一个寄存被标识为<code>Callee Save</code>，那么在函数调用时，调用者就不必保存这些寄存器的值而直接进行子函数调用，进入子函数后，子函数在覆盖这些寄存器之前，需要先保存这些寄存器的值，即这些寄存器的值是由被调用者来保存和恢复的；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**当产生函数调用时，子函数内通常也会使用到通用寄存器，那么这些寄存器中之前保存的调用者(父函数）的值就会被覆盖！为了避免数据覆盖而导致从子函数返回时寄存器中的数据不可恢复，CPU 体系结构中就规定了通用寄存器的保存方式；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**如果一个寄存器被标识为`Caller Save`， 那么在进行子函数调用前，就需要由调用者提前保存好这些寄存器的值，保存方法通常是把寄存器的值压入堆栈中，调用者保存完成后，在被调用者（子函数）中就可以随意覆盖这些寄存器的值了；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**如果一个寄存被标识为`Callee Save`，那么在函数调用时，调用者就不必保存这些寄存器的值而直接进行子函数调用，进入子函数后，子函数在覆盖这些寄存器之前，需要先保存这些寄存器的值，即这些寄存器的值是由被调用者来保存和恢复的；**&lt;/font&gt;</p>
 <p>具体来讲：</p>
-<p>&lt;font color="#f00"&gt;<strong>当该函数是处于调用者角色时，如果该函数执行过程中产生的临时数据会已存储在<code>%eax，%edx，%ecx</code>这些寄存器中，那么在其执行 call 指令之前会将这些寄存器的数据写入其栈帧内指定的内存区域，这个过程叫做调用者保存约定(Caller Save)；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>当该函数是处于被调用者角色时，那么在其使用这些寄存器<code>%ebx，%esp，%edi</code>之前，那么该函数会保存这些寄存器中的信息到其栈帧指定的内存区域，这个过程叫被调用者保存约定；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong><code>%eax</code>总会被用作返回整数值；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong><code>%esp，%ebp</code>总被分别用着指向当前栈帧的顶部和底部，主要用于在当前函数推出时，将他们还原为原始值；往往会在栈帧开始处保存上一个栈帧的ebp，而esp是全栈的栈顶指针，一直指向栈的顶部；</strong>&lt;/font&gt;</p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>注：在 x86-64 架构下也是类似的约定！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**当该函数是处于调用者角色时，如果该函数执行过程中产生的临时数据会已存储在`%eax，%edx，%ecx`这些寄存器中，那么在其执行 call 指令之前会将这些寄存器的数据写入其栈帧内指定的内存区域，这个过程叫做调用者保存约定(Caller Save)；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**当该函数是处于被调用者角色时，那么在其使用这些寄存器`%ebx，%esp，%edi`之前，那么该函数会保存这些寄存器中的信息到其栈帧指定的内存区域，这个过程叫被调用者保存约定；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**`%eax`总会被用作返回整数值；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**`%esp，%ebp`总被分别用着指向当前栈帧的顶部和底部，主要用于在当前函数推出时，将他们还原为原始值；往往会在栈帧开始处保存上一个栈帧的ebp，而esp是全栈的栈顶指针，一直指向栈的顶部；**&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**注：在 x86-64 架构下也是类似的约定！**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3><strong>x86-64 架构</strong></h3>
 <h4><strong>寄存器约定</strong></h4>
 <p>最后就是我们目前主流的 x86-64 架构了；</p>
 <p>对于 x86-64 架构，最常用的有 16 个64位通用寄存器，各寄存器及用途如下所示：</p>
-<p>| <strong>寄存器</strong>  | <strong>被调用者保存（Caller Save）</strong> | <strong>简述</strong> |
-| ----------- | ------------------------------- | -------- |
-| <strong>%rax</strong>     |                                 | <strong>累加寄存器，通常用来执行加法（加法器，如 <code>idiv</code> 指令或 <code>imul</code> 指令等）；</strong>&lt;br /&gt;<strong>同时，函数调用的返回值也放在这里；</strong> |
-| <strong>%rbx</strong>     | <strong>YES</strong>                         | <strong>通用数据存储（Miscellaneous）</strong> |
-| <strong>%rcx</strong>     |                                 | <strong>计数寄存器（Count），比如for循环</strong> |
-| <strong>%rdx</strong>     |                                 | <strong>存放数据（Data），读写I/O端口时，edx用来存放端口号</strong> |
-| <strong>%rsp</strong>     |                                 | <strong>一般用作栈指针（Stack Pointer），栈顶指针，指向栈的顶部</strong> |
-| <strong>%rbp</strong>     | <strong>YES</strong>                         | <strong>基址指针（Base Pointer），栈底指针，指向栈的底部，通常用<code>ebp+偏移量</code>的形式来定位函数存放在栈中的局部变量</strong> |
-| <strong>%rsi</strong>     |                                 | <strong>源变址（Source Index），字符串操作时，用于存放数据源的地址</strong> |
-| <strong>%rdi</strong>     |                                 | <strong>目标变址（Destinatin Index），用于存放目的地址的，和esi两个经常搭配一起使用，执行字符串的复制等操作</strong> |
-| <strong>%r8</strong>      |                                 |          |
-| <strong>%r9</strong>      |                                 |          |
-| <strong>%r10</strong>     |                                 |          |
-| <strong>%r11</strong>     |                                 |          |
-| <strong>%r12~r15</strong> | <strong>YES</strong>                         |          |
-| <strong>%st0~st7</strong> |  | <strong>浮点寄存器组</strong> |
-| <strong>XMM0~XMM15</strong> |  | <strong>XMM寄存器组</strong> |</p>
+<table>
+<thead><tr>
+<th><strong>寄存器</strong></th>
+<th><strong>被调用者保存（Caller Save）</strong></th>
+<th><strong>简述</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>%rax</strong></td>
+<td></td>
+<td><strong>累加寄存器，通常用来执行加法（加法器，如 <code>idiv</code> 指令或 <code>imul</code> 指令等）；</strong>&lt;br /&gt;<strong>同时，函数调用的返回值也放在这里；</strong></td>
+</tr>
+<tr>
+<td><strong>%rbx</strong></td>
+<td><strong>YES</strong></td>
+<td><strong>通用数据存储（Miscellaneous）</strong></td>
+</tr>
+<tr>
+<td><strong>%rcx</strong></td>
+<td></td>
+<td><strong>计数寄存器（Count），比如for循环</strong></td>
+</tr>
+<tr>
+<td><strong>%rdx</strong></td>
+<td></td>
+<td><strong>存放数据（Data），读写I/O端口时，edx用来存放端口号</strong></td>
+</tr>
+<tr>
+<td><strong>%rsp</strong></td>
+<td></td>
+<td><strong>一般用作栈指针（Stack Pointer），栈顶指针，指向栈的顶部</strong></td>
+</tr>
+<tr>
+<td><strong>%rbp</strong></td>
+<td><strong>YES</strong></td>
+<td><strong>基址指针（Base Pointer），栈底指针，指向栈的底部，通常用<code>ebp+偏移量</code>的形式来定位函数存放在栈中的局部变量</strong></td>
+</tr>
+<tr>
+<td><strong>%rsi</strong></td>
+<td></td>
+<td><strong>源变址（Source Index），字符串操作时，用于存放数据源的地址</strong></td>
+</tr>
+<tr>
+<td><strong>%rdi</strong></td>
+<td></td>
+<td><strong>目标变址（Destinatin Index），用于存放目的地址的，和esi两个经常搭配一起使用，执行字符串的复制等操作</strong></td>
+</tr>
+<tr>
+<td><strong>%r8</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>%r9</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>%r10</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>%r11</strong></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>%r12~r15</strong></td>
+<td><strong>YES</strong></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>%st0~st7</strong></td>
+<td></td>
+<td><strong>浮点寄存器组</strong></td>
+</tr>
+<tr>
+<td><strong>XMM0~XMM15</strong></td>
+<td></td>
+<td><strong>XMM寄存器组</strong></td>
+</tr>
+</tbody>
+</table>
 <p>从上面的表可以看到，除了扩展原来存在的通用寄存器，x64架构还引入了8个新的通用寄存器：<strong>r8-r15；</strong></p>
 <p>这些寄存器虽然都可以用，但是还是做了一些规定，如下：</p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>函数返回值存放的寄存器：rax；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>rax 同时也用于乘法和除法指令中；在imul 指令中，两个64位的乘法最多会产生128位的结果，需要 rax 与 rdx 共同存储乘法结果，在div 指令中被除数是128 位的，同样需要 rax 与 rdx 共同存储被除数；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>rsp 是堆栈指针寄存器，通常会指向栈顶位置，堆栈的 pop 和 push 操作就是通过改变 rsp 的值即移动堆栈指针的位置来实现的；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>rbp 是栈帧指针，用于标识当前栈帧的起始位置</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>%rdi，%rsi，%rdx，%rcx，%r8，%r9 六个寄存器用于存储函数调用时的6个参数（如果有6个或6个以上参数的话）；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>rbx 被标识为 “miscellaneous registers”，属于通用性更为广泛的寄存器，编译器或汇编程序可以根据需要存储任何数据；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>rbx、rbp、r12、r13、r14、r15：这些寄存器由被调用者负责保护，在返回的时候要恢复这些寄存器中原本的值；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**函数返回值存放的寄存器：rax；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**rax 同时也用于乘法和除法指令中；在imul 指令中，两个64位的乘法最多会产生128位的结果，需要 rax 与 rdx 共同存储乘法结果，在div 指令中被除数是128 位的，同样需要 rax 与 rdx 共同存储被除数；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**rsp 是堆栈指针寄存器，通常会指向栈顶位置，堆栈的 pop 和 push 操作就是通过改变 rsp 的值即移动堆栈指针的位置来实现的；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**rbp 是栈帧指针，用于标识当前栈帧的起始位置**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**%rdi，%rsi，%rdx，%rcx，%r8，%r9 六个寄存器用于存储函数调用时的6个参数（如果有6个或6个以上参数的话）；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**rbx 被标识为 “miscellaneous registers”，属于通用性更为广泛的寄存器，编译器或汇编程序可以根据需要存储任何数据；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**rbx、rbp、r12、r13、r14、r15：这些寄存器由被调用者负责保护，在返回的时候要恢复这些寄存器中原本的值；**&lt;/font&gt;</li>
 </ul>
 <p><strong>同时，和上面 x32 架构类似这里也要区分 <code>Caller Save</code> 和 <code>Callee Save</code> 寄存器，即寄存器的值是由 <code>调用者保存</code> 还是由 <code>被调用者保存</code>；</strong></p>
 <p>&lt;br/&gt;</p>
@@ -223,16 +376,14 @@ subq $16, %rsp
 <p>在 x32 的时代，通用寄存器少，参数传递都是通过入栈（汇编指令<code>push</code>）实现的（当然也有使用寄存器传递的，比如著名的C++ <strong>this指针</strong>使用ecx寄存器传递，不过能用的寄存器毕竟不多），相对 CPU 寄存器来说，访问太慢，函数调用的效率就不高；</p>
 <p>而在 x86-64 时代，寄存器数量多了，CPU就可以利用额外的寄存器<strong>rdi、rsi、rdx、rcx、r8、r9</strong>来存储参数！</p>
 <p><strong>寄存器传参的好处是速度快，减少了对内存的读写次数。</strong></p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>注：多于6个的参数，依然还是通过入栈实现传递；</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**注：多于6个的参数，依然还是通过入栈实现传递；**&lt;/font&gt;</p>
 </blockquote>
 <p>因此在x86_64位机器上编程时，需要注意：</p>
 <ul>
 <li>为了效率尽量使用少于6个参数的函数；</li>
 <li>传递比较大的参数，尽量使用指针，因为寄存器只有64位；</li>
 </ul>
-<blockquote>
-<p>具体使用栈还是用寄存器传参数，这个不是编程语言决定的，而是编译器在编译生成CPU指令时决定的；</p>
+<blockquote><p>具体使用栈还是用寄存器传参数，这个不是编程语言决定的，而是编译器在编译生成CPU指令时决定的；</p>
 <p>如果编译器非要在x64架构CPU上使用线程栈来传参那也不是不行，这个对高级语言是无感知的；</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
@@ -248,18 +399,15 @@ subq $16, %rsp
 <li>RIP 指令寄存器，保存指令地址；</li>
 <li>flags （rflags-64 位，eflags-32 位）寄存器。每个位用来标识一个状态。比如，这些标识符可能用于比较和跳转的指令；</li>
 </ul>
-<blockquote>
-<p>和上面所述的 x86 架构类似，在 x86-64 架构下也存在实模式；</p>
-</blockquote>
-<blockquote>
+<blockquote><p>和上面所述的 x86 架构类似，在 x86-64 架构下也存在实模式；</p>
 <p>更多关于 x86-64 处理器架构：</p>
 <ul>
-<li>http://c.biancheng.net/view/3460.html</li>
-<li>https://www.cnblogs.com/mazhimazhi/p/15236954.html</li>
-</ul>
+<li><a href="http://c.biancheng.net/view/3460.html">http://c.biancheng.net/view/3460.html</a></li>
+<li><p><a href="https://www.cnblogs.com/mazhimazhi/p/15236954.html">https://www.cnblogs.com/mazhimazhi/p/15236954.html</a></p>
 <p>更多关于 CPU 寄存器历史见：</p>
-<ul>
-<li>https://zhuanlan.zhihu.com/p/272135463</li>
+</li>
+<li><p><a href="https://zhuanlan.zhihu.com/p/272135463">https://zhuanlan.zhihu.com/p/272135463</a></p>
+</li>
 </ul>
 </blockquote>
 <p>&lt;br/&gt;</p>
@@ -277,30 +425,28 @@ subq $16, %rsp
 <p><img alt="func-calling" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/func-calling.jpeg"/></p>
 <p>在子函数调用时，需要切换上下文使得当前调用栈进入到一个新的执行中：</p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>父函数将调用参数从后向前压栈：由函数调用者完成（上文中的Caller逻辑）；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>将返回地址压栈保存：<code>call</code> 指令完成；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>跳转到子函数起始地址执行：<code>call</code> 指令完成；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>子函数将父函数栈帧起始地址（%rpb） 压栈：由函数被调用者完成（上文中的Callee逻辑）；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>将 %rbp 的值设置为当前 %rsp 的值，即将 %rbp 指向子函数栈帧的起始地址：由函数被调用者完成（上文中的Callee逻辑），完成函数上下文的切换；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**父函数将调用参数从后向前压栈：由函数调用者完成（上文中的Caller逻辑）；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**将返回地址压栈保存：`call` 指令完成；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**跳转到子函数起始地址执行：`call` 指令完成；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**子函数将父函数栈帧起始地址（%rpb） 压栈：由函数被调用者完成（上文中的Callee逻辑）；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**将 %rbp 的值设置为当前 %rsp 的值，即将 %rbp 指向子函数栈帧的起始地址：由函数被调用者完成（上文中的Callee逻辑），完成函数上下文的切换；**&lt;/font&gt;</li>
 </ul>
 <p><strong>保存返回地址和保存上一栈帧的 %rbp 都是为了函数返回时，恢复父函数的栈帧结构（保存函数调用上下文）；</strong></p>
-<blockquote>
-<p><strong>在使用高级语言进行函数调用时，由编译器自动完成上述整个流程；甚至对于”Caller Save” 和 “Callee Save” 寄存器的保存和恢复，也都是由编译器自动完成的；</strong></p>
+<blockquote><p><strong>在使用高级语言进行函数调用时，由编译器自动完成上述整个流程；甚至对于”Caller Save” 和 “Callee Save” 寄存器的保存和恢复，也都是由编译器自动完成的；</strong></p>
 </blockquote>
-<p>&lt;font color="#f00"&gt;<strong>需要注意的是：父函数中进行参数压栈时，顺序是从后向前进行的（调用栈空间都是从大地址向小地址延伸，这一点刚好和堆空间相反）；</strong>&lt;/font&gt;</p>
-<blockquote>
-<p><strong>这一行为并不是固定的，是依赖于编译器的具体实现的；</strong></p>
+<p>&lt;font color="#f00"&gt;**需要注意的是：父函数中进行参数压栈时，顺序是从后向前进行的（调用栈空间都是从大地址向小地址延伸，这一点刚好和堆空间相反）；**&lt;/font&gt;</p>
+<blockquote><p><strong>这一行为并不是固定的，是依赖于编译器的具体实现的；</strong></p>
 <p><strong>至少在 GCC 中，使用的是从后向前的压栈方式，这种方式便于支持类似于 <code>printf(“%d, %d”, i, j)</code> 这样的使用变长参数的函数调用；</strong></p>
 </blockquote>
 <p>以下面的函数为例：</p>
-<pre><code class="language-c++">void func() {}
+<pre><code class="lang-c++">void func() {}
 
 void my_func() {
     func();
 }
 </code></pre>
 <p>对应的汇编为：</p>
-<pre><code class="language-assembly">func():
+<pre><code class="lang-assembly">func():
         push    rbp
         mov     rbp, rsp
         nop
@@ -322,8 +468,7 @@ my_func():
 <li>由于没有代码，且没有返回值，此次为 <code>nop</code> 指令；</li>
 <li>最后，恢复上下文，并返回（函数返回在下文中介绍）；</li>
 </ul>
-<blockquote>
-<p><strong>函数开头的 <code>push rbp</code>  和 <code>mov rbp, rsp</code> 又叫做函数的序言（prologue），几乎每个函数一开始都会该指令；</strong></p>
+<blockquote><p><strong>函数开头的 <code>push rbp</code>  和 <code>mov rbp, rsp</code> 又叫做函数的序言（prologue），几乎每个函数一开始都会该指令；</strong></p>
 <p><strong>它和函数最后的 <code>pop rbp</code> 和 <code>ret</code> （epilogue）起到维护函数的调用栈的作用；</strong></p>
 </blockquote>
 <p>接下来，顺理成章的我们来看一下函数的返回过程；</p>
@@ -331,7 +476,7 @@ my_func():
 <h3><strong>函数返回</strong></h3>
 <p>函数返回时，我们只需要得到函数的返回值（保存在 %rax 中），之后就需要将栈的结构恢复到函数调用之差的状态，并跳转到父函数的返回地址处继续执行即可；</p>
 <p>由于函数调用时已经保存了返回地址和父函数栈帧的起始地址，要恢复到子函数调用之前的父栈帧，我们只需要执行以下两条指令：</p>
-<pre><code class="language-assembly">pop rbp
+<pre><code class="lang-assembly">pop rbp
 ret
 </code></pre>
 <p>首先执行 <code>pop rbp</code> 指令，直接将调用栈地址恢复至调用函数之前的状态；</p>
@@ -353,14 +498,13 @@ ret
 <li>从立即数到寄存器；</li>
 <li>从立即数到内存；</li>
 </ol>
-<blockquote>
-<p><strong>注意：数据不能从内存直接传递到内存，如果需要从内存传递到内存，要以寄存器为中介！</strong></p>
+<blockquote><p><strong>注意：数据不能从内存直接传递到内存，如果需要从内存传递到内存，要以寄存器为中介！</strong></p>
 </blockquote>
 <p><strong>同时需要注意的是：数据是有大小的！</strong></p>
 <p>比如：<strong>一个word是两个字节（16bit），double words是四个字节（32bit），quadruple words是八个字节（64bit）；</strong></p>
 <p>所以传递数据的时候，要知道传递的数据大小：</p>
-<p>&lt;font color="#f00"&gt;<strong>Intel 格式的汇编会在数据前面说明数据大小：比如 <code>mov DWORD PTR [rbp-4], 4</code>，意思是将一个4字节的 4 存储到栈上（地址为rbp-4）；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>而AT&amp;T 格式是通过指令的后缀来说明，同样的指令为<code>movl $4, -4(%rbp)</code>；并且存储的地方，AT&amp;T汇编是通过前缀来区别，比如%q前缀表示寄存器，<code>$</code> 表示立即数，<code>()</code>表示内存；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**Intel 格式的汇编会在数据前面说明数据大小：比如 `mov DWORD PTR [rbp-4], 4`，意思是将一个4字节的 4 存储到栈上（地址为rbp-4）；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**而AT&amp;T 格式是通过指令的后缀来说明，同样的指令为`movl $4, -4(%rbp)`；并且存储的地方，AT&amp;T汇编是通过前缀来区别，比如%q前缀表示寄存器，`$` 表示立即数，`()`表示内存；**&lt;/font&gt;</p>
 <p>学习了数据的传递方式之后，让我们看看函数的调用习惯；</p>
 <p>&lt;br/&gt;</p>
 <h4><strong>函数参数传递约定</strong></h4>
@@ -368,7 +512,7 @@ ret
 <p>首先，什么是函数调用约定？</p>
 <p>在Caller调用Callee时，要将参数(arguements)传递给Callee，一个函数可以接收多个参数，而Caller与Callee之间约定的每个参数的应该怎么传递就是调用习惯；这样，Callee 才能到指定的位置获取到相应的参数；</p>
 <p>比如下面的代码：</p>
-<pre><code class="language-c++">int square(int num) {
+<pre><code class="lang-c++">int square(int num) {
     return num * num;
 }
 
@@ -379,7 +523,7 @@ int main() {
 </code></pre>
 <p>在main函数中调用square，参数<code>i</code>是如何传递到square中的？</p>
 <p>上面的代码对应的汇编如下：</p>
-<pre><code class="language-assembly">square(int):
+<pre><code class="lang-assembly">square(int):
         push    rbp
         mov     rbp, rsp
         mov     DWORD PTR [rbp-4], edi
@@ -403,41 +547,91 @@ main:
 <p>通过上面的汇编，我们可以知道：</p>
 <p>在main里面，4先存到栈上（<code>mov DWORD PTR [rbp-4], 4</code>），然后存在edi里面（<code>mov eax, DWORD PTR [rbp-4]</code>、<code>mov edi, eax</code>），而<strong>sqaure函数直接就从edi里面读取4的值了！</strong></p>
 <p>这就说明：参数 4 是通过寄存器 edi 传给了callee (sqaure) ；</p>
-<blockquote>
-<p><strong>可能有同学会以为，从代码看，参数不是直接就传给了sqaure吗？</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>实际上，在汇编中，这个变量 i 是不存在的，只有寄存器和内存，因此我们需要约定好入参 i 的值存在哪里；</strong>&lt;/font&gt;</p>
+<blockquote><p><strong>可能有同学会以为，从代码看，参数不是直接就传给了sqaure吗？</strong></p>
+<p>&lt;font color="#f00"&gt;**实际上，在汇编中，这个变量 i 是不存在的，只有寄存器和内存，因此我们需要约定好入参 i 的值存在哪里；**&lt;/font&gt;</p>
 </blockquote>
 <p>下面让我们来详细看看这些约定、常见寄存器负责传递的参数以及一些作用（前文简要介绍了一些）：</p>
-<p>| <strong>寄存器</strong>                             | <strong>作用</strong>                                 |
-| -------------------------------------- | ---------------------------------------- |
-| &lt;font color="#00f"&gt;<strong>%rax</strong>&lt;/font&gt;     | &lt;font color="#00f"&gt;传递返回值&lt;/font&gt;     |
-| &lt;font color="#00f"&gt;<strong>%rdi</strong>&lt;/font&gt;     | &lt;font color="#00f"&gt;传递第一个参数&lt;/font&gt; |
-| &lt;font color="#00f"&gt;<strong>%rsi</strong>&lt;/font&gt;     | &lt;font color="#00f"&gt;传递第二个参数&lt;/font&gt; |
-| &lt;font color="#00f"&gt;<strong>%rdx</strong>&lt;/font&gt;     | &lt;font color="#00f"&gt;传递第三个参数&lt;/font&gt; |
-| &lt;font color="#00f"&gt;<strong>%rcx</strong>&lt;/font&gt;     | &lt;font color="#00f"&gt;传递第四个参数&lt;/font&gt; |
-| &lt;font color="#00f"&gt;<strong>%r8</strong>&lt;/font&gt;      | &lt;font color="#00f"&gt;传递第五个参数&lt;/font&gt; |
-| &lt;font color="#00f"&gt;<strong>%r9</strong>&lt;/font&gt;      | &lt;font color="#00f"&gt;传递第六个参数&lt;/font&gt; |
-| &lt;font color="#0f0"&gt;<strong>%rsp</strong>&lt;/font&gt;     | &lt;font color="#0f0"&gt;栈顶指针&lt;/font&gt;       |
-| &lt;font color="#0f0"&gt;<strong>%rbx</strong>&lt;/font&gt;     | &lt;font color="#0f0"&gt;临时变量&lt;/font&gt;       |
-| &lt;font color="#0f0"&gt;<strong>%rbp</strong>&lt;/font&gt;     | &lt;font color="#0f0"&gt;栈基址&lt;/font&gt;         |
-| &lt;font color="#0f0"&gt;<strong>%r12~r15</strong>&lt;/font&gt; | &lt;font color="#0f0"&gt;临时变量&lt;/font&gt;       |
-| <strong>%rip</strong>                               | 存储下一条要执行的指令                   |
-| <strong>%eflags</strong>                            | flags 和 条件判断的结果标志位            |
-| <strong>XMM0</strong>                               | 用来传递第一个double参数                 |
-| <strong>XMM1</strong>                               | 用来传递第二个double参数                 |</p>
+<table>
+<thead><tr>
+<th><strong>寄存器</strong></th>
+<th><strong>作用</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&lt;font color="#00f"&gt;**%rax**&lt;/font&gt;</td>
+<td>&lt;font color="#00f"&gt;传递返回值&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#00f"&gt;**%rdi**&lt;/font&gt;</td>
+<td>&lt;font color="#00f"&gt;传递第一个参数&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#00f"&gt;**%rsi**&lt;/font&gt;</td>
+<td>&lt;font color="#00f"&gt;传递第二个参数&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#00f"&gt;**%rdx**&lt;/font&gt;</td>
+<td>&lt;font color="#00f"&gt;传递第三个参数&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#00f"&gt;**%rcx**&lt;/font&gt;</td>
+<td>&lt;font color="#00f"&gt;传递第四个参数&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#00f"&gt;**%r8**&lt;/font&gt;</td>
+<td>&lt;font color="#00f"&gt;传递第五个参数&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#00f"&gt;**%r9**&lt;/font&gt;</td>
+<td>&lt;font color="#00f"&gt;传递第六个参数&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#0f0"&gt;**%rsp**&lt;/font&gt;</td>
+<td>&lt;font color="#0f0"&gt;栈顶指针&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#0f0"&gt;**%rbx**&lt;/font&gt;</td>
+<td>&lt;font color="#0f0"&gt;临时变量&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#0f0"&gt;**%rbp**&lt;/font&gt;</td>
+<td>&lt;font color="#0f0"&gt;栈基址&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>&lt;font color="#0f0"&gt;**%r12~r15**&lt;/font&gt;</td>
+<td>&lt;font color="#0f0"&gt;临时变量&lt;/font&gt;</td>
+</tr>
+<tr>
+<td><strong>%rip</strong></td>
+<td>存储下一条要执行的指令</td>
+</tr>
+<tr>
+<td><strong>%eflags</strong></td>
+<td>flags 和 条件判断的结果标志位</td>
+</tr>
+<tr>
+<td><strong>XMM0</strong></td>
+<td>用来传递第一个double参数</td>
+</tr>
+<tr>
+<td><strong>XMM1</strong></td>
+<td>用来传递第二个double参数</td>
+</tr>
+</tbody>
+</table>
 <p>在上面的列表中：</p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>蓝色的是 callee-owned、绿色背景的是caller-owned；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>callee-owned表明：callee可以自由地使用这些寄存器，覆盖已有的值；如果caller要使用这些寄存机，那么它在调用callee前，要把这些寄存器保存好；例如：如果寄存器 <code>%rax</code> 的值caller想要保留，那么在调用函数之前，caller需要赋值这个值到“安全”的地方；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>caller-owned表明：如果callee要使用这些寄存器，那么它就要保存好这些寄存器的值，并且返回到caller的时候要将这些值恢复；caller-owned的寄存器通常用于caller需要在函数之间保留的局部状态；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>一共有六个通用的寄存器用于传递参数；按顺序传递需要通用寄存器传递的参数，如果通用寄存器使用完了，那么就使用栈来传递；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**蓝色的是 callee-owned、绿色背景的是caller-owned；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**callee-owned表明：callee可以自由地使用这些寄存器，覆盖已有的值；如果caller要使用这些寄存机，那么它在调用callee前，要把这些寄存器保存好；例如：如果寄存器 `%rax` 的值caller想要保留，那么在调用函数之前，caller需要赋值这个值到“安全”的地方；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**caller-owned表明：如果callee要使用这些寄存器，那么它就要保存好这些寄存器的值，并且返回到caller的时候要将这些值恢复；caller-owned的寄存器通常用于caller需要在函数之间保留的局部状态；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**一共有六个通用的寄存器用于传递参数；按顺序传递需要通用寄存器传递的参数，如果通用寄存器使用完了，那么就使用栈来传递；**&lt;/font&gt;</li>
 </ul>
 <p><strong>同时，如果函数返回比较大的对象，那么第一个参数<code>rdi</code>会用来传递存储这个对象的地址（这个地址是由caller分配的）；</strong></p>
-<blockquote>
-<p>有了这些基础，我们就更容易理解C++中的copy elision了；</p>
+<blockquote><p>有了这些基础，我们就更容易理解C++中的copy elision了；</p>
 <p>相关阅读：</p>
 <ul>
-<li><a href="/2022/05/08/%E6%B7%B1%E5%85%A5%E7%90%86%E8%A7%A3C++%E4%B8%AD%E7%9A%84move%E5%92%8Cforward/">深入理解C++中的move和forward</a></li>
+<li><a href="/2022/05/08/深入理解C++中的move和forward/">深入理解C++中的move和forward</a></li>
 <li><a href="https://zhuanlan.zhihu.com/p/379566824">Copy/move elision: C++ 17 vs C++ 11</a></li>
 </ul>
 </blockquote>
@@ -448,7 +642,7 @@ main:
 <p>if， while循环等控制结构，在汇编里面，都是基于判定语句，跳转语句实现的：</p>
 <p><strong>做一个计算，检查相应的flag，然后根据flag的值确定要跳转到哪里；</strong></p>
 <p>比如下面的 if 语句：</p>
-<pre><code class="language-c++">int multiply(int j) {
+<pre><code class="lang-c++">int multiply(int j) {
     if (j &gt; 6) {
         return j*2;
     } else {
@@ -457,7 +651,7 @@ main:
 }
 </code></pre>
 <p>对应的汇编语句如下：</p>
-<pre><code class="language-assembly">multiply(int):
+<pre><code class="lang-assembly">multiply(int):
         push    rbp
         mov     rbp, rsp
         mov     DWORD PTR [rbp-4], edi
@@ -478,8 +672,7 @@ main:
 <p>最前面和最后两条命令就是函数调用中的上下文切换，这个在前文中已经详细说明了；</p>
 <p>函数的逻辑从第三条语句真正开始：</p>
 <p><code>mov DWORD PTR [rbp-4], edi</code> 表示将寄存器 <code>edi</code> 中的4个字节的值（<code>DWORD PTR</code>）移至 <code>[rbp-4]</code> 对应内存地址中；</p>
-<blockquote>
-<p><strong>这里和上面所讲述的参数传递的约定是保持一致的，因为我们的入参<code>j</code>是int类型，只有32位，因此使用的是 <code>edi</code> 寄存器来传递的参数；</strong></p>
+<blockquote><p><strong>这里和上面所讲述的参数传递的约定是保持一致的，因为我们的入参<code>j</code>是int类型，只有32位，因此使用的是 <code>edi</code> 寄存器来传递的参数；</strong></p>
 </blockquote>
 <p>随后，使用 <code>cmp</code> 指令将内存中的数和立即数 <code>6</code> 进行比较（即，<code>j&gt;6</code>），此指令会改变标志寄存器 <code>%eflags</code> 的状态；</p>
 <p>然后 <code>jle</code> 会利用标志寄存器 <code>%eflags</code> 中的状态进行跳转：</p>
@@ -490,7 +683,7 @@ main:
 <p>无论是向下执行还是跳转至 <code>.L2</code> 执行，最终两者都会执行至 <code>.L3</code> 并返回；</p>
 <p>&lt;br/&gt;</p>
 <p>下面再来看一个 for 循环的例子：</p>
-<pre><code class="language-c++">int add(int j) {
+<pre><code class="lang-c++">int add(int j) {
     int ret = 0;
     for (int i = 0; i &lt; j; ++i) {
         ret+= i;
@@ -499,7 +692,7 @@ main:
 }
 </code></pre>
 <p>对应的汇编如下：</p>
-<pre><code class="language-assembly">add(int):
+<pre><code class="lang-assembly">add(int):
         push    rbp
         mov     rbp, rsp
         mov     DWORD PTR [rbp-20], edi
@@ -521,11 +714,10 @@ main:
 <p>从上面的汇编我们可以看到，入参 <code>j</code> 依旧是由寄存器 <code>edi</code>传递，并存储在了内存 <code>[rbp-20]</code> 中；</p>
 <p>随后两行分别初始化了参数 <code>ret:[rbp-4]</code>、<code>i:[rbp-8]</code>；</p>
 <p>紧接着，指令直接跳转至 <code>.L2</code> 处，首先比较了 <code>[rbp-8]</code> 和 <code>[rbp-20]</code> 中的值（即比较 i 和 j）：如果 <code>i&lt;j</code> 则跳转至 <code>.L3</code> 处执行；</p>
-<blockquote>
-<p><strong>这里的判断是符合 for 循环的逻辑的：在进入 for 循环之前首先会判断一次条件；</strong></p>
+<blockquote><p><strong>这里的判断是符合 for 循环的逻辑的：在进入 for 循环之前首先会判断一次条件；</strong></p>
 </blockquote>
 <p><code>.L3</code> 代码块是 for 循环的真正逻辑：</p>
-<pre><code class="language-assembly">; ret += i;
+<pre><code class="lang-assembly">; ret += i;
 mov     eax, DWORD PTR [rbp-8]
 add     DWORD PTR [rbp-4], eax
 
@@ -542,18 +734,18 @@ add     DWORD PTR [rbp-8], 1
 <h1><strong>附录</strong></h1>
 <p>相关文章：</p>
 <ul>
-<li><a href="/2022/06/01/%E6%B5%85%E8%B0%88%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8/">《浅谈函数调用》</a></li>
-<li><a href="/2022/06/03/%E6%B5%85%E8%B0%88%E5%8D%8F%E7%A8%8B/">《浅谈协程》</a></li>
+<li><a href="/2022/06/01/浅谈函数调用/">《浅谈函数调用》</a></li>
+<li><a href="/2022/06/03/浅谈协程/">《浅谈协程》</a></li>
 </ul>
 <p>文章参考：</p>
 <ul>
 <li><a href="https://book.douban.com/subject/26365491/">《程序是怎样跑起来的》</a></li>
 <li><a href="https://book.douban.com/subject/3652388/">《程序员的自我修养 : 链接、装载与库》</a></li>
-<li>https://zhuanlan.zhihu.com/p/368962727</li>
-<li>https://zhuanlan.zhihu.com/p/27339191</li>
-<li>http://c.biancheng.net/view/3460.html</li>
-<li>https://zhuanlan.zhihu.com/p/288636064</li>
-<li>https://zhuanlan.zhihu.com/p/272135463</li>
-<li>http://119.23.219.145/posts/%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84-x86-%E6%9E%B6%E6%9E%84%E7%9A%84%E8%AE%B2%E8%A7%A3/</li>
+<li><a href="https://zhuanlan.zhihu.com/p/368962727">https://zhuanlan.zhihu.com/p/368962727</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/27339191">https://zhuanlan.zhihu.com/p/27339191</a></li>
+<li><a href="http://c.biancheng.net/view/3460.html">http://c.biancheng.net/view/3460.html</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/288636064">https://zhuanlan.zhihu.com/p/288636064</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/272135463">https://zhuanlan.zhihu.com/p/272135463</a></li>
+<li><a href="http://119.23.219.145/posts/%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84-x86-%E6%9E%B6%E6%9E%84%E7%9A%84%E8%AE%B2%E8%A7%A3/">http://119.23.219.145/posts/%E8%AE%A1%E7%AE%97%E6%9C%BA%E4%BD%93%E7%B3%BB%E7%BB%93%E6%9E%84-x86-%E6%9E%B6%E6%9E%84%E7%9A%84%E8%AE%B2%E8%A7%A3/</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

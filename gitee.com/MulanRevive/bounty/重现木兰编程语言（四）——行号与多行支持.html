@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2020-04-24-%E9%87%8D%E7%8E%B0%E6%9C%A8%E5%85%B0%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%EF%BC%88%E5%9B%9B%EF%BC%89%E2%80%94%E2%80%94%E8%A1%8C%E5%8F%B7%E4%B8%8E%E5%A4%9A%E8%A1%8C%E6%94%AF%E6%8C%81.markdown">仓库源文</a></h2>
+<h2><a href="https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2020-04-24-重现木兰编程语言（四）——行号与多行支持.markdown">仓库源文</a></h2>
 <p><a href="https://zhuanlan.zhihu.com/p/134029658">上文</a>说到每个语法树节点的行号和列号现在都是 0。首先确认它们是用在何处，就费了番功夫。ast 库<a href="https://docs.python.org/3.7/library/ast.html#ast.AST.col_offset">文档</a>并未明确说明。</p>
 <p>（写到这刚想起之前<a href="https://zhuanlan.zhihu.com/p/56411693">扩展 Python 控制台</a>用<a href="https://docs.python.org/3.7/library/sys.html#sys.exc_info">sys.exc_info</a>取了<a href="https://docs.python.org/3.7/library/traceback.html#traceback.print_exception">traceback</a>，其中的确有行号，但无列号）</p>
 <p>那时半夜里没头绪的时候，先试了这个单行程序<code>1/0</code>（因为当时只支持单行程序解析）。结果返回错误中，行号显示是 1：</p>
@@ -12,7 +12,7 @@
 ZeroDivisionError: division by zero
 </code></pre>
 <p>于是懵逼，不是 0 ？？那这个行号用在哪里？兜兜转转不死心，直接把代码里生成数节点时的行号写成随便一个数，比如 4：</p>
-<pre><code class="language-python">        return ast.Num(值, lineno = 4, col_offset = 列号)
+<pre><code class="lang-python">        return ast.Num(值, lineno = 4, col_offset = 列号)
 </code></pre>
 <p>果不然，报错时就报 line 4 ，代码也定位不了了：</p>
 <pre><code>Traceback (most recent call last):
@@ -29,7 +29,7 @@ ZeroDivisionError: division by zero
 </code></pre>
 <p>果然可以！但是，接下去就是个大坑，一路找到错误处理部分，还没找到出路，回头再说。</p>
 <p>退回来，决定添加多行支持，以便测试行号设置。比想的简单些（当然，参考逆向工程），下面是语法分析器相关部分（详见<a href="https://github.com/MulanRevive/prototype/commit/16f2f7fcd2b18b64b7fb214184f20c0690f599b3">此 commit</a>）：</p>
-<pre><code class="language-python">    @分析器母机.production('模块 : 声明列表')
+<pre><code class="lang-python">    @分析器母机.production('模块 : 声明列表')
     def 模块(片段):
         return 语法树.模块(主体=片段[0], 忽略类型=[])
 
@@ -64,7 +64,7 @@ print(1/0)
 ZeroDivisionError: division by zero
 </code></pre>
 <p>继续看逆向，似乎取行号还算简单，摘取了能够满足这个例子的部分（列号仍不知道有啥用，先不管），在语法分析器中<a href="https://github.com/MulanRevive/prototype/commit/adbc78203bf381b8bc4c5cd1619bb0e0c6baf5e4">实现如下</a>：</p>
-<pre><code class="language-python">    def 取源码位置(片段):
+<pre><code class="lang-python">    def 取源码位置(片段):
         if isinstance(片段, Token):
             return 片段.getsourcepos()
 

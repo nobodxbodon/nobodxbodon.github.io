@@ -14,7 +14,8 @@ mathjax: true</li>
 <ul>
 <li>Wang, Y., Yu, B., Zhang, Y., Liu, T., Zhu, H., &amp; Sun, L. (2020). <a href="https://arxiv.org/abs/2010.13415">Tplinker: Single-stage joint extraction of entities and relations through token pair linking</a>. <em>arXiv preprint arXiv:2010.13415</em>. [<a href="https://github.com/131250208/TPlinker-joint-extraction">Code</a>]</li>
 </ul>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <h2>主要解决的问题: 两阶段方法中训练和推理阶段的数据分布不一致</h2>
 <p>实体关系抽取传统方法先抽取实体, 再预测实体对的关系 (分类问题). 这种两阶段方法无法考虑两个子任务之间的联系. 因此引入联合 (joint) 抽取, 即同时抽取实体和关系. 此外还要解决实体重叠问题 (同一个实体出现在多个三元组中).</p>
 <p><img alt="" src="https://shiina18.github.io/assets/posts/images/20210729141153304_12040.png"/></p>
@@ -58,17 +59,15 @@ mathjax: true</li>
 </ul>
 </li>
 </ul>
-<blockquote>
-<p>It seems that our tagging scheme is extremely inefficient because the length of the tagging sequence increases in a square number with increasing sentence length. Fortunately, our experiment reveals that by utilizing a lightweight tagging model on the top of the encoder, TPLinker can achieve competitive running efficiency compared with the state-of-the-art model, since the encoder is shared by all taggers (see Figure 3) and only needs to generate $n$ token representations for once.</p>
+<blockquote><p>It seems that our tagging scheme is extremely inefficient because the length of the tagging sequence increases in a square number with increasing sentence length. Fortunately, our experiment reveals that by utilizing a lightweight tagging model on the top of the encoder, TPLinker can achieve competitive running efficiency compared with the state-of-the-art model, since the encoder is shared by all taggers (see Figure 3) and only needs to generate $n$ token representations for once.</p>
 </blockquote>
 <p>BERT 是开销大头, 这个组件不影响速度.</p>
-<blockquote>
-<p>The sequence is like the handshaking of all tokens, which is the reason why we refer to this scheme as the handshaking tagging scheme.</p>
+<blockquote><p>The sequence is like the handshaking of all tokens, which is the reason why we refer to this scheme as the handshaking tagging scheme.</p>
 </blockquote>
 <p>至少这个命名理由没有说服我. 下面是作者没有提及到的问题: 构造一个反例说明这个方案会出错的情况.</p>
 <p>对于句子 <code>ABCDEF</code>, 三元组为 (AB, EF) 和 (ABC, DEF) 两个 (省略谓语, 只写主语宾语).</p>
 <ul>
-<li>所有 tail-to-tail token pairs $\mathcal T$ 为 (B, F) 和 (C, F).</li>
+<li>所有 tail-to-tail token pairs $\mathcal T$ 为 (B, F) 和 (C, F). </li>
 <li>对于 head-to-head token pair (A, E):<ul>
 <li>考虑以 A 开头的主语 AB, ABC 和以 E 开头的宾语 EF, 因为 (B, F) 在 $\mathcal T$ 中, 抽取 (AB, EF).</li>
 </ul>
@@ -85,7 +84,7 @@ mathjax: true</li>
 </ul>
 <p>他主要是对 TPLinker 的基础上增加关于 relations 和 token pairs 的 "全局" 表格特征, 并相应提出了新的 tagging scheme (略), 它不能处理的情况如下</p>
 <ul>
-<li>句子 ABCD 以 (A, D) (B, C) 为实体对时, 会抽取为错误的 (A, D) (B, C).</li>
+<li>句子 ABCD 以 (A, D) (B, C) 为实体对时, 会抽取为错误的 (A, D) (B, C). </li>
 <li>如果句子 ABCD 以 (A, C) (A, D) (B, C) (B, D) 为实体对时, 也会抽成 (A, D) (B, C).</li>
 </ul>
 <p>这个方案可能抽取出错误的三元组或者少抽.</p>
@@ -98,16 +97,16 @@ $$</p>
 <p>其中 $W_h$ 和 $b_h$ 是训练参数.</p>
 <p>之后是分类问题的通常方法 (线性变换后接 softmax 得到概率分布预测) 生成这个 token pair 的 link label (0, 1, 2) 的概率预测</p>
 <p>$$
-Y_{i,j} \sim \operatorname{softmax}(W_o h_{i, j} + b_o).
+Y_{i,j} \sim \operatorname{softmax}(W<em>o h</em>{i, j} + b_o).
 $$</p>
 <p>上述操作对每个子任务都做一遍. 损失函数为对数极大似然</p>
 <p>$$
-L = - \frac1n \sum_{t\in T} \sum_{i=1}^n \sum_{j\ge i}^n  \log \mathbb P(Y^{(t)}_{i, j} = l^{(t)}),
+L = - \frac1n \sum<em>{t\in T} \sum</em>{i=1}^n \sum<em>{j\ge i}^n  \log \mathbb P(Y^{(t)}</em>{i, j} = l^{(t)}),
 $$</p>
 <p>其中 $T$ 是序列标注全体子任务, $l^{(t)}$ 是对应子任务的真实 link label (0, 1, 2).</p>
 <p>预测</p>
 <p>$$
-\operatorname{link}(w_i, w_j, t) = \operatorname{arg,max}<em>l \mathbb P(Y^{(t)}</em>{i, j} = l).
+\operatorname{link}(w_i, w_j, t) = \operatorname{arg\,max}<em>l \mathbb P(Y^{(t)}</em>{i, j} = l).
 $$</p>
 <h2>具体实现的细节和效果</h2>
 <p>可以看到他把长度为 $n$ 的序列展成了 $\Theta(n^2)$ 的东西, 所以长度不能太大, 作者推荐不超过 100. 另外可以看到, 展开后这么长的序列里, 非 0 值很少, 矩阵非常稀疏.</p>

@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-09-13-kafka producer cache pool.md)，<a href="https://objcoding.com/2020/09/13/kafka-producer-cache-pool">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-09-13-kafka producer cache pool.md">仓库源文</a>，<a href="https://objcoding.com/2020/09/13/kafka-producer-cache-pool">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "深度剖析 Kafka Producer 的缓冲池机制【图解 + 源码分析】"
 categories: Kakfa
-tags: 缓冲池 生产者
-author: 张乘辉</h2>
+tags: 缓冲池 生产者</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -18,7 +18,7 @@ author: 张乘辉</h2>
 <p>以上，频繁的申请内存，用完后就丢弃，必然导致频繁的 GC，造成严重的性能问题。那么，Kafka 是怎么做到避免频繁 GC 的呢？</p>
 <p>前面说过了，缓冲池在设计逻辑上面被切分成一个个大小相等的内存块，当消息发送完毕，归还给缓冲池不就可以避免被回收了吗？</p>
 <p>缓冲池的内存持有类是 BufferPool，我们先来看下 BufferPool 都有哪些成员：</p>
-<pre><code class="language-java">public class BufferPool {
+<pre><code class="lang-java">public class BufferPool {
   // 总的内存大小
   private final long totalMemory;
   // 每个内存块大小，即 batch.size
@@ -32,7 +32,7 @@ author: 张乘辉</h2>
   /** Total available memory is the sum of nonPooledAvailableMemory and the number of byte buffers in free * poolableSize.  */
   // 缓冲池还未分配的空闲内存，新申请的内存块就是从这里获取内存值
   private long nonPooledAvailableMemory;
-	// ...
+    // ...
 }
 </code></pre>
 <p>从 BufferPool 的成员可看出，缓冲池实际上由一个个 ByteBuffer 组成的，BufferPool 持有这些内存块，并保存在成员 free 中，free 的总大小由 totalMemory 作限制，而 nonPooledAvailableMemory 则表示还剩下缓冲池还剩下多少内存还未被分配。</p>
@@ -44,7 +44,7 @@ author: 张乘辉</h2>
 <p><code>org.apache.kafka.clients.producer.internals.BufferPool#allocate</code></p>
 <p>1）内存足够的情况</p>
 <p>当用户请求申请内存时，如果发现 free 中有空闲的内存，则直接从中取：</p>
-<pre><code class="language-java">if (size == poolableSize &amp;&amp; !this.free.isEmpty()){
+<pre><code class="lang-java">if (size == poolableSize &amp;&amp; !this.free.isEmpty()){
   return this.free.pollFirst(); 
 }
 </code></pre>
@@ -52,7 +52,7 @@ author: 张乘辉</h2>
 <p>即如果你的消息大小小于 batchSize，则申请的内存大小为 batchSize，那么上面的逻辑就是如果申请的内存大小等于 batchSize 并且 free 不空闲，则直接从 free 中获取。</p>
 <p>我们不妨想一下，为什么 Kafka 一定要申请内存大小等于 batchSize，才能从 free 获取空闲的内存块呢？</p>
 <p>前面也说过，缓冲池的内存块大小是固定的，它等于 batchSize，如果申请的内存比 batchSize 还大，说明一条消息所需要存放的内存空间比内存块的内存空间还要大，因此不满足需求，不满组需求怎么办呢？我们接着往下分析：</p>
-<pre><code class="language-java">// now check if the request is immediately satisfiable with the
+<pre><code class="lang-java">// now check if the request is immediately satisfiable with the
 // memory on hand or if we need to block
 int freeListSize = freeSize() * this.poolableSize;
 if (this.nonPooledAvailableMemory + freeListSize &gt;= size) {
@@ -66,7 +66,7 @@ if (this.nonPooledAvailableMemory + freeListSize &gt;= size) {
 <p>nonPooledAvailableMemory：缓冲池还未分配的空闲内存，新申请的内存块就是从这里获取内存值；</p>
 <p>this.nonPooledAvailableMemory + freeListSize：即缓冲池中总的空闲内存空间。</p>
 <p>如果缓冲池的内存空间比申请内存大小要大，则调用  <code>freeUp(size);</code> 方法，接着将空闲的内存大小减去申请的内存大小。</p>
-<pre><code class="language-java">private void freeUp(int size) {
+<pre><code class="lang-java">private void freeUp(int size) {
   while (!this.free.isEmpty() &amp;&amp; this.nonPooledAvailableMemory &lt; size)
     this.nonPooledAvailableMemory += this.free.pollLast().capacity();
 }
@@ -76,7 +76,7 @@ if (this.nonPooledAvailableMemory + freeListSize &gt;= size) {
 <p>2）内存不足的情况</p>
 <p>在我的「<a href="https://mp.weixin.qq.com/s/wbTIW3MkCxaCb8ToFe5wiA">Kafka Producer 异步发送消息居然也会阻塞？</a>」这篇文章当中也提到了，当缓冲池的内存块用完后，消息追加调用将会被阻塞，直到有空闲的内存块。</p>
 <p>阻塞等待的逻辑是怎么实现的呢？</p>
-<pre><code class="language-java">// we are out of memory and will have to block
+<pre><code class="lang-java">// we are out of memory and will have to block
 int accumulated = 0;
 Condition moreMemory = this.lock.newCondition();
 try {
@@ -124,7 +124,7 @@ try {
 <p>2、归还内存</p>
 <p>申请内存的入口：</p>
 <p><code>org.apache.kafka.clients.producer.internals.BufferPool#deallocate(java.nio.ByteBuffer, int)</code></p>
-<pre><code class="language-java">public void deallocate(ByteBuffer buffer, int size) {
+<pre><code class="lang-java">public void deallocate(ByteBuffer buffer, int size) {
   lock.lock();
   try {
     if (size == this.poolableSize &amp;&amp; size == buffer.capacity()) {

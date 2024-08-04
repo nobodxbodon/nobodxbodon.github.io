@@ -1,32 +1,31 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/ThreadLocal%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/12/26/ThreadLocal%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/ThreadLocal源码解析.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/12/26/ThreadLocal源码解析">站点原文</a></h2>
 <hr/>
-<h2>title: ThreadLocal源码解析
+<p>title: ThreadLocal源码解析
 toc: true
 date: 2019-12-26 09:43:58
-cover: https://img.paulzzh.com/touhou/random?8
+cover: <a href="https://img.paulzzh.com/touhou/random?8">https://img.paulzzh.com/touhou/random?8</a>
 categories: Java源码
-tags: [Java源码, 并发编程, 线性探测法, hash冲突, 哈希表]
-description: 最近总结了一套阿里云的面试题, 其中有一个ThreadLocal和线程池配合使用造成内存泄露的问题. 当时写了答案但是感觉对于ThreadLocal的理解还不是特别深入, 所以想再看一下源码.</h2>
+tags: [Java源码, 并发编程, 线性探测法, hash冲突, 哈希表]</p>
+<h2>description: 最近总结了一套阿里云的面试题, 其中有一个ThreadLocal和线程池配合使用造成内存泄露的问题. 当时写了答案但是感觉对于ThreadLocal的理解还不是特别深入, 所以想再看一下源码.</h2>
 <p>最近总结了一套阿里云的面试题, 其中有一个ThreadLocal和线程池配合使用造成内存泄露的问题. 当时写了答案但是感觉对于ThreadLocal的理解还不是特别深入, 所以想再看一下源码.</p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>一. ThreadLocal的简介</h2>
 <h3>ThreadLocal介绍</h3>
 <p>ThreadLocal望文生义，简单解释就是线程的本地变量</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p>JDK对它的定义：</p>
 <p><strong>该类提供了线程局部 (thread-local) 变量。这些变量不同于它们的普通对应物，因为访问某个变量(通过其 <code>get</code> 或 <code>set</code>方法)的每个线程都有自己的局部变量，它独立于变量的初始化副本。<code>ThreadLocal</code> 实例通常是类中的 private static 字段，它们希望将状态与某一个线程(例如，用户 ID 或事务 ID)相关联</strong></p>
 </blockquote>
 <p>从这段解释中可以看出它是实现线程安全的一种新的方式，不同于以前加锁synchronized的方式, 每个线程都有自己的独立的变量，这样他们之间是互不影响的，这样就间接的解决线程安全的问题。举个通俗的例子，相当于由以前的贫穷年代，大家哄抢一块蛋糕，到现在的物质丰盛年代，每个人都有一块自己的蛋糕，大家互不影响，就不会存在争抢的情况</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>评价:</strong></p>
-<p>&lt;font color="#ff0000"&gt;<strong>ThreadLocal解决了线程局部变量统一定义问题，</strong>多线程数据不能共享。(InheritableThreadLocal特例除外)<strong>不能解决并发问题</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;解决了：<strong>基于类级别的变量定义，每一个线程单独维护自己线程内的变量值（存、取、删的功能）</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**ThreadLocal解决了线程局部变量统一定义问题，**多线程数据不能共享。(InheritableThreadLocal特例除外)**不能解决并发问题**&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;解决了：**基于类级别的变量定义，每一个线程单独维护自己线程内的变量值（存、取、删的功能）**&lt;/font&gt;</p>
 </blockquote>
 <h3>ThreadLocal的构造方法</h3>
-<pre><code class="language-java">/**
+<pre><code class="lang-java">/**
 * 创建一个ThreadLocal变量
 * Creates a thread local variable.
 * @see #withInitial(java.util.function.Supplier)
@@ -46,17 +45,16 @@ public ThreadLocal() {}
 * @return a new thread local variable
 * @throws NullPointerException if the specified supplier is null
 * @since 1.8
-*/	
+*/  
 public static &lt;S&gt; ThreadLocal&lt;S&gt; withInitial(Supplier&lt;? extends S&gt; supplier) {
     return new SuppliedThreadLocal&lt;&gt;(supplier);
 }
 </code></pre>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>评价:</strong></p>
 <p>构造方法比较简单, 一个是默认的空的构造方法, 另一个是JDK 1.8之后加入的通过Supplier(实际上也是Lambda表达式)构造.</p>
 <p>下面给出一个通过Supplier创建ThreadLocal的例子:</p>
-<pre><code class="language-java">/**
+<pre><code class="lang-java">/**
 * ThreadLocal的Lambda构造方式: withInitial
 *
 * @author zk
@@ -174,11 +172,27 @@ Jasonkay -&gt; 存入 200 后，当前账户余额为：1200
 <h3>ThreadLocal的API</h3>
 <p>ThreadLocal向外暴露出基本的增删改查方法，几个方法都是很简单:</p>
 <p>通过get和set方法是访问和修改的入口，再通过remove方法移除值</p>
-<p>| 方法                  | 说明                                             |
-| :-------------------- | :----------------------------------------------- |
-| <strong>T get()</strong>           | 返回此线程局部变量的当前线程副本中的值           |
-| <strong>void set(T value)</strong> | 将此线程局部变量的当前线程副本中的值设置为指定值 |
-| <strong>void remove()</strong>     | 移除此线程局部变量当前线程的值                   |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">方法</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>T get()</strong></td>
+<td style="text-align:left">返回此线程局部变量的当前线程副本中的值</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>void set(T value)</strong></td>
+<td style="text-align:left">将此线程局部变量的当前线程副本中的值设置为指定值</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>void remove()</strong></td>
+<td style="text-align:left">移除此线程局部变量当前线程的值</td>
+</tr>
+</tbody>
+</table>
 <p>&lt;br/&gt;</p>
 <h2>二. ThreadLocal源码分析(基于JDK11.0.4)</h2>
 <h3><strong>线性探测法</strong></h3>
@@ -190,15 +204,60 @@ Jasonkay -&gt; 存入 200 后，当前账户余额为：1200
 </ul>
 <p>例如: 关键字集合{7、8、30、11、18、9、14}，散列函数为: H(key) = (key x 3) MOD 7， 设装填因子（元素个数/散列表长度）为0.7，那么散列表的长度为10</p>
 <p>关键字（key）集合存放位置分别为：</p>
-<p>| 7    | 8    | 30   | 11   | 18   | 9    | 14   |
-| ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| 0    | 3    | 6    | 5    | 5    | 6    | 0    |</p>
+<table>
+<thead><tr>
+<th>7</th>
+<th>8</th>
+<th>30</th>
+<th>11</th>
+<th>18</th>
+<th>9</th>
+<th>14</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>3</td>
+<td>6</td>
+<td>5</td>
+<td>5</td>
+<td>6</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
 <p>由表格知道，这里的7和14、30和9、11和18出现了位置存放冲突。存放key=7时，散列表长度为10的表中其实没有冲突，  因为7是第一个存在到表中的key，所以一定不会有冲突的，所以7对应散列表的地址0;</p>
 <p>8、30、11存放的地址分别是3、 6  、5，但是到了key=18时候，发现存放的地址为5，而地址5已经存放了key=11, 这时发生了地址冲突</p>
 <p>根据线性探测法，算法会探测地址5的下一个地址，即地址6，而此时地址6已经存放了key=30，程序继续探测下一个地址，发现地址7位空，此时把key=18存放到地址7处。以此类推，最后得出的散列表为：</p>
-<p>| 0    | 1    | 2    | 3    | 4    | 5    | 6    | 7    | 8    | 9    |
-| ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| 7    | 14   |      | 8    |      | 11   | 30   | 18   | 9    |      |</p>
+<table>
+<thead><tr>
+<th>0</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+<th>8</th>
+<th>9</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7</td>
+<td>14</td>
+<td></td>
+<td>8</td>
+<td></td>
+<td>11</td>
+<td>30</td>
+<td>18</td>
+<td>9</td>
+</tr>
+</tbody>
+</table>
 <p>成功查找率：（1+1+1+1+3+3+2）/ 7</p>
 <p>不成功查找率:</p>
 <p>计算查找不成功的次数就直接找<strong>关键字到第一个地址上关键字为空的距离</strong>即可， 但根据哈希函数地址为MOD7，因此初始只可能在0-6的位置。等概率情况下，查找0-6位置查找失败的查找次数为:</p>
@@ -210,16 +269,15 @@ Jasonkay -&gt; 存入 200 后，当前账户余额为：1200
 <p>地址5，到第一个关键为空的地址2(注意不是地址9，因为初始只可能在0~6之间，因此循环回去)的距离为5，因此查找不成功的次数为5.</p>
 <p>地址6，到第一个关键为空的地址2(注意不是地址9，因为初始只可能在0~6之间，因此循环回去)的距离为4，因此查找不成功的次数为4.</p>
 <p>不成功查找率:（3+2+1+2+1+5+4）/ 7</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>扩展: 在ThreadLocal中改进了线性探测</strong></p>
 <p><strong>① ThreadLocal生成hashcode方法: nextHashCode()</strong></p>
-<pre><code class="language-java">private static AtomicInteger nextHashCode = new AtomicInteger();
+<pre><code class="lang-java">private static AtomicInteger nextHashCode = new AtomicInteger();
 private static int nextHashCode() {return extHashCode.getAndAdd(HASH_INCREMENT);}
 </code></pre>
-<p>从nextHashCode方法可以看出: &lt;font color="#ff0000"&gt;<strong>ThreadLocal每实例化一次，其hash值就原子增加HASH_INCREMENT = 0x61c88647(选择原因后面解释)</strong>&lt;/font&gt;</p>
+<p>从nextHashCode方法可以看出: &lt;font color="#ff0000"&gt;**ThreadLocal每实例化一次，其hash值就原子增加HASH_INCREMENT = 0x61c88647(选择原因后面解释)**&lt;/font&gt;</p>
 <p><strong>② set方法解读</strong></p>
-<pre><code class="language-java">// threadLocal.set()
+<pre><code class="lang-java">// threadLocal.set()
 public void set(T value) {
    Thread t = Thread.currentThread();
    ThreadLocalMap map = getMap(t);
@@ -257,7 +315,7 @@ private void set(ThreadLocal&lt;?&gt; key, Object value) {
 <p><strong>ThreadLocal从当前线程Thread中获取ThreadLocalMap实例(ThreadLocal的内部类);</strong></p>
 <p><strong>调用ThreadLocalMap的set()方法[实际set()的实现方法], 进行设置:</strong></p>
 <ul>
-<li>通过 <code>hash &amp; (len -1) </code>定位到table的位置i，假设table中i位置的元素为f</li>
+<li>通过 <code>hash &amp; (len -1)</code>定位到table的位置i，假设table中i位置的元素为f</li>
 <li>如果f != null，假设f中的引用为k:<ul>
 <li>如果k和当前ThreadLocal实例一致，则修改value值，返回;</li>
 <li>如果k为null，说明这个f已经是stale(陈旧的)的元素。调用replaceStaleEntry方法删除table中所有陈旧的元素（即entry的引用为null）并插入新元素，返回</li>
@@ -267,16 +325,15 @@ private void set(ThreadLocal&lt;?&gt; key, Object value) {
 <li>如果f == null，则把Entry加入到table的i位置中</li>
 <li>通过cleanSomeSlots删除陈旧的元素，如果table中没有元素删除，需判断当前情况下是否要进行扩容</li>
 </ul>
-<p>&lt;font color="#ff0000"&gt;<strong>所以在ThreadLocal中的线性探索公式为: <code>index = hash &amp; (len - 1)</code>, 并且hash = pre_hash + 0x61c88647(HASH_INCREMENT)</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;<strong>顺便提一下: ThreadLocal中使用的是AtomicInteger存放nextHashCode, 所以每次增加是原子操作</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**所以在ThreadLocal中的线性探索公式为: `index = hash &amp; (len - 1)`, 并且hash = pre_hash + 0x61c88647(HASH_INCREMENT)**&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**顺便提一下: ThreadLocal中使用的是AtomicInteger存放nextHashCode, 所以每次增加是原子操作**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3><strong>阅读源码前的解读</strong></h3>
 <p>另外, 在进行源码分析之前先纠正一个误区: 很多人以为ThreadLocal的内部维持了一个map，其中以当前线程作为键，传入的数据作为值来进行封装的，这个想法是<strong>错误</strong>的!</p>
-<p>&lt;font color="#ff0000"&gt;<strong>ThreadLocal的内部维护着一个叫做ThreadLocalmap的静态类，它由一个首尾闭合的动态数组组成（默认大小为16），每个数组都是一个Entry对象，该对象以ThreadLocal对象作为key，以传入的数据作为值进行封装而成.</strong>&lt;/font&gt;以下是TheadLocalMap的图示：</p>
-<p><img alt="ThreadLocalMap的图示.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/ThreadLocalMap%E7%9A%84%E5%9B%BE%E7%A4%BA.png"/></p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**ThreadLocal的内部维护着一个叫做ThreadLocalmap的静态类，它由一个首尾闭合的动态数组组成（默认大小为16），每个数组都是一个Entry对象，该对象以ThreadLocal对象作为key，以传入的数据作为值进行封装而成.**&lt;/font&gt;以下是TheadLocalMap的图示：</p>
+<p><img alt="ThreadLocalMap的图示.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/ThreadLocalMap的图示.png"/></p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>注意:</strong></p>
 <p><strong>1. ThreadLocal类封装了set()、get()、remove()3个核心方法</strong></p>
 <p><strong>2. 通过getMap()获取每个子线程Thread持有自己的ThreadLocalMap实例, 因此它们是不存在并发竞争的可以理解为每个线程有自己的变量副本</strong></p>
@@ -284,51 +341,49 @@ private void set(ThreadLocal&lt;?&gt; key, Object value) {
 <p><strong>4. <code>Entry</code>的key是对ThreadLocal的弱引用，当抛弃掉ThreadLocal对象时，垃圾收集器会忽略这个key的引用而清理掉ThreadLocal对象， 防止了内存泄漏</strong></p>
 </blockquote>
 <p>&lt;br/&gt;</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>注释中的示例代码：</strong></p>
-<pre><code class="language-java">import java.util.concurrent.atomic.AtomicInteger;
-
-/**
- * 每个线程都保持对线程本地变量的副本的隐式引用，
- * 只要线程是活动的并且{@code ThreadLocal}实例是可访问的；
- * 在线程离开之后，线程本地实例的所有副本都受到垃圾收集
- *（除非存在对这些副本的其他引用）
- *
- * Each thread holds an implicit reference to its copy of a thread-local
- * variable as long as the thread is alive and the {@code ThreadLocal}
- * instance is accessible; after a thread goes away, all of its copies of
- * thread-local instances are subject to garbage collection (unless other
- * references to these copies exist).
- */
-public class ThreadId {
-    // Atomic integer containing the next thread ID to be assigned
-    // 包含要分配的下一个线程ID的原子整数
-    private static final AtomicInteger nextId = new AtomicInteger(0);
-
-    // Thread local variable containing each thread's ID
-    // 包含每个线程ID的线程局部变量
-    private static final ThreadLocal&lt;Integer&gt; threadId =
-        new ThreadLocal&lt;Integer&gt;() {
-        @Override protected Integer initialValue() {
-            return nextId.getAndIncrement();
-        }
-    };
-
-    // Returns the current thread's unique ID, assigning it if necessary
-    //  返回当前线程的唯一ID，必要时将其赋值
-    public static int get() {
-        return threadId.get();
-    }
-}
-
+<pre><code class="lang-java">  import java.util.concurrent.atomic.AtomicInteger;
+  
+  /**
+   * 每个线程都保持对线程本地变量的副本的隐式引用，
+   * 只要线程是活动的并且{@code ThreadLocal}实例是可访问的；
+   * 在线程离开之后，线程本地实例的所有副本都受到垃圾收集
+   *（除非存在对这些副本的其他引用）
+   *
+   * Each thread holds an implicit reference to its copy of a thread-local
+   * variable as long as the thread is alive and the {@code ThreadLocal}
+   * instance is accessible; after a thread goes away, all of its copies of
+   * thread-local instances are subject to garbage collection (unless other
+   * references to these copies exist).
+   */
+  public class ThreadId {
+      // Atomic integer containing the next thread ID to be assigned
+      // 包含要分配的下一个线程ID的原子整数
+      private static final AtomicInteger nextId = new AtomicInteger(0);
+  
+      // Thread local variable containing each thread's ID
+      // 包含每个线程ID的线程局部变量
+      private static final ThreadLocal&lt;Integer&gt; threadId =
+          new ThreadLocal&lt;Integer&gt;() {
+          @Override protected Integer initialValue() {
+              return nextId.getAndIncrement();
+          }
+      };
+  
+      // Returns the current thread's unique ID, assigning it if necessary
+      //  返回当前线程的唯一ID，必要时将其赋值
+      public static int get() {
+          return threadId.get();
+      }
+  }
 </code></pre>
 <p>ThreadId类会在每个线程中生成唯一标识符。线程的id在第一次调用threadid.get()时被分配，在随后的调用中保持不变</p>
 <p>ThreadId类利用AtomicInteger原子方法getAndIncrement为每个线程创建一个threadId变量，例如: 第一个线程是1，第二个线程是2...，并供一个类静态get方法用以获取当前线程ID</p>
-<p>有一个注意点是：&lt;font color="#ff0000"&gt;<strong>用户可以自定义initialValue()初始化方法，来初始化threadLocal的值</strong>&lt;/font&gt;</p>
+<p>有一个注意点是：&lt;font color="#ff0000"&gt;**用户可以自定义initialValue()初始化方法，来初始化threadLocal的值**&lt;/font&gt;</p>
 </blockquote>
 <p><strong>关于Entry对象</strong></p>
-<pre><code class="language-java">//用虚引用封装的ThreadLocal
+<pre><code class="lang-java">//用虚引用封装的ThreadLocal
 static class Entry extends WeakReference&lt;ThreadLocal&gt; {
     Object value; // 声明一个值
     Entry(ThreadLocal k, Object v) { // 用ThreadLocal对象和值创建一个Entry
@@ -338,10 +393,10 @@ static class Entry extends WeakReference&lt;ThreadLocal&gt; {
 }
 </code></pre>
 <p>该对象继承自弱引用WeakReference. 我们知道java中引用类分为4种，强度从大到小的排列顺序为：<strong>强引用、软引用、弱引用、虚引用</strong>。这样做的最大好处就是可以方便GC处理</p>
-<p>其中关于弱引用： &lt;font color="#ff0000"&gt;<strong>具有弱引用的对象拥有更短暂的生命周期。在垃圾回收器线程扫描它所管辖的内存区域的过程中，一旦发现了只具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存。不过，由于垃圾回收器是一个优先级很低的线程，因此不一定会很快发现那些只具有弱引用的对象</strong>&lt;/font&gt;</p>
+<p>其中关于弱引用： &lt;font color="#ff0000"&gt;**具有弱引用的对象拥有更短暂的生命周期。在垃圾回收器线程扫描它所管辖的内存区域的过程中，一旦发现了只具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存。不过，由于垃圾回收器是一个优先级很低的线程，因此不一定会很快发现那些只具有弱引用的对象**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <p>下面进行源码解读:</p>
-<pre><code class="language-java">import jdk.internal.misc.TerminatingThreadLocal;
+<pre><code class="lang-java">import jdk.internal.misc.TerminatingThreadLocal;
 
 import java.lang.ref.*;
 import java.util.Objects;
@@ -758,7 +813,7 @@ public class ThreadLocal&lt;T&gt; {
         private ThreadLocalMap(ThreadLocalMap parentMap) {
             Entry[] parentTable = parentMap.table;
             int len = parentTable.length;
-            
+
             // 通过父ThreadLocalMap元素数量初始化扩容阈值
             setThreshold(len);
             // 初始化数组
@@ -864,7 +919,7 @@ public class ThreadLocal&lt;T&gt; {
             // 因为在使用set()方法创建新的Entry时, 需要替换之前的旧的Entry
             // 这使得在get()方法中使用的快速路径会更频繁的失败
             // (我觉得是在方法调用栈等方面的权衡, 最终导致作者用inline又实现了一遍方法)
-            
+
             // We don't use a fast path as with get() because it is at
             // least as common to use set() to create new entries as
             // it is to replace existing ones, in which case, a fast
@@ -988,7 +1043,7 @@ public class ThreadLocal&lt;T&gt; {
 
                     tab[i] = tab[staleSlot];
                     tab[staleSlot] = e;
-                    
+
                     /*
                      * 如果在整个扫描过程中（包括函数一开始的向前扫描与i之前的向后扫描）
                      * 找到了之前的无效slot则以那个位置作为清理的起点，
@@ -1241,23 +1296,22 @@ public class ThreadLocal&lt;T&gt; {
 <p>当一个线程退出时，它会删除它ThreadLocal里的所有值。这发生在exit()方法中，垃圾回收之前，如果我们在使用ThreadLocal后忘记调用remove()方法，那么当线程退出后值还会存在</p>
 <p>ThreadLocalMap包含了对ThreadLocal的弱引用以及值的强引用，但是，它并不会判断ReferenceQueue里面哪些弱引用的值已经被清除，因为Entry不可能立即从ThreadLocalMap中清除</p>
 <p>threadLocal,threadLocalMap,entry之间的关系如下图所示:</p>
-<p><img alt="threadLocal引用示意图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/threadLocal%E5%BC%95%E7%94%A8%E7%A4%BA%E6%84%8F%E5%9B%BE.png"/></p>
+<p><img alt="threadLocal引用示意图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/threadLocal引用示意图.png"/></p>
 <p>上图中，实线代表强引用，虚线代表的是弱引用</p>
 <p>从线程Thread的角度来看，每个线程内部都会持有一个对ThreadLocalMap实例的引用，ThreadLocalMap实例相当于线程的局部变量空间，存储着线程各自的数据</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>综上所述:</strong></p>
-<p>&lt;font color="#ff0000"&gt;<strong>ThreadLocalMap实例在JDK 1.4之后就存在于Thread类中, ThreadLocalMap的定义在ThreadLocal中以内部类的形式;</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;<strong>在使用时, ThreadLocal类似于工具类, 通过<code>Thread.currentThread()</code>获取当前线程, 然后获取对应的threadLocals进行操作;</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;<strong>实际存储线程本地副本的数据结构是ThreadLocalMap中定义的内部类Entry, ThreadLocalMap中定义的Entry[] 动态数组存放实际数据, 通过线性探测法</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;<strong>Entry[] 动态数组的大小初始化为16, 每次扩容翻倍(总是2的幂)</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;<strong>扩容的阈值由threshold提供, 通常为table大小的2/3, 但当size &gt;= threshold时，遍历table并删除key为null的元素，此时如果删除后size &gt;= threshold*3/4时，需要对table进行扩容</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**ThreadLocalMap实例在JDK 1.4之后就存在于Thread类中, ThreadLocalMap的定义在ThreadLocal中以内部类的形式;**&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**在使用时, ThreadLocal类似于工具类, 通过`Thread.currentThread()`获取当前线程, 然后获取对应的threadLocals进行操作;**&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**实际存储线程本地副本的数据结构是ThreadLocalMap中定义的内部类Entry, ThreadLocalMap中定义的Entry[] 动态数组存放实际数据, 通过线性探测法**&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**Entry[] 动态数组的大小初始化为16, 每次扩容翻倍(总是2的幂)**&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;**扩容的阈值由threshold提供, 通常为table大小的2/3, 但当size &gt;= threshold时，遍历table并删除key为null的元素，此时如果删除后size &gt;= threshold*3/4时，需要对table进行扩容**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3><strong>为什么使用0x61c88647进行Rehash操作</strong></h3>
 <p>和通常的线性探测法进行线性的index增加不同, 在ThreadLocal中实际上hashcode每次增加魔数0x61c88647, 用来生成hashcode间隙, 并且官方给出的解释是: <strong>可以让生成出来的值或者说ThreadLocal的ID较为均匀地分布在2的幂大小的数组中</strong></p>
-<pre><code class="language-java">private static final int HASH_INCREMENT = 0x61c88647;
- 
+<pre><code class="lang-java">private static final int HASH_INCREMENT = 0x61c88647;
+
 private static int nextHashCode() {
    return nextHashCode.getAndAdd(HASH_INCREMENT);
 }
@@ -1265,11 +1319,11 @@ private static int nextHashCode() {
 <p>可以看出，新的hashcode是在上一个被构造出的ThreadLocal的ID/threadLocalHashCode的基础上加上一个魔数0x61c88647的</p>
 <p>实际上, <strong>这个魔数的选取与斐波那契数列(黄金分割数)有关</strong>:</p>
 <p>0x61c88647对应的十进制为1640531527, 斐波那契散列的乘数可以用<code>(long) ((1L &lt;&lt; 31) * (Math.sqrt(5) - 1))</code>可以得到2654435769，如果把这个值给转为带符号的int，则会得到-1640531527</p>
-<p>换句话说<code> (1L &lt;&lt; 32) - (long) ((1L &lt;&lt; 31) * (Math.sqrt(5) - 1))</code>得到的结果就是1640531527也就是0x61c88647</p>
+<p>换句话说<code>(1L &lt;&lt; 32) - (long) ((1L &lt;&lt; 31) * (Math.sqrt(5) - 1))</code>得到的结果就是1640531527也就是0x61c88647</p>
 <p>通过理论与实践，当我们<strong>用0x61c88647作为魔数累加为每个ThreadLocal分配各自的ID也就是threadLocalHashCode再与2的幂-1按位与，得到的结果分布很均匀</strong></p>
 <p>ThreadLocalMap使用的是线性探测法，均匀分布的好处在于很快就能探测到下一个临近的可用slot，从而保证了效率</p>
 <p>下面通过一段代码来校验算法的散列性:</p>
-<pre><code class="language-java">/**
+<pre><code class="lang-java">/**
  * ThreadLocalMap使用“开放寻址法”中最简单的“线性探测法”解决散列冲突问题
  *
  * @author zk
@@ -1315,14 +1369,14 @@ Entry[]容量扩容2倍=64时，元素完美散列:
 <h3><strong>ThreadLocal源码中为了防止内存泄露做出的努力</strong></h3>
 <p>以下文字转自: <a href="https://www.jianshu.com/p/dde92ec37bd1">一篇文章，从源码深入详解ThreadLocal内存泄漏问题</a></p>
 <p>再看threadLocal,threadLocalMap,entry之间的关系图:</p>
-<p><img alt="threadLocal引用示意图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/threadLocal%E5%BC%95%E7%94%A8%E7%A4%BA%E6%84%8F%E5%9B%BE.png"/></p>
+<p><img alt="threadLocal引用示意图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/threadLocal引用示意图.png"/></p>
 <p>上图中，实线代表强引用，虚线代表的是弱引用，如果threadLocal外部强引用被置为null(threadLocalInstance=null)的话，threadLocal实例就没有一条引用链路可达，很显然在gc(垃圾回收)的时候势必会被回收, 因此entry就存在key为null的情况，而无法通过一个key为null去访问到该entry的value</p>
 <p>同时，就存在了这样一条引用链：threadRef-&gt;currentThread-&gt;threadLocalMap-&gt;entry-&gt;valueRef-&gt;valueMemory, 导致在垃圾回收的时候进行可达性分析的时候, value可达! 从而不会被回收掉，但是该value永远不能被访问到，这样就存在了<strong>内存泄漏</strong></p>
 <p>当然，如果线程执行结束后，threadLocal，threadRef会断掉，因此threadLocal,threadLocalMap，entry都会被回收掉</p>
 <p>可是，在实际使用中我们都是会<strong>用线程池去维护我们的线程</strong>，比如在Executors.newFixedThreadPool()时创建线程的时候，为了复用线程是不会结束的，所以threadLocal内存泄漏就值得我们关注!</p>
 <p>&lt;br/&gt;</p>
 <p>实际上，为了解决ThreadLocal潜在的内存泄漏的问题，Josh Bloch and Doug Lea大师已经做了一些改进。在threadLocal的set和get方法中都有相应的处理。下文为了叙述，针对key为null的entry，源码注释为stale entry，直译为不新鲜的entry，这里我就称之为“脏entry”。比如在ThreadLocalMap的set方法中:</p>
-<pre><code class="language-java">private void set(ThreadLocal&lt;?&gt; key, Object value) {
+<pre><code class="lang-java">private void set(ThreadLocal&lt;?&gt; key, Object value) {
     Entry[] tab = table;
     int len = tab.length;
     int i = key.threadLocalHashCode &amp; (len-1);
@@ -1354,7 +1408,7 @@ Entry[]容量扩容2倍=64时，元素完美散列:
 <p>② 如果当前table[i] == null的话说明新的entry可以直接插入，但是插入后会调用cleanSomeSlots方法检测并清除脏entry</p>
 <p>&lt;br/&gt;</p>
 <p><strong>cleanSomeSlots</strong></p>
-<pre><code class="language-java">private boolean cleanSomeSlots(int i, int n) {
+<pre><code class="lang-java">private boolean cleanSomeSlots(int i, int n) {
     boolean removed = false;
     Entry[] tab = table;
     int len = tab.length;
@@ -1376,14 +1430,14 @@ Entry[]容量扩容2倍=64时，元素完美散列:
 <p><strong>② 参数n的用途</strong></p>
 <p>主要用于<strong>扫描控制（scan control），从while中是通过n来进行条件判断的说明n就是用来控制扫描趟数（循环次数）的</strong></p>
 <p>在扫描过程中，如果没有遇到脏entry就整个扫描过程持续log2(n)次，log2(n)的得来是因为<code>n &gt;&gt;&gt;= 1</code>，每次n右移一位相当于n除以2。如果在扫描过程中遇到脏entry的话就会令n为当前hash表的长度（<code>n=len</code>），再扫描log2(n)趟，注意此时n增加无非就是多增加了循环次数从而通过nextIndex往后搜索的范围扩大，示意图如下</p>
-<p><img alt="cleanSomeSlots示意图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/cleanSomeSlots%E7%A4%BA%E6%84%8F%E5%9B%BE.png"/></p>
+<p><img alt="cleanSomeSlots示意图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/cleanSomeSlots示意图.png"/></p>
 <p>按照n的初始值，搜索范围为黑线，当遇到了脏entry，此时n变成了哈希数组的长度（n取值增大），搜索范围log2(n)增大，红线表示。如果在整个搜索过程没遇到脏entry的话，搜索结束，采用这种方式的主要是用于时间效率上的平衡</p>
 <p><strong>③ n的取值</strong></p>
 <p>如果是在set方法插入新的entry后调用，n位当前已经插入的entry个数size；如果是在replaceSateleEntry方法中调用n为哈希表的长度len</p>
 <p>&lt;br/&gt;</p>
 <p><strong>expungeStaleEntry</strong></p>
 <p>如果对输入参数能够理解的话，那么cleanSomeSlots方法搜索基本上就清除了，但是全部搞定还需要掌握expungeStaleEntry方法，当在搜索过程中遇到了脏entry的话就会调用该方法去清理掉脏entry。源码为:</p>
-<pre><code class="language-java">private int expungeStaleEntry(int staleSlot) {
+<pre><code class="lang-java">private int expungeStaleEntry(int staleSlot) {
     Entry[] tab = table;
     int len = tab.length;
 
@@ -1432,14 +1486,14 @@ Entry[]容量扩容2倍=64时，元素完美散列:
 <p>① 从当前位置i处（位于i处的entry一定不是脏entry）为起点在初始小范围（log2(n)，n为哈希表已插入entry的个数size）开始向后搜索脏entry，若在整个搜索过程没有脏entry，方法结束退出;</p>
 <p>② 如果在搜索过程中遇到脏entryt通过expungeStaleEntry方法清理掉当前脏entry，并且该方法会返回下一个哈希桶(table[i])为null的索引位置为i。这时重新令搜索起点为索引位置i，n为哈希表的长度len，再次扩大搜索范围为log2(n')继续搜索;</p>
 <p>下面，以一个例子更清晰的来说一下，假设当前table数组的情况如下图:</p>
-<p><img alt="cleanSomeSlots执行情景图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/cleanSomeSlots%E7%A4%BA%E6%84%8F%E5%9B%BE.png"/></p>
+<p><img alt="cleanSomeSlots执行情景图.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/cleanSomeSlots示意图.png"/></p>
 <p>如图当前n等于hash表的size即n=10，i=1,在第一趟搜索过程中通过nextIndex,i指向了索引为2的位置，此时table[2]为null，说明第一趟未发现脏entry,则第一趟结束进行第二趟的搜索</p>
 <p>第二趟所搜先通过nextIndex方法，索引由2的位置变成了i=3,当前table[3]!=null但是该entry的key为null，说明找到了一个脏entry，<strong>先将n置为哈希表的长度len,然后继续调用expungeStaleEntry方法</strong>，该方法会将当前索引为3的脏entry给清除掉（令value为null，并且table[3]也为null）,但是<strong>该方法可不想偷懒，它会继续往后环形搜索</strong>，往后会发现索引为4,5的位置的entry同样为脏entry，索引为6的位置的entry不是脏entry保持不变，直至i=7的时候此处table[7]位null，该方法就以i=7返回。至此，第二趟搜索结束；</p>
 <p>由于在第二趟搜索中发现脏entry，n增大为数组的长度len，因此扩大搜索范围（增大循环次数）继续向后环形搜索；</p>
 <p>直到在整个搜索范围里都未发现脏entry，cleanSomeSlot方法执行结束退出。</p>
 <p>&lt;br/&gt;</p>
 <p><strong>replaceStaleEntry</strong></p>
-<pre><code class="language-java">private void replaceStaleEntry(ThreadLocal&lt;?&gt; key, Object value, int staleSlot) {
+<pre><code class="lang-java">private void replaceStaleEntry(ThreadLocal&lt;?&gt; key, Object value, int staleSlot) {
     Entry[] tab = table;
     int len = tab.length;
     Entry e;
@@ -1458,7 +1512,7 @@ Entry[]容量扩容2倍=64时，元素完美散列:
         ThreadLocal&lt;?&gt; k = e.get();
 
         if (k == key) {
-            
+
             //如果在向后环形查找过程中发现key相同的entry就覆盖并且和脏entry进行交换
 2.            e.value = value;
 3.            tab[i] = tab[staleSlot];
@@ -1495,7 +1549,7 @@ Entry[]容量扩容2倍=64时，元素完美散列:
 }
 </code></pre>
 <p>首先先看这一部分的代码：</p>
-<pre><code class="language-java">int slotToExpunge = staleSlot;
+<pre><code class="lang-java">int slotToExpunge = staleSlot;
 for (int i = prevIndex(staleSlot, len);
      (e = tab[i]) != null;
      i = prevIndex(i, len))
@@ -1506,26 +1560,25 @@ for (int i = prevIndex(staleSlot, len);
 <p><strong>① 前向有脏entry</strong></p>
 <p>1.1 后向环形查找找到可覆盖的entry</p>
 <p>该情形如下图所示。</p>
-<p><img alt="向前环形搜索到脏entry，向后环形查找到可覆盖的entry的情况.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/%E5%90%91%E5%89%8D%E7%8E%AF%E5%BD%A2%E6%90%9C%E7%B4%A2%E5%88%B0%E8%84%8Fentry%EF%BC%8C%E5%90%91%E5%90%8E%E7%8E%AF%E5%BD%A2%E6%9F%A5%E6%89%BE%E5%88%B0%E5%8F%AF%E8%A6%86%E7%9B%96%E7%9A%84entry%E7%9A%84%E6%83%85%E5%86%B5.png"/></p>
+<p><img alt="向前环形搜索到脏entry，向后环形查找到可覆盖的entry的情况.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/向前环形搜索到脏entry，向后环形查找到可覆盖的entry的情况.png"/></p>
 <p>如图，slotToExpunge初始状态和staleSlot相同，当前向环形搜索遇到脏entry时，在第1行代码中slotToExpunge会更新为当前脏entry的索引i，直到遇到哈希桶（table[i]）为null的时候，前向搜索过程结束。在接下来的for循环中进行后向环形查找，若查找到了可覆盖的entry，第2,3,4行代码先覆盖当前位置的entry，然后再与staleSlot位置上的脏entry进行交换。交换之后脏entry就更换到了i处，最后使用cleanSomeSlots方法从slotToExpunge为起点开始进行清理脏entry的过程</p>
 <p>1.2 后向环形查找未找到可覆盖的entry</p>
 <p>该情形如下图所示。</p>
-<p><img alt="前向环形搜索到脏entry,向后环形未搜索可覆盖entry.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/%E5%89%8D%E5%90%91%E7%8E%AF%E5%BD%A2%E6%90%9C%E7%B4%A2%E5%88%B0%E8%84%8Fentry,%E5%90%91%E5%90%8E%E7%8E%AF%E5%BD%A2%E6%9C%AA%E6%90%9C%E7%B4%A2%E5%8F%AF%E8%A6%86%E7%9B%96entry.png"/></p>
+<p><img alt="前向环形搜索到脏entry,向后环形未搜索可覆盖entry.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/前向环形搜索到脏entry,向后环形未搜索可覆盖entry.png"/></p>
 <p>如图，slotToExpunge初始状态和staleSlot相同，当前向环形搜索遇到脏entry时，在第1行代码中slotToExpunge会更新为当前脏entry的索引i，直到遇到哈希桶（table[i]）为null的时候，前向搜索过程结束。在接下来的for循环中进行后向环形查找，若没有查找到了可覆盖的entry，哈希桶（table[i]）为null的时候，后向环形查找过程结束。那么接下来在8,9行代码中，将插入的新entry直接放在staleSlot处即可，最后使用cleanSomeSlots方法从slotToExpunge为起点开始进行清理脏entry的过程</p>
 <p><strong>② 前向没有脏entry</strong></p>
 <p>2.1 后向环形查找找到可覆盖的entry</p>
 <p>该情形如下图所示。</p>
-<p><img alt="前向未搜索到脏entry，后向环形搜索到可覆盖的entry.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/%E5%89%8D%E5%90%91%E6%9C%AA%E6%90%9C%E7%B4%A2%E5%88%B0%E8%84%8Fentry%EF%BC%8C%E5%90%8E%E5%90%91%E7%8E%AF%E5%BD%A2%E6%90%9C%E7%B4%A2%E5%88%B0%E5%8F%AF%E8%A6%86%E7%9B%96%E7%9A%84entry.png"/></p>
+<p><img alt="前向未搜索到脏entry，后向环形搜索到可覆盖的entry.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/前向未搜索到脏entry，后向环形搜索到可覆盖的entry.png"/></p>
 <p>如图，slotToExpunge初始状态和staleSlot相同，当前向环形搜索直到遇到哈希桶（table[i]）为null的时候，前向搜索过程结束，若在整个过程未遇到脏entry，slotToExpunge初始状态依旧和staleSlot相同。在接下来的for循环中进行后向环形查找，若遇到了脏entry，在第7行代码中更新slotToExpunge为位置i。若查找到了可覆盖的entry，第2,3,4行代码先覆盖当前位置的entry，然后再与staleSlot位置上的脏entry进行交换，交换之后脏entry就更换到了i处。如果在整个查找过程中都还没有遇到脏entry的话，会通过第5行代码，将slotToExpunge更新当前i处，最后使用cleanSomeSlots方法从slotToExpunge为起点开始进行清理脏entry的过程</p>
 <p>2.2 后向环形查找未找到可覆盖的entry</p>
 <p>该情形如下图所示</p>
-<p><img alt="前向环形未搜索到脏entry,后向环形查找未查找到可覆盖的entry.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/%E5%89%8D%E5%90%91%E7%8E%AF%E5%BD%A2%E6%9C%AA%E6%90%9C%E7%B4%A2%E5%88%B0%E8%84%8Fentry,%E5%90%8E%E5%90%91%E7%8E%AF%E5%BD%A2%E6%9F%A5%E6%89%BE%E6%9C%AA%E6%9F%A5%E6%89%BE%E5%88%B0%E5%8F%AF%E8%A6%86%E7%9B%96%E7%9A%84entry.png"/></p>
+<p><img alt="前向环形未搜索到脏entry,后向环形查找未查找到可覆盖的entry.png" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/前向环形未搜索到脏entry,后向环形查找未查找到可覆盖的entry.png"/></p>
 <p>如图，slotToExpunge初始状态和staleSlot相同，当前向环形搜索直到遇到哈希桶（table[i]）为null的时候，前向搜索过程结束，若在整个过程未遇到脏entry，slotToExpunge初始状态依旧和staleSlot相同。在接下来的for循环中进行后向环形查找，若遇到了脏entry，在第7行代码中更新slotToExpunge为位置i。若没有查找到了可覆盖的entry，哈希桶（table[i]）为null的时候，后向环形查找过程结束。那么接下来在8,9行代码中，将插入的新entry直接放在staleSlot处即可。另外，如果发现slotToExpunge被重置，则第10行代码if判断为true,就使用cleanSomeSlots方法从slotToExpunge为起点开始进行清理脏entry的过程</p>
 <p>下面用一个实例来有个直观的感受，示例代码就不给出了，代码debug时table状态如下图所示:</p>
-<p><img alt="1.2情况示意图.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/jasonkayzk.github.io/source/_posts/"/></p>
+<p><img alt="1.2情况示意图.png" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/jasonkayzk.github.io/source/_posts/"/></p>
 <p>如图所示，当前的staleSolt为i=4，首先先进行前向搜索脏entry，当i=3的时候遇到脏entry，slotToExpung更新为3，当i=2的时候tabel[2]为null，因此前向搜索脏entry的过程结束。然后进行后向环形查找，知道i=7的时候遇到table[7]为null，结束后向查找过程，并且在该过程并没有找到可以覆盖的entry。最后只能在staleSlot（4）处插入新entry，然后从slotToExpunge（3）为起点进行cleanSomeSlots进行脏entry的清理</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>补充:</strong></p>
 <p><strong>当我们调用threadLocal的get方法</strong>时，当table[i]不是和所要找的key相同的话，会继续通过threadLocalMap的 getEntryAfterMiss方法向后环形去找</p>
 <p><strong>当我们调用threadLocal.remove方法时候</strong>，实际上会调用threadLocalMap的remove方法</p>
@@ -1540,7 +1593,7 @@ for (int i = prevIndex(staleSlot, len);
 <p>&lt;br/&gt;</p>
 <p><strong>Thread.exit()方法</strong></p>
 <p>当线程退出时会执行exit方法:</p>
-<pre><code class="language-java">private void exit() {
+<pre><code class="lang-java">private void exit() {
     if (group != null) {
         group.threadTerminated(this);
         group = null;
@@ -1573,7 +1626,7 @@ for (int i = prevIndex(staleSlot, len);
 <p>SimpleDateFormat是一个线程不安全的格式化日期类, 创建一个SimpleDateFormat实例的开销比较昂贵，<strong>解析字符串时间时频繁创建生命周期短暂的实例导致性能低下</strong></p>
 <p>即使将SimpleDateFormat定义为静态类变量，貌似能解决这个问题，但是SimpleDateFormat是非线程安全的，同样存在问题，如果用<code>synchronized</code>线程同步同样面临问题，同步导致性能下降(线程之间序列化的获取SimpleDateFormat实例)</p>
 <p>ThreadLocal解决了此问题，对于每个线程SimpleDateFormat不存在影响他们之间协作的状态，为每个线程创建一个SimpleDateFormat变量的拷贝:</p>
-<pre><code class="language-java">import java.text.DateFormat;
+<pre><code class="lang-java">import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -1600,7 +1653,7 @@ public class DateUtil {
 </code></pre>
 <p>&lt;br/&gt;</p>
 <h3><strong>使用ThreadLocal实现数字自增</strong></h3>
-<pre><code class="language-java">/**
+<pre><code class="lang-java">/**
  * @author zk
  */
 public class AutoAddNumber {

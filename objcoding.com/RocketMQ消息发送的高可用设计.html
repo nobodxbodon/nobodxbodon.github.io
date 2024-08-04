@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-04-06-rocketmq fault strategy.md)，<a href="https://objcoding.com/2019/04/06/rocketmq-fault-strategy">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-04-06-rocketmq fault strategy.md">仓库源文</a>，<a href="https://objcoding.com/2019/04/06/rocketmq-fault-strategy">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "RocketMQ消息发送的高可用设计"
 categories: RocketMQ
-tags: message latency 高可用
-author: 张乘辉</h2>
+tags: message latency 高可用</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -14,10 +14,10 @@ author: 张乘辉</h2>
 <h2>重试机制</h2>
 <p>直接定位到client端发送消息的方法：</p>
 <p>org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#sendDefaultImpl：</p>
-<pre><code class="language-java">int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
+<pre><code class="lang-java">int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
 </code></pre>
-<pre><code class="language-java">for (; times &lt; timesTotal; times++) {
-	// ...
+<pre><code class="lang-java">for (; times &lt; timesTotal; times++) {
+    // ...
 }
 </code></pre>
 <p>在client端，发送消息的方式有：同步（SYNC）、异步（ASYNC）、单向（ONEWAY）。</p>
@@ -30,7 +30,7 @@ author: 张乘辉</h2>
 <h3>默认机制</h3>
 <p>sendLatencyFaultEnable=false，消息发送选择队列调用以下方法：</p>
 <p>org.apache.rocketmq.client.impl.producer.TopicPublishInfo#selectOneMessageQueue：</p>
-<pre><code class="language-java">public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
+<pre><code class="lang-java">public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
   if (lastBrokerName == null) {
     return selectOneMessageQueue();
   } else {
@@ -50,7 +50,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>这里的lastBrokerName指的是上一次执行消息发送时选择失败的broker，在重试机制下，第一次执行消息发送时，lastBrokerName=null，直接选择以下方法：</p>
 <p>org.apache.rocketmq.client.impl.producer.TopicPublishInfo#selectOneMessageQueue：</p>
-<pre><code class="language-java">public MessageQueue selectOneMessageQueue() {
+<pre><code class="lang-java">public MessageQueue selectOneMessageQueue() {
   int index = this.sendWhichQueue.getAndIncrement();
   int pos = Math.abs(index) % this.messageQueueList.size();
   if (pos &lt; 0)
@@ -66,7 +66,7 @@ author: 张乘辉</h2>
 <h3>Broker故障延迟机制</h3>
 <p>sendLatencyFaultEnable=true，消息发送选择队列调用以下方法：</p>
 <p>org.apache.rocketmq.client.latency.MQFaultStrategy#selectOneMessageQueue：</p>
-<pre><code class="language-java">public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
+<pre><code class="lang-java">public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
   // Broker故障延迟机制
   if (this.sendLatencyFaultEnable) {
     try {
@@ -114,25 +114,25 @@ author: 张乘辉</h2>
 <p>下面我会从源码的角度详细地分析rocketmq是如何实现在一定时间内规避故障broker的。</p>
 <p>从发送消息方法源码看出，在发送完消息，会调用updateFaultItem方法：</p>
 <p>org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#sendDefaultImpl：</p>
-<pre><code class="language-java">// 3.执行真正的消息发送
+<pre><code class="lang-java">// 3.执行真正的消息发送
 sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
 endTimestamp = System.currentTimeMillis();
 this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
 </code></pre>
 <p>发送消息时捕捉到异常同样会调用updateFaultItem方法，它是延迟机制的核心方法：</p>
-<pre><code class="language-java">endTimestamp = System.currentTimeMillis();
+<pre><code class="lang-java">endTimestamp = System.currentTimeMillis();
 this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
 </code></pre>
 <p>其中endTimestamp - beginTimestampPrev等于消息发送需要用到的时间，如果成功发送第三个参数传的是false，发送失败传true，下面继续看updateFaultItem方法的实现源码：</p>
 <p>org.apache.rocketmq.client.latency.MQFaultStrategy#updateFaultItem：</p>
-<pre><code class="language-java">public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation) {
+<pre><code class="lang-java">public void updateFaultItem(final String brokerName, final long currentLatency, boolean isolation) {
   if (this.sendLatencyFaultEnable) {
     long duration = computeNotAvailableDuration(isolation ? 30000 : currentLatency);
     this.latencyFaultTolerance.updateFaultItem(brokerName, currentLatency, duration);
   }
 }
 </code></pre>
-<pre><code class="language-java">private long computeNotAvailableDuration(final long currentLatency) {
+<pre><code class="lang-java">private long computeNotAvailableDuration(final long currentLatency) {
   for (int i = latencyMax.length - 1; i &gt;= 0; i--) {
     if (currentLatency &gt;= latencyMax[i])
       return this.notAvailableDuration[i];
@@ -143,12 +143,12 @@ this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true
 <p>其中参数currentLatency为本次消息发送的延迟时间，isolation表示broker是否需要规避，所以消息成功发送表示broker无需规避，消息发送失败时表示broker发生故障了需要规避。</p>
 <p>latencyMax和notAvailableDuration是延迟机制算法的核心值，每次发送消息的延迟，它们也决定了失败条目中的startTimestamp的值。</p>
 <p>从方法可看出，如果broker需要隔离，消息发送延迟时间默认为30s，再利用这个时间从latencyMax尾部向前找到比currentLatency小的数组下标index，如果没有找到就返回0，我们看看latencyMax和notAvailableDuration这两个数组的默认值：</p>
-<pre><code class="language-java">private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
+<pre><code class="lang-java">private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
 private long[] notAvailableDuration = {0L, 0L, 30000L, 60000L, 120000L, 180000L, 600000L};
 </code></pre>
 <p>可看出，如果isolation=true，该broker会得到一个10分钟规避时长，如果isolation=false，那么规避时长就得看消息发送的延迟时间是多少了，我们继续往下撸：</p>
 <p>org.apache.rocketmq.client.latency.LatencyFaultToleranceImpl#updateFaultItem：</p>
-<pre><code class="language-java">public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration) {
+<pre><code class="lang-java">public void updateFaultItem(final String name, final long currentLatency, final long notAvailableDuration) {
   // 从缓存中获取失败条目
   FaultItem old = this.faultItemTable.get(name);
   if (null == old) {
@@ -174,7 +174,7 @@ private long[] notAvailableDuration = {0L, 0L, 30000L, 60000L, 120000L, 180000L,
 <p>FaultItem为存储故障broker的类，称为失败条目，每个条目存储了broker的名称、消息发送延迟时长、故障规避开始时间。</p>
 <p>该方法主要是对失败条目的一些更新操作，如果失败条目已存在，那么更新失败条目，如果失败条目不存在，那么新建失败条目，其中失败条目的startTimestamp为当前系统时间加上规避时长，startTimestamp是判断broker是否可用的时间值：</p>
 <p>org.apache.rocketmq.client.latency.LatencyFaultToleranceImpl.FaultItem#isAvailable：</p>
-<pre><code class="language-java">public boolean isAvailable() {
+<pre><code class="lang-java">public boolean isAvailable() {
   return (System.currentTimeMillis() - startTimestamp) &gt;= 0;
 }
 </code></pre>

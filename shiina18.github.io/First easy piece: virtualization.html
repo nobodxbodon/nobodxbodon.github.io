@@ -1,19 +1,19 @@
 <h2><a href="https://github.com/shiina18/shiina18.github.io/blob/master/_posts/2022-04-12-virtual.md">仓库源文</a>，<a href="https://shiina18.github.io/tech/2022/04/12/virtual">站点原文</a></h2>
 <hr/>
-<h2>title: "First easy piece: virtualization"
+<p>title: "First easy piece: virtualization"
 categories: Tech
-updated:
-comments: true
-mathjax: false</h2>
+updated: 
+comments: true</p>
+<h2>mathjax: false</h2>
 <p>Three easy pieces refer to virtualization, concurrency, and persistence. 其他两部分只看了头几节, 暂时不看了.</p>
 <ul>
 <li>Arpaci-Dusseau, R. H., Arpaci-Dusseau, A. C., &amp;  Reiher, P. (2018, August). <em><a href="http://pages.cs.wisc.edu/~remzi/OSTEP/">Operating Systems: Three Easy Pieces</a></em> (Version 1.00). University of Wisconsin-Madison.</li>
 </ul>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <h2>进程</h2>
 <p>一个进程就是一个运行着的程序.</p>
-<blockquote>
-<p>虽然只有几个物理 CPU, how can the OS provide the illusion of a nearly-endless supply of CPUs?</p>
+<blockquote><p>虽然只有几个物理 CPU, how can the OS provide the illusion of a nearly-endless supply of CPUs?</p>
 </blockquote>
 <p>用分时 (time sharing) 解决问题: OS creates this illusion by virtualizing the CPU, 即运行一个程序, 停止它再运行另一个程序, 周而复始.</p>
 <p>虚拟 CPU 的实现. We call the low-level machinery <strong>mechanisms</strong>; mechanisms are low-level methods or protocols that implement a needed piece of functionality. On top of these mechanisms reside <strong>policies</strong>, which are algorithms for making some kind of decision within the OS. 底层的机制回答了怎么做, 而上层的策略则选择用什么做.</p>
@@ -27,10 +27,10 @@ mathjax: false</h2>
 <h3>从程序到进程</h3>
 <p>创建进程 (让程序跑起来, 从而变成进程):</p>
 <ul>
-<li>将代码和静态数据 (比如初始化变量) 从磁盘载入地址空间;</li>
-<li>分配一些内存作为程序的 stack (run-time stack) 和 heap.<ul>
+<li>将代码和静态数据 (比如初始化变量) 从磁盘载入地址空间; </li>
+<li>分配一些内存作为程序的 stack (run-time stack) 和 heap. <ul>
 <li>这两个概念不同于数据结构的堆栈.</li>
-<li>C programs use the stack for local variables, function parameters, and return addresses.  In C programs, the heap is used for explicitly requested dynamically-allocated data; programs request such space by calling <code>malloc()</code> and free it explicitly by calling <code>free()</code>.</li>
+<li>C programs use the stack for local variables, function parameters, and return addresses.  In C programs, the heap is used for explicitly requested dynamically-allocated data; programs request such space by calling <code>malloc()</code> and free it explicitly by calling <code>free()</code>. </li>
 </ul>
 </li>
 <li>I/O 初始化, 比如 UNIX 系统中, 每个进程都有三个文件标识符 (file descriptors), standard input, output, and errorr; these descriptors let programs easily read input from the terminal and print output to the screen.</li>
@@ -48,7 +48,7 @@ mathjax: false</h2>
 <h3>进程 API</h3>
 <p>如何创建和控制进程?</p>
 <p><code>fork()</code> 创建一个新进程. 每个进程有一个进程标识符 (process identifier, PID). 在程序中调用 fork 之后, 就好像是从这里分身出一个一样的进程, 自己调用了 fork 一样, 并且继续执行剩余的指令. while the parent receives the PID of the newly-created child, the child receives a return code of zero.</p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="lang-c">#include &lt;stdio.h&gt;
 #include &lt;stdlib.h&gt;
 #include &lt;unistd.h&gt;
 #include &lt;sys/wait.h&gt;
@@ -64,12 +64,12 @@ int main(int argc, char *argv[])
     } else if (rc == 0) {
         // child (new process)
         printf("hello, I am child (pid:%d)\n", (int) getpid());
-	sleep(1);
+    sleep(1);
     } else {
         // parent goes down this path (original process)
         int wc = wait(NULL);
         printf("hello, I am parent of %d (wc:%d) (pid:%d)\n",
-	       rc, wc, (int) getpid());
+           rc, wc, (int) getpid());
     }
     return 0;
 }
@@ -79,10 +79,10 @@ int main(int argc, char *argv[])
 hello, I am child (pid:29267)
 hello, I am parent of 29267 (rc_wait:29267) (pid:29266)
 </code></pre>
-<p><code>exec()</code> 应该是来自 execute 的缩写. This system call is useful when you want to run a program that is different from the calling program. It does <em>not</em> create a new process; rather, it transforms the currently running program into a different running program. a successful call to <code>exec()</code> never returns. ~~转生了~~</p>
+<p><code>exec()</code> 应该是来自 execute 的缩写. This system call is useful when you want to run a program that is different from the calling program. It does <em>not</em> create a new process; rather, it transforms the currently running program into a different running program. a successful call to <code>exec()</code> never returns. <del>转生了</del></p>
 <p>shell 是一个用户程序, 显示一个提示符 (prompt), 然后等待用户输入. 输入命令之后, shell 找到文件中可执行程序的位置, 调用 fork 创建子进程, 调用 exec 的一个变种运行命令, 最后用 wait 等待命令结束. 当子进程运行结束, shell returns from <code>wait()</code>, 再次打印提示符等待下一次输入.</p>
 <p>把 fork 和 exec 分开可以让 UNIX shell 在 fork 之后, exec 之前运行代码. This code can alter the environment of the about-to-be-run program.</p>
-<pre><code class="language-shell">prompt&gt; wc file &gt; newfile.txt
+<pre><code class="lang-shell">prompt&gt; wc file &gt; newfile.txt
 </code></pre>
 <p>比如执行上述命令时, shell 创建子进程之后, 关闭标准输出, 打开文件 <code>newfile.txt</code>, 然后再调用 exec. 从而把输出重定向至文件.</p>
 <p>另外参考知乎 <a href="https://www.zhihu.com/question/20539463/answer/28952008">如何通俗地解释什么是寄存器?</a>, <a href="https://www.zhihu.com/question/66902460">为什么 Linux 下要把创建进程分为 fork() 和 exec() (一系列函数) 两个函数来处理?</a>.</p>
@@ -95,8 +95,7 @@ hello, I am parent of 29267 (rc_wait:29267) (pid:29266)
 <p><img alt="" src="https://shiina18.github.io/assets/posts/images/20211127114820552_20.png"/></p>
 <h3>Problem 2: Switching Between Processes</h3>
 <p>If a process is running on the CPU, this by definition means the OS is <em>not</em> running.</p>
-<blockquote>
-<p>How can the operating system regain control of the CPU so that it can switch between processes?</p>
+<blockquote><p>How can the operating system regain control of the CPU so that it can switch between processes?</p>
 </blockquote>
 <p><strong>A Cooperative Approach: Wait For System Calls</strong></p>
 <p>OS 信任进程会定期放弃 CPU 的控制, 比如 system calls 或者非法操作 (访问无法访问的地址, 除以零), which will generate a trap to OS. 问题在于如果程序有无限循环怎么办? 重启电脑.</p>
@@ -110,10 +109,10 @@ hello, I am parent of 29267 (rc_wait:29267) (pid:29266)
 <p>之前讲了运行进程的底层机制, 现在讲上层调度策略. 要了解调度策略, 需要了解 workload, 先从一些不现实的假设讲起, 逐步过渡到真实情形.</p>
 <p>假设, 其中 jobs 是进程的另一种称呼.</p>
 <ol>
-<li>Each job runs for the same amount of time.</li>
-<li>All jobs arrive at the same time.</li>
-<li>Once started, each job runs to completion.</li>
-<li>All jobs only use the CPU (i.e., they perform no I/O)</li>
+<li>Each job runs for the same amount of time. </li>
+<li>All jobs arrive at the same time. </li>
+<li>Once started, each job runs to completion. </li>
+<li>All jobs only use the CPU (i.e., they perform no I/O) </li>
 <li>The run-time of each job is known.</li>
 </ol>
 <p>选用的指标是周转时间 (turnaround time), 即进程完成时刻减去进程进入系统的时刻.</p>
@@ -126,7 +125,7 @@ hello, I am parent of 29267 (rc_wait:29267) (pid:29266)
 <p>最著名的调度方法, 多级反馈队列 (MLFQ). The multi-level feedback queue is an excellent example of a system that learns from the past to predict the future.</p>
 <p>MLFQ 有若干不同的队列, 每个队列带有不同的优先级 (priority level).</p>
 <ul>
-<li>Rule 1: 根据进程的优先级决定运行哪个.</li>
+<li>Rule 1: 根据进程的优先级决定运行哪个. </li>
 <li>Rule 2: 如果优先级相同, 则用 round-robin.</li>
 </ul>
 <p>那么关键就是如何设置优先级. MLFQ 通过观察到的行为决定优先级 (根据历史预测未来), 并且会实时调整优先级.</p>
@@ -173,8 +172,7 @@ hello, I am parent of 29267 (rc_wait:29267) (pid:29266)
 <li>efficiency. 时间和空间.</li>
 <li>protection. 只能在自己的地址空间内操作, 以保护其他进程不受干扰. 隔离性 (isolation).</li>
 </ul>
-<blockquote>
-<p>Side note: This usage of transparency is sometimes confusing; some students think that "being transparent" means keeping everything out in the open, i.e., what government should be like. Here, it means the opposite: that the illusion provided by the OS should not be visible to applications. Thus, in common usage, a transparent system is one that is hard to notice, not one that responds to requests as stipulated by the Freedom of Information Act.</p>
+<blockquote><p>Side note: This usage of transparency is sometimes confusing; some students think that "being transparent" means keeping everything out in the open, i.e., what government should be like. Here, it means the opposite: that the illusion provided by the OS should not be visible to applications. Thus, in common usage, a transparent system is one that is hard to notice, not one that responds to requests as stipulated by the Freedom of Information Act.</p>
 </blockquote>
 <h3>Memory API</h3>
 <p>内存管理有两层. 当进程结束时, OS 会自动回收其所有内存. 在每个进程中, 内存分为堆和栈.</p>
@@ -203,8 +201,7 @@ hello, I am parent of 29267 (rc_wait:29267) (pid:29266)
 </ul>
 <p><strong>Dynamic (Hardware-based) Relocation</strong></p>
 <p>这里的 translation 可以理解为数学意义, 即平移.</p>
-<blockquote>
-<p>physical address = virtual address + base</p>
+<blockquote><p>physical address = virtual address + base</p>
 </blockquote>
 <p>由于在运行后我们依然可以移动地址空间 (OS 可以在程序不运行的时候改变虚拟内存对应的物理内存位置), 这个技术称为 dynamic relocation (或者叫 base and bounds). 所谓的 hardware-based, 是指每个 CPU 上有一对寄存器, base register 和 bounds (or limit) register, 前者用来做 translation 的 base, 后者用来检验物理地址是否合法 (within bounds). 这对寄存器属于 CPU 上的 memory management unit (MMU) 部件.</p>
 <h3>分段 (segmentation)</h3>
@@ -225,8 +222,7 @@ hello, I am parent of 29267 (rc_wait:29267) (pid:29266)
 <p>Because page tables are so big, we don't keep any special on-chip hardware in the MMU to store the page table of the currently-running process. Instead, we store the page table for each process in memory somewhere. Without careful design of both hardware and software, page tables will cause the system to run too slowly, as well as take up too much memory</p>
 <h3>Faster Translations (TLBs)</h3>
 <p>Going to memory for translation information before every instruction fetch or explicit load or store is prohibitively slow. 用硬件帮忙, translation-lookaside buffer, or TLB, 也在 MMU 里, a hardware cache of popular virtual-to-physical address translations.</p>
-<blockquote>
-<p>Hardware caches take advantage of locality by keeping copies of memory in small, fast on-chip memory. Instead of having to go to a (slow) memory to satisfy a request, the processor can first check if a nearby copy exists in a cache; if it does, the processor can access it quickly (i.e., in a few CPU cycles) and avoid spending the costly time it takes to access memory (many nanoseconds). 为了速度快, cache 只能小.</p>
+<blockquote><p>Hardware caches take advantage of locality by keeping copies of memory in small, fast on-chip memory. Instead of having to go to a (slow) memory to satisfy a request, the processor can first check if a nearby copy exists in a cache; if it does, the processor can access it quickly (i.e., in a few CPU cycles) and avoid spending the costly time it takes to access memory (many nanoseconds). 为了速度快, cache 只能小.</p>
 </blockquote>
 <p>另外参考知乎 <a href="https://zhuanlan.zhihu.com/p/102293437">Cache 的基本原理</a>.</p>
 <h3>Mechanism: Swappings</h3>

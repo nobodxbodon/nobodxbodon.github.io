@@ -1,32 +1,30 @@
 <h2><a href="https://github.com/hijiangtao/hijiangtao.github.io/blob/master/_posts/2020-05-21-A-Better-Library-Development-Workflow.md">仓库源文</a>，<a href="https://hijiangtao.github.io/2020/05/21/A-Better-Library-Development-Workflow">站点原文</a></h2>
 <hr/>
-<h2>title: 前端组件库本地开发调试的自动化流程实现
+<p>title: 前端组件库本地开发调试的自动化流程实现
 layout: post
 thread: 248
 date: 2020-05-21
 author: Joe Jiang
 categories: Document
-tags: [Angular, 依赖, 调试, 自动化, 前端, JavaScript]
-excerpt: 本文介绍了前端组件库本地开发调试如何实现自动化流程的一些细节。</h2>
+tags: [Angular, 依赖, 调试, 自动化, 前端, JavaScript]</p>
+<h2>excerpt: 本文介绍了前端组件库本地开发调试如何实现自动化流程的一些细节。</h2>
 <p><em>注：文中涉及到的三方/二方组件库、组件、本地依赖、依赖、开源库、component 和 library 等词汇在此均指同一概念，即抽象出来的通用组件。</em></p>
 <h2>问题与背景</h2>
 <p>如果不对项目进行设计，我们写的所有代码都会存于同一个仓库，，当需要本地调试编码效果时，一条 <code>npm run start</code> 或者 <code>npm run dev</code> 便可把我们所需的服务启动，但随着时间推移，这个项目无法避免会成为一个「巨无霸」，而其带给我们的伤害会远大于收益，于是我们想到了拆分，那么，就将一些 UI 或者计算逻辑单独抽成包吧。</p>
-<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.001.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-1.png"/></p>
-<p>&lt;center&gt;&lt;small&gt;图1 - 代码都在一个仓库中的调试流程&lt;/small&gt;&lt;/center&gt;</p>
-<p>假设我们维护的主应用就叫 <code>big-platform</code>，其中有一些通用逻辑我们给抽象到了一个 Node package 里，暂且取名 <code>@fudao/hello</code> 并发布到 npm 上，等其他同学开发需要用到这个组件或者逻辑时，一条 <code>npm install @fudao/hello --save</code> 便能搞定，是不是方便了不少。</p>
+<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.001.png" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-1.png"/></p>
+&lt;center&gt;&lt;small&gt;图1 - 代码都在一个仓库中的调试流程&lt;/small&gt;&lt;/center&gt;<p>假设我们维护的主应用就叫 <code>big-platform</code>，其中有一些通用逻辑我们给抽象到了一个 Node package 里，暂且取名 <code>@fudao/hello</code> 并发布到 npm 上，等其他同学开发需要用到这个组件或者逻辑时，一条 <code>npm install @fudao/hello --save</code> 便能搞定，是不是方便了不少。</p>
 <p>调用组件是一个非常开心的事情，理论上你啥也不需要管，调调 API 就能得到想要的一切。但是，如果这是一个有问题的组件，怎么办？当我们遇到组件实际显示效果和文档中预期不一致时，浮现在脑中的第一想法便是上报 Bug 然后等作者更新，但麻烦之处在于你需要将现象描述清楚，并附上一可复现 Bug 的示例，而至于作者何时响应，更是不得而知。你可能头皮发麻，心想自己直接把他给改了得了。</p>
-<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.002.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-2.png"/></p>
-<p>&lt;center&gt;&lt;small&gt;图2 - 项目与 library 分开发维护的调试流程&lt;/small&gt;&lt;/center&gt;</p>
-<p>当我们需要修改二方或者三方组件库时，写代码都好说，但如何调试往往难倒了很多同学。为了验证修改没有问题再发布，我们的验证过程成了这期间最耗时的任务。这么长串的一个流程，我们有没有什么办法可以让三方组件库在本地开发和调试时就像内嵌在项目中一样流畅呢（无额外感知成本）？</p>
+<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.002.png" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-2.png"/></p>
+&lt;center&gt;&lt;small&gt;图2 - 项目与 library 分开发维护的调试流程&lt;/small&gt;&lt;/center&gt;<p>当我们需要修改二方或者三方组件库时，写代码都好说，但如何调试往往难倒了很多同学。为了验证修改没有问题再发布，我们的验证过程成了这期间最耗时的任务。这么长串的一个流程，我们有没有什么办法可以让三方组件库在本地开发和调试时就像内嵌在项目中一样流畅呢（无额外感知成本）？</p>
 <h2>现有开发调试方案</h2>
 <p>大致来看，存在几种不那么方便的复制粘贴大法。</p>
 <p>第一种是利用 <code>npm link</code> 来做手动搬运。每当变更过 library 上的代码后，我们在其所在目录执行</p>
-<pre><code class="language-tsx">npm run build // 执行构建
+<pre><code class="lang-tsx">npm run build // 执行构建
 cd dist/hello // 进入构建后结果目录
 npm link // 将 library 链接到全局
 </code></pre>
 <p>然后到项目所在目录重新绑定并重启服务</p>
-<pre><code class="language-tsx">npm link @fudao/hello 
+<pre><code class="lang-tsx">npm link @fudao/hello 
 npm run start // 对应到具体执行脚本
 </code></pre>
 <p>这种方式的痛苦之处在于你的 <code>npm run build</code> 和 <code>npm link</code> 需要在每次 library 代码更改后重新执行一遍，而后你还需要停止调试服务，在项目中更新依赖并重启服务。</p>
@@ -36,10 +34,10 @@ npm run start // 对应到具体执行脚本
 <li>在项目中安装依赖时使用文件路径安装</li>
 </ol>
 <p>第一种方式你可能会用上如下命令：</p>
-<pre><code class="language-bash">cp -r dist/hello/ /project/node_modules/@fudao/hello
+<pre><code class="lang-bash">cp -r dist/hello/ /project/node_modules/@fudao/hello
 </code></pre>
 <p>而第二种方式则需要在执行依赖安装的时候将具体包名替换为本地路径，安装完成后你的 <code>package.json</code> 大致会变成这样：</p>
-<pre><code class="language-bash">{
+<pre><code class="lang-bash">{
   "name": "big-platform",
   "dependencies": {
     "@fudao/hello": "file:../hello/dist/hello"
@@ -49,29 +47,27 @@ npm run start // 对应到具体执行脚本
 <p>但一定记着，上线之前你需要把这个依赖改回去，这还是不怎么方便啊；此外，这两种方式都需要你在 library 代码变更后先执行一次包的构建命令，毕竟，要先得到最近的构建包。</p>
 <p>再来说一种方式，即源码引用。如果是 React 或者 Vue 项目，将 library 声明为一个 ES Module 并列好入口文件，那么直接更改项目中 import 方式（从包名改为路径形式）或是直接拷贝未构建代码均可达到调试的效果。如果是 Angular 项目，你可以在 tsconfig.json 中指定 library 的路径映射（直接引入），但 Angular library 在项目中的使用，用源码引入和实际构建后引入这两种方式仍然存在一些差异，所以这么来看，也还是不太方便。</p>
 <p>看看上面这些方法，我们再回头来看本地项目中调试 library 的流程图，发现这些方法要么是解决了前半部分的流程问题，要么是便利了后半部分的同步问题，但与此同时又都引入了一些额外的处理流程，如果能把这些内容全部自动化就好了。</p>
-<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.003.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-3.png"/></p>
-<p>&lt;center&gt;&lt;small&gt;图3 - 理想情况下项目与 library 分开发维护的本地调试流程&lt;/small&gt;&lt;/center&gt;</p>
-<h2>相关技术探索</h2>
-<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.004.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-4.png"/></p>
-<p>&lt;center&gt;&lt;small&gt;图4 - 如何把如上几部分串起来，使本地开发调试 workflow 更加顺畅&lt;/small&gt;&lt;/center&gt;</p>
-<p>如何把如上几部分串起来，使本地开发调试 workflow 更加顺畅？可能着重要看看监听后的任务构建、构建产物的推送更新以及项目重新编译三个部分。</p>
+<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.003.png" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-3.png"/></p>
+&lt;center&gt;&lt;small&gt;图3 - 理想情况下项目与 library 分开发维护的本地调试流程&lt;/small&gt;&lt;/center&gt;<h2>相关技术探索</h2>
+<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.004.png" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-4.png"/></p>
+&lt;center&gt;&lt;small&gt;图4 - 如何把如上几部分串起来，使本地开发调试 workflow 更加顺畅&lt;/small&gt;&lt;/center&gt;<p>如何把如上几部分串起来，使本地开发调试 workflow 更加顺畅？可能着重要看看监听后的任务构建、构建产物的推送更新以及项目重新编译三个部分。</p>
 <p>网上搜了许多内容，最终在尝试后结合实际需要，我重新设计了一个用于本地 library 开发调试的自动化流程。</p>
 <p>在我们说其中一些细节之前，我们先介绍两个社区开源库，nodemon 和 yalc，我将它们用于我的自动化流程中了。</p>
 <h3>文件监控开源库 nodemon</h3>
 <p>nodemon 是一个用来监视 Node.js 应用程序中文件更改并自动重启服务的开源库，仅用于开发环境（推荐）。</p>
 <p>使用上不需要对项目代码做任何操作，命令也只是简单将 node 替换为 nodemon，你可以用如下命令安装它：</p>
-<pre><code class="language-bash">npm i -g nodemon
+<pre><code class="lang-bash">npm i -g nodemon
 </code></pre>
 <p>然后配置一下自定义参数，比如观察的文件类型（是只观察 .ts 文件还是 HTML/CSS/TypeScript 的文件变更都需要被监控）、需要观察的文件路径、需要忽略的路径（比如 node_modules）以及自定义命令等。</p>
 <p>虽然 nodemon 被设计用来监控重启 Node 应用，但是也支持监控执行自定义命令，比如在我的项目中我通过如下命令使用 nodemon 来监控我的代码变更：</p>
-<pre><code class="language-bash">nodemon 
-	--ignore dist/ # 忽略目录
-	--ignore node_modules/ 
-	--watch projects # 观察目录
-	-C # 只在变更后执行，首次启动不执行命令
-	-e ts,html,less,scss # 监控指定后缀名的文件
-	--debug # 调试
-	-x "npm run build &amp;&amp; cd dist/hello &amp;&amp; yalc push" # 自定义命令
+<pre><code class="lang-bash">nodemon 
+    --ignore dist/ # 忽略目录
+    --ignore node_modules/ 
+    --watch projects # 观察目录
+    -C # 只在变更后执行，首次启动不执行命令
+    -e ts,html,less,scss # 监控指定后缀名的文件
+    --debug # 调试
+    -x "npm run build &amp;&amp; cd dist/hello &amp;&amp; yalc push" # 自定义命令
 </code></pre>
 <p>你还可以通过 <code>nodemon -h</code> 了解更多，关于 nodemon 就介绍到这。</p>
 <h3>本地依赖管理开源库 yalc</h3>
@@ -80,27 +76,26 @@ npm run start // 对应到具体执行脚本
 <p>yalc 比较诱人的一点在于他还有一个命令叫 <code>yalc publish --push</code> 或者简称 <code>yalc push</code>，他会将你的依赖发布到本地存储库（更新状态），并将所有更改传播到现有通过 <code>yalc</code>安装的依赖中，这个操作实际上进行了一次 <code>update</code> 操作，此处不再展开，感兴趣的同学可以移步<a href="https://github.com/whitecolor/yalc">官方文档</a>查看更多。</p>
 <p>如此一来，你可以完全按照 npm install 从远程 registry 拉取依赖的方式安装和消费一个本地依赖，Cool。</p>
 <h3>自动化方案</h3>
-<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.005.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-5.png"/></p>
-<p>&lt;center&gt;&lt;small&gt;图5 - 设计后的自动化本地开发调试流程&lt;/small&gt;&lt;/center&gt;</p>
-<p>图中绿色部分皆为可自动化执行的流程，即我们只需要关注两个框内的代码更改，黄框对应 library 代码，蓝框对应项目代码，其他流程均在代码变更时自动触发并最终将变更产物刷新到浏览器中。</p>
+<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.005.png" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-5.png"/></p>
+&lt;center&gt;&lt;small&gt;图5 - 设计后的自动化本地开发调试流程&lt;/small&gt;&lt;/center&gt;<p>图中绿色部分皆为可自动化执行的流程，即我们只需要关注两个框内的代码更改，黄框对应 library 代码，蓝框对应项目代码，其他流程均在代码变更时自动触发并最终将变更产物刷新到浏览器中。</p>
 <p>而项目调试服务采用的是 webpack-dev-server，这个便不多说，时至今日这已经是很多 CLI 本地起调试服务必备的技术之一了，以至于开发者在大部分时候都不需要关心它，一条类似于 <code>ng serve</code> 的命令便帮我们把背后的许多事都干了。</p>
 <p>值得注意的是，因为引入了 library 构建的流程，你的任何代码改动都会触发整个流程重新执行一次，所以为了避免不必要的编译消耗，你可以将 Monitor 部分抽离出来，替换为一条执行命令，这样，只在你认为完成编码后再执行一次所以如果你不需要实时编译，这个可以具体分析来看。</p>
-<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.006.png" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-6.png"/></p>
+<p><img alt="Untitled%2086967d1b580b474eacd008215dcae42f/.006.png" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-05-21-A-Better-Library-Development-Workflow-6.png"/></p>
 <p>总结一下，我们的定义了一些 Make 脚本和 npm 脚本用于执行具体构建、推送和调试命令，我们用 nodemon 对 library 侧文件变更进行监控，并用 yalc 作为本地发布和推送更新的工具，最后 webpack 是本地调试热更新服务器的实现基础。</p>
 <p>你可以将其中的实现替换为你喜欢的方案或软件，然后通过脚本串通整个流程。说到脚本，假设你采用我调研后决定使用的 yalc + nodemon 方案，那么在 library 项目中，你可以通过如下 Makefile 指定几个命令：</p>
-<pre><code class="language-bash">init: # 初始化环境
-	npm install
-	npm install -g yalc nodemon
+<pre><code class="lang-bash">init: # 初始化环境
+    npm install
+    npm install -g yalc nodemon
 
 push: # 手动构建与 push
-	npm run build
-	cd dist/hello &amp;&amp; yalc push
+    npm run build
+    cd dist/hello &amp;&amp; yalc push
 
 watch: # 自动监听文件变化并执行构建与 push 任务
-	nodemon --ignore dist/ --ignore node_modules/ --watch projects -C -e ts,html,less,scss --debug -x "make push"
+    nodemon --ignore dist/ --ignore node_modules/ --watch projects -C -e ts,html,less,scss --debug -x "make push"
 </code></pre>
 <p>而在业务项目中，若是你不喜欢 Makefile，可以直接在 <code>package.json</code> 中指定几个 commands，这样你就可以直接 <code>npm run *</code> 一把梭了:</p>
-<pre><code class="language-bash">{
+<pre><code class="lang-bash">{
     "name": "big-platform",
     "version": "0.0.1",
     "scripts": {

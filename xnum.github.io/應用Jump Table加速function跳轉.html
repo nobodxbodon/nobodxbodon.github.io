@@ -1,9 +1,9 @@
 <h2><a href="https://github.com/xnum/xnum.github.io/blob/master/_posts/2023-11-17-cpp-jump-table.md">仓库源文</a>，<a href="https://xnum.github.io/2023/11/17/cpp-jump-table">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 應用Jump Table加速function跳轉
-categories: [C/C++]
-description: Jump Table是一種branchless技巧</h2>
+categories: [C/C++]</p>
+<h2>description: Jump Table是一種branchless技巧</h2>
 <h2>簡介</h2>
 <p>Jump Table (或Branch Table)是一種程式撰寫技巧，它和Lookup Table類似，都是藉由Table儲存結果的方式來減少計算量或分支程式碼(if-else, switch-case)。不同之處在於Jump Table的結果儲存的是function pointer，而Lookup Table儲存的是值。</p>
 <p>Table可以用array或是map的方式實作。array的實作通常會受限於其輸入的值域，當輸入的範圍是1-100時，可以簡單地宣告一個長度100的陣列來儲存。如果輸入的範圍可能是1-10000000時，使用同樣的方式會相當浪費空間。如果輸入的範圍很大，但實際會出現的值，其集合相當小(例如只會出現1, 10, 100, 1000, 10000)，這時我們可能需要仔細分析是否能找到一個function壓縮輸入範圍到可接受的程度。
@@ -13,7 +13,7 @@ description: Jump Table是一種branchless技巧</h2>
 <h2>範例</h2>
 <h3>查表法</h3>
 <p>這是最簡單的用法，使用map來處理任意的key值。需要注意的是他的存取時間不是O(1)，再加上cache data locality問題，因此在效能最佳化上有可能會打折扣。</p>
-<pre><code class="language-cpp">inline CurrencyType toCurrency(const std::string &amp;c)
+<pre><code class="lang-cpp">inline CurrencyType toCurrency(const std::string &amp;c)
 {
   static std::map&lt;std::string, CurrencyType&gt; currencies = {
     {"NTD", CurrencyType::NTD},     {"TWD", CurrencyType::NTD},
@@ -39,7 +39,7 @@ description: Jump Table是一種branchless技巧</h2>
 <h3>Fixed Point Number</h3>
 <p>定點數相較於浮點數，它使用整數來模擬實數。我們需要定義一個整數中有哪些部分用來表示小數點，假設要使用一個32位整數，並且他有3位小數點，那可表示的範圍就是<code>2147483.647 ~ -2147483.648</code>。實際的使用場景出現在貨幣或價格的計算上，我們可以預期貨幣或價格的小數點是有限且固定的，而且不希望有浮點數的誤差問題，就會使用這種特殊的數字表示方式。</p>
 <p>以下列的程式碼為例，在class內部約定儲存時固定有4位的小數點。value()需要根據輸入的參數給出固定有N位小數點時的定點數結果。因此decimalLocator為4時應該直接輸出，為0時應該除以10000來消除所有小數再輸出，以ChatGPT提供的實作大致如下：</p>
-<pre><code class="language-cpp">class FixedPointNumber {
+<pre><code class="lang-cpp">class FixedPointNumber {
 private:
     int64_t value_;
 
@@ -62,7 +62,7 @@ public:
 };
 </code></pre>
 <p>在這裡他使用了一個迴圈和多次乘法來實作功能，如果改用Lookup Table的話結果如下：</p>
-<pre><code class="language-cpp">class FixedPointNumber {
+<pre><code class="lang-cpp">class FixedPointNumber {
 public:
   inline int64_t value(uint8_t decimalLocator = 4) const
   {
@@ -78,7 +78,7 @@ private:
 <p>我們可以藉此消除迴圈和乘法。</p>
 <h3>Jump Table</h3>
 <p>如果有一個判斷輸入並執行特定動作的功能，通常我們可以用if或switch來實作，如下：</p>
-<pre><code class="language-cpp">int main() {
+<pre><code class="lang-cpp">int main() {
     int choice;
 
     // 請使用者輸入 0、1、2、3 中的一個數字
@@ -108,7 +108,7 @@ private:
 }
 </code></pre>
 <p>你可以使用一個array來實作Table，以簡化這段程式碼：</p>
-<pre><code class="language-cpp">int main() {
+<pre><code class="lang-cpp">int main() {
     int choice;
 
     // 請使用者輸入 0、1、2、3 中的一個數字
@@ -131,7 +131,7 @@ private:
 <p>在這個case中很幸運的是輸入的值非常小，因此你的array長度只有4。當輸入為<code>(10, 20, 30, 70, 90)</code>的時候這樣做可能不會帶來比較好的結果，其一是浪費空間，其二是破壞了cache的data locality可能導致較差的效能。</p>
 <p>要應對這樣的case，我們還可以透過bitwise的方式暴力尋找特徵。簡單的說就是尋找一個function讓<code>(10, 20, 30, 70, 90)</code>可以對應<code>(0-3)</code>或<code>(0-7)</code>或<code>(0-15)</code>。這三種範圍分別對應了從64bits中選擇2、3、4bits。然而實際範圍可能不會是64bits，以上面為例，90則代表有效範圍是7bits，更大的bit都是0。</p>
 <p>透過如下的程式可以幫我們暴力找出所有可行的組合</p>
-<pre><code class="language-cpp">#include &lt;algorithm&gt;
+<pre><code class="lang-cpp">#include &lt;algorithm&gt;
 #include &lt;bitset&gt;
 #include &lt;cstdio&gt;
 #include &lt;iostream&gt;
@@ -275,7 +275,7 @@ int main()
 }
 </code></pre>
 <p>實際案例如下，我們想將<code>(10, 30, 41, 50)</code>放到Table，經過bitwise操作提取其中的3個bits以後，就可以把array長度壓縮到8了。</p>
-<pre><code class="language-cpp">static HandleFnPtr table[8] = {
+<pre><code class="lang-cpp">static HandleFnPtr table[8] = {
 /* 0 */ &amp;ClientConnection::noop,
 /* 1 */ &amp;ClientConnection::handle50,
 /* 2 */ &amp;ClientConnection::noop,

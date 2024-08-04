@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2021-07-04-sql-server-optimize-tutorial.md">仓库源文</a>，<a href="https://qingbob.com/sql-server-optimize-tutorial">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: SQL Server 查询语句优化入门
 modified: 2021-07-25
 tags: [sql, performance]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>之所以限定于“查询语句”是因为 SQL Server 中的内存使用，查询编译，死锁等都有优化空间，本文不涉及。</p>
 <p>之所以限定于“入门”是因为我算不上 SQL Server 专家，只不过在最近做性能优化时积累了一些经验，虽然不深但足以应付我们日常需要解决的一些 SQL 语句方面的性能问题，因此分享出来供大家参考。自私点说哪怕长时间用不上这技能，生疏之后靠回顾自己的文章也能很快的捡回来。</p>
 <p>“入门”的另一层意思是我会侧重于原理讲解。我发现无论是前端性能优化还是 SQL 性能优化都没法和所见即所得的编码相提并论，可能是因为工具提供的信息有限，也有可能是因为性能的瓶颈是祖传代码屎山，大部分时候你需要随机应变。有时候你可以通过抽丝剥茧找到病根，有时候你只能大刀阔斧的重写代码才能稍稍缓解。无论什么方法，都需要你对它背后工具原理有所了解才行。<strong>我力求即使你只会简单的 SELECT, UPDATE, DELETE 也能够看懂这篇文章</strong></p>
@@ -18,34 +18,34 @@ share: true</h2>
 <h2>小心 Scan</h2>
 <p>简略的把数据库比作一本书不为过。想象一下如果你需要在一本没有目录的书中查找一行文字你唯一能做的只能逐页查找。数据库也是这么工作的，对于一个没有任何索引的表，它只能通过<strong>扫描（scan）</strong>整张表的数据来找到匹配的数据</p>
 <p>例如我把 PersonPhone 表中的所有索引都删除之后查找某一个具体的电话号码：</p>
-<pre><code class="language-sql">  SELECT *
+<pre><code class="lang-sql">  SELECT *
   FROM Person.PersonPhone
   WHERE PhoneNumber = '156-555-0199';
 </code></pre>
 <p>执行计划给我们展示的过程如下：</p>
-<p><img alt="scan table" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/001_table_scan.png"/></p>
+<p><img alt="scan table" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/001_table_scan.png"/></p>
 <p>鉴于后面我们才谈到执行计划，目前你姑且可以把执行计划当作 SQL 语句的执行过程。上图中的 <code>Table Scan</code> 就是在告诉我们它扫描了整张表。并且在整个执行过程中，这一步操作占用了最多的资源: <code>Cost: 100%</code>。这里的 cost 只是一个抽象单位，它不代表 CPU 亦或是 I/O 单个维度的消耗，而是各类资源统计之后的结果。</p>
 <p>其实上面过程中的 100% 并不能说明 scan 这一种类型的操作是效率低下的，因为这里只涉及到了单个表的查询操作，即使是对带索引的表进行这种简单的查询，你看到的也是 <code>Cost: 100%</code>。比如我对带有 <code>[PK_Person_BusinessEntityID]</code>索引的 Person 表进行查询：</p>
-<pre><code class="language-sql">  SELECT *
+<pre><code class="lang-sql">  SELECT *
   FROM Person.Person
   WHERE BusinessEntityID = 10;
 </code></pre>
 <p>得到的执行过程如下：</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/002_person_query.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/002_person_query.png"/></p>
 <p>非 scan 类型的 <code>Clustered Index Seek</code>（我稍后会解释，在这里你可以把它理解为优于 scan 的一类操作就好） 操作的消耗同样是 100% 。</p>
 <p>但如果我们对 PersonPhone 和 Person 表进行联合查询，查询效率就立分高下了：</p>
-<pre><code class="language-sql">  SELECT *
+<pre><code class="lang-sql">  SELECT *
   FROM Person.PersonPhone AS PersonPhone
   JOIN Person.Person AS Person ON PersonPhone.BusinessEntityID = Person.BusinessEntityID
   WHERE PhoneNumber = '156-555-0199';
 </code></pre>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/003_compare_scan_seek.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/003_compare_scan_seek.png"/></p>
 <p>scan 在所有操作中消耗占比达到 91%</p>
 <p>所以 scan 是我们可以识别到的一个优化点，当你发现一个表缺少索引，或者说在执行计划中看到有 scan 操作时，尝试通过添加索引来修复性能问题。</p>
 <h2>关键的 Logical Reads</h2>
 <p>通常 SQL Server 在查询数据时会优先从内存中的缓存（buffer cache）中查找，如果没有找到才会继续前往磁盘中查找，前者我们称之为 logical read，后者称之为 physical read，鉴于从内存读写的效率比磁盘高，我们当然希望尽可能避免任何的 physical read。</p>
 <p>而 logical read 具体读写的是什么呢？是 page，page 是数据库中数据组织的最小单位，我们只需要了解到这个深度即可，至于 page 是如何被组织的，page 的数据结构如何不重要。所以 logical read 数量也理应越小越好。默认情况下你不会看到 logical read 这项指标的输出，可以使用 <code>SET STATISTICS IO ON</code> 将这项监控打开，例如对于查询一个没有索引的 PersonPhone 表，我们的查询语句如下：</p>
-<pre><code class="language-sql">SET STATISTICS IO ON
+<pre><code class="lang-sql">SET STATISTICS IO ON
 GO
 
   SELECT *
@@ -56,13 +56,11 @@ SET STATISTICS IO OFF
 GO
 </code></pre>
 <p>得到的有关 logical read 信息如下：</p>
-<blockquote>
-<p>(1 row affected)
+<blockquote><p>(1 row affected)
 Table 'PersonPhone'. Scan count 1, <strong>logical reads 158</strong>, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.</p>
 </blockquote>
 <p>一旦我给 PersonPhone 加上了以 PhoneNumber 为 key 的 Clustered Index 之后（如果你对 index 没有任何了解，在这里可以仅仅把它理解为一种优化手段），上面语句的执行结果则变为：</p>
-<blockquote>
-<p>(1 row affected)
+<blockquote><p>(1 row affected)
 Table 'PersonPhone'. Scan count 1, <strong>logical reads 2</strong>, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.</p>
 </blockquote>
 <p>logical reads 过高，可能（并不是一定）在暗示一些问题：</p>
@@ -77,37 +75,37 @@ Table 'PersonPhone'. Scan count 1, <strong>logical reads 2</strong>, physical re
 <h2>索引（Index）</h2>
 <h3>Clustered Index &amp; Nonclustered Index</h3>
 <p>终于能进入正题 index 了。Index 的工作原理很简单，如果我们把数据库比作一本书的话，那么索引就是这本书的目录，它能帮助你快速定位数据。</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/004_mysql_no_index.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/004_mysql_no_index.png"/></p>
 <p>在上面这张表中，如果我们想要找到某个公司的行，那么需要检查表的每一行，看看它是否与那个期望值相匹配。 这是一个全表扫描操作，其效率很低，如果表很大，而且仅有少数几个行与搜索条件相匹配， 那么整个扫描过程的效率将会超级低。</p>
 <p>我们可以给这个表添加一个索引：</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/005_mysql_index.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/005_mysql_index.png"/></p>
 <p>该索引包含 ad 表里每个行的一个项，而且这些索引项按 company_num 值排了序。现在，不用 为了查找匹配项，一行一行地搜索整个表了，我们可以使用这个索引。假设，我们要找出公 司编号为 13 的所有行。我们开始扫描索引，便会找到 3 个属于该公司的值。然后，我们会到 达公司编号为 14 的索引值，该值比我们正查找的值要大一点。由于索引值已是有序的，因此 当我们读到那条包含 14 的索引行时，我们便知道再也无法找到更多与 13 匹配的内容了，于 是可以退出查找过程。由此可见，一种使用索引提高效率的做法是，我们可以得知匹配行在 什么位置结束，从而跳过其余部分；另一种使用索引提高效率的做法是，利用定位算法，不 用从索引开始位置进行线性扫描，即可直接找到第一个匹配项（例如，二分搜索比扫描要快 很多）。这样，我们便可以快速地定位到第一个匹配值，从而节省大量的搜索时间。</p>
 <p>但是在 SQL Server 中，index 被划分为了几类。<strong>Clustered Index 是最常被用的：表中的数据会按照 clustered index 进行物理排序</strong>。因为只可能有一种物理顺序的关系，所以一张表只允许有一个 clustered index.当你在表中添加 primary key 约束时，数据库会为你自动以 primary key 创建一个 clustered index。</p>
 <p>我们可以给 PersonPhone 添加一列以 PhoneNumber 为 key 的 index ，然后再次执行上面查询 PhoneNumber 的语句</p>
-<pre><code class="language-sql">  SELECT *
+<pre><code class="lang-sql">  SELECT *
   FROM Person.PersonPhone
   WHERE PhoneNumber = '156-555-0199';
 </code></pre>
 <p>你可以看到了执行计划变成了下图所示的 <strong>Clustered Index Seek</strong></p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/006_add_phone_number_clustered_index.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/006_add_phone_number_clustered_index.png"/></p>
 <p><strong>Seek 的效率是最高的，我们应该尽可能的让查询语句执行 seek 操作</strong>，它不再像 scan 一样逐行扫描，而类似于书的目录一样直达目的地将所需要的数据取出。</p>
 <p>但 clustered index seek 不会在任何情况下都生效，比如在上面 PhoneNumber 索引的情况下按照 BusinessEntityID 条件查询：</p>
-<pre><code class="language-sql">  SELECT *
+<pre><code class="lang-sql">  SELECT *
   FROM Person.PersonPhone
   WHERE BusinessEntityID = 4511
 </code></pre>
 <p>你会发现执行计划是 Clustered Index Scan</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/007_query_entity_id_by_phone_number_index.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/007_query_entity_id_by_phone_number_index.png"/></p>
 <p>index scan 意味着数据库通过索引获取所有行后再进行扫描。如果你对比 index scan 和 table scan，两者的 logical reads 差不多。</p>
 <p>配置 nonclustered index 和 clustered index 相比并无不同，在使用的时候你也会在执行计划中看到 Non-Clustered Index Seek。明显的不同之处在于不会对原表的顺序产生影响。虽然看似相同，但实际上它们背后有千丝万缕的联系，搞清楚这些联系有助于我们判断在什么时候应该恰当的添加哪一种 index。</p>
 <h3>Index 运作原理</h3>
 <p>想象一下有一组 27 行的单列数据，因为 page 大小有限的缘故，它们被分为了 9 个 page</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/008_random_row_pages.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/008_random_row_pages.png"/></p>
 <p>你为它们添加的 Clustered Index 之后，索引的数据结构如下所示</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/009_b_tree_layout.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/009_b_tree_layout.png"/></p>
 <p>当你想找值 5 时，搜索会从顶部节点开始，因为5在1到10之间，搜索过程会继续到左侧分支的下一个节点上，又因为5落在4到7之间，搜索会走到下一层以4开头的节点上。最后从叶子节点上找到5</p>
 <p>事实上我们忽略了一些细节，clustered index 的结构如下：</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/010_clustered_index_arch.gif"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/010_clustered_index_arch.gif"/></p>
 <p>从图中不难看出，每一层节点都是双向列表，叶子节点上存储的是表的真实数据。</p>
 <p>但 nonclustered index 的存储结构稍有不同，叶子节点由索引信息（index page）而非数据信息（data page） 组成。<strong>nonclustered index 需要借由 row locator 定位到对应的数据行（你可以理解为指针），对于 heap table（没有 clustered index 的表） 而言，row locator 指向的是每行数据的 RID (row identifier)；对于非 heap table，row locator 指向的是 clustered index</strong>。</p>
 <p>篇幅有限，基于以上知识点我们就能总结一下何时应该使用什么样的 index:</p>
@@ -120,16 +118,16 @@ Table 'PersonPhone'. Scan count 1, <strong>logical reads 2</strong>, physical re
 </ul>
 <h3>Covering Index</h3>
 <p>清除 PersonPhone 下所有的索引后将 PhoneNumber 添加为 nonclustered index，再执行最初的查询语句：</p>
-<pre><code class="language-sql">  SELECT *
+<pre><code class="lang-sql">  SELECT *
   FROM Person.PersonPhone
   WHERE PhoneNumber = '156-555-0199';
 </code></pre>
 <p>你会得到如下的执行计划：</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/012_lookup.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/012_lookup.png"/></p>
 <p>除了 Index Seek 之外，右下方的 lookup 操作占比是最多的。触发 lookup 的原因非常简单：当数据库决定使用 nonclustered index 进行查询，而需要查询的列信息又不在 nonclustered index 中（既不是作为 index 的 key 也不再 includes 列表中）时，就会触发 lookup 操作。<strong>lookup 的意思是它会根据 index 所关联的 row locator （非 heap table 用 clustered index，heap table 用 RID） 找到对应的 row data，再从中读取中想查询的列数据</strong>。整个过程除了除了有消耗在 index page 上的 logical read 上以外，还有额外花费在 data page 上的 logical read 操作。可想而知如果数据库在查询过程中使用了 clustered index 那么它永远也不需要 lookup，因为 clustered index 的叶子节点就是 data page</p>
 <p><strong>如果查询所需要的所有列信息 index 都能提供，那么意味着访问 data page 的操作可以省略，这种类型的 index 就能称之为 covering index</strong>。</p>
 <p>我们可以将除了 index key 以外的却又要查询信息的列放入 includes 列表中，这也就能解决上面 lookup 的问题：</p>
-<p><img alt="person table query" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/013_add_columns_to_include_list.png"/></p>
+<p><img alt="person table query" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/sql-server-optimize-tutorial/013_add_columns_to_include_list.png"/></p>
 <h2>总结</h2>
 <p>本来还想写 join 效率的问题（对比 hash join / nested loop / merge join），但想了一下数据库使用什么样的 join 是超出我们控制范围之外的。事实上数据库是否真的会使用我们的 index 也是我们控制之外的，执行计划是由它内部的 optimizer 计算出来的，残酷点说每一次执行计划都可能随着资源、数据、索引状态的不同而不同。但好歹索引的可控性高一些。绝大部分的性能问题都能通过 index 解决</p>
 <p>你可能会喜欢</p>

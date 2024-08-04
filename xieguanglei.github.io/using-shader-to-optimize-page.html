@@ -2,34 +2,31 @@
 <h1>活用 Shader，让你的页面更小，更炫，更快</h1>
 <p>可编程着色器（shader）是运行在 GPU 中的程序，是现代图形渲染技术的基础。Shader 赋予了开发者「逐像素着色」的能力。桌面/移动设备的图形程序 API 诸如 OpenGL，OpenGL ES，DirectX 以及新一代的 Vulkan，shader 都是重中之重，核心中的核心。</p>
 <p>WebGL 的出现，使得在浏览器环境中渲染 3D 场景变得轻而易举。但是 WebGL 和 shader 不仅可以用来渲染 3D 场景，还可以做一些其他酷酷的事情。前两天，我用 shader 技术改造 / 复刻了之前开发的一个业务页面，颇有心得和启发，不妨记录下来。</p>
-<blockquote>
-<p>广告：在 GCanvas 的帮助下，前端开发可以在 Weex，RN 等 Hybrid 环境中使用本文中用到的技术。详情见 <a href="https://alibaba.github.io/GCanvas/">GCanvas</a>。</p>
+<blockquote><p>广告：在 GCanvas 的帮助下，前端开发可以在 Weex，RN 等 Hybrid 环境中使用本文中用到的技术。详情见 <a href="https://alibaba.github.io/GCanvas/">GCanvas</a>。</p>
 </blockquote>
 <p>先看一下效果：<a href="http://g.alicdn.com/gama/assets/0.0.10/assets/shader-view-demo/compare.html">链接</a></p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1RNl_qntYBeNjy1XdXXXXyVXa-600-529.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1RNl_qntYBeNjy1XdXXXXyVXa-600-529.jpg"/></p>
 <p>左侧是原页面，<a href="http://g.alicdn.com/gama/assets/0.0.10/assets/shader-view-demo/index.html">地址</a>；右侧是用 Shader 复刻后的页面，<a href="http://g.alicdn.com/gama/assets/0.0.10/assets/shader-view-demo/shader.html">地址</a>。</p>
 <p>这其实是 2018 年春晚项目的一个活动页面，页面结构非常简单。这个页面当时是我完成的，所以现在复刻起来熟悉一些。</p>
 <p>我们可以看到，复刻前的页面（后面称「原页面」）是静态的，加载了 1 个 js 文件和 6 张图片共 599K 的资源（包含一张 502K 的大尺寸透明 png 图片）；而复刻后的页面上，有不少元素在动，加载了 1 个 js 文件和 4 张图片共 122K 的资源。不管是视觉效果，还是页面尺寸上的提升，都是比较明显的。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1B88_qntYBeNjy1XdXXXXyVXa-500-254.jpg"/></p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1Xcsip1uSBuNjy1XcXXcYjFXa-500-226.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1B88_qntYBeNjy1XdXXXXyVXa-500-254.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1Xcsip1uSBuNjy1XcXXcYjFXa-500-226.jpg"/></p>
 <p>下面，我们就以这个页面为例，分析一下，使用 Shader 是如何让这个页面更小，更炫，更快。</p>
-<blockquote>
-<p>阅读后面的文本需要一些 webgl 和 glsl 的基础知识，之前在团内对曾做过一些培训，参加的同学应该不会有什么压力，没参加的同学，也可以稍微看下 the book of shaders 这篇教程。Shader 比你想象的要简单易用，相信我。</p>
+<blockquote><p>阅读后面的文本需要一些 webgl 和 glsl 的基础知识，之前在团内对曾做过一些培训，参加的同学应该不会有什么压力，没参加的同学，也可以稍微看下 the book of shaders 这篇教程。Shader 比你想象的要简单易用，相信我。</p>
 </blockquote>
 <h1>大尺寸透明背景图</h1>
 <p>原页面存在的一个最大的问题是，有一张特别大的透明背景图。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB11dUjp1uSBuNjy1XcXXcYjFXa-750-571.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB11dUjp1uSBuNjy1XcXXcYjFXa-750-571.jpg"/></p>
 <p>这张图的体积达到了惊人的 501K，这是因为这张图是具有透明通道的 png 图片。而且由于这张图是广告内容，可能不止一张，是无法融合到背景里去的，必须透明。这时怎么优化呢？
 我们知道，具有透明通道的 png 的压缩是比较困难的；而不具备透明通道的图片，我们可以把它转化为 jpg 等格式，压缩比就高得多了，我们就可以以较小的质量损失去换取较大的压缩空间。</p>
 <p>我的思路是这样：把这张透明的 png 格式图片拆分为两张不透明的 jpg 格式图片。这两张不透明的图片，其中一张继承 png 图片的 rgb 通道，还有一张则仅使用 r 通道储存 png 图片的 a 通道。然后把这两张图片拼接在一起，给 WebGL 使用。由于拼接后的这张图没有透明度分量，所以可以使用 jpg 格式压缩，尺寸大幅度降低。这张图只有 41.5k，大约为之前的 8.2%。</p>
 <p>这张图看上去是这样的：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB13tUjp1uSBuNjy1XcXXcYjFXa-700-700.jpg"/></p>
-<blockquote>
-<p>注意，前一张图的像素尺寸是 750x571，而后一张图的像素尺寸为 1024x1024，这里我并没有通过缩小图片的像素尺寸来进行压缩。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB13tUjp1uSBuNjy1XcXXcYjFXa-700-700.jpg"/></p>
+<blockquote><p>注意，前一张图的像素尺寸是 750x571，而后一张图的像素尺寸为 1024x1024，这里我并没有通过缩小图片的像素尺寸来进行压缩。</p>
 <p>此外，第二张图看上去有些变形，这是因为图片尺寸为 2 的整数次幂，WebGL 能够方便地生成 mipmap，这对我们的使用没有影响。</p>
 </blockquote>
 <p>在 shader 中，我们根据像素坐标从图片中取色，注意需要从图的上半部分和下半部分各取一个颜色，然后根据一定规则拼起来即可。</p>
-<pre><code class="language-glsl">precision mediump float;
+<pre><code class="lang-glsl">precision mediump float;
 
 uniform vec2 uResolution;
 uniform sampler2D uImage;
@@ -40,19 +37,19 @@ void main(){
 
     vec4 c2 = texture2D(uImage, vec2(st.x, st.y*0.5));      // 取 A​lpha 通道
     vec4 c1 = texture2D(uImage, vec2(st.x, st.y*0.5+0.5));  // 取 RGB 通道
-    
+
     gl_FragColor = vec4(c1.xyz, c2.r &gt; 0.6 ? c2.r : 0.0);
 }
 </code></pre>
 <p>png 图片转化为 jpg 图片的过程，可以很轻松地在浏览器里操作 canvas 完成（示例），也可以借助一些其他的工具完成。</p>
 <h1>会动的背景</h1>
 <p>首先，我们注意到，原页面的背景是在红色的渐变之上，随机散布着一些黄色的氛围小碎片。红色渐变背景和这些小碎片全部画在一张静态 jpg 图片上，如下图（1.原图）所示。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB16JUjp1uSBuNjy1XcXXcYjFXa-700-1256.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB16JUjp1uSBuNjy1XcXXcYjFXa-700-1256.jpg"/></p>
 <p>在复刻前，我把原页面用到的图片分为了两类，图案（pattern）性质和图片（image）性质。Pattern 性质的图片，本身并不传递信息，通常用作底纹，氛围等场景；而 image 性质的图片则是信息的载体。</p>
 <p>这张图片明显是 pattern 性质的，这类图片往往尺寸大，体积也较大（尤其是半透明图案）。其实，这些图案完全可以用 Shader 「手绘」出来，这样就不用去加载此图片了。
 用 Shader 绘制图案的另一个好处是，图案可以有规律地动起来。在这个例子中，如果碎片能像天女散花一般洒下来，那就太棒了，对吧？但是熟悉前端动画的同学，一定会想到，这么多粒子组成的动画，如果用纯 CSS 或者 canvas 2d 来做的话，性能肯定好不了，粒子越多，动画的性能越差。用 WebGL 和 shader 来做粒子动画则不会因为粒子数量的增多而导致性能变差。</p>
 <p>我们来看看如何用 Shader 绘制这些碎片。</p>
-<pre><code class="language-glsl">vec2 random2(vec2 st){
+<pre><code class="lang-glsl">vec2 random2(vec2 st){
   st = vec2( dot(st,vec2(127.1,311.7)),
             dot(st,vec2(269.5,183.3)));
   st = -1.0 + 2.0*fract(sin(st)*43758.5453123);
@@ -77,7 +74,7 @@ float noise2(vec2 ist, vec2 fst){
   float p4 = dot(g4, f4);
 
   fst = smoothstep(0.0, 1.0, fst);
-  
+
   float p = mix(
     mix(p1, p2, fst.x),
     mix(p3, p4, fst.x),
@@ -103,18 +100,18 @@ void main(){
 <p>首先我们要借助一个梯度噪声函数 noise2（参考此教程），对每个像素而言，把像素坐标输入，这个函数则会输出一个灰度值。此函数输出的图像大致如上图 （2.梯度噪声）所示。
 如果你对诸如「噪声函数」的原理感到陌生，其实也没太大关系。你可以在社区找到大量各种各样的开箱即用的功能函数，只需要知道它们的效果是什么，而不必太拘泥于其内部的原理。
 显然，图 2.梯度噪声 和我们设想的还有差距。接下来，我们用一个筛子把亮度大于某个阈值的点筛出来：</p>
-<pre><code class="language-glsl">function initFrag(){
+<pre><code class="lang-glsl">function initFrag(){
     ...
     res = step(0.5, res);
     return res;
 }
 </code></pre>
 <p>这样，用 step 函数直接把大于 0.5 的点筛出来。可是这样做容易产生锯齿，为了使碎片的边缘比较平滑，所以我们用 smoothsStep 函数进行截取。</p>
-<pre><code class="language-glsl">res = smoothstep(0.35, 0.5, res);
+<pre><code class="lang-glsl">res = smoothstep(0.35, 0.5, res);
 </code></pre>
 <p>这样，我们就得到了图 3.拉伸的结果。</p>
 <p>图 3 只是一张灰度图，我们使用这个灰度混合红色和黄色，使之得到一张彩色的图。</p>
-<pre><code class="language-glsl">vec3 bgColor(){
+<pre><code class="lang-glsl">vec3 bgColor(){
     float y = gl_FragCoord.y / uResolution.y;
     vec3 c1 = vec3(0.96, 0.02, 0.16);
     vec3 c2 = vec3(0.96, 0.25, 0.21);
@@ -138,18 +135,18 @@ void main(){
 <li>原图中，碎片的分布没有这么均匀，常有一小块区域完全没有碎片的情况，似乎有一种尺寸更大的随机变量在影响。</li>
 </ul>
 <p>从以上三点出发，我们制作了 3 个通道，并依次叠加（如图 5，图 6，图 7）所示，最终得到如 图 7 所示。将叠加后的结果与图 3 进行叠加，也就是说，图 3 中被筛出的点，如果在图 7 中是较暗的，则也会被降低亮度。再使用这一步的结果进行混色，最终得到图 8 的效果。</p>
-<pre><code class="language-glsl">void main() {
+<pre><code class="lang-glsl">void main() {
 
     float pct = inFrag();
     pct = min(pct, yFactor());
     pct = min(pct, rFactor());
     pct = min(pct, mFactor());
-    
+
     ...
 }
 </code></pre>
 <p>下面，我们来使碎片动起来（洒下来）。在生成碎片的时候，传入噪音函数的坐标数据中，加上和时间有关的偏移量：</p>
-<pre><code class="language-glsl">float inFrag(){
+<pre><code class="lang-glsl">float inFrag(){
     vec2 st = gl_FragCoord.xy / uResolution.xx;
     st = st * 60.0;
     st.y += uTime * 2.0;  // 增加与时间相关的偏移量
@@ -159,7 +156,7 @@ void main(){
 }
 </code></pre>
 <p>最后，为了更出色的效果，我这里做了两个碎层碎片，两层碎片具有不同的下落速度，形成一些视差效果。</p>
-<pre><code class="language-glsl">void main() {
+<pre><code class="lang-glsl">void main() {
 
     float pct = inFrag();
     pct = min(pct, yFactor());
@@ -179,10 +176,10 @@ void main(){
 <p>这样，就在完全不依赖外部资源的情况下，仅用 Shader 直接绘制，制作出了氛围碎片的效果。</p>
 <h1>手绘图案</h1>
 <p>原页面中有一个圆形的窗格，这个窗格也是画在一张透明图片上。不知读者是否注意到，在复刻后的页面中，这个窗格是用 shader 直接画出来的。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB10Tp.qntYBeNjy1XdXXXXyVXa-400-363.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB10Tp.qntYBeNjy1XdXXXXyVXa-400-363.jpg"/></p>
 <p>实际上，这种复杂程度的窗格，也可以归为图案（pattern）一类，shader 是完全可以直接画出来的。下面，我们就来看看用 shader 如何来画窗格。
 窗格是由线组成的，其基本单元是线。首先我们看一下是如何画线的：</p>
-<pre><code class="language-glsl">// 绘制线的函数 veins
+<pre><code class="lang-glsl">// 绘制线的函数 veins
 float line(float e, float w, float d, float p){
     float e1 = e - w/2.0;
     float e2 = e + w/2.0;
@@ -210,13 +207,12 @@ void main(){
 }
 </code></pre>
 <p>main 函数调用 veins 函数，veins 又调用 line 函数得到一个灰度值，然后混合两种颜色。上述程序的结果如下图所示。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1ctq.p3mTBuNjy1XbXXaMrVXa-400-430.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1ctq.p3mTBuNjy1XbXXaMrVXa-400-430.jpg"/></p>
 <p>解释一下几个参数：p 是当前像素的 x 或 y 坐标值（取决于横线还是竖线，如果是横线为 y 坐标值，如果为竖线为 x 坐标值），e 则是所绘制的直线所在的坐标。w 指线的宽度，而 d 指在线与非线的交界处，用来平滑的区域的宽度。</p>
-<blockquote>
-<p>在上面的代码中，w 取了 0.3，而 d 取了 0.2，线看上去很粗。后面，我们会把这两个值固定在 0.035 和 0.003 上。</p>
+<blockquote><p>在上面的代码中，w 取了 0.3，而 d 取了 0.2，线看上去很粗。后面，我们会把这两个值固定在 0.035 和 0.003 上。</p>
 </blockquote>
 <p>由于窗格图案中包含多跟线，我们需要多次调用 line 函数，并得到一个一个灰度值。如果当前像素在「任意一个」 line 函数中返回了大于 0 的灰度值，我们就认为这个像素是在图案上的。换言之，我们取多次 line 函数返回的灰度值中最大的那个值，作为最后的灰度值来计算颜色。代码如下所示：</p>
-<pre><code class="language-glsl">float maxList(float list[20]){
+<pre><code class="lang-glsl">float maxList(float list[20]){
     float res = list[0];
     for(int i=0; i&lt;20; i++){
         if(list[i]&gt;res){
@@ -242,9 +238,9 @@ vec3 veins(){
 }
 </code></pre>
 <p>我们计算了 8 根直线，得到的结果如下图 2 所示。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1ltq.p3mTBuNjy1XbXXaMrVXa-700-1105.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/using-shader-to-optimize-page/TB1ltq.p3mTBuNjy1XbXXaMrVXa-700-1105.jpg"/></p>
 <p>拆解图案，我们发现光有直线还不能满足要求，还需要有射线和矩形框。同样，我们引入射线 ray 和矩形框 box 函数。</p>
-<pre><code class="language-glsl">float rayV(vec2 ep, float w, float d,  float dir, vec2 st){
+<pre><code class="lang-glsl">float rayV(vec2 ep, float w, float d,  float dir, vec2 st){
     float pct = line(ep.x, w, d, st.x);
     if((st.y - ep.y) * dir &lt; 0.0){
         pct = 0.0;
@@ -279,7 +275,7 @@ float box(vec2 center, float width, float height, float w, float d, vec2 st){
 }
 </code></pre>
 <p>然后依次向图案中增加内容，得到图 4，图 6 的效果。通过最终的叠加，得到了图 7 的效果。代码如下（不要被密密麻麻的浮点数吓住了，其实都是一些固定的坐标而已，有意义的值只有几个，通过正负号进行组合形成图案）：</p>
-<pre><code class="language-glsl">    float p = 0.0;
+<pre><code class="lang-glsl">    float p = 0.0;
     float pl[20];
     pl[0] = line(0.29, 0.035, 0.003, st.x);
     pl[1] = line(0.58, 0.035, 0.003, st.x);
@@ -294,7 +290,7 @@ float box(vec2 center, float width, float height, float w, float d, vec2 st){
     pl[9] = rayV(vec2(0.0, -0.29), 0.035, 0.003, -1.0, st);
     pl[10] = rayH(vec2(0.29, 0.0), 0.035, 0.003, 1.0, st);
     pl[11] = rayH(vec2(-0.29, 0.0), 0.035, 0.003, -1.0, st);
-    
+
     p = maxList(pl);
 
     float pl2[20];
@@ -319,7 +315,7 @@ float box(vec2 center, float width, float height, float w, float d, vec2 st){
     p = max(p, maxList(pl2));
 </code></pre>
 <p>得到图 7 的图案后，我们还需要为其蒙上一层阴影（可对比原图），这样后面裁切的时候会有一些立体感。</p>
-<pre><code class="language-glsl">float shadow(){
+<pre><code class="lang-glsl">float shadow(){
     float r = uResolution.x * 0.4;
     vec2 center = vec2(uResolution.x/2.0, uResolution.y-r-5.0);
     vec2 st = gl_FragCoord.xy - center;
@@ -334,7 +330,7 @@ vec3 veins(){
 </code></pre>
 <p>这里为了方便，使用了一个开口朝下，中轴和 y 轴重合的抛物线（st.y + 0.5<em>st.x</em>st.x - 0.1）来模拟圆形的阴影。这样我们就得到了图 8。</p>
 <p>最后，原设计稿中红色边框和透明背景的效果，对整个图像进行了两次裁切。裁切掉的部分，分别用红色和透明色来填充。依次得到图 9 和 图 10 的结果。图 10 也就是最终的结果。</p>
-<pre><code class="language-glsl">vec3 circle(vec3 veinsColor){
+<pre><code class="lang-glsl">vec3 circle(vec3 veinsColor){
 
     float r = uResolution.x * 0.4;    
     vec2 center = vec2(uResolution.x/2.0, uResolution.y-r-5.0);

@@ -1,12 +1,12 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B-2-%E9%94%81%E7%9A%84%E6%A6%82%E8%BF%B0.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/09/12/Java%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B-2-%E9%94%81%E7%9A%84%E6%A6%82%E8%BF%B0">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Java并发编程-2-锁的概述.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/09/12/Java并发编程-2-锁的概述">站点原文</a></h2>
 <hr/>
-<h2>title: Java并发编程-2-锁的概述
+<p>title: Java并发编程-2-锁的概述
 toc: true
 date: 2019-09-12 10:33:27
-cover: https://timgsa.baidu.com/timg?image&amp;quality=80&amp;size=b9999_10000&amp;sec=1568266912531&amp;di=c235b28ef40d7975bb63957baea6ad9c&amp;imgtype=0&amp;src=http%3A%2F%2Fimage.codes51.com%2FArticle%2Fimage%2F20160507%2F20160507104152_6100.jpg
+cover: <a href="https://timgsa.baidu.com/timg?image&amp;quality=80&amp;size=b9999_10000&amp;sec=1568266912531&amp;di=c235b28ef40d7975bb63957baea6ad9c&amp;imgtype=0&amp;src=http%3A%2F%2Fimage.codes51.com%2FArticle%2Fimage%2F20160507%2F20160507104152_6100.jpg">https://timgsa.baidu.com/timg?image&amp;quality=80&amp;size=b9999_10000&amp;sec=1568266912531&amp;di=c235b28ef40d7975bb63957baea6ad9c&amp;imgtype=0&amp;src=http%3A%2F%2Fimage.codes51.com%2FArticle%2Fimage%2F20160507%2F20160507104152_6100.jpg</a>
 categories: 并发编程
-tags: [并发编程]
-description: Java并发编程之美-2-锁的概述</h2>
+tags: [并发编程]</p>
+<h2>description: Java并发编程之美-2-锁的概述</h2>
 <p>本文主要总结了Java多线程编程中各种锁的种类以及概述:</p>
 <ul>
 <li>乐观锁与悲观锁</li>
@@ -16,88 +16,89 @@ description: Java并发编程之美-2-锁的概述</h2>
 <li>自旋锁</li>
 </ul>
 <p>图为Java线程的生命周期.</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>Java 锁的概述</h2>
 <h3>1. 乐观锁与悲观锁</h3>
 <p>乐观锁与悲观锁是数据库中引入的名词! 但是并发包中也引入了类似的思想.</p>
 <h4>1): 悲观锁</h4>
-<p>**概念: **</p>
+<p><strong>概念: </strong></p>
 <p>&lt;font color="#0000ff"&gt;指对数据被外界修改持保守态度, 认为数据很容易就被其他线程修改, 所以在数据被处理之前要先对数据进行加锁, 并在整个数据处理过程中, 使数据处于锁定状态!&lt;/font&gt;</p>
-<p>**实现: **</p>
-<p>悲观锁的实现&lt;font color="#ff0000"&gt;往往依靠数据库提供的锁机制, 即在对数据记录操作之前给记录增加<em>排它锁.</em>&lt;/font&gt;</p>
+<p><strong>实现: </strong></p>
+<p>悲观锁的实现&lt;font color="#ff0000"&gt;往往依靠数据库提供的锁机制, 即在对数据记录操作之前给记录增加*排它锁.*&lt;/font&gt;</p>
 <ul>
 <li>若获取锁失败, 则说明数据正在被其他线程修改, 当前线程等待或者抛出异常;</li>
 <li>若获取锁成功, 则对记录进行操作, 然后提交事务后释放排它锁.</li>
 </ul>
 <p><strong>例子: 使用悲观锁来避免多线程同时对一个记录进行修改</strong></p>
-<pre><code class="language-java">public int updateEntry(long id) {
+<pre><code class="lang-java">public int updateEntry(long id) {
     // 使用悲观锁获取指定记录
     EntryObject entry = query("SELECT * FROM table1 WHERE id = # {id} for update", id);
-    
+
     // 修改记录内容, 根据计算修改entry记录的属性
     String name = generatorName(entry);
     entry.setName(name);
     .....
-        
+
     // update操作
     int count = update("UPDATE table1 SET name=#{name}, age=#{age} WHERE id=#{id}", entry);
-    
+
     return count;
 }
 </code></pre>
 <p>这里假设<code>updateEntry, query, update</code>方法都使用了事务切面, 且事务传播性被设置为<code>required</code>:</p>
 <ul>
-<li><p>&lt;font color="#0000ff"&gt;执行<code>updateEntry</code>方法时, 如果上层调用方法没有开启事务, 则会即时开启一个事务, 然后执行代码!&lt;/font&gt;</p>
+<li><p>&lt;font color="#0000ff"&gt;执行`updateEntry`方法时, 如果上层调用方法没有开启事务, 则会即时开启一个事务, 然后执行代码!&lt;/font&gt;</p>
 </li>
-<li><p>&lt;font color="#0000ff"&gt;调用query方法, 由于事务传播性为<code>required</code>, 所以执行时没有开启新的事务, 而是加入了<code>updateEntry</code>开启的事务;&lt;/font&gt;</p>
+<li><p>&lt;font color="#0000ff"&gt;调用query方法, 由于事务传播性为`required`, 所以执行时没有开启新的事务, 而是加入了`updateEntry`开启的事务;&lt;/font&gt;</p>
 </li>
 </ul>
-<p>也即是: &lt;font color="#ff0000"&gt;当<code>updateEntry</code>方法执行完毕提交事务时, query方法才会被提交! &lt;/font&gt;</p>
+<p>也即是: &lt;font color="#ff0000"&gt;当`updateEntry`方法执行完毕提交事务时, query方法才会被提交! &lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <p>当多个线程同时调用updateEntry方法, 并且传递的是同一个id时, 只有一个线程执行代码会成功, 而其他线程将会被阻塞. &lt;font color="#ff0000"&gt;因为同一时间只有一个线程可以获取到对应记录的锁, 而在获取锁的线程释放锁之前(updateEntry执行完毕之前), 其他线程必须等待!&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h4>2): 乐观锁</h4>
-<p>**概念: **</p>
-<p>乐观锁是相对悲观锁来说的, 他认为: &lt;font color="#0000ff"&gt;数据在一般情况下不会造成冲突, 所以在<em>访问记录前不会增加排它锁!</em> 而是在数据提交更新的时候, 才会正式对数据冲突与否进行检测!&lt;/font&gt;</p>
-<p>**实现: **</p>
+<p><strong>概念: </strong></p>
+<p>乐观锁是相对悲观锁来说的, 他认为: &lt;font color="#0000ff"&gt;数据在一般情况下不会造成冲突, 所以在*访问记录前不会增加排它锁!* 而是在数据提交更新的时候, 才会正式对数据冲突与否进行检测!&lt;/font&gt;</p>
+<p><strong>实现: </strong></p>
 <p>&lt;font color="#ff0000"&gt;具体来讲, 根据update返回的行数, 让用户决定如何去做! &lt;/font&gt;</p>
-<p>**例子: **</p>
-<pre><code class="language-java">public int updateEntry (long id) {
+<p><strong>例子: </strong></p>
+<pre><code class="lang-java">public int updateEntry (long id) {
     // 使用乐观锁获取记录(1)
     EntryObject entry = query("SELECT * FROM table1 WHERE id = #{id}", id);
-    
+
     // 修改记录, version字段不能被修改!(2)
     String name = generatorName(entry);
     entry.setName(name);
     ......
-    
+
     // update操作(3)
     int count = update("UPDATE table1 SET name=#{name}, age=#{age}, version=${version}+1 WHERE id = #{id} AND version=#{version}", entry);
-	return count;
+    return count;
 }
 </code></pre>
 <p>对于上述代码, 当多个线程使用updateEntry, 并且传递相同的id时:</p>
 <ul>
 <li><p>&lt;font color="#0000ff"&gt;多个线程可以同时执行代码(1)并获得id对应的记录, 然后放入线程本地栈中;&lt;/font&gt;</p>
 </li>
-<li><p>&lt;font color="#0000ff"&gt;然后可以同时执行代码(2)对<em>自己栈上</em>的记录进行修改, 此时**多个线程修改后各自的entry中的属性都不同了!&lt;/font&gt;</p>
+<li><p>&lt;font color="#0000ff"&gt;然后可以同时执行代码(2)对*自己栈上*的记录进行修改, 此时**多个线程修改后各自的entry中的属性都不同了!&lt;/font&gt;</p>
 </li>
-<li><p>&lt;font color="#0000ff"&gt;然后多个线程同时执行代码(3), 代码(3)中的update语句的where条件加入了<code>version=#{version}</code>条件, 并且set语句中多了<code>version=${version} + 1</code>表达式&lt;/font&gt;:</p>
-<p>&lt;font color="#ff0000"&gt;若数据库中<code>id=#{id} &amp;&amp; version=#{version}</code>的记录存在, 则更新version的值加1!&lt;/font&gt;</p>
+<li><p>&lt;font color="#0000ff"&gt;然后多个线程同时执行代码(3), 代码(3)中的update语句的where条件加入了`version=#{version}`条件, 并且set语句中多了`version=${version} + 1`表达式&lt;/font&gt;:</p>
+<p>&lt;font color="#ff0000"&gt;若数据库中`id=#{id} &amp;&amp; version=#{version}`的记录存在, 则更新version的值加1!&lt;/font&gt;</p>
 </li>
 </ul>
 <p>&lt;br/&gt;</p>
 <p>假设多个线程同时执行updateEntry并传入相同的id, 则执行(1)获取到的Entry是同一个! <strong>(Entry中的version是同一个!)</strong>. 所以, 当执行(3)时:</p>
 <p>&lt;font color="#ff0000"&gt;由于update语句本身是原子性的, 假设某一个线程执行update成功了, 此时id对应的version由原始值变为+1. 则其他线程执行代码时, 会返回影响的行号为0! &lt;/font&gt;</p>
 <p>业务上根据返回值0, 即可知道当前更新没有成功! 之后可以: 什么都不做, 或者选择重试:</p>
-<pre><code class="language-java">// 使用乐观锁重试更新的例子
+<pre><code class="lang-java">// 使用乐观锁重试更新的例子
 
 public boolean updateEntry(long id) {
-	
+
     boolean result = false;
     int retryNum = 5;
     while (retryNum &gt; 0) {
-        
+
         // 使用乐观锁获取记录(1)
         EntryObject entry = query("SELECT * FROM table1 WHERE id = #{id}", id);
 
@@ -108,7 +109,7 @@ public boolean updateEntry(long id) {
 
         // update操作(3)
         int count = update("UPDATE table1 SET name=#{name}, age=#{age}, version=${version}+1 WHERE id = #{id} AND version=#{version}", entry);
-        
+
         if (count == 1) {
             result = true;
             break;
@@ -123,7 +124,7 @@ public boolean updateEntry(long id) {
 <li>若执行后返回0: 说明记录已经被修改, 此时<strong>重新获得最新的数据, 然后重新尝试更新!</strong></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>**总结: **</p>
+<p><strong>总结: </strong></p>
 <p>&lt;font color="#ff0000"&gt;乐观锁并不会使用数据库提供的锁机制! 一般在表中添加version字段或者业务状态来实现!&lt;/font&gt;</p>
 <p>&lt;font color="#ff0000"&gt;乐观锁直到提交才锁定, 所以不会产生死锁!&lt;/font&gt;</p>
 <hr/>
@@ -133,15 +134,15 @@ public boolean updateEntry(long id) {
 <li>公平锁: 线程获取锁的顺序是按照线程请求锁的时间早晚来决定的, 先请求先得到;</li>
 <li>非公平锁: 运行时闯入, 不一定先到的先得</li>
 </ul>
-<p>**实现: **</p>
+<p><strong>实现: </strong></p>
 <p><code>ReentrantLock</code>提供了公平锁和非公平锁的实现:</p>
 <ul>
 <li><p>公平锁:</p>
-<pre><code class="language-java">ReentrantLock lock = new ReentrantLock(true);
+<pre><code class="lang-java">ReentrantLock lock = new ReentrantLock(true);
 </code></pre>
 </li>
 <li><p>非公平锁:</p>
-<pre><code class="language-java">ReentrantLock lock = new ReentrantLock(false);
+<pre><code class="lang-java">ReentrantLock lock = new ReentrantLock(false);
 </code></pre>
 </li>
 </ul>
@@ -154,11 +155,11 @@ public boolean updateEntry(long id) {
 </ul>
 <hr/>
 <h3>3. 独占锁与共享锁</h3>
-<p>&lt;font color="#0000ff"&gt;根据锁只能被单个线程持有, 还是能够被多个线程共同持有, 分为: <em>独占锁和共享锁</em>&lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;根据锁只能被单个线程持有, 还是能够被多个线程共同持有, 分为: *独占锁和共享锁*&lt;/font&gt;</p>
 <ul>
-<li><p>&lt;font color="#0000ff"&gt;独占锁保证, 任何时候都只有一个线程能够得到锁, 如: <code>ReentrantLock</code>就是以独占方式实现;&lt;/font&gt;</p>
+<li><p>&lt;font color="#0000ff"&gt;独占锁保证, 任何时候都只有一个线程能够得到锁, 如: `ReentrantLock`就是以独占方式实现;&lt;/font&gt;</p>
 </li>
-<li><p>&lt;font color="#0000ff"&gt;共享锁则可以同时由多个线程持有, 如: <code>ReadWriteLock</code>读写锁, 允许一个资源可以被多个线程同时进行读操作.&lt;/font&gt;</p>
+<li><p>&lt;font color="#0000ff"&gt;共享锁则可以同时由多个线程持有, 如: `ReadWriteLock`读写锁, 允许一个资源可以被多个线程同时进行读操作.&lt;/font&gt;</p>
 </li>
 </ul>
 <p>&lt;br/&gt;</p>
@@ -174,17 +175,17 @@ public boolean updateEntry(long id) {
 <p>如果不能被阻塞: <em>可重入锁</em>. 即: &lt;font color="#0000ff"&gt;只要线程获取了该锁, 那么可以几乎无限次地进入该锁锁住的代码!&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <p><strong>应用场景:</strong></p>
-<pre><code class="language-java">public class Hello {
-    
+<pre><code class="lang-java">public class Hello {
+
     public synchronized void helloA() {
         System.out.println("hello");
     }
-    
+
     public synchronized void helloB() {
         System.out.println("helloB");
         helloA();
     }
-    
+
 }
 </code></pre>
 <p>如上代码块: &lt;font color="#0000ff"&gt;调用helloB方法后, 会先获得内置锁, 然后打印输出. 之后调用helloA方法, 在调用前会先获取该锁&lt;/font&gt;</p>
@@ -207,6 +208,6 @@ public boolean updateEntry(long id) {
 <p>&lt;font color="#ff0000"&gt;从用户态切换到内核状态的开销是比较大的, 在一定程度上影响了并发的性能!&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <p><strong>自旋锁则是:</strong></p>
-<p>&lt;font color="#0000ff"&gt;当前线程获取锁时, 若发现锁已经被其他线程占有, 并不是马上阻塞自己! 而是在不放弃CPU使用权的前提下, 多次尝试(默认为10次, 可通过<code>-XX:PreBlockSpinsh</code>参数设置). 可能在后面几次尝试中其他线程已经释放了该锁! &lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;当前线程获取锁时, 若发现锁已经被其他线程占有, 并不是马上阻塞自己! 而是在不放弃CPU使用权的前提下, 多次尝试(默认为10次, 可通过`-XX:PreBlockSpinsh`参数设置). 可能在后面几次尝试中其他线程已经释放了该锁! &lt;/font&gt;</p>
 <p>&lt;font color="#0000ff"&gt;如果多次尝试之后仍没有获取到该锁, 则当前线程才会被阻塞挂起&lt;/font&gt;</p>
 <p>&lt;font color="#ff0000"&gt;即: 使用CPU时间换取线程阻塞和调度的开销, 但是有可能这些CPU时间白白浪费!&lt;/font&gt;</p>

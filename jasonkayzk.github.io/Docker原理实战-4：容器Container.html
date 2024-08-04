@@ -1,54 +1,99 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-4%EF%BC%9A%E5%AE%B9%E5%99%A8Container.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2021/09/05/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-4%EF%BC%9A%E5%AE%B9%E5%99%A8Container">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Docker原理实战-4：容器Container.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2021/09/05/Docker原理实战-4：容器Container">站点原文</a></h2>
 <hr/>
-<h2>title: Docker原理实战-4：容器Container
+<p>title: Docker原理实战-4：容器Container
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?4'
+cover: '<a href="https://img.paulzzh.com/touhou/random?4">https://img.paulzzh.com/touhou/random?4</a>'
 date: 2021-09-05 15:24:47
 categories: Docker
-tags: [Docker, Linux, Container, 容器]
-description: 前三篇分别讲解了Linux内核所以提供的功能：Namespace、Cgroups和UnionFS，本篇使用这些技术，真正的实现一个类似于Docker运行环境下的容器；</h2>
+tags: [Docker, Linux, Container, 容器]</p>
+<h2>description: 前三篇分别讲解了Linux内核所以提供的功能：Namespace、Cgroups和UnionFS，本篇使用这些技术，真正的实现一个类似于Docker运行环境下的容器；</h2>
 <p>前三篇分别讲解了Linux内核所以提供的功能：Namespace、Cgroups和UnionFS，本篇使用这些技术，真正的实现一个类似于Docker运行环境下的容器；</p>
 <p>系列文章：</p>
 <ul>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-1%EF%BC%9ANamespace/">Docker原理实战-1：Namespace</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-2%EF%BC%9ACgroups/">Docker原理实战-2：Cgroups</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-3%EF%BC%9AUnionFS/">Docker原理实战-3：UnionFS</a></li>
-<li><a href="/2021/09/05/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-4%EF%BC%9A%E5%AE%B9%E5%99%A8Container/">Docker原理实战-4：容器Container</a></li>
+<li><a href="/2021/08/29/Docker原理实战-1：Namespace/">Docker原理实战-1：Namespace</a></li>
+<li><a href="/2021/08/29/Docker原理实战-2：Cgroups/">Docker原理实战-2：Cgroups</a></li>
+<li><a href="/2021/08/29/Docker原理实战-3：UnionFS/">Docker原理实战-3：UnionFS</a></li>
+<li><a href="/2021/09/05/Docker原理实战-4：容器Container/">Docker原理实战-4：容器Container</a></li>
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/my_docker</li>
+<li><a href="https://github.com/JasonkayZK/my_docker">https://github.com/JasonkayZK/my_docker</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h1><strong>Docker原理实战-4：容器Container</strong></h1>
 <h2><strong>前言：proc文件系统</strong></h2>
 <p>在手写我们的Container之前，先简单介绍一下Linux中的<code>/proc</code>；</p>
 <p>众所周知，在Linux中，一切皆文件；而<code>/proc</code>文件系统是由内核提供的，它<strong>并非真正的文件系统，而是存在于内存中的、包含了整个系统运行时的信息（硬件配置、系统mount设备等）；</strong></p>
 <p><code>/proc</code>以文件的形式存在，为访问内核数据的操作提供了接口；</p>
-<blockquote>
-<p><strong>实际上，很多系统工具就是简单读取<code>/proc</code>下的某个文件内容实现的；</strong></p>
+<blockquote><p><strong>实际上，很多系统工具就是简单读取<code>/proc</code>下的某个文件内容实现的；</strong></p>
 <p><strong>如：<code>lsmod</code>命令，实际上就是<code>cat /proc/modules</code></strong></p>
 </blockquote>
 <p>下面是关于<code>/proc</code>下的一些目录的总结：</p>
-<p>| 路径            | 说明                                  |
-| :-------------- | ------------------------------------- |
-| /proc/N         | PID为Ν的进程信息                      |
-| /proc/N/cmdline | 进程启动命令                          |
-| /proc/N/cwd     | 链接到进程当前工作目录                |
-| /proc/N/environ | 进程环境变量列表                      |
-| /proc/N/exe     | 链接到进程的执行命令文件              |
-| /proc/N/fd      | 包含进程相关的所有文件描述符          |
-| /proc/N/maps    | 与进程相关的内存映射信息              |
-| /proc/N/mem     | 指代进程持有的内存，不可读            |
-| /proc/N/root    | 链接到进程的根目录                    |
-| /proc/N/stat    | 进程的状态                            |
-| /proc/N/statm   | 进程使用的内存状态                    |
-| /proc/N/status  | 进程状态信息，比 stat/statm更具可读性 |
-| /proc/self/     | 链接到当前正在运行的进程              |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">/proc/N</td>
+<td>PID为Ν的进程信息</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/cmdline</td>
+<td>进程启动命令</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/cwd</td>
+<td>链接到进程当前工作目录</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/environ</td>
+<td>进程环境变量列表</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/exe</td>
+<td>链接到进程的执行命令文件</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/fd</td>
+<td>包含进程相关的所有文件描述符</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/maps</td>
+<td>与进程相关的内存映射信息</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/mem</td>
+<td>指代进程持有的内存，不可读</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/root</td>
+<td>链接到进程的根目录</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/stat</td>
+<td>进程的状态</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/statm</td>
+<td>进程使用的内存状态</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/N/status</td>
+<td>进程状态信息，比 stat/statm更具可读性</td>
+</tr>
+<tr>
+<td style="text-align:left">/proc/self/</td>
+<td>链接到当前正在运行的进程</td>
+</tr>
+</tbody>
+</table>
 <p>对于<code>/proc/N</code>下的各个目录，基本上完整的描述了一个进程在操作系统中的内容；</p>
-<blockquote>
-<p><strong>尤其要注意的是：<code>/proc/self/</code>；</strong></p>
+<blockquote><p><strong>尤其要注意的是：<code>/proc/self/</code>；</strong></p>
 <p><strong>看似比较鸡肋，但是是后面我们构造容器时具有终于作用！</strong></p>
 </blockquote>
 <p>了解了<code>/proc</code>之后，我们开始真正的构建一个容器吧！</p>
@@ -65,39 +110,39 @@ description: 前三篇分别讲解了Linux内核所以提供的功能：Namespac
 <h3><strong>1、Subsystem接口抽象</strong></h3>
 <p>根据上面的资源限制类型，抽象出对应的Subsystem接口：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cgroups/subsystems/subsystems.go</p>
-<pre><code class="language-go">package subsystems
+<pre><code class="lang-go">package subsystems
 
 var (
-	SubsystemIns = []Subsystem{
-		&amp;CpuSetSubSystem{},
-		&amp;MemorySubSystem{},
-		&amp;CpuSubSystem{},
-	}
+    SubsystemIns = []Subsystem{
+        &amp;CpuSetSubSystem{},
+        &amp;MemorySubSystem{},
+        &amp;CpuSubSystem{},
+    }
 
-	CgroupConfigPath = "tasks"
+    CgroupConfigPath = "tasks"
 )
 
 // ResourceConfig 用于传递资源限制的结构体
 type ResourceConfig struct {
-	MemoryLimit string // 内存限制
-	CpuShare    string // CPU时间片权重
-	CpuSet      string // CPU核心数
+    MemoryLimit string // 内存限制
+    CpuShare    string // CPU时间片权重
+    CpuSet      string // CPU核心数
 }
 
 // Subsystem Subsystem接口
 // 这里将 cgroups 抽象为了 path，因为 cgroups 在 hierarchy 的路径就是虚拟文件系统中的路径！
 type Subsystem interface {
-	// Name 返回subsystem的名称，如：cpu、memory等
-	Name() string
+    // Name 返回subsystem的名称，如：cpu、memory等
+    Name() string
 
-	// Set 设置某个cgroup在这个subsystem中的资源限制
-	Set(path string, res *ResourceConfig) error
+    // Set 设置某个cgroup在这个subsystem中的资源限制
+    Set(path string, res *ResourceConfig) error
 
-	// Apply 将指定pid对应的进程添加至某个cgroup中
-	Apply(path string, pid int) error
+    // Apply 将指定pid对应的进程添加至某个cgroup中
+    Apply(path string, pid int) error
 
-	// Remove 移除某个cgroup
-	Remove(path string) error
+    // Remove 移除某个cgroup
+    Remove(path string) error
 }
 </code></pre>
 <p>Subsystem接口共包含了四个方法：</p>
@@ -111,15 +156,15 @@ type Subsystem interface {
 <p>&lt;br/&gt;</p>
 <h3><strong>2、一些辅助函数</strong></h3>
 <p>在之前第二篇对于Cgroups的讲解中，我们知道：</p>
-<p>&lt;font color="#f00"&gt;<strong>Cgroups是目录型的结构，而如果我们想要限制进程资源，只需要在Cgroups的根路径下创建新的目录，并修改该目录下的配置，并将进程的PID移至这个新目录下的<code>tasks</code>文件中即可；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**Cgroups是目录型的结构，而如果我们想要限制进程资源，只需要在Cgroups的根路径下创建新的目录，并修改该目录下的配置，并将进程的PID移至这个新目录下的`tasks`文件中即可；**&lt;/font&gt;</p>
 <p>为了实现这个目的，我创建了两个工具函数，如下：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cgroups/utils/utils.go</p>
-<pre><code class="language-go">package utils
+<pre><code class="lang-go">package utils
 
 var (
-	DefaultCgroupFilePerm os.FileMode = 0755
+    DefaultCgroupFilePerm os.FileMode = 0755
 
-	DefaultCgroupConfigFilePerm os.FileMode = 0755
+    DefaultCgroupConfigFilePerm os.FileMode = 0755
 )
 
 // FindCgroupMountPoint 查询对应subsystem在当前进程中的挂载点路径
@@ -127,53 +172,53 @@ var (
 // 43 35 0:37 / /sys/fs/cgroup/memory rw,nosuid,nodev,noexec,relatime shared:18 - cgroup cgroup rw,memory
 // 查找最后一部分的逗号分隔字段，如：memory
 func FindCgroupMountPoint(subsystem string) string {
-	// 打开当前进程挂载文件（后面会查询信息）
-	f, err := os.Open("/proc/self/mountinfo")
-	if err != nil {
-		return ""
-	}
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			log.Error(err)
-		}
-	}(f)
+    // 打开当前进程挂载文件（后面会查询信息）
+    f, err := os.Open("/proc/self/mountinfo")
+    if err != nil {
+        return ""
+    }
+    defer func(f *os.File) {
+        err := f.Close()
+        if err != nil {
+            log.Error(err)
+        }
+    }(f)
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		content := scanner.Text()
-		fields := strings.Split(content, " ")
-		for _, opt := range strings.Split(fields[len(fields)-1], ",") {
-			if opt == subsystem {
-				return fields[4]
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		log.Error(err)
-		return ""
-	}
-	return ""
+    scanner := bufio.NewScanner(f)
+    for scanner.Scan() {
+        content := scanner.Text()
+        fields := strings.Split(content, " ")
+        for _, opt := range strings.Split(fields[len(fields)-1], ",") {
+            if opt == subsystem {
+                return fields[4]
+            }
+        }
+    }
+    if err := scanner.Err(); err != nil {
+        log.Error(err)
+        return ""
+    }
+    return ""
 }
 
 // GetCgroupPath 获取当前进程中指定cgroup对应的路径
 func GetCgroupPath(subsystem string, cgroupPath string) (string, error) {
-	cgroupRoot := FindCgroupMountPoint(subsystem)
+    cgroupRoot := FindCgroupMountPoint(subsystem)
 
-	// 查询文件是否已经存在
-	_, err := os.Stat(path.Join(cgroupRoot, cgroupPath))
-	if err != nil {
-		// 非文件不存在错误，返回错误
-		if !os.IsNotExist(err) {
-			return "", fmt.Errorf("cgroup path error %v", err)
-		} else { // 如果是文件不存在错误，创建
-			if err := os.Mkdir(path.Join(cgroupRoot, cgroupPath), DefaultCgroupFilePerm); err != nil {
-				return "", fmt.Errorf("error create cgroup %v", err)
-			}
-		}
-	}
+    // 查询文件是否已经存在
+    _, err := os.Stat(path.Join(cgroupRoot, cgroupPath))
+    if err != nil {
+        // 非文件不存在错误，返回错误
+        if !os.IsNotExist(err) {
+            return "", fmt.Errorf("cgroup path error %v", err)
+        } else { // 如果是文件不存在错误，创建
+            if err := os.Mkdir(path.Join(cgroupRoot, cgroupPath), DefaultCgroupFilePerm); err != nil {
+                return "", fmt.Errorf("error create cgroup %v", err)
+            }
+        }
+    }
 
-	return path.Join(cgroupRoot, cgroupPath), nil
+    return path.Join(cgroupRoot, cgroupPath), nil
 }
 </code></pre>
 <p>上面定义了两个辅助工具函数：</p>
@@ -181,11 +226,10 @@ func GetCgroupPath(subsystem string, cgroupPath string) (string, error) {
 <li><code>FindCgroupMountPoint</code>：查询对应subsystem在当前进程中的挂载点路径；</li>
 <li><code>GetCgroupPath</code>：获取当前进程中指定子cgroup对应的路径（如不存在，则创建）；</li>
 </ul>
-<blockquote>
-<p><strong>由于不同的subsystem所在的系统Cgroups配置根路径是不同的，因此：</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>我们需要一个函数来帮助我们寻找对应Cgroups下的subsystem在<code>/proc</code>中的路径，即<code>GetCgroupPath</code>函数</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>需要注意的是：对于不同的进程，其所挂载的文件系统也是不同的！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>我们可以在当前进程中通过查看<code>/proc/self/mountinfo</code>文件，获取当前进程所对应subsystem的挂载点根路径！</strong>&lt;/font&gt;</p>
+<blockquote><p><strong>由于不同的subsystem所在的系统Cgroups配置根路径是不同的，因此：</strong></p>
+<p>&lt;font color="#f00"&gt;**我们需要一个函数来帮助我们寻找对应Cgroups下的subsystem在`/proc`中的路径，即`GetCgroupPath`函数**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**需要注意的是：对于不同的进程，其所挂载的文件系统也是不同的！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**我们可以在当前进程中通过查看`/proc/self/mountinfo`文件，获取当前进程所对应subsystem的挂载点根路径！**&lt;/font&gt;</p>
 <p>文件格式如下：</p>
 <p><code>43 35 0:37 / /sys/fs/cgroup/memory rw,nosuid,nodev,noexec,relatime shared:18 - cgroup cgroup rw,memory</code></p>
 <p>可以看到最后一部分的逗号分隔字段，如：memory；</p>
@@ -193,38 +237,38 @@ func GetCgroupPath(subsystem string, cgroupPath string) (string, error) {
 </blockquote>
 <h4><strong>① <code>FindCgroupMountPoint</code>函数</strong></h4>
 <p><code>FindCgroupMountPoint</code>主要是用在<code>GetCgroupPath</code>函数中的，因此我们先来看<code>FindCgroupMountPoint</code>函数；</p>
-<pre><code class="language-go">// FindCgroupMountPoint 查询对应subsystem在当前进程中的挂载点路径
+<pre><code class="lang-go">// FindCgroupMountPoint 查询对应subsystem在当前进程中的挂载点路径
 // /proc/self/mountinfo 文件格式：
 // 43 35 0:37 / /sys/fs/cgroup/memory rw,nosuid,nodev,noexec,relatime shared:18 - cgroup cgroup rw,memory
 // 查找最后一部分的逗号分隔字段，如：memory
 func FindCgroupMountPoint(subsystem string) string {
-	// 打开当前进程挂载文件（后面会查询信息）
-	f, err := os.Open("/proc/self/mountinfo")
-	if err != nil {
-		return ""
-	}
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			log.Error(err)
-		}
-	}(f)
+    // 打开当前进程挂载文件（后面会查询信息）
+    f, err := os.Open("/proc/self/mountinfo")
+    if err != nil {
+        return ""
+    }
+    defer func(f *os.File) {
+        err := f.Close()
+        if err != nil {
+            log.Error(err)
+        }
+    }(f)
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		content := scanner.Text()
-		fields := strings.Split(content, " ")
-		for _, opt := range strings.Split(fields[len(fields)-1], ",") {
-			if opt == subsystem {
-				return fields[4]
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		log.Error(err)
-		return ""
-	}
-	return ""
+    scanner := bufio.NewScanner(f)
+    for scanner.Scan() {
+        content := scanner.Text()
+        fields := strings.Split(content, " ")
+        for _, opt := range strings.Split(fields[len(fields)-1], ",") {
+            if opt == subsystem {
+                return fields[4]
+            }
+        }
+    }
+    if err := scanner.Err(); err != nil {
+        log.Error(err)
+        return ""
+    }
+    return ""
 }
 </code></pre>
 <p>根据上文所述，<code>FindCgroupMountPoint</code>函数首先打开当前进程挂载文件：<code>/proc/self/mountinfo</code>；</p>
@@ -232,24 +276,24 @@ func FindCgroupMountPoint(subsystem string) string {
 <p>&lt;br/&gt;</p>
 <h4><strong>② <code>GetCgroupPath</code>函数</strong></h4>
 <p>再来看函数<code>GetCgroupPath</code>：</p>
-<pre><code class="language-go">// GetCgroupPath 获取当前进程中指定cgroup对应的路径
+<pre><code class="lang-go">// GetCgroupPath 获取当前进程中指定cgroup对应的路径
 func GetCgroupPath(subsystem string, cgroupPath string) (string, error) {
-	cgroupRoot := FindCgroupMountPoint(subsystem)
+    cgroupRoot := FindCgroupMountPoint(subsystem)
 
-	// 查询文件是否已经存在
-	_, err := os.Stat(path.Join(cgroupRoot, cgroupPath))
-	if err != nil {
-		// 非文件不存在错误，返回错误
-		if !os.IsNotExist(err) {
-			return "", fmt.Errorf("cgroup path error %v", err)
-		} else { // 如果是文件不存在错误，创建
-			if err := os.Mkdir(path.Join(cgroupRoot, cgroupPath), DefaultCgroupFilePerm); err != nil {
-				return "", fmt.Errorf("error create cgroup %v", err)
-			}
-		}
-	}
+    // 查询文件是否已经存在
+    _, err := os.Stat(path.Join(cgroupRoot, cgroupPath))
+    if err != nil {
+        // 非文件不存在错误，返回错误
+        if !os.IsNotExist(err) {
+            return "", fmt.Errorf("cgroup path error %v", err)
+        } else { // 如果是文件不存在错误，创建
+            if err := os.Mkdir(path.Join(cgroupRoot, cgroupPath), DefaultCgroupFilePerm); err != nil {
+                return "", fmt.Errorf("error create cgroup %v", err)
+            }
+        }
+    }
 
-	return path.Join(cgroupRoot, cgroupPath), nil
+    return path.Join(cgroupRoot, cgroupPath), nil
 }
 </code></pre>
 <p>在函数<code>GetCgroupPath</code>中，首先通过<code>FindCgroupMountPoint(subsystem)</code>获取到了对于指定Subsystem对应Cgroup的根路径；</p>
@@ -259,107 +303,107 @@ func GetCgroupPath(subsystem string, cgroupPath string) (string, error) {
 <h3><strong>3、具体Subsystem接口实现</strong></h3>
 <p>下面以内存为例，来看一下如何实现Subsystem接口；</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cgroups/subsystems/memory.go</p>
-<pre><code class="language-go">package subsystems
+<pre><code class="lang-go">package subsystems
 
 import (
-	"fmt"
-	log "github.com/sirupsen/logrus"
-	"io/ioutil"
-	"my_docker/cgroups/utils"
-	"os"
-	"path"
-	"strconv"
+    "fmt"
+    log "github.com/sirupsen/logrus"
+    "io/ioutil"
+    "my_docker/cgroups/utils"
+    "os"
+    "path"
+    "strconv"
 )
 
 var (
-	MemoryName = `memory`
+    MemoryName = `memory`
 
-	MemoryNameCgroupConfig = "memory.limit_in_bytes"
+    MemoryNameCgroupConfig = "memory.limit_in_bytes"
 )
 
 type MemorySubSystem struct {
 }
 
 func (m *MemorySubSystem) Name() string {
-	return MemoryName
+    return MemoryName
 }
 
 func (m *MemorySubSystem) Set(cgroupPath string, res *ResourceConfig) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
-	if err != nil {
-		return err
-	}
+    subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
+    if err != nil {
+        return err
+    }
 
-	configPath := path.Join(subsystemCgroupPath, MemoryNameCgroupConfig)
-	// 如果存在内存限制的配置
-	if res.MemoryLimit != "" {
-		err = ioutil.WriteFile(configPath,
-			[]byte(res.MemoryLimit), utils.DefaultCgroupConfigFilePerm)
-		if err != nil {
-			return fmt.Errorf("set cgroup cpuset fail %v", err)
-		}
-	}
+    configPath := path.Join(subsystemCgroupPath, MemoryNameCgroupConfig)
+    // 如果存在内存限制的配置
+    if res.MemoryLimit != "" {
+        err = ioutil.WriteFile(configPath,
+            []byte(res.MemoryLimit), utils.DefaultCgroupConfigFilePerm)
+        if err != nil {
+            return fmt.Errorf("set cgroup cpuset fail %v", err)
+        }
+    }
 
-	log.Infof("set memory success, file: %s, size: %s",
-		configPath,
-		res.MemoryLimit,
-	)
-	return nil
+    log.Infof("set memory success, file: %s, size: %s",
+        configPath,
+        res.MemoryLimit,
+    )
+    return nil
 }
 
 func (m *MemorySubSystem) Apply(cgroupPath string, pid int) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
+    subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
 
-	configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
-	err = ioutil.WriteFile(configPath,
-		[]byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
-	if err != nil {
-		return fmt.Errorf("set cgroup proc fail %v", err)
-	}
+    configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
+    err = ioutil.WriteFile(configPath,
+        []byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
+    if err != nil {
+        return fmt.Errorf("set cgroup proc fail %v", err)
+    }
 
-	log.Infof("apply memory success, file: %s, pid: %d",
-		path.Join(subsystemCgroupPath, CgroupConfigPath),
-		pid,
-	)
-	return nil
+    log.Infof("apply memory success, file: %s, pid: %d",
+        path.Join(subsystemCgroupPath, CgroupConfigPath),
+        pid,
+    )
+    return nil
 }
 
 func (m *MemorySubSystem) Remove(cgroupPath string) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
-	return os.RemoveAll(subsystemCgroupPath)
+    subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
+    return os.RemoveAll(subsystemCgroupPath)
 }
 </code></pre>
 <h4><strong>① Name方法</strong></h4>
 <p>首先，Name方法返回了内存限制subsystem的名称：<code>MemoryName = "memory"</code>；</p>
 <h4><strong>② Set方法</strong></h4>
 <p>Set方法的实现如下：</p>
-<pre><code class="language-go">func (m *MemorySubSystem) Set(cgroupPath string, res *ResourceConfig) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
-	if err != nil {
-		return err
-	}
+<pre><code class="lang-go">func (m *MemorySubSystem) Set(cgroupPath string, res *ResourceConfig) error {
+    subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
+    if err != nil {
+        return err
+    }
 
-	configPath := path.Join(subsystemCgroupPath, MemoryNameCgroupConfig)
-	// 如果存在内存限制的配置
-	if res.MemoryLimit != "" {
-		err = ioutil.WriteFile(configPath,
-			[]byte(res.MemoryLimit), utils.DefaultCgroupConfigFilePerm)
-		if err != nil {
-			return fmt.Errorf("set cgroup cpuset fail %v", err)
-		}
-	}
+    configPath := path.Join(subsystemCgroupPath, MemoryNameCgroupConfig)
+    // 如果存在内存限制的配置
+    if res.MemoryLimit != "" {
+        err = ioutil.WriteFile(configPath,
+            []byte(res.MemoryLimit), utils.DefaultCgroupConfigFilePerm)
+        if err != nil {
+            return fmt.Errorf("set cgroup cpuset fail %v", err)
+        }
+    }
 
-	log.Infof("set memory success, file: %s, size: %s",
-		configPath,
-		res.MemoryLimit,
-	)
-	return nil
+    log.Infof("set memory success, file: %s, size: %s",
+        configPath,
+        res.MemoryLimit,
+    )
+    return nil
 }
 </code></pre>
 <p>Set方法首先通过工具函数GetCgroupPath获取到了子Cgroup的路径；</p>
@@ -375,39 +419,38 @@ func (m *MemorySubSystem) Remove(cgroupPath string) error {
 <p>同时，如果不存在此文件，则创建文件后再写入；</p>
 <h4><strong>③ Apply方法</strong></h4>
 <p>Apply方法的实现也是非常简单，代码如下：</p>
-<pre><code class="language-go">func (m *MemorySubSystem) Apply(cgroupPath string, pid int) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
+<pre><code class="lang-go">func (m *MemorySubSystem) Apply(cgroupPath string, pid int) error {
+    subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
 
-	configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
-	err = ioutil.WriteFile(configPath,
-		[]byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
-	if err != nil {
-		return fmt.Errorf("set cgroup proc fail %v", err)
-	}
+    configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
+    err = ioutil.WriteFile(configPath,
+        []byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
+    if err != nil {
+        return fmt.Errorf("set cgroup proc fail %v", err)
+    }
 
-	log.Infof("apply memory success, file: %s, pid: %d",
-		path.Join(subsystemCgroupPath, CgroupConfigPath),
-		pid,
-	)
-	return nil
+    log.Infof("apply memory success, file: %s, pid: %d",
+        path.Join(subsystemCgroupPath, CgroupConfigPath),
+        pid,
+    )
+    return nil
 }
 </code></pre>
-<p>首先也是通过<code> utils.GetCgroupPath(m.Name(), cgroupPath)</code>找到内存对应的子Cgroup路径（和Set方法相同）；</p>
+<p>首先也是通过<code>utils.GetCgroupPath(m.Name(), cgroupPath)</code>找到内存对应的子Cgroup路径（和Set方法相同）；</p>
 <p>随后，向路径下的<code>tasks</code>文件写入指定的PID号即可！</p>
-<blockquote>
-<p><strong>在Linux中对于资源的限制就是这么简单！</strong></p>
+<blockquote><p><strong>在Linux中对于资源的限制就是这么简单！</strong></p>
 </blockquote>
 <h4><strong>④ Remove方法</strong></h4>
 <p>Remove方法就更简单了，代码如下：</p>
-<pre><code class="language-go">func (m *MemorySubSystem) Remove(cgroupPath string) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
-	return os.RemoveAll(subsystemCgroupPath)
+<pre><code class="lang-go">func (m *MemorySubSystem) Remove(cgroupPath string) error {
+    subsystemCgroupPath, err := utils.GetCgroupPath(m.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
+    return os.RemoveAll(subsystemCgroupPath)
 }
 </code></pre>
 <p>直接获取当前配置路径，并删除整个配置目录即可！</p>
@@ -416,158 +459,158 @@ func (m *MemorySubSystem) Remove(cgroupPath string) error {
 <p>下面是CPU核心数和CPU时间片限制对应Subsystem接口实现的代码，和内存限制完全类似，这里不再赘述！</p>
 <h4><strong>① CPU核心数</strong></h4>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cgroups/subsystems/cpuset.go</p>
-<pre><code class="language-go">package subsystems
+<pre><code class="lang-go">package subsystems
 
 import (
-	"fmt"
-	log "github.com/sirupsen/logrus"
-	"io/ioutil"
-	"my_docker/cgroups/utils"
-	"os"
-	"path"
-	"strconv"
+    "fmt"
+    log "github.com/sirupsen/logrus"
+    "io/ioutil"
+    "my_docker/cgroups/utils"
+    "os"
+    "path"
+    "strconv"
 )
 
 var (
-	CpuSetName = `cpuset`
+    CpuSetName = `cpuset`
 
-	CpuSetCgroupConfig = "cpuset.cpus"
+    CpuSetCgroupConfig = "cpuset.cpus"
 )
 
 type CpuSetSubSystem struct {
 }
 
 func (c *CpuSetSubSystem) Name() string {
-	return CpuSetName
+    return CpuSetName
 }
 
 func (c *CpuSetSubSystem) Set(cgroupPath string, res *ResourceConfig) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
-	if err != nil {
-		return err
-	}
+    subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
+    if err != nil {
+        return err
+    }
 
-	// 如果存在CPU核心数的配置
-	configPath := path.Join(subsystemCgroupPath, CpuSetCgroupConfig)
-	if res.CpuSet != "" {
-		err = ioutil.WriteFile(configPath,
-			[]byte(res.CpuSet), utils.DefaultCgroupConfigFilePerm)
-		if err != nil {
-			return fmt.Errorf("set cgroup cpuset fail %v", err)
-		}
-	}
+    // 如果存在CPU核心数的配置
+    configPath := path.Join(subsystemCgroupPath, CpuSetCgroupConfig)
+    if res.CpuSet != "" {
+        err = ioutil.WriteFile(configPath,
+            []byte(res.CpuSet), utils.DefaultCgroupConfigFilePerm)
+        if err != nil {
+            return fmt.Errorf("set cgroup cpuset fail %v", err)
+        }
+    }
 
-	log.Infof("set cpu-set success, file: %s, cpu-set num: %s",
-		configPath,
-		res.CpuSet,
-	)
-	return nil
+    log.Infof("set cpu-set success, file: %s, cpu-set num: %s",
+        configPath,
+        res.CpuSet,
+    )
+    return nil
 }
 
 func (c *CpuSetSubSystem) Apply(cgroupPath string, pid int) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
+    subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
 
-	configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
-	err = ioutil.WriteFile(configPath,
-		[]byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
-	if err != nil {
-		return fmt.Errorf("set cpuset cgroup proc fail %v", err)
-	}
+    configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
+    err = ioutil.WriteFile(configPath,
+        []byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
+    if err != nil {
+        return fmt.Errorf("set cpuset cgroup proc fail %v", err)
+    }
 
-	log.Infof("apply cpu-set success, file: %s, pid: %d",
-		path.Join(subsystemCgroupPath, CgroupConfigPath),
-		pid,
-	)
-	return nil
+    log.Infof("apply cpu-set success, file: %s, pid: %d",
+        path.Join(subsystemCgroupPath, CgroupConfigPath),
+        pid,
+    )
+    return nil
 }
 
 func (c *CpuSetSubSystem) Remove(cgroupPath string) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
-	return os.RemoveAll(subsystemCgroupPath)
+    subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
+    return os.RemoveAll(subsystemCgroupPath)
 }
 </code></pre>
 <h4><strong>② CPU时间片</strong></h4>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cgroups/subsystems/cpu.go</p>
-<pre><code class="language-go">package subsystems
+<pre><code class="lang-go">package subsystems
 
 import (
-	"fmt"
-	log "github.com/sirupsen/logrus"
-	"io/ioutil"
-	"my_docker/cgroups/utils"
-	"os"
-	"path"
-	"strconv"
+    "fmt"
+    log "github.com/sirupsen/logrus"
+    "io/ioutil"
+    "my_docker/cgroups/utils"
+    "os"
+    "path"
+    "strconv"
 )
 
 var (
-	CpuName = `cpu`
+    CpuName = `cpu`
 
-	CpuCgroupConfig = "cpu.shares"
+    CpuCgroupConfig = "cpu.shares"
 )
 
 type CpuSubSystem struct {
 }
 
 func (c *CpuSubSystem) Name() string {
-	return CpuName
+    return CpuName
 }
 
 func (c *CpuSubSystem) Set(cgroupPath string, res *ResourceConfig) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
-	if err != nil {
-		return err
-	}
+    subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
+    if err != nil {
+        return err
+    }
 
-	configPath := path.Join(subsystemCgroupPath, CpuCgroupConfig)
-	// 如果存在CPU时间片的配置
-	if res.CpuShare != "" {
-		err = ioutil.WriteFile(configPath,
-			[]byte(res.CpuShare), utils.DefaultCgroupConfigFilePerm)
-		if err != nil {
-			return fmt.Errorf("set cgroup cpu share fail %v", err)
-		}
-	}
+    configPath := path.Join(subsystemCgroupPath, CpuCgroupConfig)
+    // 如果存在CPU时间片的配置
+    if res.CpuShare != "" {
+        err = ioutil.WriteFile(configPath,
+            []byte(res.CpuShare), utils.DefaultCgroupConfigFilePerm)
+        if err != nil {
+            return fmt.Errorf("set cgroup cpu share fail %v", err)
+        }
+    }
 
-	log.Infof("set cpu-share success, file: %s, cpu-share: %s",
-		configPath,
-		res.CpuShare,
-	)
-	return nil
+    log.Infof("set cpu-share success, file: %s, cpu-share: %s",
+        configPath,
+        res.CpuShare,
+    )
+    return nil
 }
 
 func (c *CpuSubSystem) Apply(cgroupPath string, pid int) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
+    subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
 
-	configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
-	err = ioutil.WriteFile(configPath,
-		[]byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
-	if err != nil {
-		return fmt.Errorf("set cgroup proc fail %v", err)
-	}
+    configPath := path.Join(subsystemCgroupPath, CgroupConfigPath)
+    err = ioutil.WriteFile(configPath,
+        []byte(strconv.Itoa(pid)), utils.DefaultCgroupConfigFilePerm)
+    if err != nil {
+        return fmt.Errorf("set cgroup proc fail %v", err)
+    }
 
-	log.Infof("apply cpu-share success, file: %s, pid: %d",
-		path.Join(subsystemCgroupPath, CgroupConfigPath),
-		pid,
-	)
-	return nil
+    log.Infof("apply cpu-share success, file: %s, pid: %d",
+        path.Join(subsystemCgroupPath, CgroupConfigPath),
+        pid,
+    )
+    return nil
 }
 
 func (c *CpuSubSystem) Remove(cgroupPath string) error {
-	subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
-	if err != nil {
-		return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
-	}
-	return os.RemoveAll(subsystemCgroupPath)
+    subsystemCgroupPath, err := utils.GetCgroupPath(c.Name(), cgroupPath)
+    if err != nil {
+        return fmt.Errorf("get cgroup %s error: %v", cgroupPath, err)
+    }
+    return os.RemoveAll(subsystemCgroupPath)
 }
 </code></pre>
 <p>&lt;br/&gt;</p>
@@ -575,57 +618,57 @@ func (c *CpuSubSystem) Remove(cgroupPath string) error {
 <p>为了方便使用，在所有的Subsystem之上封装一个CgroupManager，通过传入ResourceConfig配置直接对资源进行限制；</p>
 <p>代码如下：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cgroups/cgroups_manager.go</p>
-<pre><code class="language-go">package cgroups
+<pre><code class="lang-go">package cgroups
 
 import (
-	"github.com/sirupsen/logrus"
-	"my_docker/cgroups/subsystems"
+    "github.com/sirupsen/logrus"
+    "my_docker/cgroups/subsystems"
 )
 
 // CgroupManager cgroups的整体管理者(同时管理多种类型的cgroup)
 type CgroupManager struct {
-	// cgroup在hierarchy中的路径 相当于创建的cgroup目录相对于root cgroup目录的路径
-	Path string
-	// 资源配置
-	Resource *subsystems.ResourceConfig
+    // cgroup在hierarchy中的路径 相当于创建的cgroup目录相对于root cgroup目录的路径
+    Path string
+    // 资源配置
+    Resource *subsystems.ResourceConfig
 }
 
 func NewCgroupManager(path string) *CgroupManager {
-	return &amp;CgroupManager{
-		Path: path,
-	}
+    return &amp;CgroupManager{
+        Path: path,
+    }
 }
 
 // Apply 将进程pid加入到这个cgroup中
 func (c *CgroupManager) Apply(pid int) error {
-	for _, subSysIns := range subsystems.SubsystemIns {
-		err := subSysIns.Apply(c.Path, pid)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+    for _, subSysIns := range subsystems.SubsystemIns {
+        err := subSysIns.Apply(c.Path, pid)
+        if err != nil {
+            return err
+        }
+    }
+    return nil
 }
 
 // Set 设置cgroup资源限制
 func (c *CgroupManager) Set(res *subsystems.ResourceConfig) error {
-	for _, subSysIns := range subsystems.SubsystemIns {
-		err := subSysIns.Set(c.Path, res)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+    for _, subSysIns := range subsystems.SubsystemIns {
+        err := subSysIns.Set(c.Path, res)
+        if err != nil {
+            return err
+        }
+    }
+    return nil
 }
 
 // Destroy 释放cgroup
 func (c *CgroupManager) Destroy() error {
-	for _, subSysIns := range subsystems.SubsystemIns {
-		if err := subSysIns.Remove(c.Path); err != nil {
-			logrus.Warnf("remove cgroup fail %v", err)
-		}
-	}
-	return nil
+    for _, subSysIns := range subsystems.SubsystemIns {
+        if err := subSysIns.Remove(c.Path); err != nil {
+            logrus.Warnf("remove cgroup fail %v", err)
+        }
+    }
+    return nil
 }
 </code></pre>
 <p>CgroupManager包括两个配置信息：</p>
@@ -638,8 +681,7 @@ func (c *CgroupManager) Destroy() error {
 <p>&lt;br/&gt;</p>
 <h2><strong>二、构建命令行工具</strong></h2>
 <p>有了资源限制器之后，接下来我们开始创建我们的命令行工具（众所周知，Docker就是一个命令行工具）；</p>
-<blockquote>
-<p>构建命令行工具时我们使用了著名的<code>cli</code>工具库：</p>
+<blockquote><p>构建命令行工具时我们使用了著名的<code>cli</code>工具库：</p>
 <ul>
 <li>github.com/urfave/cli</li>
 </ul>
@@ -654,39 +696,39 @@ func (c *CgroupManager) Destroy() error {
 <p>在构建命令行工具时，我将采用自上而下的方式进行构建：从函数的入口开始，然后是每一个命令行Flag的实现；</p>
 <p>首先来看main函数：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/main.go</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
-	"my_docker/cmd"
-	"os"
+    log "github.com/sirupsen/logrus"
+    "github.com/urfave/cli"
+    "my_docker/cmd"
+    "os"
 )
 
 const usage = `my-docker is a simple container runtime implementation.
-			   The purpose of this project is to learn how docker works and how to write a docker by ourselves
-			   Enjoy it, just for fun.`
+               The purpose of this project is to learn how docker works and how to write a docker by ourselves
+               Enjoy it, just for fun.`
 
 func main() {
-	app := cli.NewApp()
-	app.Name = "my-docker"
-	app.Usage = usage
+    app := cli.NewApp()
+    app.Name = "my-docker"
+    app.Usage = usage
 
-	app.Commands = []cli.Command{
-		cmd.InitCommand,
-		cmd.RunCommand,
-	}
+    app.Commands = []cli.Command{
+        cmd.InitCommand,
+        cmd.RunCommand,
+    }
 
-	app.Before = func(context *cli.Context) error {
-		// Log as JSON instead of the default ASCII formatter.
-		log.SetFormatter(&amp;log.JSONFormatter{})
-		log.SetOutput(os.Stdout)
-		return nil
-	}
+    app.Before = func(context *cli.Context) error {
+        // Log as JSON instead of the default ASCII formatter.
+        log.SetFormatter(&amp;log.JSONFormatter{})
+        log.SetOutput(os.Stdout)
+        return nil
+    }
 
-	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
-	}
+    if err := app.Run(os.Args); err != nil {
+        log.Fatal(err)
+    }
 }
 </code></pre>
 <p>代码非常简单：</p>
@@ -696,17 +738,15 @@ func main() {
 <li><code>InitCommand</code>；</li>
 <li><code>RunCommand</code>；</li>
 </ul>
-<p>&lt;font color="#f00"&gt;<strong>注：上面这两个命令非常的重要，是实现整个容器的核心！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**注：上面这两个命令非常的重要，是实现整个容器的核心！**&lt;/font&gt;</p>
 <p>最后，在<code>app.Before</code>中，配置了日志输出格式和地址（标准输出流），并使用<code>app.Run(os.Args)</code>启动了应用；</p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>在Run方法中会匹配用户指定的命令，进入到对应的<code>XxxCommand</code>函数中！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**在Run方法中会匹配用户指定的命令，进入到对应的`XxxCommand`函数中！**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h2><strong>三、具体命令行参数实现</strong></h2>
 <h3><strong>1、进程间通信方式管道：Pipe概述</strong></h3>
 <p>上面我们实现了命令行工具的入口方法，在接下来继续进行命令行命令的具体实现前，还需要补充一些关于Linix进程间通信管道（Pipe）的知识；</p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>因为我们所创建的容器是在一个新的进程中，因此需要通过管道进行进程间通信！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**因为我们所创建的容器是在一个新的进程中，因此需要通过管道进行进程间通信！**&lt;/font&gt;</p>
 </blockquote>
 <p>进程间通信包括了很多种方式，管道只是其中一种；</p>
 <p>所谓管道（Pipe），就是一个连接两个进程的通道，他是Linux支持IPC的一种方式；</p>
@@ -716,13 +756,12 @@ func main() {
 <li><strong>无名管道</strong>：通常用于具有亲缘关系的进程之间直接进行通信；</li>
 <li><strong>有名管道（FIFO管道）</strong>：它是一种存在于文件系统中的管道，可以被两个没有任何亲缘关系的进程进行访问；有名管道可以通过<code>mkfifo()</code>函数来创建；</li>
 </ul>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>本质上来说：管道也是文件的一种！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**本质上来说：管道也是文件的一种！**&lt;/font&gt;</p>
 <p>但是它和文件通信的区别在于：</p>
-<p>&lt;font color="#f00"&gt;<strong>管道有一个固定大小的缓冲区（大小一般是4KB）：</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**管道有一个固定大小的缓冲区（大小一般是4KB）：**&lt;/font&gt;</p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>当管道被写满时，写进程就会被阻塞，直到有读进程把管道的内容读出来；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>同样地，当读进程从管道内拿数据的时候，如果这时管道的内容是空的，那么读进程同样会被阻塞，一直等到有写进程向管道内写数据！</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**当管道被写满时，写进程就会被阻塞，直到有读进程把管道的内容读出来；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**同样地，当读进程从管道内拿数据的时候，如果这时管道的内容是空的，那么读进程同样会被阻塞，一直等到有写进程向管道内写数据！**&lt;/font&gt;</li>
 </ul>
 </blockquote>
 <p>在Go中，可以使用<code>os.Pipe()</code>创建一个匿名管道：</p>
@@ -737,200 +776,200 @@ func main() {
 <p>对于InitCommand而言，是在容器中进行初始化时，由我们的命令行工具调用的，而非用户调用的；</p>
 <p>因此我们直接来看RunCommand命令的实现：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cmd/run_command.go</p>
-<pre><code class="language-go">package cmd
+<pre><code class="lang-go">package cmd
 
 import (
-	"fmt"
-	log "github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
-	"my_docker/cgroups"
-	"my_docker/cgroups/subsystems"
-	"my_docker/container"
-	"os"
-	"strings"
+    "fmt"
+    log "github.com/sirupsen/logrus"
+    "github.com/urfave/cli"
+    "my_docker/cgroups"
+    "my_docker/cgroups/subsystems"
+    "my_docker/container"
+    "os"
+    "strings"
 )
 
 var (
-	defaultCgroupPath = "mydocker-cgroup"
+    defaultCgroupPath = "mydocker-cgroup"
 )
 
 var RunCommand = cli.Command{
-	Name: "run",
-	Usage: `Create a container with namespace and cgroups limit
-			my-docker run -ti [command]`,
-	Flags: []cli.Flag{
-		cli.BoolFlag{
-			Name:  "ti",
-			Usage: "enable tty",
-		},
-		cli.BoolFlag{
-			Name:  "it",
-			Usage: "enable tty",
-		},
-		cli.StringFlag{
-			Name:  "m",
-			Usage: "memory limit",
-		},
-		cli.StringFlag{
-			Name:  "cpushare",
-			Usage: "cpushare limit",
-		},
-		cli.StringFlag{
-			Name:  "cpuset",
-			Usage: "cpuset limit",
-		},
-	},
-	Action: func(context *cli.Context) error {
-		// Step 1：用户初始化命令校验
-		if len(context.Args()) &lt; 1 {
-			return fmt.Errorf("missing container command")
-		}
+    Name: "run",
+    Usage: `Create a container with namespace and cgroups limit
+            my-docker run -ti [command]`,
+    Flags: []cli.Flag{
+        cli.BoolFlag{
+            Name:  "ti",
+            Usage: "enable tty",
+        },
+        cli.BoolFlag{
+            Name:  "it",
+            Usage: "enable tty",
+        },
+        cli.StringFlag{
+            Name:  "m",
+            Usage: "memory limit",
+        },
+        cli.StringFlag{
+            Name:  "cpushare",
+            Usage: "cpushare limit",
+        },
+        cli.StringFlag{
+            Name:  "cpuset",
+            Usage: "cpuset limit",
+        },
+    },
+    Action: func(context *cli.Context) error {
+        // Step 1：用户初始化命令校验
+        if len(context.Args()) &lt; 1 {
+            return fmt.Errorf("missing container command")
+        }
 
-		// Step 2：获取用户命令行命令
-		// Step 2.1：从Context中获取容器内初始化命令
-		var cmdArray []string
-		for _, arg := range context.Args() {
-			cmdArray = append(cmdArray, arg)
-		}
+        // Step 2：获取用户命令行命令
+        // Step 2.1：从Context中获取容器内初始化命令
+        var cmdArray []string
+        for _, arg := range context.Args() {
+            cmdArray = append(cmdArray, arg)
+        }
 
-		// Step 2.2：从Context中获取容器配置相关命令
-		tty := context.Bool("ti") || context.Bool("it") // tty参数
-		resourceConfig := getResourceConfig(context)    // 容器资源限制参数
+        // Step 2.2：从Context中获取容器配置相关命令
+        tty := context.Bool("ti") || context.Bool("it") // tty参数
+        resourceConfig := getResourceConfig(context)    // 容器资源限制参数
 
-		run(tty, cmdArray, resourceConfig)
-		return nil
-	},
+        run(tty, cmdArray, resourceConfig)
+        return nil
+    },
 }
 
 func run(tty bool, comArray []string, res *subsystems.ResourceConfig) {
-	parent, writePipe := container.NewParentProcess(tty)
-	if parent == nil {
-		log.Errorf("New parent process error")
-		return
-	}
-	err := parent.Start()
-	if err != nil {
-		log.Error(err)
-	}
+    parent, writePipe := container.NewParentProcess(tty)
+    if parent == nil {
+        log.Errorf("New parent process error")
+        return
+    }
+    err := parent.Start()
+    if err != nil {
+        log.Error(err)
+    }
 
-	cgroupManager := cgroups.NewCgroupManager(defaultCgroupPath)
-	defer func(cgroupManager *cgroups.CgroupManager) {
-		err := cgroupManager.Destroy()
-		if err != nil {
-			log.Error(err)
-		}
-	}(cgroupManager)
+    cgroupManager := cgroups.NewCgroupManager(defaultCgroupPath)
+    defer func(cgroupManager *cgroups.CgroupManager) {
+        err := cgroupManager.Destroy()
+        if err != nil {
+            log.Error(err)
+        }
+    }(cgroupManager)
 
-	err = cgroupManager.Set(res)
-	if err != nil {
-		goto FASTEND
-	}
-	err = cgroupManager.Apply(parent.Process.Pid)
-	if err != nil {
-		goto FASTEND
-	}
+    err = cgroupManager.Set(res)
+    if err != nil {
+        goto FASTEND
+    }
+    err = cgroupManager.Apply(parent.Process.Pid)
+    if err != nil {
+        goto FASTEND
+    }
 
-	sendInitCommand(comArray, writePipe)
-	err = parent.Wait()
+    sendInitCommand(comArray, writePipe)
+    err = parent.Wait()
 
 FASTEND:
-	if err != nil {
-		log.Error(err)
-	}
+    if err != nil {
+        log.Error(err)
+    }
 
-	os.Exit(0)
+    os.Exit(0)
 }
 
 func getResourceConfig(context *cli.Context) *subsystems.ResourceConfig {
-	var (
-		memoryLimit = `256m`
-		cpuset      = `1`
-		cpuShare    = `512`
-	)
+    var (
+        memoryLimit = `256m`
+        cpuset      = `1`
+        cpuShare    = `512`
+    )
 
-	if context.String("m") != "" {
-		memoryLimit = context.String("m")
-	}
-	if context.String("cpuset") != "" {
-		cpuset = context.String("cpuset")
-	}
-	if context.String("cpushare") != "" {
-		cpuShare = context.String("cpushare")
-	}
+    if context.String("m") != "" {
+        memoryLimit = context.String("m")
+    }
+    if context.String("cpuset") != "" {
+        cpuset = context.String("cpuset")
+    }
+    if context.String("cpushare") != "" {
+        cpuShare = context.String("cpushare")
+    }
 
-	return &amp;subsystems.ResourceConfig{
-		MemoryLimit: memoryLimit,
-		CpuSet:      cpuset,
-		CpuShare:    cpuShare,
-	}
+    return &amp;subsystems.ResourceConfig{
+        MemoryLimit: memoryLimit,
+        CpuSet:      cpuset,
+        CpuShare:    cpuShare,
+    }
 }
 
 // sendInitCommand 向管道中写入用户自定义初始化命令参数
 func sendInitCommand(comArray []string, writePipe *os.File) {
-	defer func(writePipe *os.File) {
-		err := writePipe.Close()
-		if err != nil {
-			log.Errorf("close write pipe err: %v", err)
-		}
-	}(writePipe)
+    defer func(writePipe *os.File) {
+        err := writePipe.Close()
+        if err != nil {
+            log.Errorf("close write pipe err: %v", err)
+        }
+    }(writePipe)
 
-	command := strings.Join(comArray, " ")
-	log.Infof("command all is %s", command)
-	_, err := writePipe.WriteString(command)
-	if err != nil {
-		log.Errorf("write pipe err: %v", err)
-		return
-	}
+    command := strings.Join(comArray, " ")
+    log.Infof("command all is %s", command)
+    _, err := writePipe.WriteString(command)
+    if err != nil {
+        log.Errorf("write pipe err: %v", err)
+        return
+    }
 }
 </code></pre>
 <h4><strong>① 声明命令变量</strong></h4>
 <p>首先，我们声明了一个命令变量：<code>RunCommand</code>；</p>
-<pre><code class="language-go">var RunCommand = cli.Command{
-	Name: "run",
-	Usage: `Create a container with namespace and cgroups limit
-			my-docker run -ti [command]`,
-	Flags: []cli.Flag{
-		cli.BoolFlag{
-			Name:  "ti",
-			Usage: "enable tty",
-		},
-		cli.BoolFlag{
-			Name:  "it",
-			Usage: "enable tty",
-		},
-		cli.StringFlag{
-			Name:  "m",
-			Usage: "memory limit",
-		},
-		cli.StringFlag{
-			Name:  "cpushare",
-			Usage: "cpushare limit",
-		},
-		cli.StringFlag{
-			Name:  "cpuset",
-			Usage: "cpuset limit",
-		},
-	},
-	Action: func(context *cli.Context) error {
-		// Step 1：用户初始化命令校验
-		if len(context.Args()) &lt; 1 {
-			return fmt.Errorf("missing container command")
-		}
+<pre><code class="lang-go">var RunCommand = cli.Command{
+    Name: "run",
+    Usage: `Create a container with namespace and cgroups limit
+            my-docker run -ti [command]`,
+    Flags: []cli.Flag{
+        cli.BoolFlag{
+            Name:  "ti",
+            Usage: "enable tty",
+        },
+        cli.BoolFlag{
+            Name:  "it",
+            Usage: "enable tty",
+        },
+        cli.StringFlag{
+            Name:  "m",
+            Usage: "memory limit",
+        },
+        cli.StringFlag{
+            Name:  "cpushare",
+            Usage: "cpushare limit",
+        },
+        cli.StringFlag{
+            Name:  "cpuset",
+            Usage: "cpuset limit",
+        },
+    },
+    Action: func(context *cli.Context) error {
+        // Step 1：用户初始化命令校验
+        if len(context.Args()) &lt; 1 {
+            return fmt.Errorf("missing container command")
+        }
 
-		// Step 2：获取用户命令行命令
-		// Step 2.1：从Context中获取容器内初始化命令
-		var cmdArray []string
-		for _, arg := range context.Args() {
-			cmdArray = append(cmdArray, arg)
-		}
+        // Step 2：获取用户命令行命令
+        // Step 2.1：从Context中获取容器内初始化命令
+        var cmdArray []string
+        for _, arg := range context.Args() {
+            cmdArray = append(cmdArray, arg)
+        }
 
-		// Step 2.2：从Context中获取容器配置相关命令
-		tty := context.Bool("ti") || context.Bool("it") // tty参数
-		resourceConfig := getResourceConfig(context)    // 容器资源限制参数
+        // Step 2.2：从Context中获取容器配置相关命令
+        tty := context.Bool("ti") || context.Bool("it") // tty参数
+        resourceConfig := getResourceConfig(context)    // 容器资源限制参数
 
-		run(tty, cmdArray, resourceConfig)
-		return nil
-	},
+        run(tty, cmdArray, resourceConfig)
+        return nil
+    },
 }
 </code></pre>
 <p>在变量中，我们声明了子命令的一些内容：</p>
@@ -942,18 +981,17 @@ func sendInitCommand(comArray []string, writePipe *os.File) {
 <li><code>m &amp; cpushare &amp; cpuset</code>：内存、CPU时间片以及CPU核心数资源限制；</li>
 </ul>
 </li>
-<li>Action：命令具体执行的函数，其中：&lt;font color="#f00"&gt;<strong>Action函数的入参context中包含了用户所指定的上述所声明的Flags参数以及其他参数（用于指定容器创建后的初始化命令）</strong>&lt;/font&gt;</li>
+<li>Action：命令具体执行的函数，其中：&lt;font color="#f00"&gt;**Action函数的入参context中包含了用户所指定的上述所声明的Flags参数以及其他参数（用于指定容器创建后的初始化命令）**&lt;/font&gt;</li>
 </ul>
-<blockquote>
-<p>这里补充说明一点：</p>
+<blockquote><p>这里补充说明一点：</p>
 <p><strong>在Action函数的入参context中：</strong></p>
 <ul>
 <li><strong>Flags对应的参数使用例如：<code>context.Bool("it")</code>进行取值；</strong></li>
-<li><strong>用户定义的其他参数通过<code>context.Args()</code>进行取值；</strong></li>
-</ul>
+<li><p><strong>用户定义的其他参数通过<code>context.Args()</code>进行取值；</strong></p>
 <p>例如命令：<code>./my_docker run -ti -m 100m -- stress --vm-bytes 200m --vm-keep -m 1</code></p>
-<ul>
-<li><code>context.String("m")</code>会取到：<code>100m</code>；</li>
+</li>
+<li><p><code>context.String("m")</code>会取到：<code>100m</code>；</p>
+</li>
 <li><code>context.Args()</code>会取到：<code>stress --vm-bytes 200m --vm-keep -m 1</code>；</li>
 </ul>
 </blockquote>
@@ -968,68 +1006,68 @@ func sendInitCommand(comArray []string, writePipe *os.File) {
 <h4><strong>② 开启新的容器进程：NewParentProcess</strong></h4>
 <p>run函数的整体实现如下：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cmd/run_command.go</p>
-<pre><code class="language-go">func run(tty bool, comArray []string, res *subsystems.ResourceConfig) {
-	parent, writePipe := container.NewParentProcess(tty)
-	if parent == nil {
-		log.Errorf("New parent process error")
-		return
-	}
-	err := parent.Start()
-	if err != nil {
-		log.Error(err)
-	}
+<pre><code class="lang-go">func run(tty bool, comArray []string, res *subsystems.ResourceConfig) {
+    parent, writePipe := container.NewParentProcess(tty)
+    if parent == nil {
+        log.Errorf("New parent process error")
+        return
+    }
+    err := parent.Start()
+    if err != nil {
+        log.Error(err)
+    }
 
-	cgroupManager := cgroups.NewCgroupManager(defaultCgroupPath)
-	defer func(cgroupManager *cgroups.CgroupManager) {
-		err := cgroupManager.Destroy()
-		if err != nil {
-			log.Error(err)
-		}
-	}(cgroupManager)
+    cgroupManager := cgroups.NewCgroupManager(defaultCgroupPath)
+    defer func(cgroupManager *cgroups.CgroupManager) {
+        err := cgroupManager.Destroy()
+        if err != nil {
+            log.Error(err)
+        }
+    }(cgroupManager)
 
-	err = cgroupManager.Set(res)
-	if err != nil {
-		goto FASTEND
-	}
-	err = cgroupManager.Apply(parent.Process.Pid)
-	if err != nil {
-		goto FASTEND
-	}
+    err = cgroupManager.Set(res)
+    if err != nil {
+        goto FASTEND
+    }
+    err = cgroupManager.Apply(parent.Process.Pid)
+    if err != nil {
+        goto FASTEND
+    }
 
-	sendInitCommand(comArray, writePipe)
-	err = parent.Wait()
+    sendInitCommand(comArray, writePipe)
+    err = parent.Wait()
 
 FASTEND:
-	if err != nil {
-		log.Error(err)
-	}
-	os.Exit(0)
+    if err != nil {
+        log.Error(err)
+    }
+    os.Exit(0)
 }
 </code></pre>
 <p>在run函数中，首先我们调用了container包中的<code>NewParentProcess(tty)</code>函数创建了一个子进程：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/container/container.go</p>
-<pre><code class="language-go">func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
-	readPipe, writePipe, err := utils.NewPipe()
-	if err != nil {
-		log.Errorf("New pipe error %v", err)
-		return nil, nil
-	}
+<pre><code class="lang-go">func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
+    readPipe, writePipe, err := utils.NewPipe()
+    if err != nil {
+        log.Errorf("New pipe error %v", err)
+        return nil, nil
+    }
 
-	// 子进程中调用自己，并发送init参数，在子进程中初始化容器资源（自己的init命令！）
-	cmd := exec.Command("/proc/self/exe", "init")
-	cmd.SysProcAttr = &amp;syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC |
-			syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
-	}
-	// 如果支持tty
-	if tty {
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	}
+    // 子进程中调用自己，并发送init参数，在子进程中初始化容器资源（自己的init命令！）
+    cmd := exec.Command("/proc/self/exe", "init")
+    cmd.SysProcAttr = &amp;syscall.SysProcAttr{
+        Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC |
+            syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
+    }
+    // 如果支持tty
+    if tty {
+        cmd.Stdin = os.Stdin
+        cmd.Stdout = os.Stdout
+        cmd.Stderr = os.Stderr
+    }
 
-	cmd.ExtraFiles = []*os.File{readPipe}
-	return cmd, writePipe
+    cmd.ExtraFiles = []*os.File{readPipe}
+    return cmd, writePipe
 }
 </code></pre>
 <p>在<code>NewParentProcess</code>函数中，首先创建了一个前文中所提到的管道；</p>
@@ -1037,20 +1075,19 @@ FASTEND:
 <ul>
 <li><code>/proc/self/exe init</code>；</li>
 </ul>
-<p>&lt;font color="#f00"&gt;<strong>注：上面的这个命令行可以说是整个容器实现中最为巧妙的地方！（Docker也是使用这个方式进行容器内资源初始化的！）</strong>&lt;/font&gt;</p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>这里重点介绍一下上面创建的命令的含义：</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>由本篇最开始的<code>/proc</code>介绍可知：<code>/proc/self/exe</code>链接到了当前进程的执行命令文件；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>因此：<code>/proc/self/exe init</code>命令将会再次调用docker命令本身，即：<code>docker init</code>，从而执行到我们所声明的<code>InitCommand</code>函数中（注：此时已经进入到了容器进程中！）并完成初始化！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**注：上面的这个命令行可以说是整个容器实现中最为巧妙的地方！（Docker也是使用这个方式进行容器内资源初始化的！）**&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**这里重点介绍一下上面创建的命令的含义：**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**由本篇最开始的`/proc`介绍可知：`/proc/self/exe`链接到了当前进程的执行命令文件；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**因此：`/proc/self/exe init`命令将会再次调用docker命令本身，即：`docker init`，从而执行到我们所声明的`InitCommand`函数中（注：此时已经进入到了容器进程中！）并完成初始化！**&lt;/font&gt;</p>
 </blockquote>
 <p>随后，对命令进行了Namespace绑定：</p>
-<pre><code class="language-go">cmd.SysProcAttr = &amp;syscall.SysProcAttr{
-	Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC |
-		syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
+<pre><code class="lang-go">cmd.SysProcAttr = &amp;syscall.SysProcAttr{
+    Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC |
+        syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
 }
 </code></pre>
 <p>同时，如果支持tty，还会将子进程中的标准流和当前进程中的流进行绑定：</p>
-<pre><code class="language-go">if tty {
+<pre><code class="lang-go">if tty {
     cmd.Stdin = os.Stdin
     cmd.Stdout = os.Stdout
     cmd.Stderr = os.Stderr
@@ -1059,97 +1096,96 @@ FASTEND:
 <p>最后，将所创建的管道对应的<code>readPipe</code>传递给命令<strong>（之后会传入容器进程中，用于接收宿主进程发送的初始化消息）</strong>，并返回创建的命令和<code>writePipe</code><strong>（用于宿主进程向容器进程发送消息）；</strong></p>
 <p>&lt;br/&gt;</p>
 <p>接着，我们回到<code>run</code>函数中：</p>
-<pre><code class="language-go">err := parent.Start()
+<pre><code class="lang-go">err := parent.Start()
 if err != nil {
     log.Error(err)
 }
 </code></pre>
-<p>&lt;font color="#f00"&gt;<strong><code>run</code>函数调用返回的命令的<code>Start</code>函数<code>parent.Start()</code>创建新的进程，即：容器进程！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**`run`函数调用返回的命令的`Start`函数`parent.Start()`创建新的进程，即：容器进程！**&lt;/font&gt;</p>
 <p>这时就会调用我们的<code>InitCommand</code>函数；</p>
 <p>让我们看一下<code>init</code>命令的实现；</p>
 <p>&lt;br/&gt;</p>
 <h4><strong>③ 初始化容器：InitCommand</strong></h4>
 <p>下面是InitCommand的声明：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/cmd/init_command.go</p>
-<pre><code class="language-go">var InitCommand = cli.Command{
-	Name:  "init",
-	Usage: "Init container process run user's process in container. Do not call it outside",
-	Action: func(context *cli.Context) error {
-		log.Infof("init come on")
-		err := container.RunContainerInitProcess()
-		return err
-	},
+<pre><code class="lang-go">var InitCommand = cli.Command{
+    Name:  "init",
+    Usage: "Init container process run user's process in container. Do not call it outside",
+    Action: func(context *cli.Context) error {
+        log.Infof("init come on")
+        err := container.RunContainerInitProcess()
+        return err
+    },
 }
 </code></pre>
 <p>可以看到，InitCommand调用了container包中的<code>RunContainerInitProcess</code>函数：</p>
 <p>chapter3_container/3_3_container_with_limit_and_pipe/container/container.go</p>
-<pre><code class="language-go">// RunContainerInitProcess 在容器中创建初始化进程！（本函数在容器内部，作为第一个进程被执行）
+<pre><code class="lang-go">// RunContainerInitProcess 在容器中创建初始化进程！（本函数在容器内部，作为第一个进程被执行）
 func RunContainerInitProcess() error {
-	// systemd 加入linux之后, mount namespace 就变成 shared by default, 所以你必须显式声明你要这个新的mount namespace独立！
-	// Issue：https://github.com/xianlubird/mydocker/issues/41
-	err := syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
-	if err != nil {
-		return err
-	}
+    // systemd 加入linux之后, mount namespace 就变成 shared by default, 所以你必须显式声明你要这个新的mount namespace独立！
+    // Issue：https://github.com/xianlubird/mydocker/issues/41
+    err := syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, "")
+    if err != nil {
+        return err
+    }
 
-	// 从无名管道中获取用户的参数（从WritePipe过来！）
-	cmdArray := readUserCommand()
-	if cmdArray == nil || len(cmdArray) == 0 {
-		return fmt.Errorf("run container get user command error, cmdArray is nil")
-	}
+    // 从无名管道中获取用户的参数（从WritePipe过来！）
+    cmdArray := readUserCommand()
+    if cmdArray == nil || len(cmdArray) == 0 {
+        return fmt.Errorf("run container get user command error, cmdArray is nil")
+    }
 
-	// 使用 mount 挂载 proc 文件系统（以便后面通过 ps 命令查看当前进程资源）
-	// MS_NOEXEC：本文件系统不允许运行其他程序
-	// MS_NOSUID：本系统运行程序时，不允许 set-user-id, set-group-id
-	// MS_NODEV：mount系统的默认参数
-	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
-	err = syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
-	if err != nil {
-		return err
-	}
+    // 使用 mount 挂载 proc 文件系统（以便后面通过 ps 命令查看当前进程资源）
+    // MS_NOEXEC：本文件系统不允许运行其他程序
+    // MS_NOSUID：本系统运行程序时，不允许 set-user-id, set-group-id
+    // MS_NODEV：mount系统的默认参数
+    defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+    err = syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
+    if err != nil {
+        return err
+    }
 
-	// 查询命令的绝对路径，此时用户可以不再输入绝对路径！
-	absPath, err := exec.LookPath(cmdArray[0])
-	if err != nil {
-		log.Errorf("Exec loop path error %v", err)
-		return err
-	}
-	log.Infof("find cmd absolute path %s", absPath)
+    // 查询命令的绝对路径，此时用户可以不再输入绝对路径！
+    absPath, err := exec.LookPath(cmdArray[0])
+    if err != nil {
+        log.Errorf("Exec loop path error %v", err)
+        return err
+    }
+    log.Infof("find cmd absolute path %s", absPath)
 
-	// 完成容器内初始化，并将用户进程运行起来！
-	// syscall.Exec 最终调用 execve 系统函数，执行当前 filename 对应程序
-	// 并”覆盖“当前进程的镜像、数据和堆栈等信息，包括PID，因此将容器最开始的 init 进程替换掉！
-	if err := syscall.Exec(absPath, cmdArray, os.Environ()); err != nil {
-		log.Errorf("init container err: %v", err.Error())
-	}
-	return nil
+    // 完成容器内初始化，并将用户进程运行起来！
+    // syscall.Exec 最终调用 execve 系统函数，执行当前 filename 对应程序
+    // 并”覆盖“当前进程的镜像、数据和堆栈等信息，包括PID，因此将容器最开始的 init 进程替换掉！
+    if err := syscall.Exec(absPath, cmdArray, os.Environ()); err != nil {
+        log.Errorf("init container err: %v", err.Error())
+    }
+    return nil
 }
 </code></pre>
 <p>在<code>RunContainerInitProcess</code>函数中：</p>
 <p>首先，<strong>我们重新挂载了<code>/</code>，这是为了解决在 <code>systemd</code> 加入linux之后, mount namespace 默认就变成了 shared by default，因此需要显式声明新的mount namespace独立！</strong></p>
 <p>随后，调用了<code>readUserCommand()</code>从无名管道中获取用户的容器初始化参数，代码如下：</p>
-<pre><code class="language-go">// 从无名管道中获取输入
+<pre><code class="lang-go">// 从无名管道中获取输入
 func readUserCommand() []string {
-	// 这里用3号文件描述符是因为，我们只创建了一个管道流，而默认是0、1、2（标准输入+输出，错误输出）
-	pipe := os.NewFile(uintptr(3), "pipe")
-	msg, err := ioutil.ReadAll(pipe)
-	if err != nil {
-		log.Errorf("init read pipe error %v", err)
-		return nil
-	}
-	msgStr := string(msg)
-	return strings.Split(msgStr, " ")
+    // 这里用3号文件描述符是因为，我们只创建了一个管道流，而默认是0、1、2（标准输入+输出，错误输出）
+    pipe := os.NewFile(uintptr(3), "pipe")
+    msg, err := ioutil.ReadAll(pipe)
+    if err != nil {
+        log.Errorf("init read pipe error %v", err)
+        return nil
+    }
+    msgStr := string(msg)
+    return strings.Split(msgStr, " ")
 }
 </code></pre>
 <p>这里通过3号文件描述符<strong>（这里用3号文件描述符是因为，我们只创建了一个管道流，而默认是0、1、2【标准输入+输出，错误输出】）</strong>取出了我们的父进程输入流，</p>
-<p>&lt;font color="#f00"&gt;<strong>注：此时父进程（宿主进程）还没有向管道中写入数据！因此，此时<code>容器进程</code>会在此阻塞（<code>ioutil.ReadAll(pipe)</code>）！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>直到宿主进程向子进程中发送了初始化命令后，容器进程才会继续执行！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**注：此时父进程（宿主进程）还没有向管道中写入数据！因此，此时`容器进程`会在此阻塞（`ioutil.ReadAll(pipe)`）！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**直到宿主进程向子进程中发送了初始化命令后，容器进程才会继续执行！**&lt;/font&gt;</p>
 <p>当宿主进程通过管道向子进程发送了初始化命令后，<code>readUserCommand</code>函数获取用户的初始化命令数组，并返回；</p>
 <p>随后，容器进程重新挂载 proc 文件系统，并从<code>$PATH</code>中获取用户初始化命令的绝对路径<code>absPath</code>；</p>
 <p>最终，调用<code>syscall.Exec(absPath, cmdArray, os.Environ())</code>，使用用户传输的命令进行容器的初始化！</p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>注：Go语言中的 <code>syscall.Exec</code> 函数最终会调用 <code>execve</code> 系统函数，执行当前 filename 对应程序，并<code>覆盖</code>当前进程的镜像、数据和堆栈等信息，包括PID，因此会将将容器最开始的 init 进程替换掉！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>即：PID为1的进程不再是init，而是用户指定的初始化命令所对应的进程！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**注：Go语言中的 `syscall.Exec` 函数最终会调用 `execve` 系统函数，执行当前 filename 对应程序，并`覆盖`当前进程的镜像、数据和堆栈等信息，包括PID，因此会将将容器最开始的 init 进程替换掉！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**即：PID为1的进程不再是init，而是用户指定的初始化命令所对应的进程！**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h4><strong>④ 挂载Cgroup进行资源限制</strong></h4>
@@ -1157,7 +1193,7 @@ func readUserCommand() []string {
 <p>当调用了<code>parent.Start()</code>后，容器进程被创建，并等待宿主进程中的初始化命令，随后完成容器初始化；</p>
 <p>此时正是我们对容器进程进行资源限制的最好时机！</p>
 <p>因此，在 <code>run</code> 函数中，接下来进行了Cgroup和PID之间的绑定，进行资源的限制：</p>
-<pre><code class="language-go">cgroupManager := cgroups.NewCgroupManager(defaultCgroupPath)
+<pre><code class="lang-go">cgroupManager := cgroups.NewCgroupManager(defaultCgroupPath)
 defer func(cgroupManager *cgroups.CgroupManager) {
     err := cgroupManager.Destroy()
     if err != nil {
@@ -1174,36 +1210,35 @@ if err != nil {
     goto FASTEND
 }
 </code></pre>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>注1：如果先初始化，后绑定，则不会对初始化命令的资源进行限制！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>注2：直接使用<code>parent.Process.Pid</code>获取容器进程的PID即可！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**注1：如果先初始化，后绑定，则不会对初始化命令的资源进行限制！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**注2：直接使用`parent.Process.Pid`获取容器进程的PID即可！**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h4><strong>⑤ 宿主进程向容器进程发送初始化命令：sendInitCommand</strong></h4>
 <p>在对容进程进行了资源限制之后，宿主进程可以向容器进程发送初始化命令，完成容器的初始化；</p>
 <p>发送命令主要是通过<code>sendInitCommand</code>函数完成的：</p>
-<pre><code class="language-go">// sendInitCommand 向管道中写入用户自定义初始化命令参数
+<pre><code class="lang-go">// sendInitCommand 向管道中写入用户自定义初始化命令参数
 func sendInitCommand(comArray []string, writePipe *os.File) {
-	defer func(writePipe *os.File) {
-		err := writePipe.Close()
-		if err != nil {
-			log.Errorf("close write pipe err: %v", err)
-		}
-	}(writePipe)
+    defer func(writePipe *os.File) {
+        err := writePipe.Close()
+        if err != nil {
+            log.Errorf("close write pipe err: %v", err)
+        }
+    }(writePipe)
 
-	command := strings.Join(comArray, " ")
-	log.Infof("command all is %s", command)
-	_, err := writePipe.WriteString(command)
-	if err != nil {
-		log.Errorf("write pipe err: %v", err)
-		return
-	}
+    command := strings.Join(comArray, " ")
+    log.Infof("command all is %s", command)
+    _, err := writePipe.WriteString(command)
+    if err != nil {
+        log.Errorf("write pipe err: %v", err)
+        return
+    }
 }
 </code></pre>
 <p><code>sendInitCommand</code>函数很简单：就是通过<code>writePipe</code>向容器进程发送了用户初始化命令；</p>
 <p>当发送完成后，容器进程便开始进行初始化；</p>
 <p>同时，宿主进程等待容器进程完成：</p>
-<pre><code class="language-go">err = parent.Wait()
+<pre><code class="lang-go">err = parent.Wait()
 </code></pre>
 <p>此时，我们的容器进程初始化完毕，可以使用！</p>
 <p>至此，我们的容器创建完毕！</p>
@@ -1211,7 +1246,7 @@ func sendInitCommand(comArray []string, writePipe *os.File) {
 <h2><strong>四、命令测试</strong></h2>
 <p>我们的容器已经写完了，那么效果如何呢？是骡子是马，拉出来溜溜吧！</p>
 <p>首先使用<code>go build</code>编译我们的Docker：</p>
-<pre><code class="language-bash">root@jasonkay:~/workspace/my_docker/chapter3_container/3_3_container_with_limit_and_pipe# go build
+<pre><code class="lang-bash">root@jasonkay:~/workspace/my_docker/chapter3_container/3_3_container_with_limit_and_pipe# go build
 root@jasonkay:~/workspace/my_docker/chapter3_container/3_3_container_with_limit_and_pipe# ll
 total 4684
 drwxr-xr-x 6 root root    4096 Sep  5 20:04 ./
@@ -1231,10 +1266,10 @@ drwxr-xr-x 2 root root    4096 Aug 28 18:59 utils/
 <h3><strong>1、无资源限制测试</strong></h3>
 <h4><strong>① ls命令测试</strong></h4>
 <p>直接执行下面的命令进行测试：</p>
-<pre><code class="language-bash">./my_docker run -ti /bin/ls
+<pre><code class="lang-bash">./my_docker run -ti /bin/ls
 </code></pre>
 <p>输出如下：</p>
-<pre><code class="language-bash">{"level":"info","msg":"init come on","time":"2021-09-05T20:05:20Z"}
+<pre><code class="lang-bash">{"level":"info","msg":"init come on","time":"2021-09-05T20:05:20Z"}
 {"level":"info","msg":"set cpu-set success, file: /sys/fs/cgroup/cpuset/mydocker-cgroup/cpuset.cpus, cpu-set num: 1","time":"2021-09-05T20:05:20Z"}
 {"level":"info","msg":"set memory success, file: /sys/fs/cgroup/memory/mydocker-cgroup/memory.limit_in_bytes, size: 256m","time":"2021-09-05T20:05:20Z"}
 {"level":"info","msg":"set cpu-share success, file: /sys/fs/cgroup/cpu,cpuacct/mydocker-cgroup/cpu.shares, cpu-share: 512","time":"2021-09-05T20:05:20Z"}
@@ -1254,17 +1289,16 @@ cgroups  cmd  container  go.mod  go.sum  main.go  my_docker  README.md  test-ls.
 <li>子进程查找<code>ls</code>命令的绝对路径（<strong>这里能够看到子进程的日志是因为我们指定了<code>tty</code>将标准流和当前进程绑定）</strong>；</li>
 <li>执行命令<code>/bin/ls</code>，打印出结果！</li>
 </ul>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>注意到：我们并未挂载新的目录，因此容器进程可以打印出宿主进程中当前目录下的文件！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**注意到：我们并未挂载新的目录，因此容器进程可以打印出宿主进程中当前目录下的文件！**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h4><strong>② sh命令测试</strong></h4>
 <p>除了<code>ls</code>命令外，我们还可以直接执行<code>sh</code>命令进入容器环境！</p>
 <p>执行下面的命令：</p>
-<pre><code class="language-bash">./my_docker run -ti /bin/sh
+<pre><code class="lang-bash">./my_docker run -ti /bin/sh
 </code></pre>
 <p>此时输出日志，并进入容器进程中：</p>
-<pre><code class="language-bash">root@jasonkay:~/workspace/my_docker/chapter3_container/3_3_container_with_limit_and_pipe# ./my_docker run -ti /bin/sh
+<pre><code class="lang-bash">root@jasonkay:~/workspace/my_docker/chapter3_container/3_3_container_with_limit_and_pipe# ./my_docker run -ti /bin/sh
 {"level":"info","msg":"init come on","time":"2021-09-05T20:12:02Z"}
 {"level":"info","msg":"set cpu-set success, file: /sys/fs/cgroup/cpuset/mydocker-cgroup/cpuset.cpus, cpu-set num: 1","time":"2021-09-05T20:12:03Z"}
 {"level":"info","msg":"set memory success, file: /sys/fs/cgroup/memory/mydocker-cgroup/memory.limit_in_bytes, size: 256m","time":"2021-09-05T20:12:03Z"}
@@ -1274,10 +1308,10 @@ cgroups  cmd  container  go.mod  go.sum  main.go  my_docker  README.md  test-ls.
 {"level":"info","msg":"apply cpu-share success, file: /sys/fs/cgroup/cpu,cpuacct/mydocker-cgroup/tasks, pid: 355424","time":"2021-09-05T20:12:03Z"}
 {"level":"info","msg":"command all is /bin/sh","time":"2021-09-05T20:12:03Z"}
 {"level":"info","msg":"find cmd absolute path /bin/sh","time":"2021-09-05T20:12:03Z"}
-# 
+#
 </code></pre>
 <p>查看容器中的进程列表：</p>
-<pre><code class="language-bash"># ps -ef
+<pre><code class="lang-bash"># ps -ef
 UID          PID    PPID  C STIME TTY          TIME CMD
 root           1       0  0 20:12 pts/0    00:00:00 /bin/sh
 root           6       1  0 20:12 pts/0    00:00:00 ps -ef
@@ -1287,7 +1321,7 @@ root           6       1  0 20:12 pts/0    00:00:00 ps -ef
 <p>&lt;br/&gt;</p>
 <h3><strong>2、资源限制测试</strong></h3>
 <p>执行下面的命令，在容器中执行<code>stress</code>命令模拟系统负载较高时的场景；</p>
-<pre><code class="language-bash"># ./my_docker run -ti -m 100m -- stress --vm-bytes 200m --vm-keep -m 1
+<pre><code class="lang-bash"># ./my_docker run -ti -m 100m -- stress --vm-bytes 200m --vm-keep -m 1
 
 {"level":"info","msg":"init come on","time":"2021-09-05T20:15:30Z"}
 {"level":"info","msg":"set cpu-set success, file: /sys/fs/cgroup/cpuset/mydocker-cgroup/cpuset.cpus, cpu-set num: 1","time":"2021-09-05T20:15:30Z"}
@@ -1302,7 +1336,7 @@ stress: info: [1] dispatching hogs: 0 cpu, 0 io, 1 vm, 0 hdd
 </code></pre>
 <p>我们<code>stress</code>命令指定的内存占用为<code>200m</code>，而对容器进程的资源占用限制为<code>100m</code>；</p>
 <p>可以在宿主机中查看资源占用情况：</p>
-<pre><code class="language-bash"># top
+<pre><code class="lang-bash"># top
 
 top - 20:16:37 up 8 days,  4:01,  2 users,  load average: 0.79, 0.27, 0.08
 Tasks: 267 total,   2 running, 265 sleeping,   0 stopped,   0 zombie
@@ -1311,7 +1345,7 @@ MiB Mem :  15985.9 total,   9795.9 free,   2824.4 used,   3365.6 buff/cache
 MiB Swap:  12288.0 total,  12184.2 free,    103.8 used.  12832.9 avail Mem 
 
     PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND                             
- 355578 root      20   0  208660 101456    272 R  73.3   0.6   0:50.78 stress  
+ 355578 root      20   0  208660 101456    272 R  73.3   0.6   0:50.78 stress
 </code></pre>
 <p>可以看到，仅仅占用了 <code>15985.9 * 0.6% = 95.9154 ≈ 100M</code> 内存，我们成功限制了容器进程的内存占用！</p>
 <p>其他的资源限制也是可以生效的，这里由于篇幅的原因，不再赘述了！</p>
@@ -1319,11 +1353,10 @@ MiB Swap:  12288.0 total,  12184.2 free,    103.8 used.  12832.9 avail Mem
 <h2><strong>其他内容</strong></h2>
 <p>在执行命令时可能会报错：<code>cgroup：no space left on device</code>，即：<code>cpuset中tasks无法加入新的pid</code>！</p>
 <p>这是由于默认的Cgroups的mems文件是空的，我们只需要写入一个值，分配内存即可，如：</p>
-<pre><code class="language-bash">echo 0 &gt; /sys/fs/cgroup/cpuset/mydocker-cgroup/cpuset.mems
+<pre><code class="lang-bash">echo 0 &gt; /sys/fs/cgroup/cpuset/mydocker-cgroup/cpuset.mems
 </code></pre>
-<blockquote>
-<p>对应Issue：https://github.com/xianlubird/mydocker/issues/74</p>
-<p>相关文章：https://blog.csdn.net/xftony/article/details/80536562</p>
+<blockquote><p>对应Issue：<a href="https://github.com/xianlubird/mydocker/issues/74">https://github.com/xianlubird/mydocker/issues/74</a></p>
+<p>相关文章：<a href="https://blog.csdn.net/xftony/article/details/80536562">https://blog.csdn.net/xftony/article/details/80536562</a></p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h2><strong>本篇小结</strong></h2>
@@ -1341,13 +1374,13 @@ MiB Swap:  12288.0 total,  12184.2 free,    103.8 used.  12832.9 avail Mem
 <h1><strong>附录</strong></h1>
 <p>系列文章：</p>
 <ul>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-1%EF%BC%9ANamespace/">Docker原理实战-1：Namespace</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-2%EF%BC%9ACgroups/">Docker原理实战-2：Cgroups</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-3%EF%BC%9AUnionFS/">Docker原理实战-3：UnionFS</a></li>
-<li><a href="/2021/09/05/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-4%EF%BC%9A%E5%AE%B9%E5%99%A8Container/">Docker原理实战-4：容器Container</a></li>
+<li><a href="/2021/08/29/Docker原理实战-1：Namespace/">Docker原理实战-1：Namespace</a></li>
+<li><a href="/2021/08/29/Docker原理实战-2：Cgroups/">Docker原理实战-2：Cgroups</a></li>
+<li><a href="/2021/08/29/Docker原理实战-3：UnionFS/">Docker原理实战-3：UnionFS</a></li>
+<li><a href="/2021/09/05/Docker原理实战-4：容器Container/">Docker原理实战-4：容器Container</a></li>
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/my_docker</li>
+<li><a href="https://github.com/JasonkayZK/my_docker">https://github.com/JasonkayZK/my_docker</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

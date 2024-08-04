@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E8%BD%AF%E4%BB%B6%E6%9E%84%E6%9E%B6%E8%AE%BE%E8%AE%A1/%E4%B8%80%E4%B8%AALinux%E6%AD%BB%E9%94%81%E4%BF%A1%E6%81%AF%E5%88%86%E6%9E%90.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/软件构架设计/一个Linux死锁信息分析.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2019-2020</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.0</p>
@@ -52,7 +52,8 @@
 
     2 locks held by test_dummy/827:
      #0: (____ptrval____) (&amp;hw-&gt;mutex){+.+.}, at: xxxxxxxxx+0x34/0x98
-     #1: (____ptrval____) (xxxxx_mutex){+.+.}, at: xxxxxxxxxx+0x30/0xb8</code></pre>
+     #1: (____ptrval____) (xxxxx_mutex){+.+.}, at: xxxxxxxxxx+0x30/0xb8
+</code></pre>
 <p>这个事情很奇怪，我不觉得它提出来的Possible unsafe locking scenario真的会死锁啊
 。</p>
 <p>我个人原来一直没有看过Linux的死锁跟踪机制，为了看懂这个问题，我先速成一下，整理
@@ -80,7 +81,7 @@ lockdep_map对象的映射，然后就在这些流程里进行死锁Pattern的�
 <p>为了增加检测的机会，在部分和锁有关的代码中，还会主动插入might_lock增加检查，这
 个本质是主动把lock_acquire和lock_release调一次，就是为了检查而做的。</p>
 <p>除了这些基本接口，lockdep还有可以用来检查某个锁肯定已经上了的
-lockdep_assert_is_held()，或者确认锁不会被中途释放的lockdep_*pin_lock()等辅助性
+lockdep_assert_is<em>held()，或者确认锁不会被中途释放的lockdep</em>*pin_lock()等辅助性
 的函数。</p>
 <p>具体的检查算法都是细节，大概的意思就是判断依赖关系是否有循环（注1），是否重复上
 锁和是否在不安全上下文中上安全的锁（比如开着中断上spinlock，这会引起spinlock进
@@ -91,13 +92,15 @@ lockdep_assert_is_held()，或者确认锁不会被中途释放的lockdep_*pin_l
 <pre><code>    LOCK_USED_IN_HARDIRQ
     LOCK_USED_IN_HARDIRQ_READ
     LOCK_USED_IN_SOFTIRQ
-    LOCK_USED_IN_SOFTIRQ_READ</code></pre>
+    LOCK_USED_IN_SOFTIRQ_READ
+</code></pre>
 <p>这个标记记录的是上锁的时候是否“曾经”在对应的状态过，具体的标记表示这个上下文当
 时的状态：::</p>
 <pre><code>    . 状态关，非状态上下文（也可能就没有发生过）
     - 状态关，状态上下文
     + 状态开，非状态上下文
-    ? 状态开，状态上下文</code></pre>
+    ? 状态开，状态上下文
+</code></pre>
 <p>“状态”对应上面那四个上下文标记提到的中断状态，比如第一个标记是+，就表示hardirq
 开，非hardirq上下文。</p>
 <p>而例子中的{+.+.}，表示这个锁“在线程上下文没关软硬中断的情况下上过锁（非读写锁）

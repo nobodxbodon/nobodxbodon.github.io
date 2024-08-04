@@ -12,20 +12,21 @@ tags:</li>
 <hr/>
 <h2>起因</h2>
 <p>公司重构系统，我被分配到了用户管理模块，在做到权限的时候发现之前的权限管理是用一个长的字符串来存储所有权限的，例如：</p>
-<p>&lt;!-- more --&gt;</p>
-<pre><code class="language-text">5101110
+&lt;!-- more --&gt;
+
+<pre><code class="lang-text">5101110
 ABCDEFG
 </code></pre>
 <p>上面的 <code>7</code> 位数字分别对应下面的 <code>7</code> 个权限，除了第一位为权限等级（分为 1 至 5 档）外，其他的都是是否拥有该权限的状态（1 代表拥有该权限，0 代表没有该权限）。 这样的做法虽然看似简单，但在代码编写中会麻烦很多，特别是当权限种类数量很多的时候。所以，在查阅资料后，我决定<strong>使用枚举和按位运算来控制用户权限</strong>（点题），在向 leader 请示后，开始改造。</p>
 <h2>原理</h2>
 <p>首先要把原有的权限拆分为两部分，一部分是第一位的权限等级，另一部分是各个权限状态，需要改造的主要是各个权限状态。 为了简化步骤，我把权限数量缩小为 <code>6</code> 个，实际有 <code>15</code> 个（并且未来还可能增加），具体是这样的： 一个六个权限，分别用 0 和 1 来表示<strong>有</strong>或<strong>没有</strong>对应的权限：</p>
-<pre><code class="language-text">17
+<pre><code class="lang-text">17
 
 FEDCBA
 010001B
 </code></pre>
 <p>如上，代表用户拥有 <code>A</code> 权限和 <code>E</code> 权限，同理可得如果有 一个用户拥有 <code>B</code> 权限、<code>C</code> 权限和 <code>D</code> 权限，那我们就可以这样计算：</p>
-<pre><code class="language-text">2 | 4 | 8 = 14
+<pre><code class="lang-text">2 | 4 | 8 = 14
 
   000010B
   000100B
@@ -34,33 +35,33 @@ FEDCBA
   001110B
 </code></pre>
 <p>然后我们就可以用 <code>001110</code> 来代表用户所拥有的权限了。 当我们需要<strong>添加权限</strong>的时候，我们就可以用<strong>按位或</strong>（<code>|</code>）来计算，比如我们要为上面的 <code>001110B</code> 来添加一个 F 权限（<code>100000B</code>）：</p>
-<pre><code class="language-text">001110B | 100000B = 101110B
+<pre><code class="lang-text">001110B | 100000B = 101110B
 
 14 | 32 = 45
 </code></pre>
 <p>而且就算用户已经有了需要添加的权限，再进行<strong>按位或</strong>的运算也是没有问题的：</p>
-<pre><code class="language-text">45 | 32 = 45
+<pre><code class="lang-text">45 | 32 = 45
 
 101110B | 100000B = 101110B
 </code></pre>
 <p>当我们需要<strong>移除权限</strong>的时候，我们就要用到<strong>与非运算</strong>（<code>&amp;</code> 和 <code>~</code>）：</p>
-<pre><code class="language-text">45 &amp; ~32 = 14
+<pre><code class="lang-text">45 &amp; ~32 = 14
 
 101110B &amp; ~100000B = 001110B
 </code></pre>
 <p>同样的，就算用户本来没有这个权限，在移除权限时也不会有问题：</p>
-<pre><code class="language-text">14 &amp; ~32 = 14
+<pre><code class="lang-text">14 &amp; ~32 = 14
 
 001110B &amp; ~100000B = 001110B
 </code></pre>
 <p>当我们需要判断一个用户<strong>是否拥有权限</strong>的时候，可以用用户的权限来<strong>与</strong>（<code>&amp;</code>）要判断的权限，当结果还是判断的权限时，则代表用户有这个权限：</p>
-<pre><code class="language-text">45 &amp; 32 = 32
+<pre><code class="lang-text">45 &amp; 32 = 32
 
 101110B &amp; 100000B = 100000B
 </code></pre>
 <h2>编码</h2>
 <p>首先列出所有的权限的枚举：</p>
-<pre><code class="language-csharp">/// &lt;summary&gt;
+<pre><code class="lang-csharp">/// &lt;summary&gt;
 /// 权限集枚举
 /// &lt;/summary&gt;
 public enum RightsSet
@@ -97,7 +98,7 @@ public enum RightsSet
 }
 </code></pre>
 <p>注意，枚举的值一定要是 <code>2</code> 的 N 次幂形式。 然后是三个与权限相关个公共静态方法：</p>
-<pre><code class="language-csharp">/// &lt;summary&gt;
+<pre><code class="lang-csharp">/// &lt;summary&gt;
 /// 判断是否拥有一个权限
 /// &lt;/summary&gt;
 /// &lt;param name="userRights"&gt;用户原有的权限&lt;/param&gt;

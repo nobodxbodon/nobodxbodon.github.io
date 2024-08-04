@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux%E4%B8%BB%E7%BA%BF%E5%86%85%E6%A0%B8%E8%B7%9F%E8%B8%AA/6.5.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux主线内核跟踪/6.5.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2023</p>
 <p>:Authors: Kenneth Lee
 :Version: 0.1
@@ -29,7 +29,8 @@
 
 &gt; umount /mnt
   |
-  └─/mnt    /dev/sdb    xfs</code></pre>
+  └─/mnt    /dev/sdb    xfs
+</code></pre>
 <p>简单总结就是你可以在已有的Mount下面（Beneath）换一个Mount，然后把顶上的Mount
 Unmount掉。这可以很灵活换掉正在使用的某个Mount而不怎么影响使用。不过预计还是有
 不少小问题的：如果你已经打开了顶上这层的文件，它同样是umount不掉的，得有个办法
@@ -55,12 +56,13 @@ propagation的概念，它决定了mount的信息是否在多个mount point之�
 };
 
 int cachestat(unsigned int fd, off_t offset, size_t len,
-              size_t cstat_size, struct cachestat *cstat);</code></pre>
+              size_t cstat_size, struct cachestat *cstat);
+</code></pre>
 <p>总觉得这个东西不应该开给应用程序的，一旦用了这种功能，基本上cache的算法特征就
 和程序的功能绑定了。不过OS技术这么多年也没有什么进步，一点性能收益大家都要去抢
 的，这愤世嫉俗也没用。</p>
 <h2>支持unaccepted内存</h2>
-<p>现在的安全虚拟机技术，比如Intel的TDX\ [#tdx]<em>\ 或者AMD的SEV-SNP\ [#sev-snp]</em><br/>
+<p>现在的安全虚拟机技术，比如Intel的TDX\ [#tdx]<em>\ 或者AMD的SEV-SNP\ [#sev-snp]</em>\
 ，对内存的能力有要求，这个补丁支持虚拟机对内存的使用提要求。</p>
 <p>.. [#tdx] Trust Domain eXtension
 .. [#sev-snp] Secure Encrypted Virtuliazation and Secure Nested Paging</p>
@@ -91,43 +93,44 @@ int cachestat(unsigned int fd, off_t offset, size_t len,
 <p>它依赖gcc和llvm的一个语言扩展，你可以这样定义类型：</p>
 <p>.. code:: c</p>
 <p>cleanup_func(&amp;my_var) {
-free_my_var(my_var);
-}
-type my_var <strong>attribute</strong>((<strong>cleanup</strong>(cleanup_func)));</p>
+    free_my_var(my_var);
+  }
+  type my_var <strong>attribute</strong>((<strong>cleanup</strong>(cleanup_func)));</p>
 <p>就是你指定一个类型的释放函数，当这个类型的实例离开范围的时候，实例的指针会传给
 你的施放函数，你用你的方法清除它就可以了。</p>
 <p>用法看例子：</p>
 <p>.. code:: c</p>
 <p>// 释放函数
-static inline void snd_card_unref(struct snd_card *card)
-{
-put_device(&amp;card-&gt;card_dev);
-}</p>
+  static inline void snd_card_unref(struct snd_card *card)
+  {
+    put_device(&amp;card-&gt;card_dev);
+  }</p>
 <p>// 绑定类型
-DEFINE_FREE(snd_card_unref, struct snd_card *, if (_T) snd_card_unref(_T))</p>
-<p>static int snd_ctl_led_set_id(int card_number, struct snd_ctl_elem_id *id,
-unsigned int group, bool set)
-{
-struct snd_card *card __free(snd_card_unref) = NULL; // 定义类型
-...</p>
+  DEFINE_FREE(snd_card_unref, struct snd_card *, if (_T) snd_card_unref(_T))</p>
+<p>static int snd_ctl_led_set_id(int card_number, struct snd_ctl_elem_id <em>id,
+                  unsigned int group, bool set)
+  {
+    struct snd_card </em>card __free(snd_card_unref) = NULL; // 定义类型
+        ...</p>
 <pre><code>card = snd_card_ref(card_number);                    // 分配
     ...
 if (!kctl)
-	return -ENOENT;                              // 这里会自动释放
+    return -ENOENT;                              // 这里会自动释放
     ...
 return 0;                                            // 这里也会自动释放
-                                                         // 如果要返回card本身，用return_ptr(card)</code></pre>
+                                                         // 如果要返回card本身，用return_ptr(card)
+</code></pre>
 <p>}</p>
 <p>这是基础方法，高级用法是封装成类：::</p>
 <ul>
 <li>DEFINE_CLASS(name, type, exit, init, init_args...):</li>
 <li>helper to define the destructor and constructor for a type.</li>
 <li>@exit is an expression using '_T' -- similar to FREE above.</li>
-<li>@init is an expression in @init_args resulting in @type</li>
-<li></li>
+<li>@init is an expression in @init_args resulting in @type
+*</li>
 <li>EXTEND_CLASS(name, ext, init, init_args...):</li>
-<li>extends class @name to @name@ext with the new constructor</li>
-<li></li>
+<li>extends class @name to @name@ext with the new constructor
+*</li>
 <li>CLASS(name, var)(args...):</li>
 <li>declare the variable @var as an instance of the named class</li>
 </ul>
@@ -135,30 +138,28 @@ return 0;                                            // 这里也会自动释放
 <ul>
 <li>DEFINE_GUARD(name, type, lock, unlock):</li>
 <li>trivial wrapper around DEFINE_CLASS() above specifically</li>
-<li>for locks.</li>
-<li></li>
+<li>for locks.
+*</li>
 <li>DEFINE_GUARD_COND(name, ext, condlock)</li>
 <li>wrapper around EXTEND_CLASS above to add conditional lock</li>
 <li>variants to a base class, eg. mutex_trylock() or</li>
-<li>mutex_lock_interruptible().</li>
-<li></li>
+<li>mutex_lock_interruptible().
+*</li>
 <li>guard(name):</li>
 <li>an anonymous instance of the (guard) class, not recommended for</li>
-<li>conditional locks.</li>
-<li></li>
+<li>conditional locks.
+*</li>
 <li>scoped_guard (name, args...) { }:</li>
 <li>similar to CLASS(name, scope)(args), except the variable (with the</li>
 <li>explicit name 'scope') is declard in a for-loop such that its scope is</li>
-<li>bound to the next (compound) statement.</li>
-<li></li>
+<li>bound to the next (compound) statement.
+*</li>
 <li>for conditional locks the loop body is skipped when the lock is not</li>
-<li>acquired.</li>
-<li></li>
+<li>acquired.
+*</li>
 <li>scoped_cond_guard (name, fail, args...) { }:</li>
-<li><pre><code> similar to scoped_guard(), except it does fail when the lock</code></pre>
-</li>
-<li><pre><code> acquire fails.</code></pre>
-</li>
+<li>similar to scoped_guard(), except it does fail when the lock</li>
+<li>acquire fails.</li>
 </ul>
 <h1>其他有趣的东西</h1>
 <ol>
@@ -168,24 +169,24 @@ return 0;                                            // 这里也会自动释放
 </li>
 <li><p>启动USB4.0支持，Intel的工作，大部分代码在drivers/thunderbolt里面。</p>
 </li>
-<li><p>启动MIDI2.0支持</p>
-</li>
-<li><p>nolibc又合入了很多测试用例，最近是它的密集开发期。</p>
-</li>
+<li>启动MIDI2.0支持</li>
+<li>nolibc又合入了很多测试用例，最近是它的密集开发期。</li>
 <li><p>rust升级到1.68.2</p>
 </li>
 <li><p>ARM8.8提供了一个在用户态拷贝内存的指令（需要开启内核特性），指令是这样的：::</p>
 <p>static void mops_sigill(void)
-{
-char dst[1], src[1];
-register char *dstp asm ("x0") = dst;
-register char *srcp asm ("x1") = src;
-register long size asm ("x2") = 1;</p>
-<pre><code> 	/* CPYP [x0]!, [x1]!, x2! */
- 	asm volatile(".inst 0x1d010440"
- 		     : "+r" (dstp), "+r" (srcp), "+r" (size)
- 		     :
- 		     : "cc", "memory");</code></pre>
+   {</p>
+<pre><code>     char dst[1], src[1];
+     register char *dstp asm ("x0") = dst;
+     register char *srcp asm ("x1") = src;
+     register long size asm ("x2") = 1;
+
+     /* CPYP [x0]!, [x1]!, x2! */
+     asm volatile(".inst 0x1d010440"
+              : "+r" (dstp), "+r" (srcp), "+r" (size)
+              :
+              : "cc", "memory");
+</code></pre>
 <p>}</p>
 </li>
 <li><p>Intel修复了GDS（Gather Data Sampling）安全漏洞，这个问题是向量指令在做

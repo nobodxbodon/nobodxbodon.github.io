@@ -4,14 +4,14 @@
 categories:</p>
 <ul>
 <li>Machine Learning
-updated:
+updated: 
 comments: true
 mathjax: false</li>
 </ul>
 <hr/>
 <p>受 <a href="https://zhuanlan.zhihu.com/p/486938936">这篇</a> 启发, 自定义 Huggingface Transformers Trainer 做通用训练器.</p>
 <p>模型定义照常.</p>
-<pre><code class="language-python">import torch.nn as nn
+<pre><code class="lang-python">import torch.nn as nn
 
 class Model(nn.Module):
     def forward(self, inputs):
@@ -19,7 +19,7 @@ class Model(nn.Module):
         return logits
 </code></pre>
 <p>自定义损失函数. 损失函数要么写在模型的 forward 里 (Huggingface 的写法), 要么继承 Trainer 类, 覆写 compute_loss.</p>
-<pre><code class="language-python">import transformers
+<pre><code class="lang-python">import transformers
 
 class MyTrainer(transformers.Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
@@ -31,16 +31,17 @@ class MyTrainer(transformers.Trainer):
         # TODO: tested only with `return_outputs=False`
         return (loss, {'logits': logits}) if return_outputs else loss
 </code></pre>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <p>定义指标.</p>
-<pre><code class="language-python">def compute_metrics(eval_pred: [transformers.EvalPrediction]) -&gt; Dict:
+<pre><code class="lang-python">def compute_metrics(eval_pred: [transformers.EvalPrediction]) -&gt; Dict:
     ...
     return {
         'f1': ...,
     }
 </code></pre>
 <p>接下来初始化模型, 自定义 torch.utils.data.Dataset 和 collate_fn (trainer 里会自动组装为 dataloader).</p>
-<pre><code class="language-python">class MyDataset(torch.utils.data.Dataset):
+<pre><code class="lang-python">class MyDataset(torch.utils.data.Dataset):
     ...
     def __getitem__(self, idx):
         return {
@@ -49,13 +50,13 @@ class MyTrainer(transformers.Trainer):
         }
 </code></pre>
 <p>指定训练参数, 要注意 label_names. 看 Trainer 的 prediction_step 方法源码.</p>
-<pre><code class="language-python"># trainer.py
+<pre><code class="lang-python"># trainer.py
 class Trainer:
     def __init__(self, ...):
         ...
         default_label_names = find_labels(self.model.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
-        
+
     def prediction_step(self, ...):
         has_labels = False if len(self.label_names) == 0 else all(inputs.get(k) is not None for k in self.label_names)
         ...
@@ -68,8 +69,8 @@ class Trainer:
             labels = None
         ...
         return (loss, logits, labels)
-            
-        
+
+
 # utils/generic.py
 def find_labels(model_class):
     model_name = model_class.__name__
@@ -90,7 +91,7 @@ def find_labels(model_class):
 <p><a href="https://huggingface.co/docs/transformers/main_classes/trainer#trainer">官方文档</a> 中写到了可以覆写哪些方法.</p>
 <h3>优化器</h3>
 <p>覆盖默认优化器, 使用 Adam, 不用 scheduler.</p>
-<pre><code class="language-python">class MyTrainer(transformers.Trainer):
+<pre><code class="lang-python">class MyTrainer(transformers.Trainer):
     def create_optimizer(self):
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=self.args.learning_rate,
@@ -105,7 +106,7 @@ def find_labels(model_class):
 <h3>集成 MLflow</h3>
 <p>如果安装了 mflow, 直接用 Trainer 时会自动使用 MLflowCallback. 一个 mlfow run 会自动记录训练开始到结束的指标. 如果想在训练结束后继续用 mlflow 记录, 可以如下操作.</p>
 <p>先看源码</p>
-<pre><code class="language-python"># integrations.py
+<pre><code class="lang-python"># integrations.py
 class MLflowCallback(TrainerCallback):
     def __init__(self):
         ...
@@ -113,7 +114,7 @@ class MLflowCallback(TrainerCallback):
         self._ml_flow = mlflow
         self._auto_end_run = False
         self._initialized = False
-    
+
     def setup(self, args, state, model):
         ...
         if self._ml_flow.active_run() is None:
@@ -121,7 +122,7 @@ class MLflowCallback(TrainerCallback):
             self._auto_end_run = True
             ...
         self._initialized = True
-        
+
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if not self._initialized:
             self.setup(args, state, model)
@@ -131,7 +132,7 @@ class MLflowCallback(TrainerCallback):
             self._ml_flow.end_run()
 </code></pre>
 <p>因此只要在 Trainer 外面包一层 mlflow run 即可.</p>
-<pre><code class="language-python">with mlflow.start_run(run_name=training_args.run_name):
+<pre><code class="lang-python">with mlflow.start_run(run_name=training_args.run_name):
     trainer.train()
     results = trainer.evaluate(dataset)
     # 自定义改写指标的名称 (比如加上前缀), 筛选需要记录的指标

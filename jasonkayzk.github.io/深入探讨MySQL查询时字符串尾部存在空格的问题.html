@@ -1,16 +1,17 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/%E6%B7%B1%E5%85%A5%E6%8E%A2%E8%AE%A8MySQL%E6%9F%A5%E8%AF%A2%E6%97%B6%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%B0%BE%E9%83%A8%E5%AD%98%E5%9C%A8%E7%A9%BA%E6%A0%BC%E7%9A%84%E9%97%AE%E9%A2%98.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/02/27/%E6%B7%B1%E5%85%A5%E6%8E%A2%E8%AE%A8MySQL%E6%9F%A5%E8%AF%A2%E6%97%B6%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%B0%BE%E9%83%A8%E5%AD%98%E5%9C%A8%E7%A9%BA%E6%A0%BC%E7%9A%84%E9%97%AE%E9%A2%98">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/深入探讨MySQL查询时字符串尾部存在空格的问题.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/02/27/深入探讨MySQL查询时字符串尾部存在空格的问题">站点原文</a></h2>
 <hr/>
-<h2>title: 深入探讨MySQL查询时字符串尾部存在空格的问题
+<p>title: 深入探讨MySQL查询时字符串尾部存在空格的问题
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?31'
+cover: '<a href="https://img.paulzzh.com/touhou/random?31">https://img.paulzzh.com/touhou/random?31</a>'
 date: 2022-02-27 11:06:11
 categories: MySQL
-tags: [MySQL]
-description: 之前在一次MySQL的查询中，偶然间发现了即使在字符串查询条件的后面加空格也能查出数据来！本文从多个场景对该现象进行了分析；</h2>
+tags: [MySQL]</p>
+<h2>description: 之前在一次MySQL的查询中，偶然间发现了即使在字符串查询条件的后面加空格也能查出数据来！本文从多个场景对该现象进行了分析；</h2>
 <p>之前在一次MySQL的查询中，偶然间发现了即使在字符串查询条件的后面加空格也能查出数据来！</p>
 <p>本文从多个场景对该现象进行了分析；</p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h1><strong>深入探讨MySQL查询时字符串尾部存在空格的问题</strong></h1>
 <h2><strong>前言</strong></h2>
 <p>本文采用的MySQL版本分别如下：</p>
@@ -18,14 +19,14 @@ description: 之前在一次MySQL的查询中，偶然间发现了即使在字�
 <li>MySQL 5.7.36: docker.io/mysql:5.7.36</li>
 <li>MySQL 8.0.28: docker.io/mysql:8.0.28</li>
 </ul>
-<p>&lt;font color="#f00"&gt;<strong>需要注意的是：MySQL尾部存在空格的逻辑在 MySQL 8.x 版本已经被修改；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>下文会详细叙述；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**需要注意的是：MySQL尾部存在空格的逻辑在 MySQL 8.x 版本已经被修改；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**下文会详细叙述；**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>字符串类型为普通字段的情况</strong></h2>
 <h3><strong>数据准备</strong></h3>
 <p>先来看最基本的情况：<strong>当字符串类型为普通字段时</strong>；</p>
 <p>创建表：</p>
-<pre><code class="language-mysql">DROP TABLE IF EXISTS `space_test`;
+<pre><code class="lang-mysql">DROP TABLE IF EXISTS `space_test`;
 CREATE TABLE `space_test`
 (
     `id`      BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键自增ID',
@@ -42,13 +43,12 @@ values ('abc', 'abc'), # no space
        ('abc    ', 'abc    '); # four suffix spaces
 </code></pre>
 <p>上面的表创建了两个字段：<code>var_str</code> 和 <code>str</code>，分别为 <code>varchar</code> 和 <code>char</code> 类型；</p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>注意这里的字符集声明，后面有大作用！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**注意这里的字符集声明，后面有大作用！**&lt;/font&gt;</p>
 </blockquote>
 <p>随后，写入了四条具有代表性的数据；</p>
 <h3><strong>MySQL 5.7.x中的表现</strong></h3>
 <p>首先，先将所有的结果列出：</p>
-<pre><code class="language-mysql">mysql&gt; select * from space_test;
+<pre><code class="lang-mysql">mysql&gt; select * from space_test;
 
 +----+---------+------+
 | id | var_str | str  |
@@ -63,7 +63,7 @@ values ('abc', 'abc'), # no space
 <p>可以看到，除了具有前导空格的数据，其他三条数据查询出来的结果看起来甚至是一模一样的！</p>
 <h4><strong>字段条件查询</strong></h4>
 <p>下面我们执行几个查询：</p>
-<pre><code class="language-mysql"># 无空格查询
+<pre><code class="lang-mysql"># 无空格查询
 mysql&gt; select * from space_test where var_str='abc';
 +----+---------+-----+
 | id | var_str | str |
@@ -125,7 +125,7 @@ Empty set (0.00 sec)
 <p>&lt;br/&gt;</p>
 <h4><strong>Count查询</strong></h4>
 <p>再来看一下 Count 查询：</p>
-<pre><code class="language-mysql">mysql&gt; select count(1) from space_test;
+<pre><code class="lang-mysql">mysql&gt; select count(1) from space_test;
 +----------+
 | count(1) |
 +----------+
@@ -133,8 +133,7 @@ Empty set (0.00 sec)
 +----------+
 1 row in set (0.00 sec)
 </code></pre>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>Count 的结果为4条，这是正确的，因为 Count(1) 其实是根据主键来确定数据条数的！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**Count 的结果为4条，这是正确的，因为 Count(1) 其实是根据主键来确定数据条数的！**&lt;/font&gt;</p>
 </blockquote>
 <p>下面我们再来看一下查询在 MySQL 8.0.x中的表现；</p>
 <p>&lt;br/&gt;</p>
@@ -142,7 +141,7 @@ Empty set (0.00 sec)
 <p>在 MySQL 8.0.x 中创建相同的表，并执行相同的查询；</p>
 <h4><strong>对varchar类型进行查询</strong></h4>
 <p>结果如下：</p>
-<pre><code class="language-mysql"># 无空格
+<pre><code class="lang-mysql"># 无空格
 mysql&gt; select * from space_test where var_str='abc';
 +----+---------+-----+
 | id | var_str | str |
@@ -191,12 +190,12 @@ mysql&gt; select * from space_test where var_str='  abc';
 Empty set (0.00 sec)
 </code></pre>
 <p>可以看到：</p>
-<p>&lt;font color="#f00"&gt;<strong>在 MySQL 8.0.x 中，对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**在 MySQL 8.0.x 中，对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；**&lt;/font&gt;</p>
 <p>下面再来看看在 MySQL 8.0.x 中针对 char 类型的查询；</p>
 <p>&lt;br/&gt;</p>
 <h4><strong>对char类型进行查询</strong></h4>
 <p>结果如下：</p>
-<pre><code class="language-mysql"># 无空格
+<pre><code class="lang-mysql"># 无空格
 mysql&gt; select * from space_test where str='abc';
 +----+---------+-----+
 | id | var_str | str |
@@ -236,13 +235,13 @@ mysql&gt; select * from space_test where str=' abc';
 mysql&gt; select * from space_test where str='  abc';
 </code></pre>
 <p>从上面的结果可以看出：</p>
-<p>&lt;font color="#f00"&gt;<strong>在 MySQL 8.0.x 中，对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>这一点和 MySQL 5.7.x 中的行为完全不同！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**在 MySQL 8.0.x 中，对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**这一点和 MySQL 5.7.x 中的行为完全不同！**&lt;/font&gt;</p>
 <p>接下来再看一下当被查询的数据被声明为唯一索引时的表现；</p>
 <p>&lt;br/&gt;</p>
 <h4><strong>Count查询</strong></h4>
 <p>再来看一下 Count 查询在 MySQL 8.0.x 中的表现：</p>
-<pre><code class="language-mysql">mysql&gt; select count(1) from space_test;
+<pre><code class="lang-mysql">mysql&gt; select count(1) from space_test;
 +----------+
 | count(1) |
 +----------+
@@ -250,12 +249,12 @@ mysql&gt; select * from space_test where str='  abc';
 +----------+
 1 row in set (0.00 sec)
 </code></pre>
-<p>&lt;font color="#f00"&gt;<strong>可以看到，Count 的结果也为4条！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**可以看到，Count 的结果也为4条！**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>字符串类型为唯一索引场景</strong></h2>
 <h3><strong>建表语句</strong></h3>
 <p>建表语句如下：</p>
-<pre><code class="language-mysql">DROP TABLE IF EXISTS `space_test`;
+<pre><code class="lang-mysql">DROP TABLE IF EXISTS `space_test`;
 CREATE TABLE `space_test`
 (
     `id`      BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键自增ID',
@@ -279,14 +278,13 @@ INSERT INTO space_test(var_str, str) values ('abc    ', '6'); # four varchar suf
 INSERT INTO space_test(var_str, str) values ('7' ,'abc    '); # four char suffix space
 </code></pre>
 <p>由于可能会存在单条数据插入失败的场景，因此对不同的插入场景进行了区分；</p>
-<blockquote>
-<p><strong>为了避免空值重复，我们为其附上了没有意义的数字值；</strong></p>
+<blockquote><p><strong>为了避免空值重复，我们为其附上了没有意义的数字值；</strong></p>
 </blockquote>
 <p>下面分 MySQL 版本来看；</p>
 <p>&lt;br/&gt;</p>
 <h3><strong>MySQL 5.7.x中的表现</strong></h3>
 <p>执行上面的语句后，执行插入数据语句的结果如下：</p>
-<pre><code class="language-mysql">mysql&gt; INSERT INTO space_test(var_str, str) values ('abc', 'abc'); # no space
+<pre><code class="lang-mysql">mysql&gt; INSERT INTO space_test(var_str, str) values ('abc', 'abc'); # no space
 Query OK, 1 row affected (0.01 sec)
 
 mysql&gt; INSERT INTO space_test(var_str, str) values (' abc', '2'); # one varchar prefix space
@@ -312,12 +310,12 @@ ERROR 1062 (23000): Duplicate entry 'abc' for key 'str'
 <p>可以看到：</p>
 <p><strong>由于我们首先插入了不含有任何空格的数据，因此在插入任何具有尾部空格的数据时都会报错！</strong></p>
 <p>现象和我们上面进行查询完全一致：</p>
-<p>&lt;font color="#f00"&gt;<strong>在查询 varchar 或者 char 类型时，MySQL 5.7.x 版本忽略了尾部的空格（数据和查询条件）进行匹配；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**在查询 varchar 或者 char 类型时，MySQL 5.7.x 版本忽略了尾部的空格（数据和查询条件）进行匹配；**&lt;/font&gt;</p>
 <p>下面再来看在 MySQL 8.0.x 中的表现；</p>
 <p>&lt;br/&gt;</p>
 <h3><strong>MySQL 8.0.x中的表现</strong></h3>
 <p>执行上面的语句后，执行插入数据语句的结果如下：</p>
-<pre><code class="language-mysql">mysql&gt; INSERT INTO space_test(var_str, str) values ('abc', 'abc'); # no space
+<pre><code class="lang-mysql">mysql&gt; INSERT INTO space_test(var_str, str) values ('abc', 'abc'); # no space
 Query OK, 1 row affected (0.01 sec)
 
 mysql&gt; INSERT INTO space_test(var_str, str) values (' abc', '2'); # one varchar prefix space
@@ -342,8 +340,8 @@ ERROR 1062 (23000): Duplicate entry 'abc' for key 'space_test.str'
 </code></pre>
 <p>在MySQL 8.0.x 中的现象和查询的结果也完全一致：</p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！**&lt;/font&gt;</li>
 </ul>
 <p>因此，在上面的插入中，varchar 类型可以成功插入，而 char 类型不可以！</p>
 <p>最后，再来看看当字符串为主键时的场景；</p>
@@ -351,7 +349,7 @@ ERROR 1062 (23000): Duplicate entry 'abc' for key 'space_test.str'
 <h2><strong>字符串类型为主键场景</strong></h2>
 <h3><strong>建表语句</strong></h3>
 <p>varchar 类型的主键和 char 类型的主键对应的建表语句如下：</p>
-<pre><code class="language-mysql">-- varchar
+<pre><code class="lang-mysql">-- varchar
 DROP TABLE IF EXISTS `space_test`;
 CREATE TABLE `space_test`
 (
@@ -370,7 +368,7 @@ CREATE TABLE `space_test`
   DEFAULT CHARSET = utf8mb4;
 </code></pre>
 <p>以及对应的写入数据的SQL语句：</p>
-<pre><code class="language-mysql">INSERT INTO space_test(id) values ('abc'); # no space
+<pre><code class="lang-mysql">INSERT INTO space_test(id) values ('abc'); # no space
 INSERT INTO space_test(id) values (' abc'); # one prefix space
 INSERT INTO space_test(id) values ('abc '); # one suffix space
 INSERT INTO space_test(id) values ('abc    '); # four char suffix space
@@ -379,7 +377,7 @@ INSERT INTO space_test(id) values ('abc    '); # four char suffix space
 <p>&lt;br/&gt;</p>
 <h3><strong>MySQL 5.7.x中的表现</strong></h3>
 <p>创建以 varchar 类型作为主键的表后，执行插入语句后的结果如下：</p>
-<pre><code class="language-mysql">mysql&gt; INSERT INTO space_test(id) values ('abc'); # no space
+<pre><code class="lang-mysql">mysql&gt; INSERT INTO space_test(id) values ('abc'); # no space
 Query OK, 1 row affected (0.01 sec)
 
 mysql&gt; INSERT INTO space_test(id) values (' abc'); # one prefix space
@@ -394,14 +392,13 @@ ERROR 1062 (23000): Duplicate entry 'abc    ' for key 'PRIMARY'
 <p>可以看到，和字段为唯一索引的情况是一致的：</p>
 <p><strong>尾部存在空格的字符串会和无空格的字符串冲突，从而无法被插入；</strong></p>
 <p><strong>以 char 类型作为主键的表的结果和 varchar 的结果完全一致，这里不再赘述！</strong></p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>其实结果是显而易见的，因为在主键的语义中已经包括了 <code>唯一索引</code> 的概念；</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**其实结果是显而易见的，因为在主键的语义中已经包括了 `唯一索引` 的概念；**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3><strong>MySQL 8.0.x中的表现</strong></h3>
 <h4><strong>varchar类型作为主键</strong></h4>
 <p>建表后结果如下：</p>
-<pre><code class="language-mysql">mysql&gt; INSERT INTO space_test(id) values ('abc'); # no space
+<pre><code class="lang-mysql">mysql&gt; INSERT INTO space_test(id) values ('abc'); # no space
 Query OK, 1 row affected (0.00 sec)
 
 mysql&gt; INSERT INTO space_test(id) values (' abc'); # one prefix space
@@ -414,9 +411,9 @@ mysql&gt; INSERT INTO space_test(id) values ('abc    '); # four char suffix spac
 Query OK, 1 row affected (0.01 sec)
 </code></pre>
 <p>和上面的结论也是一致的：</p>
-<p>&lt;font color="#f00"&gt;<strong>MySQL 8.0.x 中对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**MySQL 8.0.x 中对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；**&lt;/font&gt;</p>
 <p>可以查询到，此时有四条数据：</p>
-<pre><code class="language-mysql">mysql&gt; select * from space_test;
+<pre><code class="lang-mysql">mysql&gt; select * from space_test;
 
 +---------+
 | id      |
@@ -432,7 +429,7 @@ Query OK, 1 row affected (0.01 sec)
 <p>&lt;br/&gt;</p>
 <h4><strong>char类型作为主键</strong></h4>
 <p>执行语句后结果如下：</p>
-<pre><code class="language-mysql">mysql&gt; INSERT INTO space_test(id) values ('abc'); # no space
+<pre><code class="lang-mysql">mysql&gt; INSERT INTO space_test(id) values ('abc'); # no space
 Query OK, 1 row affected (0.00 sec)
 
 mysql&gt; INSERT INTO space_test(id) values (' abc'); # one prefix space
@@ -445,74 +442,118 @@ mysql&gt; INSERT INTO space_test(id) values ('abc    '); # four char suffix spac
 ERROR 1062 (23000): Duplicate entry 'abc' for key 'space_test.PRIMARY'
 </code></pre>
 <p>也和上面的结论保持一致：</p>
-<p>&lt;font color="#f00"&gt;<strong>MySQL 8.0.x 中对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**MySQL 8.0.x 中对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>现象总结</strong></h2>
 <p>表格如下：</p>
-<p>| <strong>版本</strong> | <strong>匹配方式</strong>                                                 |
-| -------- | ------------------------------------------------------------ |
-| 5.7.x    | &lt;font color="#f00"&gt;<strong>在查询/匹配 varchar 或者 char 类型时，会忽略尾部的空格（数据和查询条件）进行匹配；</strong>&lt;/font&gt; |
-| 8.0.x    | &lt;font color="#f00"&gt;<strong>对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；</strong>&lt;/font&gt;&lt;br /&gt;&lt;font color="#f00"&gt;<strong>对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！</strong>&lt;/font&gt; |</p>
+<table>
+<thead><tr>
+<th><strong>版本</strong></th>
+<th><strong>匹配方式</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5.7.x</td>
+<td>&lt;font color="#f00"&gt;**在查询/匹配 varchar 或者 char 类型时，会忽略尾部的空格（数据和查询条件）进行匹配；**&lt;/font&gt;</td>
+</tr>
+<tr>
+<td>8.0.x</td>
+<td>&lt;font color="#f00"&gt;**对于 varchar 的查询的逻辑不再去除尾部空格，而是采用精确匹配的方式；**&lt;/font&gt;&lt;br /&gt;&lt;font color="#f00"&gt;**对于 char 类型的查询会直接认为尾部不存在空格，并且仅会匹配尾部无空格的查询条件！**&lt;/font&gt;</td>
+</tr>
+</tbody>
+</table>
 <p>&lt;br/&gt;</p>
 <h2><strong>原因分析</strong></h2>
-<blockquote>
-<p><strong>相关资料参考：</strong></p>
+<blockquote><p><strong>相关资料参考：</strong></p>
 <p>MySQL的官方文档：</p>
 <ul>
-<li>https://dev.mysql.com/doc/refman/5.7/en/char.html</li>
-<li>https://dev.mysql.com/doc/refman/8.0/en/char.html</li>
-</ul>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/char.html">https://dev.mysql.com/doc/refman/5.7/en/char.html</a></li>
+<li><p><a href="https://dev.mysql.com/doc/refman/8.0/en/char.html">https://dev.mysql.com/doc/refman/8.0/en/char.html</a></p>
 <p>以及Stack Overflow相关问题：</p>
-<ul>
-<li>https://stackoverflow.com/questions/10495692/mysql-comparison-operator-spaces</li>
+</li>
+<li><p><a href="https://stackoverflow.com/questions/10495692/mysql-comparison-operator-spaces">https://stackoverflow.com/questions/10495692/mysql-comparison-operator-spaces</a></p>
+</li>
 </ul>
 </blockquote>
 <p><strong>下面先来看一下在 MySQL 5.7.x 中的内容；</strong></p>
 <p>&lt;br/&gt;</p>
 <h3><strong>CHAR和VARCHAR在底层数据存储上的区别</strong></h3>
 <p>首先需要明确的是：</p>
-<p>&lt;font color="#f00"&gt;<strong>在MySQL中，CHAR 和 VARCHAR 类型还是有非常大的区别的（无论是从存储角度还是查询角度来看）；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**在MySQL中，CHAR 和 VARCHAR 类型还是有非常大的区别的（无论是从存储角度还是查询角度来看）；**&lt;/font&gt;</p>
 <p>对应 CHAR 类型而言：</p>
-<p>&lt;font color="#f00"&gt;<strong>CHAR 类型的存储长度固定在创建表时声明的长度（长度在0～255之间）；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>当存储 CHAR 值时，会在字符串的右侧填充到指定长度的空格！而在查询 CHAR 值时，除非启用 <a href="https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html#sqlmode_pad_char_to_full_length"><code>PAD_CHAR_TO_FULL_LENGTH</code></a> SQL模式，否则将会删除尾部的所有空格！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**CHAR 类型的存储长度固定在创建表时声明的长度（长度在0～255之间）；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**当存储 CHAR 值时，会在字符串的右侧填充到指定长度的空格！而在查询 CHAR 值时，除非启用 [`PAD_CHAR_TO_FULL_LENGTH`](https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html#sqlmode_pad_char_to_full_length) SQL模式，否则将会删除尾部的所有空格！**&lt;/font&gt;</p>
 <p>而，对于 VARCHAR 类型而言：</p>
-<p>&lt;font color="#f00"&gt;<strong>VARCHAR 类型存储长度是动态变化的（长度在 0～65535之间，并且受限于整张表的最大行长度：<a href="https://dev.mysql.com/doc/refman/5.7/en/column-count-limit.html">Section 8.4.7, “Limits on Table Column Count and Row Size”</a>）</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>同时，相比于 CHAR 类型，VARCHAR 类型会在数据头部记录 1～2个字节（单个字节如果字符串长度小于255字节，否则为2个字节）的数据来表示当前所存储字符串的真实长度！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>同时，相比于 CHAR 类型，VARCHAR 类型并不会在字符串尾部插入空格来填充长度！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>因此，VARCHAR 在查询和存储字符串时会完全保留尾部的空格个数，和标准的SQL保持一致(in conformance with standard SQL)</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**VARCHAR 类型存储长度是动态变化的（长度在 0～65535之间，并且受限于整张表的最大行长度：[Section 8.4.7, “Limits on Table Column Count and Row Size”](https://dev.mysql.com/doc/refman/5.7/en/column-count-limit.html)）**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**同时，相比于 CHAR 类型，VARCHAR 类型会在数据头部记录 1～2个字节（单个字节如果字符串长度小于255字节，否则为2个字节）的数据来表示当前所存储字符串的真实长度！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**同时，相比于 CHAR 类型，VARCHAR 类型并不会在字符串尾部插入空格来填充长度！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**因此，VARCHAR 在查询和存储字符串时会完全保留尾部的空格个数，和标准的SQL保持一致(in conformance with standard SQL)**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h3><strong>CHAR和VARCHAR在数据写入上的区别</strong></h3>
 <p>除了数据存储上的区别之外，CHAR 和 VARCHAR 在数据写入上也存在些许区别；</p>
-<p>&lt;font color="#f00"&gt;<strong>在非严格SQL模式（strict SQL mode）下，当对 CHAR 和 VARCHAR 类型的字段插入超过声明长度的字符串时，字符串将会被截断；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>而在严格模式下，插入超过声明长度的数据会报错！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>对于尾部为空格的数据来说：</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**在非严格SQL模式（strict SQL mode）下，当对 CHAR 和 VARCHAR 类型的字段插入超过声明长度的字符串时，字符串将会被截断；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**而在严格模式下，插入超过声明长度的数据会报错！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**对于尾部为空格的数据来说：**&lt;/font&gt;</p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong>对于 VARCHAR 类型而言，尾部的空格将会被截断，同时提示 WARNING（无论是否处于严格SQL模式下）；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>对于 CHAR 类型而言，尾部的空格会被截断，并且不会有任何提示（无论是否处于严格SQL模式下）；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**对于 VARCHAR 类型而言，尾部的空格将会被截断，同时提示 WARNING（无论是否处于严格SQL模式下）；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**对于 CHAR 类型而言，尾部的空格会被截断，并且不会有任何提示（无论是否处于严格SQL模式下）；**&lt;/font&gt;</li>
 </ul>
-<blockquote>
-<p><strong>原文：</strong></p>
+<blockquote><p><strong>原文：</strong></p>
 <p>If strict SQL mode is not enabled and you assign a value to a <code>CHAR</code> or <code>VARCHAR</code> column that exceeds the column's maximum length, the value is truncated to fit and a warning is generated. For truncation of nonspace characters, you can cause an error to occur (rather than a warning) and suppress insertion of the value by using strict SQL mode. See <a href="https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html">Section 5.1.10, “Server SQL Modes”</a>.</p>
 <p>For <code>VARCHAR</code> columns, trailing spaces in excess of the column length are truncated prior to insertion and a warning is generated, regardless of the SQL mode in use. For <code>CHAR</code> columns, truncation of excess trailing spaces from inserted values is performed silently regardless of the SQL mode.</p>
 </blockquote>
 <p>下面是一个在非严格SQL模式下，实际截断的例子：</p>
-<p>| Value        | <code>CHAR(4)</code> | Storage Required | <code>VARCHAR(4)</code> | Storage Required |
-| :----------- | :-------- | :--------------- | :----------- | :--------------- |
-| <code>''</code>         | <code>'    '</code>  | 4 bytes          | <code>''</code>         | 1 byte           |
-| <code>'ab'</code>       | <code>'ab  '</code>  | 4 bytes          | <code>'ab'</code>       | 3 bytes          |
-| <code>'abcd'</code>     | <code>'abcd'</code>  | 4 bytes          | <code>'abcd'</code>     | 5 bytes          |
-| <code>'abcdefgh'</code> | <code>'abcd'</code>  | 4 bytes          | <code>'abcd'</code>     | 5 bytes          |</p>
-<blockquote>
-<p>这里补充一点：</p>
-<p>&lt;font color="#f00"&gt;<strong>InnoDB 引擎会将长度大于等于768字节的定长字段编码为可变长度字段，使其可以在页外存储；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>例如，如果字符集的最大字节长度大于3，则 CHAR(255) 列可能会超过768字节（如，utf8mb4字符集）；</strong>&lt;/font&gt;</p>
+<table>
+<thead><tr>
+<th style="text-align:left">Value</th>
+<th style="text-align:left"><code>CHAR(4)</code></th>
+<th style="text-align:left">Storage Required</th>
+<th style="text-align:left"><code>VARCHAR(4)</code></th>
+<th style="text-align:left">Storage Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code>''</code></td>
+<td style="text-align:left"><code>'    '</code></td>
+<td style="text-align:left">4 bytes</td>
+<td style="text-align:left"><code>''</code></td>
+<td style="text-align:left">1 byte</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>'ab'</code></td>
+<td style="text-align:left"><code>'ab  '</code></td>
+<td style="text-align:left">4 bytes</td>
+<td style="text-align:left"><code>'ab'</code></td>
+<td style="text-align:left">3 bytes</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>'abcd'</code></td>
+<td style="text-align:left"><code>'abcd'</code></td>
+<td style="text-align:left">4 bytes</td>
+<td style="text-align:left"><code>'abcd'</code></td>
+<td style="text-align:left">5 bytes</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>'abcdefgh'</code></td>
+<td style="text-align:left"><code>'abcd'</code></td>
+<td style="text-align:left">4 bytes</td>
+<td style="text-align:left"><code>'abcd'</code></td>
+<td style="text-align:left">5 bytes</td>
+</tr>
+</tbody>
+</table>
+<blockquote><p>这里补充一点：</p>
+<p>&lt;font color="#f00"&gt;**InnoDB 引擎会将长度大于等于768字节的定长字段编码为可变长度字段，使其可以在页外存储；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**例如，如果字符集的最大字节长度大于3，则 CHAR(255) 列可能会超过768字节（如，utf8mb4字符集）；**&lt;/font&gt;</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3><strong>CHAR和VARCHAR在数据读取上的区别</strong></h3>
-<p>&lt;font color="#f00"&gt;<strong>对于分别存储在 CHAR(4) 和 VARCHAR(4) 中的数据而言，对于这些列查询到的值并不总是相同的：</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>因为在查询时，CHAR 会删除尾部的空格！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**对于分别存储在 CHAR(4) 和 VARCHAR(4) 中的数据而言，对于这些列查询到的值并不总是相同的：**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**因为在查询时，CHAR 会删除尾部的空格！**&lt;/font&gt;</p>
 <p>例如：</p>
-<pre><code class="language-mysql">mysql&gt; CREATE TABLE vc (v VARCHAR(4), c CHAR(4));
+<pre><code class="lang-mysql">mysql&gt; CREATE TABLE vc (v VARCHAR(4), c CHAR(4));
 Query OK, 0 rows affected (0.01 sec)
 
 mysql&gt; INSERT INTO vc VALUES ('ab  ', 'ab  ');
@@ -529,15 +570,14 @@ mysql&gt; SELECT CONCAT('(', v, ')'), CONCAT('(', c, ')') FROM vc;
 <p>&lt;br/&gt;</p>
 <h3><strong>CHAR和VARCHAR在数据比较上的区别</strong></h3>
 <p>首先需要明确的是，对于 CHAR 和 VARCHAR 而言，其比较都是建立在某一特定的字符集之上的！</p>
-<p>&lt;font color="#f00"&gt;<strong>同时，对于 MySQL 而言，所有的字符集类型都是“填充空格”(All MySQL collations are of type <code>PAD SPACE</code>)；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>即：无论对于 <code>CHAR</code>、 <code>VARCHAR</code>、 还是 <code>TEXT</code> 类型而言，在比较时，都会忽略尾部的空格！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>唯一需要区别的是，<code>LIKE</code> 关键字，因为这个场景下尾部空格的匹配对其非常重要！</strong>&lt;/font&gt;</p>
-<blockquote>
-<p>原文：</p>
+<p>&lt;font color="#f00"&gt;**同时，对于 MySQL 而言，所有的字符集类型都是“填充空格”(All MySQL collations are of type `PAD SPACE`)；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**即：无论对于 `CHAR`、 `VARCHAR`、 还是 `TEXT` 类型而言，在比较时，都会忽略尾部的空格！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**唯一需要区别的是，`LIKE` 关键字，因为这个场景下尾部空格的匹配对其非常重要！**&lt;/font&gt;</p>
+<blockquote><p>原文：</p>
 <p>All MySQL collations are of type <code>PAD SPACE</code>. This means that all <code>CHAR</code>, <code>VARCHAR</code>, and <code>TEXT</code> values are compared without regard to any trailing spaces. “Comparison” in this context does not include the <a href="https://dev.mysql.com/doc/refman/5.7/en/string-comparison-functions.html#operator_like"><code>LIKE</code></a> pattern-matching operator, for which trailing spaces are significant.</p>
 </blockquote>
 <p>例如：</p>
-<pre><code class="language-mysql">mysql&gt; CREATE TABLE names (myname CHAR(10));
+<pre><code class="lang-mysql">mysql&gt; CREATE TABLE names (myname CHAR(10));
 Query OK, 0 rows affected (0.03 sec)
 
 mysql&gt; INSERT INTO names VALUES ('Jones');
@@ -562,8 +602,7 @@ mysql&gt; SELECT myname LIKE 'Jones', myname LIKE 'Jones  ' FROM names;
 <p>&lt;br/&gt;</p>
 <p>对于那些会除去尾部空格，或者相互比较时尾部空格被忽略的场景，如果某列被声明为了唯一索引，则在向其插入的数据中如果只存在尾部空格的区别，则插入数据会报错！</p>
 <p>例如：表中已存在 <code>'a'</code>，则插入 <code>'a '</code> 会报错；</p>
-<blockquote>
-<p>原文：</p>
+<blockquote><p>原文：</p>
 <p>For those cases where trailing pad characters are stripped or comparisons ignore them, if a column has an index that requires unique values, inserting into the column values that differ only in number of trailing pad characters results in a duplicate-key error. For example, if a table contains <code>'a'</code>, an attempt to store <code>'a '</code> causes a duplicate-key error.</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
@@ -571,28 +610,26 @@ mysql&gt; SELECT myname LIKE 'Jones', myname LIKE 'Jones  ' FROM names;
 <p>上面为 MySQL 5.7.x 文档中的内容，在 MySQL 8.0.x 中有了部分变化；</p>
 <h4><strong>NO PAD类型</strong></h4>
 <p>首先，引入了 <code>NO PAD</code> 类型的数据类型；</p>
-<p>&lt;font color="#f00"&gt;<strong>上面提到在老的 MySQL 版本中，所有的字符集类型都是“填充空格”(All MySQL collations are of type <code>PAD SPACE</code>)；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>而在新的版本中，存在 <code>NO PAD</code> 类型，如：UCA 9.0.0 或更高版本的 Unicode；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>可以通过  <code>INFORMATION_SCHEMA</code>.<a href="https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html"><code>COLLATIONS</code></a> 表查看具体数据的类型；</strong>&lt;/font&gt;</p>
-<blockquote>
-<p>原文：</p>
+<p>&lt;font color="#f00"&gt;**上面提到在老的 MySQL 版本中，所有的字符集类型都是“填充空格”(All MySQL collations are of type `PAD SPACE`)；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**而在新的版本中，存在 `NO PAD` 类型，如：UCA 9.0.0 或更高版本的 Unicode；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**可以通过  `INFORMATION_SCHEMA`.[`COLLATIONS`](https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html) 表查看具体数据的类型；**&lt;/font&gt;</p>
+<blockquote><p>原文：</p>
 <p>MySQL collations have a pad attribute of <code>PAD SPACE</code>, other than Unicode collations based on UCA 9.0.0 and higher, which have a pad attribute of <code>NO PAD</code>. (see <a href="https://dev.mysql.com/doc/refman/8.0/en/charset-unicode-sets.html">Section 10.10.1, “Unicode Character Sets”</a>).</p>
 <p>To determine the pad attribute for a collation, use the <code>INFORMATION_SCHEMA</code> <a href="https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html"><code>COLLATIONS</code></a> table, which has a <code>PAD_ATTRIBUTE</code> column.</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h4><strong>非二进制字符串(nonbinary strings)比较变更</strong></h4>
 <p>在上面的基础之上：</p>
-<p>&lt;font color="#f00"&gt;<strong>对于非二进制字符串(包括，<code>CHAR</code>, <code>VARCHAR</code> 和 <code>TEXT</code> 类型)而言，字符串的校对填充属性(collation pad attribute) 决定了在比较时是否处理字符串在尾部的空格：</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**对于非二进制字符串(包括，`CHAR`, `VARCHAR` 和 `TEXT` 类型)而言，字符串的校对填充属性(collation pad attribute) 决定了在比较时是否处理字符串在尾部的空格：**&lt;/font&gt;</p>
 <ul>
-<li>&lt;font color="#f00"&gt;<strong><code>NO PAD</code> 类型会在比较时计入尾部的空格；</strong>&lt;/font&gt;</li>
-<li>&lt;font color="#f00"&gt;<strong>而 <code>PAD SPACE</code> 则不会在比较时计入尾部的空格；</strong>&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**`NO PAD` 类型会在比较时计入尾部的空格；**&lt;/font&gt;</li>
+<li>&lt;font color="#f00"&gt;**而 `PAD SPACE` 则不会在比较时计入尾部的空格；**&lt;/font&gt;</li>
 </ul>
-<blockquote>
-<p>原文：</p>
+<blockquote><p>原文：</p>
 <p>For nonbinary strings (<code>CHAR</code>, <code>VARCHAR</code>, and <code>TEXT</code> values), the string collation pad attribute determines treatment in comparisons of trailing spaces at the end of strings. <code>NO PAD</code> collations treat trailing spaces as significant in comparisons, like any other character. <code>PAD SPACE</code> collations treat trailing spaces as insignificant in comparisons; strings are compared without regard to trailing spaces. See <a href="https://dev.mysql.com/doc/refman/8.0/en/charset-binary-collations.html#charset-binary-collations-trailing-space-comparisons">Trailing Space Handling in Comparisons</a>. The server SQL mode has no effect on comparison behavior with respect to trailing spaces.</p>
 </blockquote>
 <p>我们来看一下支持的类型：</p>
-<pre><code class="language-mysql">mysql&gt; select * from information_schema. COLLATIONS;
+<pre><code class="lang-mysql">mysql&gt; select * from information_schema. COLLATIONS;
 +----------------------------+--------------------+-----+------------+-------------+---------+---------------+
 | COLLATION_NAME             | CHARACTER_SET_NAME | ID  | IS_DEFAULT | IS_COMPILED | SORTLEN | PAD_ATTRIBUTE |
 +----------------------------+--------------------+-----+------------+-------------+---------+---------------+
@@ -683,7 +720,7 @@ mysql&gt; SELECT myname LIKE 'Jones', myname LIKE 'Jones  ' FROM names;
 272 rows in set (0.00 sec)
 </code></pre>
 <p>再来看一下我们之前建表语句：</p>
-<pre><code class="language-mysql">DROP TABLE IF EXISTS `space_test`;
+<pre><code class="lang-mysql">DROP TABLE IF EXISTS `space_test`;
 CREATE TABLE `space_test`
 (
     `id`      BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键自增ID',
@@ -694,7 +731,7 @@ CREATE TABLE `space_test`
   DEFAULT CHARSET = utf8mb4;
 </code></pre>
 <p>实际对应的字符集类型：</p>
-<pre><code class="language-mysql">mysql&gt; show table status from test like 'space_test';
+<pre><code class="lang-mysql">mysql&gt; show table status from test like 'space_test';
 +------------+--------+---------+------------+------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------+
 | Name       | Engine | Version | Row_format | Rows | Avg_row_length | Data_length | Max_data_length | Index_length | Data_free | Auto_increment | Create_time         | Update_time         | Check_time | Collation          | Checksum | Create_options | Comment |
 +------------+--------+---------+------------+------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------+
@@ -702,15 +739,15 @@ CREATE TABLE `space_test`
 +------------+--------+---------+------------+------+----------------+-------------+-----------------+--------------+-----------+----------------+---------------------+---------------------+------------+--------------------+----------+----------------+---------+
 1 row in set (0.01 sec)
 </code></pre>
-<p>可以看到，&lt;font color="#f00"&gt;<strong>实际的排序类型为：<code>utf8mb4_0900_ai_ci</code>，对应的是 <code>NO PAD</code>！</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>因此，这也是为什么在上面的测试中 MySQL 8.0.x 和 MySQL 5.7.x 表现不一致的原因！</strong>&lt;/font&gt;</p>
+<p>可以看到，&lt;font color="#f00"&gt;**实际的排序类型为：`utf8mb4_0900_ai_ci`，对应的是 `NO PAD`！**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**因此，这也是为什么在上面的测试中 MySQL 8.0.x 和 MySQL 5.7.x 表现不一致的原因！**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>解决方案</strong></h2>
 <h3><strong>业务代码层面</strong></h3>
-<p>&lt;font color="#f00"&gt;<strong>首先，在业务代码中建议使用 Trim、TrimSpace 等相关函数先对参数进行处理，避免出现尾部存在空格的数据；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**首先，在业务代码中建议使用 Trim、TrimSpace 等相关函数先对参数进行处理，避免出现尾部存在空格的数据；**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h3><strong>数据集声明层面</strong></h3>
-<p>&lt;font color="#f00"&gt;<strong>需要根据实际需求，结合<code>INFORMATION_SCHEMA</code>.<a href="https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html"><code>COLLATIONS</code></a> 表判断具体使用 <code>PAD SPACE</code> 还是 <code>NO PAD</code>类型！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**需要根据实际需求，结合`INFORMATION_SCHEMA`.[`COLLATIONS`](https://dev.mysql.com/doc/refman/8.0/en/information-schema-collations-table.html) 表判断具体使用 `PAD SPACE` 还是 `NO PAD`类型！**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h3><strong>查询层面</strong></h3>
 <p>如果一定要查询含有尾部空格的数据，则可以使用两种方法：</p>
@@ -721,7 +758,7 @@ CREATE TABLE `space_test`
 <p>下面在MySQL 5.7.x 中分别来看；</p>
 <h4><strong>like</strong></h4>
 <p>查询结果：</p>
-<pre><code class="language-mysql">-- varchar查询
+<pre><code class="lang-mysql">-- varchar查询
 mysql&gt; select * from space_test where var_str like 'abc';
 +----+---------+-----+
 | id | var_str | str |
@@ -776,13 +813,13 @@ Empty set (0.00 sec)
 mysql&gt; select * from space_test where str like 'abc    ';
 Empty set (0.00 sec)
 </code></pre>
-<p>&lt;font color="#f00"&gt;<strong>可以看到：在 MySQL 5.7.x 中使用 LIKE 关键字后的逻辑和 MySQL 8.0.x 中的<code>NO PAD</code>逻辑相同；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**可以看到：在 MySQL 5.7.x 中使用 LIKE 关键字后的逻辑和 MySQL 8.0.x 中的`NO PAD`逻辑相同；**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h4><strong>binary</strong></h4>
 <p><code>binary</code> 是MySQL中的一个类型转换运算符：用来强制它后面的字符串为一个二进制字符串，可以理解成精确匹配；</p>
-<p>&lt;font color="#f00"&gt;<strong>注：BINARY 关键字要放在 <code>=</code> 的后边，以便有效利用该字段的索引；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**注：BINARY 关键字要放在 `=` 的后边，以便有效利用该字段的索引；**&lt;/font&gt;</p>
 <p>实验结果：</p>
-<pre><code class="language-mysql">-- varchar
+<pre><code class="lang-mysql">-- varchar
 mysql&gt; select * from space_test where var_str = binary 'abc';
 +----+---------+-----+
 | id | var_str | str |
@@ -837,7 +874,7 @@ Empty set (0.00 sec)
 mysql&gt; select * from space_test where str = binary 'abc    ';
 Empty set (0.00 sec)
 </code></pre>
-<p>&lt;font color="#f00"&gt;<strong>可以看到：在 MySQL 5.7.x 中使用 BINARY 关键字后的逻辑和 MySQL 8.0.x 中的<code>NO PAD</code>逻辑相同；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**可以看到：在 MySQL 5.7.x 中使用 BINARY 关键字后的逻辑和 MySQL 8.0.x 中的`NO PAD`逻辑相同；**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>小结</strong></h2>
 <p>MySQL 中字符串尾部存在空格的问题和两个条件相关：</p>
@@ -859,10 +896,10 @@ Empty set (0.00 sec)
 </ul>
 <p>MySQL的官方文档：</p>
 <ul>
-<li>https://dev.mysql.com/doc/refman/5.7/en/char.html</li>
-<li>https://dev.mysql.com/doc/refman/8.0/en/char.html</li>
+<li><a href="https://dev.mysql.com/doc/refman/5.7/en/char.html">https://dev.mysql.com/doc/refman/5.7/en/char.html</a></li>
+<li><a href="https://dev.mysql.com/doc/refman/8.0/en/char.html">https://dev.mysql.com/doc/refman/8.0/en/char.html</a></li>
 </ul>
 <p>以及Stack Overflow相关问题：</p>
 <ul>
-<li>https://stackoverflow.com/questions/10495692/mysql-comparison-operator-spaces</li>
+<li><a href="https://stackoverflow.com/questions/10495692/mysql-comparison-operator-spaces">https://stackoverflow.com/questions/10495692/mysql-comparison-operator-spaces</a></li>
 </ul>

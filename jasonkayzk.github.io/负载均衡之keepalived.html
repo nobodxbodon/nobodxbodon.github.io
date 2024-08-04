@@ -1,18 +1,22 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E4%B9%8Bkeepalived.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/04/12/%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1%E4%B9%8Bkeepalived">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/负载均衡之keepalived.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/04/12/负载均衡之keepalived">站点原文</a></h2>
 <hr/>
-<h2>title: 负载均衡之keepalived
-cover: https://img.paulzzh.com/touhou/random?97
+<p>title: 负载均衡之keepalived
+cover: <a href="https://img.paulzzh.com/touhou/random?97">https://img.paulzzh.com/touhou/random?97</a>
 date: 2020-04-12 14:08:31
 categories: 分布式
 toc: true
-tags: [分布式, 负载均衡, keepalived]
-description: 在前面介绍的LVS中容易发生单点故障的问题；当LVS或者RS挂掉时，后台的RS服务不再可靠。而通过部署keepalive可以达到检测单点故障，并达到自动切换LVS Server和剔除故障RS的效果。</h2>
+tags: [分布式, 负载均衡, keepalived]</p>
+<h2>description: 在前面介绍的LVS中容易发生单点故障的问题；当LVS或者RS挂掉时，后台的RS服务不再可靠。而通过部署keepalive可以达到检测单点故障，并达到自动切换LVS Server和剔除故障RS的效果。</h2>
 <p>在前面介绍的LVS中容易发生单点故障的问题；当LVS或者RS挂掉时，后台的RS服务不再可靠。而通过部署keepalive可以达到检测单点故障，并达到自动切换LVS Server和剔除故障RS的效果。</p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
-<p>&lt;!-- **目录:** --&gt;</p>
-<p>&lt;!-- toc --&gt;</p>
-<p>&lt;!-- &lt;br/&gt; --&gt;</p>
+&lt;!--more--&gt;
+
+&lt;!-- **目录:** --&gt;
+
+&lt;!-- toc --&gt;
+
+&lt;!-- &lt;br/&gt; --&gt;
+
 <h2>负载均衡之keepalived</h2>
 <h3>前言</h3>
 <p>本文在<a href="https://jasonkayzk.github.io/2020/04/10/LVS%E4%B8%ADDR%E6%A8%A1%E5%9E%8B%E5%AE%9E%E6%88%98/">LVS中DR模型实战</a>基础之上, 在LVS节点中配置Keepalive, 从而解决LVS的单点故障问题;</p>
@@ -21,11 +25,10 @@ description: 在前面介绍的LVS中容易发生单点故障的问题；当LVS�
 <li>多台计算机同时可以提供服务;</li>
 <li>多台计算机只有一台可以提供服务, 其他计算机为冗余备机;</li>
 </ul>
-<p>&lt;font color="#f00"&gt;<strong>而在LVS一台变多台时, 只能有一台对外提供服务(VIP只能配置在一台机器上对外提供服务)</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**而在LVS一台变多台时, 只能有一台对外提供服务(VIP只能配置在一台机器上对外提供服务)**&lt;/font&gt;</p>
 <p>在某台LVS挂掉后, VIP会切换到另外一台LVS继续提供服务;</p>
 <p>而检测LVS的健康状况, 对LVS进行切换就是使用keepalived实现的;</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>具体子容器的创建本篇不再赘述, 更多的是进行keepalived的说明</strong></p>
 <p>如中途遇到问题, 解决方法参考:</p>
 <p><a href="https://jasonkayzk.github.io/2020/04/10/LVS%E4%B8%ADDR%E6%A8%A1%E5%9E%8B%E5%AE%9E%E6%88%98/">LVS中DR模型实战</a></p>
@@ -33,8 +36,7 @@ description: 在前面介绍的LVS中容易发生单点故障的问题；当LVS�
 <p>&lt;br/&gt;</p>
 <h3>keepalived介绍</h3>
 <p>Keepalived是Linux下面实现VRRP备份路由的高可靠性运行件。Keepalived是一个基于VRRP协议来实现的服务高可用方案，可以利用其来避免IP单点故障，类似的工具还有heartbeat、corosync、pacemaker。但是它一般不会单独出现，而是与其它负载均衡技术（如lvs、haproxy、nginx）一起工作来达到集群的高可用。</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>简介: VRRP</strong></p>
 <p>VRRP全称 Virtual Router Redundancy Protocol，即 虚拟路由冗余协议。</p>
 <p>可以认为它是实现路由器高可用的容错协议，即将N台提供相同功能的路由器组成一个路由器组(Router Group)，这个组里面有一个master和多个backup，但在外界看来就像一台一样，构成虚拟路由器，拥有一个虚拟IP（vip，也就是路由器所在局域网内其他机器的默认路由），占有这个IP的master实际负责ARP相应和转发IP数据包，组中的其它路由器作为备份的角色处于待命状态。</p>
@@ -46,18 +48,17 @@ description: 在前面介绍的LVS中容易发生单点故障的问题；当LVS�
 <h4>对于RS挂掉</h4>
 <p>当RS挂掉之后，在<code>ipvsadm -ln</code>列表中，会将具体的负载均衡RS条目标记为不可用，从而不再向此RS中分配请求负载包；</p>
 <p>一旦keepalived再次感知到RS上线后，会再次将RS加入，标记为可用；</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>注：RS的健康检测</strong></p>
 <p>keepalived通过向RS发送一个GET请求头，检测响应码是否返回200；</p>
-<p>&lt;font color="#f00"&gt;<strong>不是使用ping!</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>因为实际使用ping命令时连四层的基本都没有到! 仅仅使用了三层协议, 更别提建立握手!</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**不是使用ping!**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**因为实际使用ping命令时连四层的基本都没有到! 仅仅使用了三层协议, 更别提建立握手!**&lt;/font&gt;</p>
 <p>此外，如果keepalived验证的是200的响应码，则对于一些跳转返回如3xx响应码也会被认为RS挂掉！</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3>创建子网络</h3>
 <p>使用下述命令创建一个叫做lvs_dr的子网络(<strong>上次已经创建</strong>):</p>
-<pre><code class="language-bash">docker network create --subnet=172.20.1.0/16 lvs_dr
+<pre><code class="lang-bash">docker network create --subnet=172.20.1.0/16 lvs_dr
 </code></pre>
 <p>网络规划为(在下方配置):</p>
 <ul>
@@ -65,14 +66,13 @@ description: 在前面介绍的LVS中容易发生单点故障的问题；当LVS�
 <li>两个LVS的IP地址: 172.20.1.1和172.20.1.2</li>
 <li>两台RS的IP地址: 172.20.1.10和172.20.1.11</li>
 </ul>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>为了考察keepalived实现了故障转移, 使用到了两个LVS</strong></p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3>创建容器</h3>
 <p>然后在子网络中分别创建lvs, rs1, rs2三个子容器并启动:</p>
-<pre><code class="language-bash">docker run -d --privileged=true --name=lvs1 --net lvs_dr --ip 172.20.1.1 centos:7 /usr/sbin/init
+<pre><code class="lang-bash">docker run -d --privileged=true --name=lvs1 --net lvs_dr --ip 172.20.1.1 centos:7 /usr/sbin/init
 docker run -d --privileged=true --name=lvs2 --net lvs_dr --ip 172.20.1.2 centos:7 /usr/sbin/init
 docker run -d --privileged=true --name=rs1 --net lvs_dr --ip 172.20.1.10 centos:7 /usr/sbin/init
 docker run -d --privileged=true --name=rs2 --net lvs_dr --ip 172.20.1.11 centos:7 /usr/sbin/init
@@ -81,10 +81,10 @@ docker run -d --privileged=true --name=rs2 --net lvs_dr --ip 172.20.1.11 centos:
 <h3>配置RS</h3>
 <p>对于RS的配置和之前的配置完全相同, 具体步骤如下;</p>
 <h4>配置RS的响应和通告级别</h4>
-<p>&lt;font color="#f00"&gt;<strong>需要注意的是: 必须先配置RS的响应和通告级别然后再去配置VIP</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>否则, 先配置的VIP会直接被广播. 就失去了对外隐藏, 对内可见的性质!</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**需要注意的是: 必须先配置RS的响应和通告级别然后再去配置VIP**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**否则, 先配置的VIP会直接被广播. 就失去了对外隐藏, 对内可见的性质!**&lt;/font&gt;</p>
 <p>下面以rs1为例配置<code>arp_ignore</code>和<code>arp_announce</code>文件:</p>
-<pre><code class="language-bash">[root@b2f5ab1b8b7d conf]# cd /proc/sys/net/ipv4/conf/
+<pre><code class="lang-bash">[root@b2f5ab1b8b7d conf]# cd /proc/sys/net/ipv4/conf/
 [root@b2f5ab1b8b7d conf]# ll
 total 0
 dr-xr-xr-x 1 root root 0 Apr 10 08:03 all
@@ -100,20 +100,19 @@ dr-xr-xr-x 1 root root 0 Apr 10 08:03 lo
 2
 </code></pre>
 <p>上面修改了ech0目录下的配置信息</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>注: 在启动容器和交互时必须增加<code>--privileged=true</code>参数, 否则文件将为只读, 无法修改</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
+<p>&lt;font color="#f00"&gt;**注: 在启动容器和交互时必须增加`--privileged=true`参数, 否则文件将为只读, 无法修改**&lt;/font&gt;</p>
 </blockquote>
 <p>如果后续还要添加新的机器, 可以通过修改all目录下的配置信息</p>
-<pre><code class="language-bash">[root@b2f5ab1b8b7d eth0]# cd ../all/
+<pre><code class="lang-bash">[root@b2f5ab1b8b7d eth0]# cd ../all/
 [root@b2f5ab1b8b7d all]# echo 1 &gt; arp_ignore 
-[root@b2f5ab1b8b7d all]# echo 2 &gt; arp_announce 
+[root@b2f5ab1b8b7d all]# echo 2 &gt; arp_announce
 </code></pre>
 <hr/>
 <h4>配置RS的VIP</h4>
 <p>这里继续以rs1为例对VIP(172.20.1.100)进行配置;</p>
 <p>使用ifconfig配置如下:</p>
-<pre><code class="language-bash">[root@b2f5ab1b8b7d all]# ifconfig lo:1 172.20.1.100 netmask 255.255.255.255
+<pre><code class="lang-bash">[root@b2f5ab1b8b7d all]# ifconfig lo:1 172.20.1.100 netmask 255.255.255.255
 [root@b2f5ab1b8b7d all]# ifconfig 
 eth0      Link encap:Ethernet  HWaddr 02:42:AC:14:01:0A  
           inet addr:172.20.1.10  Bcast:172.20.255.255  Mask:255.255.0.0
@@ -135,30 +134,29 @@ lo:1      Link encap:Local Loopback
           inet addr:172.20.1.100  Mask:255.255.255.255
           UP LOOPBACK RUNNING  MTU:65536  Metric:1
 </code></pre>
-<p>&lt;font color="#f00"&gt;<strong>注: 将掩码地址配置为四个255</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**注: 将掩码地址配置为四个255**&lt;/font&gt;</p>
 <hr/>
 <h4>在两个RS上启动HTTPD服务</h4>
 <p>两台RS都经过了上述配置之后, 安装httpd服务;</p>
-<pre><code class="language-bash">yum install httpd -y
+<pre><code class="lang-bash">yum install httpd -y
 </code></pre>
 <p>然后在<code>/var/www/html</code>目录下创建一个主页分别表示当前RS的主页</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>为了显示负载均衡的效果, 两个RS的内容不同. 而在实际生成环境, 应当部署相同的Server镜像</strong></p>
 </blockquote>
 <p>对于rs1:</p>
-<pre><code class="language-bash">[root@b2f5ab1b8b7d all]# cd /var/www/html/
+<pre><code class="lang-bash">[root@b2f5ab1b8b7d all]# cd /var/www/html/
 [root@b2f5ab1b8b7d html]# vi index.html
 [root@b2f5ab1b8b7d html]# cat index.html 
 from 172.20.1.10
 </code></pre>
 <p>对于rs2:</p>
-<pre><code class="language-bash">[root@953d5b5e1201 /]# vi /var/www/html/index.html
+<pre><code class="lang-bash">[root@953d5b5e1201 /]# vi /var/www/html/index.html
 [root@953d5b5e1201 /]# cat /var/www/html/index.html 
 from 172.20.1.11
 </code></pre>
 <p>然后启动两个服务:</p>
-<pre><code class="language-bash"># CentOS 7中, 启动服务
+<pre><code class="lang-bash"># CentOS 7中, 启动服务
 [root@88528e94e720 /]# systemctl start httpd
 
 # 在CentOS 6.x中使用下面
@@ -166,11 +164,11 @@ from 172.20.1.11
 Starting httpd: httpd: Could not reliably determine the server's fully qualified domain name, using 172.20.1.10 for ServerName   [  OK  ]
 </code></pre>
 <p>此时可以访问<code>172.20.1.10</code>和<code>172.20.1.11</code>, 会分别显示:</p>
-<pre><code class="language-bash"># http://172.20.1.10/
+<pre><code class="lang-bash"># http://172.20.1.10/
 from 172.20.1.10
 
 # http://172.20.1.11/
-from 172.20.1.11 
+from 172.20.1.11
 </code></pre>
 <p>但此时访问<code># http://172.20.1.100/</code>会访问失败, 因为LVS还尚未配置;</p>
 <p>&lt;br/&gt;</p>
@@ -178,17 +176,16 @@ from 172.20.1.11
 <p>在LVS容器中可以不安装ipvsadm软件（推荐安装，可以使用<code>ipvsadm -lnc</code>查看ipvs日志记录）</p>
 <h4>安装keepalived</h4>
 <p>使用yum安装keepalived即可：</p>
-<pre><code class="language-bash">yum install -y keepalived
+<pre><code class="lang-bash">yum install -y keepalived
 </code></pre>
 <p>启动：</p>
-<pre><code class="language-bash"># CentOS 7中
+<pre><code class="lang-bash"># CentOS 7中
 systemctl start keepalived
 
 # CentOS 6中
 service keepalived start
 </code></pre>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>启动前应先修改配置</strong></p>
 </blockquote>
 <p>配置文件：<code>/etc/keepalived/keepalived.conf</code></p>
@@ -196,11 +193,11 @@ service keepalived start
 <p>&lt;br/&gt;</p>
 <h4>配置keepalived</h4>
 <p>在配置keepalived之前，先清除之前ipvs的配置：</p>
-<pre><code class="language-bash">ipvsadm -C
+<pre><code class="lang-bash">ipvsadm -C
 </code></pre>
 <p>修改keepalived配置：</p>
 <p>配置172.20.1.10为主机master：</p>
-<pre><code class="language-bash">[root@9517ef4219ec keepalived]# cd /etc/keepalived/
+<pre><code class="lang-bash">[root@9517ef4219ec keepalived]# cd /etc/keepalived/
 
 # 配置文件备份
 [root@9517ef4219ec keepalived]# cp keepalived.conf keepalived.conf.bak
@@ -317,58 +314,58 @@ virtual_server 172.20.1.100 80 {
 <hr/>
 <h4>开启keepalived</h4>
 <p>配置完毕之后开启两个LVS容器中的keepalived</p>
-<pre><code class="language-bash">systemctl start keepalived
+<pre><code class="lang-bash">systemctl start keepalived
 </code></pre>
 <p>然后打开浏览器输入VIP(172.20.1.100)；</p>
 <p>使用<code>Ctrl+F5</code>刷新，则会依次显示<code>from 172.20.1.10</code>和<code>from 172.20.1.11</code>；</p>
 <p>说明keepalived部署成功；</p>
 <p>在master中查看ipvs负载均衡情况:</p>
-<pre><code class="language-bash">[root@9517ef4219ec keepalived]# ipvsadm -ln
+<pre><code class="lang-bash">[root@9517ef4219ec keepalived]# ipvsadm -ln
 IP Virtual Server version 1.2.1 (size=4096)
 Prot LocalAddress:Port Scheduler Flags
   -&gt; RemoteAddress:Port           Forward Weight ActiveConn InActConn
 TCP  172.20.1.100:80 rr
   -&gt; 172.20.1.10:80               Route   1      0          0         
-  -&gt; 172.20.1.11:80               Route   1      0          0        
+  -&gt; 172.20.1.11:80               Route   1      0          0
 </code></pre>
 <p>可以看到两个RS服务器;</p>
 <p>&lt;br/&gt;</p>
 <h3>keepalived测试</h3>
 <h4>模拟RS挂掉</h4>
 <p>停止一个rs容器中的httpd服务, 如rs1容器</p>
-<pre><code class="language-bash">systemctl stop httpd
+<pre><code class="lang-bash">systemctl stop httpd
 </code></pre>
 <p>此时经历一个keepalived探活的过程(探活期间rs1中的服务将无法访问)</p>
 <p>使用<code>Ctrl+F5</code>刷新，则仅会显示<code>from 172.20.1.11</code>；</p>
 <p>在master节点查看ipvs:</p>
-<pre><code class="language-bash">[root@9517ef4219ec keepalived]# ipvsadm -ln 
+<pre><code class="lang-bash">[root@9517ef4219ec keepalived]# ipvsadm -ln 
 IP Virtual Server version 1.2.1 (size=4096)
 Prot LocalAddress:Port Scheduler Flags
   -&gt; RemoteAddress:Port           Forward Weight ActiveConn InActConn
 TCP  172.20.1.100:80 rr
-  -&gt; 172.20.1.11:80               Route   1      0          0      
+  -&gt; 172.20.1.11:80               Route   1      0          0
 </code></pre>
 <p>可以看到只剩下一个<code>172.20.1.11</code>一个RS;</p>
 <hr/>
 <p>重新开启RS1中的httpd服务:</p>
-<pre><code class="language-bash">systemctl start httpd
+<pre><code class="lang-bash">systemctl start httpd
 </code></pre>
 <p>在等待一会, 使用<code>Ctrl+F5</code>刷新，则又会依次显示<code>from 172.20.1.10</code>和<code>from 172.20.1.11</code>；</p>
 <p>在master节点查看ipvs:</p>
-<pre><code class="language-bash">[root@9517ef4219ec keepalived]# ipvsadm -ln
+<pre><code class="lang-bash">[root@9517ef4219ec keepalived]# ipvsadm -ln
 IP Virtual Server version 1.2.1 (size=4096)
 Prot LocalAddress:Port Scheduler Flags
   -&gt; RemoteAddress:Port           Forward Weight ActiveConn InActConn
 TCP  172.20.1.100:80 rr
   -&gt; 172.20.1.10:80               Route   1      0          0         
-  -&gt; 172.20.1.11:80               Route   1      0          0        
+  -&gt; 172.20.1.11:80               Route   1      0          0
 </code></pre>
 <p>可以看到两个RS均在负载均衡列表中;</p>
 <p>&lt;br/&gt;</p>
 <h4>模拟IPVS挂掉</h4>
 <p>在一般情况下IPVS很难挂掉<strong>(因为IPVS属于内核功能, 如果IPVS挂掉, 基本说明整个服务器挂掉了)</strong></p>
 <p>我们可以通过直接禁用lvs容器中的eth0物理接口实现:</p>
-<pre><code class="language-bash">[root@9517ef4219ec /]# ifconfig eth0 down
+<pre><code class="lang-bash">[root@9517ef4219ec /]# ifconfig eth0 down
 [root@9517ef4219ec /]# ifconfig 
 lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
         inet 127.0.0.1  netmask 255.0.0.0
@@ -380,7 +377,7 @@ lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
 </code></pre>
 <p>此时访问172.20.1.100, 并使用<code>Ctrl+F5</code>刷新，仍会显示两个网页;</p>
 <p>而在另一台主机上会自动创建eth0:1, 如下:</p>
-<pre><code class="language-bash">[root@bb1945fadef5 /]# ifconfig 
+<pre><code class="lang-bash">[root@bb1945fadef5 /]# ifconfig 
 eth0: flags=4163&lt;UP,BROADCAST,RUNNING,MULTICAST&gt;  mtu 1500
         inet 172.20.1.2  netmask 255.255.0.0  broadcast 172.20.255.255
         ether 02:42:ac:14:01:02  txqueuelen 0  (Ethernet)
@@ -402,7 +399,7 @@ lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
         TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
 </code></pre>
 <p>再次使用<code>ifconfig up</code>启用lvs1中的eth0:</p>
-<pre><code class="language-bash">[root@9517ef4219ec /]# ifconfig eth0 up  
+<pre><code class="lang-bash">[root@9517ef4219ec /]# ifconfig eth0 up  
 [root@9517ef4219ec /]# ifconfig 
 eth0: flags=4163&lt;UP,BROADCAST,RUNNING,MULTICAST&gt;  mtu 1500
         inet 172.20.1.1  netmask 255.255.0.0  broadcast 172.20.255.255
@@ -426,7 +423,7 @@ lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
 </code></pre>
 <p>则172.20.1.1又成为master, 所以会自动配上<code>eth0:1</code>子接口;</p>
 <p>而在lvs2(172.20.1.2)中又会自动删除<code>eth0:1</code>子接口:</p>
-<pre><code class="language-bash">[root@bb1945fadef5 /]# ifconfig 
+<pre><code class="lang-bash">[root@bb1945fadef5 /]# ifconfig 
 eth0: flags=4163&lt;UP,BROADCAST,RUNNING,MULTICAST&gt;  mtu 1500
         inet 172.20.1.2  netmask 255.255.0.0  broadcast 172.20.255.255
         ether 02:42:ac:14:01:02  txqueuelen 0  (Ethernet)
@@ -446,7 +443,7 @@ lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
 <p>&lt;br/&gt;</p>
 <h4>模拟keepalived异常退出</h4>
 <p>使用<code>kill -9</code>杀死在lvs1中的keepalive进程:</p>
-<pre><code class="language-bash"># 查看并杀死keepalived进程
+<pre><code class="lang-bash"># 查看并杀死keepalived进程
 [root@9517ef4219ec /]# ps -fe | grep keep
 root      1153     1  0 09:13 ?        00:00:00 /usr/sbin/keepalived -D
 root      1154  1153  0 09:13 ?        00:00:00 /usr/sbin/keepalived -D
@@ -475,7 +472,7 @@ lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
         TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
 </code></pre>
 <p>而lvs2已被提升为MASTER:</p>
-<pre><code class="language-bash">[root@bb1945fadef5 /]# ifconfig 
+<pre><code class="lang-bash">[root@bb1945fadef5 /]# ifconfig 
 eth0: flags=4163&lt;UP,BROADCAST,RUNNING,MULTICAST&gt;  mtu 1500
         inet 172.20.1.2  netmask 255.255.0.0  broadcast 172.20.255.255
         ether 02:42:ac:14:01:02  txqueuelen 0  (Ethernet)
@@ -496,7 +493,7 @@ lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
         TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
 </code></pre>
 <p>此时再次启用lvs1中的keepalived服务:</p>
-<pre><code class="language-bash">[root@9517ef4219ec /]# systemctl start keepalived
+<pre><code class="lang-bash">[root@9517ef4219ec /]# systemctl start keepalived
 [root@9517ef4219ec /]# ifconfig 
 eth0: flags=4163&lt;UP,BROADCAST,RUNNING,MULTICAST&gt;  mtu 1500
         inet 172.20.1.1  netmask 255.255.0.0  broadcast 172.20.255.255
@@ -519,7 +516,7 @@ lo: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536
         TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
 </code></pre>
 <p>则lvs1再次变为MASTER, 而lvs2降为BACKUP:</p>
-<pre><code class="language-bash">[root@bb1945fadef5 /]# ifconfig 
+<pre><code class="lang-bash">[root@bb1945fadef5 /]# ifconfig 
 eth0: flags=4163&lt;UP,BROADCAST,RUNNING,MULTICAST&gt;  mtu 1500
         inet 172.20.1.2  netmask 255.255.0.0  broadcast 172.20.255.255
         ether 02:42:ac:14:01:02  txqueuelen 0  (Ethernet)

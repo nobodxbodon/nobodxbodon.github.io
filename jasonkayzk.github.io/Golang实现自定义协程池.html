@@ -1,37 +1,72 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Golang%E5%AE%9E%E7%8E%B0%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8D%8F%E7%A8%8B%E6%B1%A0.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/09/25/Golang%E5%AE%9E%E7%8E%B0%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8D%8F%E7%A8%8B%E6%B1%A0">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Golang实现自定义协程池.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/09/25/Golang实现自定义协程池">站点原文</a></h2>
 <hr/>
-<h2>title: Golang实现自定义协程池
+<p>title: Golang实现自定义协程池
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?98'
+cover: '<a href="https://img.paulzzh.com/touhou/random?98">https://img.paulzzh.com/touhou/random?98</a>'
 date: 2020-09-25 17:34:17
 categories: Golang
-tags: [Golang, 协程池]
-description: 在某些场景下，我们需要连接池的实现来避免每次使用组件都重新创建连接，以提升效率；但是某些情况下我们所使用的组件并未提供连接池给我们使用(例如消息队列nsq)，这个时候我们就需要一个能够自定义的连接池来面对各种需要协程池的场景！本文即实现了一个自定义的连接池；</h2>
+tags: [Golang, 协程池]</p>
+<h2>description: 在某些场景下，我们需要连接池的实现来避免每次使用组件都重新创建连接，以提升效率；但是某些情况下我们所使用的组件并未提供连接池给我们使用(例如消息队列nsq)，这个时候我们就需要一个能够自定义的连接池来面对各种需要协程池的场景！本文即实现了一个自定义的连接池；</h2>
 <p>在某些场景下，我们需要连接池的实现来避免每次使用组件都重新创建连接，以提升效率；但是某些情况下我们所使用的组件并未提供连接池给我们使用(例如消息队列nsq)，这个时候我们就需要一个能够自定义的连接池来面对各种需要协程池的场景！</p>
 <p>本文首先分析了几种常见连接池的实现方式，最后实现了一个开箱即用的自定义的连接池；</p>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/pool</li>
+<li><a href="https://github.com/JasonkayZK/pool">https://github.com/JasonkayZK/pool</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <p>&lt;br/&gt;</p>
 <h2>Golang实现自定义协程池</h2>
 <p>连接池是一个用来维护可复用连接的数据结构，正确地使用连接池可以达到减少网络往返损耗，降低系统资源占用，提升响应性能的目的。连接池主要的思想是把新建的连接暂存到池子中，当请求结束后不关闭连接，而是放回到连接池中，需要的时候从连接池中取出连接使用。</p>
 <h3>不同连接池实现方式</h3>
 <p><a href="https://link.zhihu.com/?target=https%3A//github.com/go-redis/redis">go-redis</a>，<a href="https://link.zhihu.com/?target=https%3A//github.com/gomodule/redigo">redigo</a>和<a href="https://link.zhihu.com/?target=https%3A//github.com/mediocregopher/radix.v2">radix.v2</a>都是用Go实现的Redis客户端，它们都在代码中实现了健壮的连接池，而它们实现的方式又各不一样，接下来就一起窥探它们的连接池实现的区别；</p>
 <p>下面这个表格展示了它们的特点：</p>
-<p>| <strong>特性</strong>             | <strong>go-redis</strong> | <strong>redigo</strong> | <strong>radix.v2</strong> |
-| -------------------- | ------------ | ---------- | ------------ |
-| <strong>连接池实现方式</strong>   | slice        | linkedlist | channel      |
-| <strong>自动关闭空闲连接</strong> | √            | √          | ×            |
-| <strong>连接最大生存时间</strong> | √            | √          | ×            |
-| <strong>连接健康检测</strong>     | ×            | √          | √            |
-| <strong>连接池</strong>stats      | √            | √          | ×            |</p>
+<table>
+<thead><tr>
+<th><strong>特性</strong></th>
+<th><strong>go-redis</strong></th>
+<th><strong>redigo</strong></th>
+<th><strong>radix.v2</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>连接池实现方式</strong></td>
+<td>slice</td>
+<td>linkedlist</td>
+<td>channel</td>
+</tr>
+<tr>
+<td><strong>自动关闭空闲连接</strong></td>
+<td>√</td>
+<td>√</td>
+<td>×</td>
+</tr>
+<tr>
+<td><strong>连接最大生存时间</strong></td>
+<td>√</td>
+<td>√</td>
+<td>×</td>
+</tr>
+<tr>
+<td><strong>连接健康检测</strong></td>
+<td>×</td>
+<td>√</td>
+<td>√</td>
+</tr>
+<tr>
+<td><strong>连接池</strong>stats</td>
+<td>√</td>
+<td>√</td>
+<td>×</td>
+</tr>
+</tbody>
+</table>
 <p>下面我们一个一个来看：</p>
 <h4>go-redis</h4>
 <p><code>ConnPool</code>是go-redis中连接池的实现，其数据结构如下：</p>
-<pre><code class="language-go">type ConnPool struct {
+<pre><code class="lang-go">type ConnPool struct {
     opt *Options
 
     dialErrorsNum uint32 // atomic
@@ -66,7 +101,7 @@ description: 在某些场景下，我们需要连接池的实现来避免每次�
 <li>_closed：连接池是否关闭。</li>
 </ul>
 <p>连接池的选项如下：</p>
-<pre><code class="language-go">type Options struct {
+<pre><code class="lang-go">type Options struct {
     Dialer  func() (net.Conn, error)
     OnClose func(*Conn) error
 
@@ -89,7 +124,7 @@ description: 在某些场景下，我们需要连接池的实现来避免每次�
 <li>IdleCheckFrequency：超时空闲连接清理的间隔时间。</li>
 </ul>
 <p>新建连接池的过程如下：</p>
-<pre><code class="language-go">func NewConnPool(opt *Options) *ConnPool {
+<pre><code class="lang-go">func NewConnPool(opt *Options) *ConnPool {
     p := &amp;ConnPool{
         opt: opt,
 
@@ -112,7 +147,7 @@ description: 在某些场景下，我们需要连接池的实现来避免每次�
 <p>首先会初始化一个ConnPool实例，赋予<code>PoolSize</code>大小的连接队列和轮转队列，接着会根据<code>MinIdleConns</code>参数维持一个最小连接数，以保证连接池中有这么多数量的连接处于活跃状态。<code>IdleTimeout</code>和<code>IdleCheckFrequency</code>参数用来在每过一段时间内会对连接池中不活跃的连接做清理操作。</p>
 <p>从连接池中获取一个连接的过程如下：</p>
 <p>1.检查连接池是否被关闭，如果被关闭直接返回<code>ErrClosed</code>错误。否则尝试在轮转队列中占据一个位置，如果抢占的等待时间超过连接池的超时时间，会返回<code>ErrPoolTimeout</code>错误。</p>
-<pre><code class="language-go">if p.closed() {
+<pre><code class="lang-go">if p.closed() {
     return nil, ErrClosed
 }
 
@@ -122,7 +157,7 @@ if err != nil {
 }
 </code></pre>
 <p>这里面的等待过程如下：</p>
-<pre><code class="language-go">func (p *ConnPool) waitTurn() error {
+<pre><code class="lang-go">func (p *ConnPool) waitTurn() error {
     select {
     case p.queue &lt;- struct{}{}:
         return nil
@@ -146,7 +181,7 @@ if err != nil {
 </code></pre>
 <p>轮转队列的主要作用是协调连接池的生产-消费过程，每往轮转队列中添加一个元素时，可用的连接资源的数量就减少一。若无法立即写入，该过程将尝试等待<code>PoolTimeout</code>大小的时间后，返回相应结果。</p>
 <p>2.尝试从连接池的空闲连接队列中获取一个已有连接，如果该连接已过期，则关闭并丢弃该连接，继续重复相同尝试操作，直至获取到一个连接或连接队列为空为止。</p>
-<pre><code class="language-go">for {
+<pre><code class="lang-go">for {
     p.connsMu.Lock()
     cn := p.popIdle()
     p.connsMu.Unlock()
@@ -164,7 +199,7 @@ if err != nil {
 }
 </code></pre>
 <p>3.如果上一步无法获取到已有连接，则新建一个连接，如果没有返回错误则直接返回，如果新建连接时返回错误，则释放掉轮转队列中的位置，返回连接错误。</p>
-<pre><code class="language-go">newcn, err := p._NewConn(true)
+<pre><code class="lang-go">newcn, err := p._NewConn(true)
 if err != nil {
     p.freeTurn()
     return nil, err
@@ -173,7 +208,7 @@ if err != nil {
 return newcn, nil
 </code></pre>
 <p>其中新建连接的过程如下：</p>
-<pre><code class="language-go">cn, err := p.newConn(pooled)
+<pre><code class="lang-go">cn, err := p.newConn(pooled)
 if err != nil {
     return nil, err
 }
@@ -192,7 +227,7 @@ return cn, nil
 </code></pre>
 <p>新建的连接会插入到连接池的<code>conns</code>队列中，当发现连接池的大小超出了设定的连接大小时，这时候会触发超卖，新建的连接的<code>pooled</code>属性被设置为false，也就是说这个连接不会再落地，未来将会被删除。</p>
 <p>从连接池中取出的连接一般来说都是要放回到连接池中的，放回的过程如下：</p>
-<pre><code class="language-go">func (p *ConnPool) Put(cn *Conn) {
+<pre><code class="lang-go">func (p *ConnPool) Put(cn *Conn) {
     if !cn.pooled {
         p.Remove(cn)
         return
@@ -207,7 +242,7 @@ return cn, nil
 </code></pre>
 <p>简单地说就是直接放空闲连接队列中插入这个连接，并把轮转队列的资源释放掉。若连接被标记为不要被池化，则会从连接池中删除这个连接。</p>
 <p>删除的过程如下，删除会从连接池的<code>conns</code>队列中移除这个连接：</p>
-<pre><code class="language-go">func (p *ConnPool) removeConn(cn *Conn) {
+<pre><code class="lang-go">func (p *ConnPool) removeConn(cn *Conn) {
     p.connsMu.Lock()
     for i, c := range p.conns {
         if c == cn {
@@ -223,7 +258,7 @@ return cn, nil
 }
 </code></pre>
 <p>最后再来看下连接池是怎么自动收割长时间不使用的空闲连接的，后台的goroutine会定时执行任务，不断地从空闲连接队列中取出过时连接，做删除和关闭连接操作，并释放轮转资源：</p>
-<pre><code class="language-go">var n int
+<pre><code class="lang-go">var n int
 for {
     p.getTurn()
 
@@ -248,7 +283,7 @@ return n, nil
 </code></pre>
 <h4><strong>redigo</strong></h4>
 <p><code>Pool</code>是redigo中连接池的实现，其数据结构如下：</p>
-<pre><code class="language-go">type Pool struct {
+<pre><code class="lang-go">type Pool struct {
     Dial func() (Conn, error)
 
     TestOnBorrow func(c Conn, t time.Time) error
@@ -285,7 +320,7 @@ return n, nil
 </ul>
 <p>可以看出连接池的参数选项和数据都集中在了连接池的结构体中，区别于go-redis中连接池和连接选项分开的情况。</p>
 <p>redigo推荐用类似以下的方式来新建一个连接池，而不是使用一个它自带的工厂方法：</p>
-<pre><code class="language-go">func newPool(addr string) *redis.Pool {
+<pre><code class="lang-go">func newPool(addr string) *redis.Pool {
    return &amp;redis.Pool{
      MaxIdle: 3,
      IdleTimeout: 240 * time.Second,
@@ -296,7 +331,7 @@ return n, nil
 <p>从连接池中获取一个连接的过程如下：</p>
 <p>1.检测是否设置了<code>Wait</code>和<code>MaxActive</code>选项，若是，则对连接池的<code>ch</code>属性进行懒加载，<code>ch</code>是一个设置了<code>MaxActive</code>大小的channel，用以维护活跃连接资源，如果<code>ch</code>已经被初始化了则会马上返回。</p>
 <p>接下来再尝试从<code>ch</code>中获取一个资源，这里会进行一个阻塞获取操作，等待直至有可用资源。</p>
-<pre><code class="language-go">// Handle limit for p.Wait == true.
+<pre><code class="lang-go">// Handle limit for p.Wait == true.
 if p.Wait &amp;&amp; p.MaxActive &gt; 0 {
     p.lazyInit()
     if ctx == nil {
@@ -311,7 +346,7 @@ if p.Wait &amp;&amp; p.MaxActive &gt; 0 {
 }
 </code></pre>
 <p>2.接下来会进行几个动作，首先会遍历空闲连接的链表，逐个检测连接是否过时，如果连接已超过设定的过时时间，则从链表中摘走该连接，并关闭底层连接，把活跃连接数减少一；接着尝试从链表头部中获取一个可用连接，调用测活函数和检查生命周期，如果通过判断则返回该连接，如果不通过则丢弃掉该连接，并把活跃连接数减少一，如果连接池被关闭的话，函数会在这时候返回错误。</p>
-<pre><code class="language-go">p.mu.Lock()
+<pre><code class="lang-go">p.mu.Lock()
 
 // Prune stale connections at the back of the idle list.
 if p.IdleTimeout &gt; 0 {
@@ -356,7 +391,7 @@ p.active++
 p.mu.Unlock()
 </code></pre>
 <p>3.如果无法在上一步获取连接，连接池则会新建一个连接返回，如果连接返回失败，则释放掉<code>ch</code>中的资源，可以看出这里的<code>ch</code>的作用跟go-redis连接池实现中的轮转队列的作用是类似的。</p>
-<pre><code class="language-go">c, err := p.Dial()
+<pre><code class="lang-go">c, err := p.Dial()
 if err != nil {
     c = nil
     p.mu.Lock()
@@ -369,11 +404,11 @@ if err != nil {
 return &amp;poolConn{c: c, created: nowFunc()}, err
 </code></pre>
 <p>在redigo的连接池的<code>Get</code>方法中无论成功或失败，是只返回一个连接结构体作为返回结果的，而在go-redis中的<code>Get</code>方法则返回两个结果，一个代表连接，另一个是错误，这里也可以看出它们在接口设计上的区别。</p>
-<pre><code class="language-go">func (p *ConnPool) Get() (*Conn, error) // go-redis
+<pre><code class="lang-go">func (p *ConnPool) Get() (*Conn, error) // go-redis
 func (p *Pool) Get() Conn // redigo
 </code></pre>
 <p>把连接放回到连接池的过程如下：</p>
-<pre><code class="language-go">p.mu.Lock()
+<pre><code class="lang-go">p.mu.Lock()
 if !p.closed &amp;&amp; !forceClose {
     pc.t = nowFunc()
     p.idle.pushFront(pc)
@@ -400,7 +435,7 @@ return nil
 </code></pre>
 <p>当连接池没被关闭时，放回连接池的连接会被重新插入到链表头中，如果链表长度超过最大空闲数量了，则会从链表尾部摘除一个连接。否则连接会被关闭并释放相应资源。</p>
 <p>注意这里的<code>put</code>方法是不对外暴露的，而是通过对外暴露的<code>Close</code>方法的内部进行调用，使用者无须关心把连接放回池中的逻辑，而只需要像使用普通网络连接一样使用就好了：</p>
-<pre><code class="language-go">func serveHome(w http.ResponseWriter, r *http.Request) {
+<pre><code class="lang-go">func serveHome(w http.ResponseWriter, r *http.Request) {
      conn := pool.Get()
      defer conn.Close()
      //...
@@ -408,7 +443,7 @@ return nil
 </code></pre>
 <h4>radix.v2</h4>
 <p><code>Pool</code>是radix.v2中的连接池的实现，其数据结构如下：</p>
-<pre><code class="language-go">type Pool struct {
+<pre><code class="lang-go">type Pool struct {
     pool        chan *redis.Client
     reservePool chan *redis.Client
     df          DialFunc
@@ -433,7 +468,7 @@ return nil
 </ul>
 <p>radix.v2的连接池实现对比其他两个来说要比较简洁一些，其新建一个连接池的过程如下：</p>
 <p>1.初始化构造参数，新建一个<code>Pool</code>实例：</p>
-<pre><code class="language-go">var defaultPoolOpts []Opt
+<pre><code class="lang-go">var defaultPoolOpts []Opt
 // if pool size is 0 don't do any pinging, cause there'd be no point
 if size &gt; 0 {
     defaultPoolOpts = append(defaultPoolOpts, PingInterval(10*time.Second/time.Duration(size)))
@@ -458,7 +493,7 @@ p := Pool{
 </code></pre>
 <p>这里面会构造一些默认参数，例如设置了连接定期发送ping命令的配置，以及对<code>Pool</code>实例中的数据结构进行初始化。</p>
 <p>2.启动后台任务，分别定时进行连接健康检测，以及定时从保留连接池中清理连接：</p>
-<pre><code class="language-go">if po.pingInterval &gt; 0 {
+<pre><code class="lang-go">if po.pingInterval &gt; 0 {
     doEvery(po.pingInterval, func() {
         // instead of using Cmd/Get, which might make a new connection,
         // we only check from the pool
@@ -490,7 +525,7 @@ if po.overflowSize &gt; 0 {
 }
 </code></pre>
 <p>3.新建一个连接并检测server是否存活，如果存在错误直接返回，否则继续新建<code>size-1</code>数量的连接，存放在连接池供使用：</p>
-<pre><code class="language-go">mkConn := func() error {
+<pre><code class="lang-go">mkConn := func() error {
     client, err := df(network, addr)
     if err == nil {
         p.pool &lt;- client
@@ -516,7 +551,7 @@ go func() {
 return &amp;p, nil
 </code></pre>
 <p>从连接池中获取一个连接的过程如下：</p>
-<pre><code class="language-go">select {
+<pre><code class="lang-go">select {
 case conn := &lt;-p.pool:
     return conn, nil
 case conn := &lt;-p.reservePool:
@@ -545,7 +580,7 @@ default:
 </code></pre>
 <p>连接池首先尝试从<code>pool</code>中获取一个连接，其次会尝试从<code>reservePool</code>中获取一个连接，如果都无法获取到连接，则会等待一段时间获取连接，直至超时或返回。</p>
 <p>把连接放回到连接池的过程如下：</p>
-<pre><code class="language-go">select {
+<pre><code class="lang-go">select {
 case &lt;-p.stopCh:
     conn.Close()
     return
@@ -572,7 +607,8 @@ default:
 <p>同样地，连接会首先尝试放回到<code>pool</code>中，如果失败则会尝试放到<code>reservePool</code>中，当还是出现失败则直接丢弃并关闭连接。</p>
 <h4>总结</h4>
 <p>用不同方式实现的连接池都有各自的特点，比如用channel实现的话代码会更加简单和清晰，用slice或linkedlist实现的话则整体性能会更高一些，但良好的连接池共同的特点是：提供对用户友好的接口，安全可靠，以及能保证在并发环境下的正确性。</p>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h3>实现自己的连接池</h3>
 <p>经过上面对几种常见的连接池实现方式的比较，接下来我们使用channel实现一个我们自定义的连接池；</p>
 <p>首先，根据上面的分析，我们希望我们的连接池具备一下特性：</p>
@@ -584,27 +620,27 @@ default:
 </ul>
 <h4>定义Pool接口</h4>
 <p>Pool接口的定义如下：</p>
-<pre><code class="language-go">package channel_pool
+<pre><code class="lang-go">package channel_pool
 
 // The pool interface
 type Pool interface {
-	// Get returns a new connection from the pool. Closing the connections puts
-	// it back to the Pool. Closing it when the pool is destroyed or full will
-	// be counted as an error.
-	Get() (interface{}, error)
+    // Get returns a new connection from the pool. Closing the connections puts
+    // it back to the Pool. Closing it when the pool is destroyed or full will
+    // be counted as an error.
+    Get() (interface{}, error)
 
-	// Put puts the connection into the pool instead of closing it.
-	Put(interface{}) error
+    // Put puts the connection into the pool instead of closing it.
+    Put(interface{}) error
 
-	// CloseConn directly close the connection
-	CloseConn(interface{}) error
+    // CloseConn directly close the connection
+    CloseConn(interface{}) error
 
-	// ShutDown closes the pool and all its connections.
-	// After ShutDown() the pool is no longer usable.
-	ShutDown() error
+    // ShutDown closes the pool and all its connections.
+    // After ShutDown() the pool is no longer usable.
+    ShutDown() error
 
-	// Len returns the current number of connections of the pool.
-	Len() int
+    // Len returns the current number of connections of the pool.
+    Len() int
 }
 </code></pre>
 <p>包括了一个线程池都应该具备的一些基本方法，例如：获取连接Get、放回资源Put、关闭协程池ShutDown等；</p>
@@ -612,11 +648,11 @@ type Pool interface {
 <hr/>
 <h4>定义连接</h4>
 <p>对于连接池中单个连接的定义在generalConn中：</p>
-<pre><code class="language-go">// generalConn is a wrapper around the connection
+<pre><code class="lang-go">// generalConn is a wrapper around the connection
 type generalConn struct {
-	conn     interface{}
-	t        time.Time
-	unusable bool
+    conn     interface{}
+    t        time.Time
+    unusable bool
 }
 </code></pre>
 <p>generalConn相当于一般连接conn的一个包装类，其内部封装了实际连接资源conn、创建时间t用于判断是否超时/闲置连接、unusable作为不可用(待回收标记，目前实现中尚未使用)；</p>
@@ -624,18 +660,18 @@ type generalConn struct {
 <hr/>
 <h4>定义连接池</h4>
 <p>连接池的定义如下：</p>
-<pre><code class="language-go">// the pool
+<pre><code class="lang-go">// the pool
 type channelPool struct {
-	mu           sync.RWMutex
-	conns        chan *generalConn
-	factory      func() (interface{}, error)
-	close        func(interface{}) error
-	ping         func(interface{}) error
-	idleTimeout  time.Duration
-	waitTimeOut  time.Duration
-	maxActive    int
-	openingConns int
-	connReqs     []chan *generalConn
+    mu           sync.RWMutex
+    conns        chan *generalConn
+    factory      func() (interface{}, error)
+    close        func(interface{}) error
+    ping         func(interface{}) error
+    idleTimeout  time.Duration
+    waitTimeOut  time.Duration
+    maxActive    int
+    openingConns int
+    connReqs     []chan *generalConn
 }
 </code></pre>
 <p>其中：</p>
@@ -661,33 +697,33 @@ type channelPool struct {
 <h5><strong>① 创建连接池 - NewChannelPool</strong></h5>
 <p>创建连接池使用的是Golang经典的创建资源的方法：通过传入一个配置类进行资源的创建；</p>
 <p>这里使用到的类是：</p>
-<pre><code class="language-go">// Configs for pool
+<pre><code class="lang-go">// Configs for pool
 type Options struct {
-	// The number of the connections when initiate the pool
-	// Also, the least connection number of the pool
-	InitialCap int
+    // The number of the connections when initiate the pool
+    // Also, the least connection number of the pool
+    InitialCap int
 
-	// Max connection number in the pool
-	MaxCap int
+    // Max connection number in the pool
+    MaxCap int
 
-	// Max idle number in the pool
-	MaxIdle int
+    // Max idle number in the pool
+    MaxIdle int
 
-	// The method the build the connection
-	Factory func() (interface{}, error)
+    // The method the build the connection
+    Factory func() (interface{}, error)
 
-	// The method to close the connection
-	Close func(interface{}) error
+    // The method to close the connection
+    Close func(interface{}) error
 
-	// Check connection health
-	Ping func(interface{}) error
+    // Check connection health
+    Ping func(interface{}) error
 
-	// Max life time for idle connection
-	IdleTimeout time.Duration
+    // Max life time for idle connection
+    IdleTimeout time.Duration
 
-	// Max time to get a connection from pool
-	// Else this will return a errs.MaxActiveConnectionErr
-	WaitTimeout time.Duration
+    // Max time to get a connection from pool
+    // Else this will return a errs.MaxActiveConnectionErr
+    WaitTimeout time.Duration
 }
 </code></pre>
 <p>初始化时需要传入协程池的相关参数；</p>
@@ -723,12 +759,12 @@ type Options struct {
 </ul>
 <h5><strong>④ 关闭连接池 - ShutDown</strong></h5>
 <p>使用ShutDown关闭连接池会将协程池的所有配置置空(防止内存泄漏、并便于垃圾回收)，同时尝试调用协程池中配置的close方法关闭各个协程；</p>
-<blockquote>
-<p>&lt;BR/&gt;</p>
+<blockquote>&lt;BR/&gt;
+
 <p>与Java中的线程池尽最大可能保证线程安全执行不同，这里由close方法来保证各个连接资源的关闭；</p>
 <p>这是考虑到，不同类型连接处理close的逻辑各异，同时，不少第三方连接已经提供了较为合理的关闭方式，所以就不重复造轮子了！</p>
 <p>但是还是要提醒一句：</p>
-<p>&lt;font color="#f00"&gt;<strong>如果close处理不当，如：单个协程出现死循环无法退出，是一定会造成内存泄漏的！这里的ShutDown仅仅是尝试关闭连接，并不保证强制关闭(有需要的可以使用context改进本协程池)</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**如果close处理不当，如：单个协程出现死循环无法退出，是一定会造成内存泄漏的！这里的ShutDown仅仅是尝试关闭连接，并不保证强制关闭(有需要的可以使用context改进本协程池)**&lt;/font&gt;</p>
 </blockquote>
 <hr/>
 <h4>定义错误类型</h4>
@@ -742,32 +778,32 @@ type Options struct {
 <hr/>
 <h4>使用方式</h4>
 <p>通过下面的方式引入仓库即可：</p>
-<pre><code class="language-bash">go get -u github.com/jasonkayzk/pool/channel_pool
+<pre><code class="lang-bash">go get -u github.com/jasonkayzk/pool/channel_pool
 </code></pre>
 <h5><strong>① 创建协程池</strong></h5>
 <p>使用<code>NewChannelPool</code>创建一个协程池：</p>
-<pre><code class="language-go">func newChannelPool() (Pool, error) {
-	ops := Options{
-		InitialCap:  InitialCap,
-		MaxCap:      MaximumCap,
-		MaxIdle:     MaxIdleCap,
-		Factory:     factory,
-		Ping:        pingFunc,
-		Close:       closeFunc,
-		IdleTimeout: IdleTimeout,
-		WaitTimeout: WaitTimeout,
-	}
-	return NewChannelPool(&amp;ops)
+<pre><code class="lang-go">func newChannelPool() (Pool, error) {
+    ops := Options{
+        InitialCap:  InitialCap,
+        MaxCap:      MaximumCap,
+        MaxIdle:     MaxIdleCap,
+        Factory:     factory,
+        Ping:        pingFunc,
+        Close:       closeFunc,
+        IdleTimeout: IdleTimeout,
+        WaitTimeout: WaitTimeout,
+    }
+    return NewChannelPool(&amp;ops)
 }
 </code></pre>
 <h5><strong>② 使用连接</strong></h5>
 <p>通过Get方法从协程池中取出连接，并通过类型转换，将interface{}转换为对应的连接类型；</p>
 <p>然后使用连接处理逻辑，最后通过Put方法释放连接；</p>
-<pre><code class="language-go">func xxx() {
+<pre><code class="lang-go">func xxx() {
     conn, _ := p.Get()
     cli := conn.(*rpc.Client)
     defer p.Put(conn)
-	
+
     // 使用cli连接处理逻辑
     ...
 }
@@ -775,58 +811,57 @@ type Options struct {
 <h5><strong>③ 获取池中可用连接数</strong></h5>
 <p>通过Len方法，可以获取到线程池中可用的连接数；</p>
 <p>例如：</p>
-<pre><code class="language-go">func TestPool_Get(t *testing.T) {
-	p, err := newChannelPool()
-	if err != nil {
-		t.Errorf("create pool error: %s", err)
-	}
-	defer p.ShutDown()
+<pre><code class="lang-go">func TestPool_Get(t *testing.T) {
+    p, err := newChannelPool()
+    if err != nil {
+        t.Errorf("create pool error: %s", err)
+    }
+    defer p.ShutDown()
 
-	_, err = p.Get()
-	if err != nil {
-		t.Errorf("Get error: %s", err)
-	}
+    _, err = p.Get()
+    if err != nil {
+        t.Errorf("Get error: %s", err)
+    }
 
-	// after one get, current capacity should be lowered by one.
-	if p.Len() != (InitialCap - 1) {
-		t.Errorf("Get error. Expecting %d, got %d", InitialCap-1, p.Len())
-	}
+    // after one get, current capacity should be lowered by one.
+    if p.Len() != (InitialCap - 1) {
+        t.Errorf("Get error. Expecting %d, got %d", InitialCap-1, p.Len())
+    }
 }
 </code></pre>
-<p>&lt;BR/&gt;</p>
+&lt;BR/&gt;
+
 <h4>性能测试</h4>
 <p>为了进行协程池的性能测试，首先我们建立一个rpc服务：</p>
-<pre><code class="language-go">type Number int
+<pre><code class="lang-go">type Number int
 
 type Args struct {
-	A, B int
+    A, B int
 }
 
 func rpcServer() {
-	number := new(Number)
-	_ = rpc.Register(number)
-	rpc.HandleHTTP()
+    number := new(Number)
+    _ = rpc.Register(number)
+    rpc.HandleHTTP()
 
-	l, e := net.Listen("tcp", address)
-	if e != nil {
-		panic(e)
-	}
-	go http.Serve(l, nil)
+    l, e := net.Listen("tcp", address)
+    if e != nil {
+        panic(e)
+    }
+    go http.Serve(l, nil)
 }
 
 func (n *Number) Multiply(args *Args, reply *int) error {
-	*reply = args.A * args.B
-	return nil
+    *reply = args.A * args.B
+    return nil
 }
-
 </code></pre>
 <p>这个rpc服务注册了Number中的服务，好让我们可以远程调用其Multiply方法，返回两个数的乘积；</p>
 <p>接下来我们分别通过协程池和非协程池(每次调用创建一个连接)进行rpc调用，并调用5000次，比较时间：</p>
 <pre><code>poolMethod elapsed:  1.6118875s
 simpleMethod elapsed:  9.0750414s
 </code></pre>
-<blockquote>
-<p>具体测试代码见example目录；</p>
+<blockquote><p>具体测试代码见example目录；</p>
 </blockquote>
 <p>经过测试，这个协程池的性能还是不错的，速度的确提升了很多；</p>
 <p>&lt;br/&gt;</p>
@@ -840,9 +875,9 @@ simpleMethod elapsed:  9.0750414s
 <p>如果对Java中线程池实现感兴趣，并且想尝试自己写一个类似于Java这种大而全的协程池的，可以先看一下我之前写的JDK11中的线程池的源码解析；</p>
 <p>系列文章入口：</p>
 <ul>
-<li><a href="https://jasonkayzk.github.io/2020/02/06/Java%E7%BA%BF%E7%A8%8B%E6%B1%A0ThreadPoolExecutor%E5%88%86%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98/">Java线程池ThreadPoolExecutor分析与实战</a></li>
-<li><a href="https://jasonkayzk.github.io/2020/03/04/Java%E7%BA%BF%E7%A8%8B%E6%B1%A0ThreadPoolExecutor%E5%88%86%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E7%BB%AD/">Java线程池ThreadPoolExecutor分析与实战续</a></li>
-<li><a href="https://jasonkayzk.github.io/2020/03/05/Java%E7%BA%BF%E7%A8%8B%E6%B1%A0ThreadPoolExecutor%E5%88%86%E6%9E%90%E4%B8%8E%E5%AE%9E%E6%88%98%E7%BB%88/">Java线程池ThreadPoolExecutor分析与实战终</a></li>
+<li><a href="https://jasonkayzk.github.io/2020/02/06/Java线程池ThreadPoolExecutor分析与实战/">Java线程池ThreadPoolExecutor分析与实战</a></li>
+<li><a href="https://jasonkayzk.github.io/2020/03/04/Java线程池ThreadPoolExecutor分析与实战续/">Java线程池ThreadPoolExecutor分析与实战续</a></li>
+<li><a href="https://jasonkayzk.github.io/2020/03/05/Java线程池ThreadPoolExecutor分析与实战终/">Java线程池ThreadPoolExecutor分析与实战终</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
 <h2>附录</h2>
@@ -852,6 +887,6 @@ simpleMethod elapsed:  9.0750414s
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/pool</li>
+<li><a href="https://github.com/JasonkayZK/pool">https://github.com/JasonkayZK/pool</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

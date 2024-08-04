@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2018-01-15-Design and implementation of red packets.md)，<a href="https://objcoding.com/2018/01/15/Design-and-implementation-of-red-packets">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2018-01-15-Design and implementation of red packets.md">仓库源文</a>，<a href="https://objcoding.com/2018/01/15/Design-and-implementation-of-red-packets">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "「红包」的设计与实现"
 categories: Redis
-tags: 分布式缓存锁 并发
-author: 张乘辉</h2>
+tags: 分布式缓存锁 并发</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}</li>
@@ -15,7 +15,7 @@ author: 张乘辉</h2>
 <p>第二种是发红包的时候就通过算法将红包存到队列和数据库中，抢红包时再将已算好的红包从队列中取出来，这种方式缺点就是增大了缓存的消耗，毕竟用户发的每个红包都要缓存到队列中，但是好处就是在抢过程中直接从队列中拿出来就好了，无需计算。</p>
 <p>我采用的是第二种方式。</p>
 <p>附上一个红包算法：</p>
-<pre><code class="language-java">/**
+<pre><code class="lang-java">/**
   * @param number 红包数量
   * @param total 红包总金额
   * @param min 红包最小金额
@@ -63,7 +63,7 @@ public List&lt;Integer&gt; randomMoney(int number, int total, int min) {
 <ul>
 <li>Redisson配置：</li>
 </ul>
-<pre><code class="language-yaml">---
+<pre><code class="lang-yaml">---
 singleServerConfig:
   idleConnectionTimeout: 10000 #连接空闲超时，单位：毫秒
   pingTimeout: 1000
@@ -92,7 +92,7 @@ useLinuxNativeEpoll: false
 <ul>
 <li>创建 Bean：</li>
 </ul>
-<pre><code class="language-java">@Bean(destroyMethod = "shutdown")
+<pre><code class="lang-java">@Bean(destroyMethod = "shutdown")
 public RedissonClient redissonClient() throws IOException {
   return Redisson.create(
     Config.fromYAML(new ClassPathResource("redisson-" + ProfileUtil.getProfile() + ".yml").getInputStream())
@@ -103,7 +103,7 @@ public RedissonClient redissonClient() throws IOException {
 <p>有同步，那必然要考虑多用户同时请求造成的阻塞时间，基于这个目的，我将抢红包过程拆分成「抢过程」和「拆过程」，「抢过程」属于快的过程，「拆过程」属于慢的过程，因为「拆过程」涉及到数据库的事务操作。</p>
 <p>因此我将「抢过程」放在 cache 层，也就是利用红包队列个长度来判断红包是否抢完，每进来一个用户，就从队列取出一个红包，当队列长度为 0 时，那么意味着红包已经抢完了，这时可以抵挡大部分用户的请求了，防止过多用户停留在「拆过程」。已经抢到红包的用户进入到「拆过程」，每次只能有一个用户进行拆操作，其余抢到红包的用户会在锁外面等待。</p>
 <p>代码大致实现：</p>
-<pre><code class="language-java">@Override
+<pre><code class="lang-java">@Override
 @Transactional
 public Map&lt;String, Object&gt; receive(Long luckyMoneyId, Long userId, String form_id, String appId) throws RestException {
 

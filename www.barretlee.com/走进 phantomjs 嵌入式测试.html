@@ -15,7 +15,8 @@ date: 2015-09-25 10:21:30</li>
 </ul>
 <hr/>
 <p>Google 上搜索了下 phantomjs 关键词，展示最多的是测试和截屏相关的内容。phantomjs 提供了大量的 API，让我们可以操作 webkit 网页沙箱中的内容，也可以将网页中的信息输出到外层，进行分析处理。而本文着重要讲述的是，如何更好的与 webkit 网页沙箱交互，如何注入脚本，如何修改请求。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <p>QA 测试最烦恼的是 UI 测试，包括网页元素的正确呈现，网页交互之后的元素变化等，人工测试很容易疏忽一些问题，并且 UI 层面的测试用例也不好写，这让人很头痛。为了让程序能够很好地分析页面 UI，也有很多人做了图片对比工具，通过 phantomjs 提供的 screen capture 功能，定时抓取页面截图，或者在不同的场景下抓取同一个页面的截图，在时间维度和空间维度上对页面图片做对比分析，做监控警报等。技术成本不是很高，但是为了个性需求需要做很多额外的工作。</p>
 <h3>事件就是精确插入点</h3>
 <p>为了能够在精确的时间点注入测试脚本，我们需要了解下 phantomjs 在请求资源时会发生哪些事件，毕竟它也是一个事件驱动模型。</p>
@@ -29,13 +30,13 @@ date: 2015-09-25 10:21:30</li>
 <li><code>onConsoleMessage</code> 沙箱内的 console 内容是不会出现到外层的，通过这个函数可以输出</li>
 </ul>
 <p>还有很多，具体可以翻阅文档: <a href="http://phantomjs.org/api/webpage/">http://phantomjs.org/api/webpage/</a>。这些事件都是打开一个页面之后的实例化对象上的：</p>
-<pre><code class="language-javascript">var page = require('webpage').create();
+<pre><code class="lang-javascript">var page = require('webpage').create();
 // 事件监听
 page.onxxxx();
 page.open(url, function(){});
 </code></pre>
 <p>用惯了 nodejs 的同学，可能会很自然的在代码里头写</p>
-<pre><code class="language-javascript">var page = require('webpage').create();
+<pre><code class="lang-javascript">var page = require('webpage').create();
 // phantomjs API 没有这些东西
 var http = require('http');
 </code></pre>
@@ -45,7 +46,7 @@ var http = require('http');
 <p>嵌入式指的是，将测试代码嵌入到 phantomjs 的沙箱之中，然后通过它提供的 API 将测试数据导出来，那么，如何将数据插入进去？</p>
 <p><strong>1. includeJS/injectJS注入文件</strong></p>
 <p>两个函数都可以网沙箱内注入代码，区别是 <code>includeJS</code> 主要用于注入一个远程的脚本，如：</p>
-<pre><code class="language-javascript">var webPage = require('webpage');
+<pre><code class="lang-javascript">var webPage = require('webpage');
 var page = webPage.create();
 
 page.includeJs('http://code.jquery.com/jquery-1.10.2.min.js', function() {
@@ -59,7 +60,7 @@ page.includeJs('http://code.jquery.com/jquery-1.10.2.min.js', function() {
 <p><strong>2. evaluate注入代码</strong></p>
 <p>而 <code>injectJS</code> 主要用于注入本地的文件，在做测试的时候，这个函数的使用频率稍高一些。很多的测试平台都是在线的，并且支持在线编写测试用例，最后生成的脚本地址当然也是网络可访问的，那么这个时候用 <code>includeJS</code> 就略微方便一些啦。</p>
 <p>上面两种方式是想容器内注入可执行稳紧啊。除此之外，我们还可以使用 <code>evaluate</code> 直接注入可执行的脚本内容，如：</p>
-<pre><code class="language-javascript">var webPage = require('webpage');
+<pre><code class="lang-javascript">var webPage = require('webpage');
 var page = webPage.create();
 
 page.open('http://www.taobao.com', function(status) {
@@ -75,13 +76,13 @@ page.open('http://www.taobao.com', function(status) {
 <p>注入代码拿到输出之后，我们需要将数据拿出来，在运行的环境中，可以通过如下手段将数据搬出来。</p>
 <p><strong>1. 多开几个 webserver</strong></p>
 <p>上面提到，phantomjs 提供了 webserver 方面的 API，我们可以在注入的代码中：</p>
-<pre><code class="language-javascript">// part of inject.js
+<pre><code class="lang-javascript">// part of inject.js
 $.post("http://localhost:10220", data, function(){
   // code..
 })
 </code></pre>
 <p>向外部通讯，而我们在外部也准备好了接驾代码：</p>
-<pre><code class="language-javascript">// part of server.js
+<pre><code class="lang-javascript">// part of server.js
 var server = require('webserver').create();
 var port = 10220;
 server.listen(port, function(req, res){
@@ -92,7 +93,7 @@ server.listen(port, function(req, res){
 <p>所以 http 是个好东西，我们可以控制 web 的 server（沙箱外） 和 client（沙箱内），那么数据通讯就不是问题了。</p>
 <p><strong>2. callPhantom 函数</strong></p>
 <p>phantomjs 的 webpage 对象提供了一个 <code>onCallback</code> 函数，这个函数能够听到沙箱内一个叫做 <code>callPhantom</code> 函数的呐喊。<code>callPhantom</code> 是 phantomjs 在 window 上扩展的函数，他的使用：</p>
-<pre><code class="language-javascript">var page = require("webpage").create();
+<pre><code class="lang-javascript">var page = require("webpage").create();
 page.onCallback = function(msg) {
     console.log("这是沙箱说的话: " + msg);
     return "嘿，沙箱，我听到了！";

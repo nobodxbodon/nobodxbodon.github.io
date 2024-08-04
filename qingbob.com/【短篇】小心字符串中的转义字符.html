@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2016-12-27-be-careful-with-character-escape-in-stringify-json.md">仓库源文</a>，<a href="https://qingbob.com/be-careful-with-character-escape-in-stringify-json">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 【短篇】小心字符串中的转义字符
 modified: 2016-12-27
 tags: [javascript, short]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>这是一篇遇见bug的反思。</p>
 <h2>问题</h2>
 <p>首先请听我描述一段业务上的需求。</p>
@@ -17,7 +17,7 @@ share: true</h2>
 <p>比如我们需要的是：</p>
 <p>{% highlight javascript %}
 {
-"name": "banana"
+    "name": "banana"
 }
 {% endhighlight %}</p>
 <p>而后端返回的是</p>
@@ -35,7 +35,7 @@ JSON.parse('{"name": ""banana""}')
 <p>不妨让我们从头捋一捋，为什么需要转义。</p>
 <p>转义的原因无非有两种（改编自<a href="http://baike.baidu.com/link?url=83ELEvD7roYOxo33tnu7MpuOEegyQaGUz9rORLzSoU523YhoR48PhEf2PFeGzo7r08geKtw60bVT8MkAFmR9g_">百度百科</a>）</p>
 <ol>
-<li>使用转义字符来表示字符集中定义的字符，如Javascript中定义了一些字母前加""来表示常见的那些不能显示的（也就是换行，缩进，符号等）ASCII字符，如\0,\t,\n等，就称为转义字符，因为后面的字符，都不是它本来的ASCII字符意思了。</li>
+<li>使用转义字符来表示字符集中定义的字符，如Javascript中定义了一些字母前加"\"来表示常见的那些不能显示的（也就是换行，缩进，符号等）ASCII字符，如\0,\t,\n等，就称为转义字符，因为后面的字符，都不是它本来的ASCII字符意思了。</li>
 <li><strong>某一些特定的字符在编辑语言中被定义为特殊用途的字符。这些字符由于被定义为特殊用途，它们失去了原有的意义。</strong>例如双引号在Javascript用于标注字符串。但如果字符串中就自带双引号。需要把自带的双引号和用于标注的双引号进行区分。于是需要对自带双引号进行转义，也就是加上反斜杠。</li>
 </ol>
 <ul>
@@ -54,11 +54,11 @@ var str = "Hello""
 <li>于是需要对字符串内的双引号进行转义，也就是加上反斜杠，告诉脚本引擎要区分对待：</li>
 </ul>
 <p>{% highlight javascript %}
-var str = "Hello""
+var str = "Hello\""
 {% endhighlight %}</p>
 <p>请注意加上反斜杠进行转义，只是为了在<strong>书写代码</strong>时有所区分，骨子里转义双引号<code>\"</code>仍然还是双引号<code>"</code>。例如你可以运行下面这段代码：</p>
 <p>{% highlight javascript %}
-var str = """"";
+var str = "\"\"\"";
 console.log(str); // """
 {% endhighlight %}</p>
 <p>上面代码中在打印时，反斜杠已经不存在了，反斜杠存在的意义是为了保证双引号不被误解。</p>
@@ -71,17 +71,17 @@ console.log(str); // """
 <p>{% highlight javascript %}
 // 原始object对象
 var obj = {
-key: '"Hello World"'
+    key: '\"Hello World\"'
 }</p>
 <p>var str = JSON.stringify(obj); // 转化为字符串
 console.log(str)
-// {"key":""Hello World""}</p>
+// {"key":"\"Hello World\""}</p>
 <p>var o = JSON.parse(str) // 还原为object时出错
 {% endhighlight %}</p>
 <h2>解决问题</h2>
 <p>回到开始的那个问题。我们现在知道为什么当后端返回给我们<code>{"name": "\"banana\""}</code>时，我们实际上得到的是<code>{"name": ""banana""}</code>了。对脚本引擎来说，<code>\"</code>与<code>"</code>是一样的，这样的字符串当然不能被<code>JSON.parse</code>。</p>
 <p>那么什么样的字符串才能被<code>JSON.parse</code>解析？后端返回字符串经过脚本引擎处理后仍然保留反斜杠的字符串：<code>{"name": "\"banana\""}</code></p>
-<p>反过来推算，如果我们想字符串能被<code>JSON.parse</code>，则需要<code>\"</code>中的反斜杠得以保留，也就是最终的结果应该为<code>JSON.parse(</code>{"name": ""banana""}<code>)</code>，如果想反斜杠得以保留，则需要反斜杠不被用于转义，则需要在反斜杠之前再加反斜杠将其转义以防止它被用于转义（是不是有点绕，好好理解一下）。最后得出结论，后端存储时，应该存储的内容是：</p>
+<p>反过来推算，如果我们想字符串能被<code>JSON.parse</code>，则需要<code>\"</code>中的反斜杠得以保留，也就是最终的结果应该为<code>JSON.parse(</code>{"name": "\"banana\""}<code>)</code>，如果想反斜杠得以保留，则需要反斜杠不被用于转义，则需要在反斜杠之前再加反斜杠将其转义以防止它被用于转义（是不是有点绕，好好理解一下）。最后得出结论，后端存储时，应该存储的内容是：</p>
 <p>{% highlight javascript %}
 {"name": "\"banana\""}
 {% endhighlight %}</p>

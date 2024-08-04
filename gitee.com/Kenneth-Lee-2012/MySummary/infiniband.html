@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E6%A6%82%E5%BF%B5%E7%A9%BA%E9%97%B4%E5%88%86%E6%9E%90/infiniband.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/概念空间分析/infiniband.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2018-2020</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.0</p>
@@ -10,12 +10,12 @@
 <p>由于本文需要给几位合作伙伴分享，所以在中间版本就对外公开，这里做一个简单的版本
 管理：</p>
 <p>V0.1.20181125
-Kenneth Lee 完成初步概念构建，只对了代码，还没有编程验证，待进一步细化</p>
+        Kenneth Lee 完成初步概念构建，只对了代码，还没有编程验证，待进一步细化</p>
 <p>V0.2.20181126
-Kenneth Lee 补充MR相关的更多语义过，重新组织了结论的表述方式（但不改变
-结论）</p>
+        Kenneth Lee 补充MR相关的更多语义过，重新组织了结论的表述方式（但不改变
+        结论）</p>
 <p>V0.3.20181130
-Kenneth Lee 补充处于安全区加速器的讨论</p>
+        Kenneth Lee 补充处于安全区加速器的讨论</p>
 <p>IB是跨平台的，但本文仅分析Linux的实现，分析基于当前最新的Linux Kernel版本
 4.20-rc1和rdma-core stable-v15</p>
 <h1>基础概念空间</h1>
@@ -38,7 +38,8 @@ Work Request)，写到对应的CQ中，另一方对这种请求进行响应，�
 </li>
 </ol>
 <p>这个概念我们用下面这幅图来表达：</p>
-<pre><code>    .. figure:: _static/ib1.jpg</code></pre>
+<pre><code>    .. figure:: _static/ib1.jpg
+</code></pre>
 <p>在实现理念上，IB心目中的Application可以在用户态，也可以在内核态（统称Client），
 但为了保证效率，IB认为，这个通讯是直接和硬件沟通的，不经过第三方的软件代理。也
 就是说，如果你的应用在用户态，向对端发送verb或者更新对方的MR，不需要经过内核。
@@ -72,7 +73,8 @@ QP是直接mmap到用户态的，MR也是直接暴露为实际的内存，直接
 </li>
 </ol>
 <p>这样，这些通讯方就构成这样一个协议栈了：</p>
-<pre><code>    .. figure:: _static/ib2.jpg</code></pre>
+<pre><code>    .. figure:: _static/ib2.jpg
+</code></pre>
 <p>下层的通讯栈可以根据不同的通讯协议承载在不同的协议上的，最常见的协议当然是
 Mellanox的Infiniband协议了，这也是它总造成误会的原因。IB软件框架和IB通讯协议，
 是重名的。但其实那是可以换掉的。Linux的IB协议中，有一个模块叫RXE，这个东西基于
@@ -80,12 +82,14 @@ Socket实现了一个Transport Layer，下面根本就没有那些层次，但�
 分的verbs（只是性能不高就是了）。</p>
 <p>从这个角度来看，比如你做了一个压缩引擎的加速器，你完全可以把这个加速引擎本身作
 为一个通讯方构成这样的一个构架：</p>
-<pre><code>    .. figure:: _static/ib3.jpg</code></pre>
+<pre><code>    .. figure:: _static/ib3.jpg
+</code></pre>
 <p>这是不考虑通讯本身的语义的情况，但如前所述，实际上IB是从通讯发展起来的（实际上
 主要就是发明了支持上层做verb和rdma语义的专用硬件），所以它的QP在一定程度上是认
 知下面的通讯层的。所以，我们还需要认知在这个语义空间中，有CA，HCA，TCA，Switch
 ，Channel这个概念（图片来自IBTA）：</p>
-<pre><code>    .. figure:: _static/ib4.jpg</code></pre>
+<pre><code>    .. figure:: _static/ib4.jpg
+</code></pre>
 <p>但大部分时候我们都用不上，但我们可以知道的是CA就是Channel Adapter，指那个支持通
 讯的设备，TCA和HCA是target和Host CA。Channel是连接TCA和HCA的一条通道（连接），
 Channel和CA的对应叫一个Port。</p>
@@ -110,7 +114,8 @@ received acknowledgement），sid（service id）</p>
     send_cq = ibv_create_cq(ctx, ...);
     recv_cq = ibv_create_cq(ctx, ...);
     qp = ibv_create_qp(pd, qp_attr(send_cq, recv_cq, ...));
-    ibv_modify_qp(qp, attr, attr_mask);</code></pre>
+    ibv_modify_qp(qp, attr, attr_mask);
+</code></pre>
 <p>然后就可以用ibv_post_send()和ibv_post_recv()来进行verb的收发了。</p>
 <p>这里有几个新概念：</p>
 <p>ctx，这相当于一个client</p>
@@ -133,24 +138,28 @@ received acknowledgement），sid（service id）</p>
             IBV_WR_BIND_MW,
             IBV_WR_SEND_WITH_INV,
             IBV_WR_TSO,
-    };</code></pre>
+    };
+</code></pre>
 <p>ULP层的消息都可以通过IBV_WR_SEND_XXXX来封装，其他的就是在IB层就可以处理的RDMA操
 作和原子操作。</p>
 <h1>mr名称空间的进一步理解</h1>
 <p>mr基于ctx创建，通过verb进行分享和更新。先看看mr的创建方法：::</p>
-<pre><code>    mr = ibv_reg_mr(pd, addr, length, access);</code></pre>
+<pre><code>    mr = ibv_reg_mr(pd, addr, length, access);
+</code></pre>
 <p>基本上是直接给定一个虚拟地址，ib负责帮你创建一个句柄，创建的mr中包含一个lkey和
 一个rkey，前者用于本地索引，后者用于远程索引。</p>
 <p>mr还有一些扩展概念：</p>
 <p>首先是fmr，fast mr，用法如下：::</p>
 <pre><code>    fmr = ib_alloc_fmr(pd, flags, attr);
-    ib_map_phys_fmr(fmr, page_list, list_len, iova);</code></pre>
+    ib_map_phys_fmr(fmr, page_list, list_len, iova);
+</code></pre>
 <p>这个概念仅在内核有效，其实就是mem_pool版本的mr，个人认为不影响整个概念空间。</p>
 <p>第二个概念是sge，这表示scatter gather element，它用于指定不连续的内存块给mr做二
 次组织（这说起来是个优势，进程中不连续的虚拟地址，在设备上都可以是连续的）</p>
 <p>第三个概念是mw，memory window ，用法如下：::</p>
 <pre><code>    wm = ibv_alloc_wm(pd, type);
-    ibv_bind_mw(qp, mw, mw_bind)</code></pre>
+    ibv_bind_mw(qp, mw, mw_bind)
+</code></pre>
 <p>其中的mw_bind用来指定一个mr内的区域的读写属性，其实就是在mr中割一段空间出来，指
 定它的权限。这个功能在当前的rdma-core的代码中没有看到用户。</p>
 <p>如果把通讯的一方称为A，另一方称为B。A有一片内存要B更新，可以从A发出一个verb，把

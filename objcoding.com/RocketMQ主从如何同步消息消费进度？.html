@@ -1,22 +1,22 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-09-23-rocketmq consumer syns.md)，<a href="https://objcoding.com/2019/09/23/rocketmq-consumer-syns">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-09-23-rocketmq consumer syns.md">仓库源文</a>，<a href="https://objcoding.com/2019/09/23/rocketmq-consumer-syns">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "RocketMQ主从如何同步消息消费进度？"
 categories: RocketMQ
-tags: HA Master Slave
-author: 张乘辉</h2>
+tags: HA Master Slave</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
 前面我也跟大家讲述了 RocketMQ 读写分离的规则，但是你可能会问，主从服务器之间的消费进度是如何保持同步的？下面我来给大家解答一下。</li>
 </ul>
 <p>如果消费者消费模式不同，也会有不同的保存方式，消费者端的消息消费进度保存到 OffsetStore 中，他有两个实现类：</p>
-<pre><code class="language-java">org.apache.rocketmq.client.consumer.store.LocalFileOffsetStore // 本地消费进度保存实现
+<pre><code class="lang-java">org.apache.rocketmq.client.consumer.store.LocalFileOffsetStore // 本地消费进度保存实现
 org.apache.rocketmq.client.consumer.store.RemoteBrokerOffsetStore // 远程消费进度保存实现
 </code></pre>
 <p>其中，如果是广播模式消费，消息的消费进度是保存到本地，如果是集群消费模式，消息的消费进度则是保存到 Broker，但无论是保存到本地，还是保存到 Broker，消费者都会在本地留一份缓存，我们暂且看看集群消费模式下，消息消费进度的缓存是如何保存的：</p>
 <p>org.apache.rocketmq.client.consumer.store.RemoteBrokerOffsetStore#updateOffset:</p>
-<pre><code class="language-java">public void updateOffset(MessageQueue mq, long offset, boolean increaseOnly) {
+<pre><code class="lang-java">public void updateOffset(MessageQueue mq, long offset, boolean increaseOnly) {
   if (mq != null) {
     AtomicLong offsetOld = this.offsetTable.get(mq);
     if (null == offsetOld) {
@@ -36,7 +36,7 @@ org.apache.rocketmq.client.consumer.store.RemoteBrokerOffsetStore // 远程消�
 <p>消息者在消费完消息后，会调用以上方法，讲消费进度放入 offsetTable 缓存中，当 Rebalance 负载重新分配生成 PullRequest 对象时，会调用 RemoteBrokerOffsetStore.readOffset 方法从 offsetTable 缓存中取出对应的消费进度缓存值，再将该值放进 PullRequest 对象中，接下来消息拉取时就很将消息消费进度缓存发送到 Broker 端，所以我们继续看 Broker 端的处理逻辑。</p>
 <p>之前整理 Broker 启动流程时，发现 Broker 启动时会开启一个定时任务：</p>
 <p>org.apache.rocketmq.broker.BrokerController#initialize:</p>
-<pre><code class="language-java">this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
+<pre><code class="lang-java">this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
     @Override
     public void run() {
@@ -50,7 +50,7 @@ org.apache.rocketmq.client.consumer.store.RemoteBrokerOffsetStore // 远程消�
 </code></pre>
 <p>如果 Broker 是从服务器，则会开启以上定时任务。</p>
 <p>org.apache.rocketmq.broker.slave.SlaveSynchronize#syncAll:</p>
-<pre><code class="language-java">public void syncAll() {
+<pre><code class="lang-java">public void syncAll() {
   this.syncTopicConfig();
   this.syncConsumerOffset();
   this.syncDelayOffset();
@@ -60,7 +60,7 @@ org.apache.rocketmq.client.consumer.store.RemoteBrokerOffsetStore // 远程消�
 <p>在主服务器没有宕机的情况下，从服务器会定时从主服务器中同步消息消费进度等信息，那现在问题来了，由于这个同步是单方面同步，即只会从服务器同步主服务器，那如果主服务器宕机了之后，消费者切换成从服务器拉取消息进行消费，如果之后主服务器启动了，从服务器在把已经消费过的偏移量同步过来，那岂不是造成同步消费了？</p>
 <p>其实消费者取在拉取消息的时候，如果消费者的缓存中存在消费进度，也会向 Broker 更新消息消费进度，所以即使是主服务器挂了，在它重新启动之后，消费者的消费进度没有丢失，依然会更新主服务器的消息消费进度，这样一来，消费端与主服务器只挂了器中一个，并不会导致消息重新被消费，具体代码逻辑如下：</p>
 <p>org.apache.rocketmq.broker.processor.PullMessageProcessor#processRequest：</p>
-<pre><code class="language-java">boolean storeOffsetEnable = brokerAllowSuspend;
+<pre><code class="lang-java">boolean storeOffsetEnable = brokerAllowSuspend;
 storeOffsetEnable = storeOffsetEnable &amp;&amp; hasCommitOffsetFlag;
 storeOffsetEnable = storeOffsetEnable
     &amp;&amp; this.brokerController.getMessageStoreConfig().getBrokerRole() != BrokerRole.SLAVE;

@@ -1,14 +1,14 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2021-07-30-hash-collision.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2021/07/30/hash-collision">站点原文</a></h2>
 <hr/>
-<h2>key: 55
+<p>key: 55
 title: Beware of Hash Collisions in Lua Tables
 math: true
-tag: [lua, english]
-aside: false</h2>
+tag: [lua, english]</p>
+<h2>aside: false</h2>
 <p>We all know that a Lua table is a hash table, which uses a hash function to map a key into one of the table's slots. However, the result of the hash function is not unique. There exist some keys that have the same hash value, i.e., it may map some different keys into the same slot. We call it <strong>Hash Collision</strong>.</p>
 <p>To observe hash collisions in a Lua table, we add a function to count how many keys in a table are in their main positions. A position (index of the slot) is the main position if the position is exactly determined by the hash value. Ideally, if there is no collision, each key is in its main position. However, we may found an existing key occupied the new key's main position when we insert a new key into a table. In that case, we get a hash collision and we have to move the new key to another position that is not the main position.</p>
 <p>It's easy to determine if a key is in its main position. The macro <code>mainposition</code> returns the main position of a specific key. The following function returns the number of keys in their main positions.</p>
-<pre><code class="language-c">int luaH_mainposnum(Table *t) {
+<pre><code class="lang-c">int luaH_mainposnum(Table *t) {
     int n = 0;
     for (int i = 0; i &lt; sizenode(t); i++) {
         if (!ttisnil(gval(gnode(t, i)))) {
@@ -21,7 +21,7 @@ aside: false</h2>
 }
 </code></pre>
 <p>We add it to the <code>table</code> module, so we can call it by <code>table.mainposnum</code>.</p>
-<pre><code class="language-c">static const luaL_Reg tab_funcs[] = {
+<pre><code class="lang-c">static const luaL_Reg tab_funcs[] = {
     ...
     {"remove", tremove},
     {"move", tmove},
@@ -31,7 +31,7 @@ aside: false</h2>
 };
 </code></pre>
 <p>Let's see the collisions in a table. The following code inserts random integer keys into a table, then calls <code>table.mainposnum</code> and prints the number of keys in main positions.</p>
-<pre><code class="language-lua">for i = 2, 5 do
+<pre><code class="lang-lua">for i = 2, 5 do
     local T = {}
     for _ = 1, 10 ^ i do
         T[math.random(10000000, 99999999)] = true
@@ -42,15 +42,15 @@ aside: false</h2>
 end
 </code></pre>
 <p>The output looks like this</p>
-<pre><code>T	100	66	0.66
-T	1000	655	0.655
-T	9998	7486	0.74874974994999
-T	99946	69755	0.69792688051548
+<pre><code>T   100 66  0.66
+T   1000    655 0.655
+T   9998    7486    0.74874974994999
+T   99946   69755   0.69792688051548
 </code></pre>
 <p>About 30% of the keys collide, It seems the Lua table performs well. Unfortunately, however, it is not so perfect in all cases. Let's look at an example.</p>
 <h3>Combined ID</h3>
 <p>A common way to generate a numerical global unique id is to combine from several different parts. For instance, we can let a timestamp as the high 32 bits of the ID, an auto-increment serial number as the middle 16 bits, and the server ID as the low 16 bits of the ID.</p>
-<pre><code class="language-lua">local seq = 0
+<pre><code class="lang-lua">local seq = 0
 function gen_id(server_id)
     seq = (seq + 1) % 0x10000
     local now = os.time()
@@ -58,7 +58,7 @@ function gen_id(server_id)
 end
 </code></pre>
 <p>Let's generate some IDs and insert them into a table and to see what happens.</p>
-<pre><code class="language-lua">local server_id = 10001
+<pre><code class="lang-lua">local server_id = 10001
 
 local T = {}
 for _ = 1, 1000 do
@@ -71,7 +71,7 @@ local M = table.mainposnum(T)
 print("T", N, M, M/N)
 </code></pre>
 <p>Output:</p>
-<pre><code>T	1000	1	0.001
+<pre><code>T   1000    1   0.001
 </code></pre>
 <p>WTF? All keys collide and only one key in its main position, we turned the hash table into a linked list! But why?</p>
 <p>The problem is due to the hash function of the Lua table. Lua table uses the simplest hash function -- modulo. The position of an integer key in a table is equal to the key modulo the capacity of the table. The bad news is that the capacity of a table is always a power of 2 and that a number modulo of a power of 2 is just its n-bit suffix. In our example, hash results of these Combined IDs are exactly equal, because the lowest 16 bits of these keys are the same server ID. As the result, all keys are mapped to the same slot.</p>
@@ -84,12 +84,12 @@ print("T", N, M, M/N)
 <p>So, in conclusion, if you use combined IDs, be very cautious to put them into a hash table.</p>
 <h3>Distribution by Modulo</h3>
 <p>To distribute requests to several work services, we often use modulo. For example, assume we have 64 work services. When we receive a request from a user whose ID is 10001, we distribute the request to the number <code>10001 % 64 = 17</code> service. After that, the service received that request:</p>
-<pre><code class="language-lua">function request_handler(user_id, data)
+<pre><code class="lang-lua">function request_handler(user_id, data)
     cache[user_id] = data
 end
 </code></pre>
 <p>So the problem happened then. What, don't you believe it? Let's experiment.</p>
-<pre><code class="language-lua">cache = {}
+<pre><code class="lang-lua">cache = {}
 
 function request_handler(user_id, data)
     cache[user_id] = data
@@ -107,14 +107,14 @@ local M = table.mainposnum(cache)
 print("cache", N, M, M/N)
 </code></pre>
 <p>And this is the output:</p>
-<pre><code>cache	157	4	0.025477707006369
+<pre><code>cache   157 4   0.025477707006369
 </code></pre>
 <p>Only 5 keys are in their main positions and the collision rate is as high as 97.5% !</p>
 <p>The reason is very clear: all the IDs distributed to service 17 have the same suffix, because their modulo 64, a power of 2, is 17. These same suffixes caused hash collisions.</p>
 <p>As we see, modulo a power of 2 is a bad hash function. We need a better hash function.</p>
 <h3>Better Hash Function</h3>
 <p>The following algorithm was found by <a href="https://stackoverflow.com/users/382763/thomas-mueller">Thomas Mueller</a>. This is based on <a href="https://xorshift.di.unimi.it/splitmix64.c">splitmix64</a>, which seems to be based on the blog article <a href="http://zimbry.blogspot.it/2011/09/better-bit-mixing-improving-on.html">Better Bit Mixing</a>.</p>
-<pre><code class="language-c">inline uint64_t betterhash(uint64_t x) {
+<pre><code class="lang-c">inline uint64_t betterhash(uint64_t x) {
     x = (x ^ (x &gt;&gt; 30)) * UINT64_C(0xbf58476d1ce4e5b9);
     x = (x ^ (x &gt;&gt; 27)) * UINT64_C(0x94d049bb133111eb);
     x = x ^ (x &gt;&gt; 31);
@@ -122,16 +122,15 @@ print("cache", N, M, M/N)
 }
 </code></pre>
 <p>In this algorithm, every bit of a number is considered, instead of just cut the tail. Let's modify the implementation of the Lua table and change the hash function:</p>
-<pre><code class="language-c">#define hashint(t,i)		hashpow2(t, betterhash(i))
+<pre><code class="lang-c">#define hashint(t,i)        hashpow2(t, betterhash(i))
 </code></pre>
 <p>Let's run the previous examples again:</p>
 <pre><code>combined ID:
-T	1000	640	0.64
+T   1000    640 0.64
 
 distribution by modulo:
-cache	157	117	0.74522292993631
+cache   157 117 0.74522292993631
 </code></pre>
 <p>Finally, the results become normal.</p>
 <hr/>
-<p><strong>Reference:</strong> <a href="https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key">What integer hash function are good that accepts an integer hash key?
-</a></p>
+<p><strong>Reference:</strong> <a href="https://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key">What integer hash function are good that accepts an integer hash key?</a></p>

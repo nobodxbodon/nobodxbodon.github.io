@@ -1,12 +1,12 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/node-process-hang-up.md">仓库源文</a>，<a href="https://claude-ray.github.io/node-process-hang-up">站点原文</a></h2>
 <hr/>
-<h2>title: 记一次 Node.js 进程挂起的 BUG 追踪
+<p>title: 记一次 Node.js 进程挂起的 BUG 追踪
 date: 2019-08-08 21:31:02
-tag: [Node.js]
-categories: Node.js</h2>
+tag: [Node.js]</p>
+<h2>categories: Node.js</h2>
 <h1>前言</h1>
 <p>先把干货放前面，辅助排查的 npm 模块有：<a href="https://github.com/myndzi/wtfnode">wtfnode</a>，why-is-node-running，active-handles 等，使用方法差不多如下，可以查看各自的文档。</p>
-<pre><code class="language-js">const wtf = require('wtfnode');
+<pre><code class="lang-js">const wtf = require('wtfnode');
 
 // your codes
 
@@ -14,25 +14,24 @@ categories: Node.js</h2>
 wtf.dump();
 </code></pre>
 <p>也可以更深入地排查，因为上述模块的核心都是 Node.js 文档未标注的两个接口：</p>
-<pre><code class="language-js">process._getActiveHandles();
+<pre><code class="lang-js">process._getActiveHandles();
 process._getActiveRequests();
 </code></pre>
-<p>好了，本篇到这里结束了，剩下的内容，劝你还是跳过吧：流水帐警告⚠️️ 翻车警告⚠️️</p>
-<p>&lt;!--more--&gt;</p>
+<p>好了，本篇到这里结束了，剩下的内容，劝你还是跳过吧：流水帐警告⚠️️ 翻车警告⚠️️
+&lt;!--more--&gt;</p>
 <h1>问题经过</h1>
 <p>背景是为 ts + egg 项目引入 apm 探针，由于 apm 必须在“启动文件”的第一行完成加载，即整个 egg 的生命周期开始之前，因此需要使用独立的脚本或指令进行启动。具体如何处理可以参考这篇<a href="http://claude-ray.com/2019/07/12/elastic-apm-node-egg">博客</a>。</p>
 <p>问题就出在脱离了 egg 的声明周期，得额外管理不同运行环境下 apm-server（APM 数据采集服务器）的地址配置。可能第一时间就能想到 Node.js 的环境变量，思路没错，毕竟程序和 egg-bin 绑定，NODE_ENV 环境变量的命名符合规范，主要为 development、test、production。特定环境读取特定的即可。</p>
 <p>但调试过程中，写错了 apm-server 路径，遇到了进程启动过程中卡住的现象。解决起来很容易，但好奇是什么原因造成的，因为正常引入 elastic-apm-node 并填写一个错误的 url 并不妨碍主流程的运行。</p>
 <h1>战前准备</h1>
 <p>省略翻代码的过程，简单的结论就是：进程卡死的问题由 egg-bin 内置的 ets（egg-ts-helper）指令诱发，其使用 <code>child_process.execSync</code> 方法启动子进程来预加载一部分代码用作检查，而子进程卡住不退出，才导致父进程无法继续向下执行。</p>
-<blockquote>
-<p>ets 执行 execSync 的位置：https://github.com/whxaxes/egg-ts-helper/blob/master/src/utils.ts#L107 其中 cmd 的内容是执行 <code>./scripts/eggInfo</code> 文件。eggInfo 指令了 egg 的 loader 来获取插件信息，因此 apm 作为生命周期之前的模块被顺便加载了。</p>
+<blockquote><p>ets 执行 execSync 的位置：<a href="https://github.com/whxaxes/egg-ts-helper/blob/master/src/utils.ts#L107">https://github.com/whxaxes/egg-ts-helper/blob/master/src/utils.ts#L107</a> 其中 cmd 的内容是执行 <code>./scripts/eggInfo</code> 文件。eggInfo 指令了 egg 的 loader 来获取插件信息，因此 apm 作为生命周期之前的模块被顺便加载了。</p>
 </blockquote>
 <p>经过检查和断点调试，已经找出进程无法正常退出的根源在 <code>elasitc-apm-http-client</code> 模块和 <code>apm-server</code> 的通讯之间。并且如果把 apm-server 的目标地址改成本机未使用的端口，如 <code>http://localhost:8201</code>，进程可迅速地正常退出。但如果填写一个错误地或不存在的地址，例如 <code>http://10.10.10.10:8200</code> ，以致访问超时，进程就会挂起。</p>
 <h1>开始狩猎</h1>
 <p>我们已经缩小了问题重现的范围，就可以仔细阅读代码了。</p>
 <p>首先看向 http client 创建的步骤，唯一值得注意的点是一个轮询操作。apm 创建时默认开启了 elastic-apm-http-client 的 <code>centralConfig</code> 选项，此功能是允许在 Kibana 看板上直接修改 apm agent 的配置而无须重启 Node.js 进程，实现原理便是轮询 apm-server 以查询最新的配置信息。</p>
-<pre><code class="language-js">Client.prototype._pollConfig = function () {
+<pre><code class="lang-js">Client.prototype._pollConfig = function () {
   // ...
   const req = this._transport.get(opts, res =&gt; {
     // ...
@@ -60,7 +59,7 @@ Client.prototype._scheduleNextConfigPoll = function (seconds) {
 <p>虽然轮询可怕，但上面已经为 Timeout 调用了 unref 方法。正常来说，只要没有其他 event loop 在运行，<code>Timer.unref()</code> 能够让 Node.js 进程在 Timeout 回调调用前退出，可以防止程序空转。</p>
 <p>因此问题不在这段代码，为了验证推断，关闭此选项之后，果然依旧不能正常退出。</p>
 <p>既然进程还在运转，就一定有其他的 event loop。在 elastic-apm-http-client 中继续寻找到了另一个 Timeout，该函数每次触发数据上报时都会被调用。</p>
-<pre><code class="language-js">Client.prototype._maybeCork = function () {
+<pre><code class="lang-js">Client.prototype._maybeCork = function () {
   if (!this._writableState.corked &amp;&amp; this._conf.bufferWindowTime !== -1) {
     this.cork()
     if (this._corkTimer &amp;&amp; this._corkTimer.refresh) {
@@ -80,7 +79,7 @@ Client.prototype._scheduleNextConfigPoll = function (seconds) {
 <p>暂停代码阅读，先盲目猜测一波：在第一次请求超时之前，进程一定不会退出，但超时之后，将在 30 秒后才会重新发起新的请求，进程退出的机会就在这 30 秒。而 _maybeCork 这里虽然每次数据上报都会触发不经过 unref 处理的 setTimeout，奈何我查了 bufferWindowTime 默认才 20 毫秒。所以问题出在这里的可能性又很渺茫了，试下把这段注释掉，果然……
 但凭着对 elastic-apm-node 项目的熟悉，性能指标的上报间隔恰好也是 30 秒，这里一定有个定时任务的，但之前直接在项目中搜索关键字未找到，就忽略了。</p>
 <p>根据相关时间字段，又检索到了定时任务的创建地点 —— <code>measured-reporting</code> 模块，然而这里也做了 unref 处理。</p>
-<pre><code class="language-js">_createIntervalCallback(intervalInSeconds) {
+<pre><code class="lang-js">_createIntervalCallback(intervalInSeconds) {
   this._log.debug(`_createIntervalCallback() called with intervalInSeconds: ${intervalInSeconds}`);
 
   const timer = setInterval(() =&gt; {
@@ -114,7 +113,7 @@ Client.prototype._scheduleNextConfigPoll = function (seconds) {
 <p>补充方案：
 通过 process.env 向 apm 传递自定义参数，便于控制配置项。</p>
 <p>最后 apm 启动头部长这个样子</p>
-<pre><code class="language-js">// 自定义 APM_ENABLE 作为开关条件
+<pre><code class="lang-js">// 自定义 APM_ENABLE 作为开关条件
 const enableAPM = process.env.APM_ENABLE || (process.env.NODE_ENV &amp;&amp; !process.env.ETS_REGISTER_PID);
 if (enableAPM) {
   // 除了 NODE_ENV，也可以使用自定义的 ENV

@@ -1,8 +1,8 @@
-<h2><a href="https://github.com/jerkwin/jerkwin.github.io//blob/master/_posts/2020-10-23-%E4%BD%BF%E7%94%A8GROMACS_msd%E6%A8%A1%E5%9D%97%E7%9A%84%E5%87%A0%E4%B8%AA%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9.md">仓库源文</a>，<a href="https://jerkwin.github.io/2020/10/23/%E4%BD%BF%E7%94%A8GROMACS_msd%E6%A8%A1%E5%9D%97%E7%9A%84%E5%87%A0%E4%B8%AA%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9">站点原文</a></h2>
+<h2><a href="https://github.com/jerkwin/jerkwin.github.io//blob/master/_posts/2020-10-23-使用GROMACS_msd模块的几个注意事项.md">仓库源文</a>，<a href="https://jerkwin.github.io/2020/10/23/使用GROMACS_msd模块的几个注意事项">站点原文</a></h2>
 <hr/>
 <p>layout: post
-title: 使用GROMACS msd模块的几个注意事项
-categories:</p>
+ title: 使用GROMACS msd模块的几个注意事项
+ categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -22,20 +22,17 @@ tags:</li>
 </li>
 </ul>
 <p>许楠给出了<a href="https://mp.weixin.qq.com/s?__biz=MzI2OTQ4OTExOA==&amp;mid=2247487235&amp;idx=1&amp;sn=d0b81f1472f2eac5f6321c96565b17a7&amp;chksm=eadec9b2dda940a4e12431949d49707a568f66b5dc045f8afdb830fdc02d405ee6ff61465921&amp;mpshare=1&amp;scene=23&amp;srcid=1019zlBrov0a8tdcsMCrmjPQ&amp;sharer_sharetime=1603116067167&amp;sharer_shareid=238241eab6cbe265f857d12dfd748331#rd">处理cp2k轨迹的一个例子</a>. 模拟时间步长0.5 fs, 轨迹总长度15.54450 ps, 轨迹连续且没有移除质心运动. 如果直接使用<code>msd</code>默认选项</p>
-<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; msd &lt;span style="color:#666"&gt;-f&lt;/span&gt; traj.gro &lt;span style="color:#666"&gt;-n&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;</p>
-<p>所得曲线如下</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; msd &lt;span style="color:#666"&gt;-f&lt;/span&gt; traj.gro &lt;span style="color:#666"&gt;-n&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;<p>所得曲线如下</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/msd-1.png"/></p>
 <p>可以看到, 二次项比较明显, 说明轨迹未移除系统质心运动. 此外, 5 ps左右出现阶跃, 让人生疑. 如果不是出现了这个不连续的阶跃, 反倒让人以为计算一切正常, 从而得到的错误的结果.</p>
 <p>我们先移除质心运动</p>
-<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; msd &lt;span style="color:#666"&gt;-f&lt;/span&gt; traj.gro &lt;span style="color:#666"&gt;-n&lt;/span&gt; &lt;span style="color:#666"&gt;-rmcomm&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;</p>
-<p>结果如下</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; msd &lt;span style="color:#666"&gt;-f&lt;/span&gt; traj.gro &lt;span style="color:#666"&gt;-n&lt;/span&gt; &lt;span style="color:#666"&gt;-rmcomm&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;<p>结果如下</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/msd-2.png"/></p>
 <p>可以看到, 二次项不再明显了. 但5 ps左右的阶跃仍然存在.</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/msd-3.png"/></p>
 <p>经过几次测试, 并对比其他msd计算程序的结果, 最终才发现, 原来是<code>-trestart</code>选项的默认值过大导致的. 15 ps长度的轨迹, 如果默认间隔时间10 ps, 那么间隔为5 ps处, 只有1个数据可用, 误差太大, 导致曲线不连续. 话虽这样说, 但是还有一个问题没有解释, 就是为什么更长间隔处的数据看起来也比较正常, 没有出现明显阶跃呢? 这个就作为习题吧, 因为我也不知道答案.</p>
 <p>我们使用原始轨迹的时间步长作为间隔</p>
-<p>&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; msd &lt;span style="color:#666"&gt;-f&lt;/span&gt; traj.gro &lt;span style="color:#666"&gt;-n&lt;/span&gt; &lt;span style="color:#666"&gt;-rmcomm&lt;/span&gt; &lt;span style="color:#666"&gt;-trestart&lt;/span&gt; 0.0005&lt;/pre&gt;&lt;/div&gt;</p>
-<p>结果如下</p>
+&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span style="color:#A2F"&gt;gmx&lt;/span&gt; msd &lt;span style="color:#666"&gt;-f&lt;/span&gt; traj.gro &lt;span style="color:#666"&gt;-n&lt;/span&gt; &lt;span style="color:#666"&gt;-rmcomm&lt;/span&gt; &lt;span style="color:#666"&gt;-trestart&lt;/span&gt; 0.0005&lt;/pre&gt;&lt;/div&gt;<p>结果如下</p>
 <p><img alt="" src="https://jerkwin.github.io/pic/msd-4.png"/></p>
 <p>这下看起来就比较正常了.</p>
 <p>至于如何根据msd曲线计算扩散系数, 这里就不说了, 请参考以前的一篇文章<a href="https://jerkwin.github.io/2018/07/19/MSD%E7%AE%97%E6%89%A9%E6%95%A3%E7%B3%BB%E6%95%B0%E7%9A%84%E5%87%A0%E7%A7%8D%E6%96%B9%E6%B3%95/">MSD算扩散系数的几种方法</a>.</p>

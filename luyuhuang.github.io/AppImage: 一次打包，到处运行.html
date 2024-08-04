@@ -1,14 +1,14 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2024-04-19-appimage.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2024/04/19/appimage">站点原文</a></h2>
 <hr/>
-<h2>key: 77
-title: "AppImage: 一次打包，到处运行"
-tag: [linux, tools]</h2>
+<p>key: 77
+title: "AppImage: 一次打包，到处运行"</p>
+<h2>tag: [linux, tools]</h2>
 <p>我们知道，不同于 Windows 将软件的所有文件安装在一个目录，一个 Linux 软件的不同部分会被安装在不同路径。例如，可执行文件安装在 <code>/usr/bin</code> 下；库文件安装在 <code>/usr/lib</code> 下；文档、脚本等资源文件通常安装在 <code>/usr/share</code> 下等。这是因为 Linux 认为软件包之间会相互依赖，不同的软件可能依赖于同一个库，那么这个库就只应该存在一份。例如 curl, ssh 和 nginx 都依赖于 libcrypt.so 这个共享库，其为 openssl 的一部分。当我们使用 <code>apt</code> 安装 nginx 时，先会检测 openssl 是否已经安装。如果没有，就先安装 openssl；否则直接安装 nginx。</p>
 <p>这样做的好处是可以节省磁盘：所有软件依赖的相同的库只存在一份。因此安装一个 Linux 系统通常只需要几 G 的磁盘空间，而 Windows 通常需要几十 G。同时可以节省内存，因为共享库的加载方式是 mmap，同一个共享库在内存中也只有一份。</p>
 <p>但是这么做是有代价的。假设 A, B 软件都依赖于库 L，那么 A 和 B 就只能依赖于同一个版本的库 L。一台机器上有这么多软件，意味着整个依赖网络让他们相互钳制，版本号被限制，不能随意升级。一个发行版会确定各种软件包的版本（确定主次版本号，补丁号通常不做限制），组成软件库，确保它们相互兼容，没有依赖冲突。也就是说 <code>apt</code> 安装的软件版本由当前 Ubuntu 版本决定的。这也是为什么 Linux 发行版通常每年都要发布一个新版本，否则软件库会落后于时代。</p>
 <p>如果你在用一个较老的发行版，想安装一些新软件，通常需要自己编译。自己编译的软件通常安装在 <code>/usr/local/*</code> 下，与 <code>/usr/*</code> 区分开。但是我公司用的开发环境的发行版太老了，g++ 版本 4.8，只支持 C++ 11，无法编译要求支持 C++ 17 的新软件。更糟糕的是这个发行版的 glibc 版本也非常老，新软件即使在新系统中编译出来，也无法在这个老系统上运行。而 gcc 工具链（包括 glibc）是操作系统的一部分，不能随意升级。</p>
 <p>要是能像 Windows 一样将软件的依赖的各种 DLL 都打包到一起就好了！Linux 有类似的解决方案，AppImage 就是其中一种。它可以将软件打包成一个二进制 AppImage 文件，这是一个标准的 ELF 可执行文件。用户下载 AppImage 文件后，直接 <code>chmod +x</code> 后就可以直接运行，非常方便。对于 AppImage 来说，一个软件就是一个可执行文件。</p>
-<pre><code class="language-sh">chmod +x app.AppImage
+<pre><code class="lang-sh">chmod +x app.AppImage
 ./app.AppImage
 </code></pre>
 <h2>原理</h2>
@@ -33,7 +33,7 @@ tag: [linux, tools]</h2>
 <p>运行 AppImage 文件时，其中的磁盘镜像会被挂载到 <code>/tmp/.mount_XXX.XXXXX</code> 上，然后执行其中的 AppRun。AppRun 可以是一个脚本，也可以是一个二进制，它负责做一些前序工作，设置各种环境变量（如 <code>LD_LIBRARY_PATH</code>），然后启动目标程序。</p>
 <h2>Hello, AppImage</h2>
 <p>接下来我们动手制作一个 AppImage。我们有一个 C 程序 <code>hello.c</code></p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="lang-c">#include &lt;stdio.h&gt;
 
 int main() {
     printf("Hello Appimage\n");
@@ -41,7 +41,7 @@ int main() {
 }
 </code></pre>
 <p>然后编译它 <code>gcc -o hello hello.c</code>。接着我们创建一个 <code>AppDir</code> 目录，将 <code>hello</code> 放到 <code>AppDir/usr/bin/</code> 中。</p>
-<pre><code class="language-sh">$ mkdir -p AppDir/usr/bin
+<pre><code class="lang-sh">$ mkdir -p AppDir/usr/bin
 $ cp hello AppDir/usr/bin/
 $ tree Appdir
 AppDir
@@ -50,13 +50,13 @@ AppDir
         └── hello
 </code></pre>
 <p>接着我们要将程序依赖的共享库也打包进去。我们用 <code>ldd</code> 查看 <code>hello</code> 依赖的共享库：</p>
-<pre><code class="language-sh">$ ldd hello
+<pre><code class="lang-sh">$ ldd hello
         linux-vdso.so.1 (0x00007ffe66f8f000)
         libc.so.6 =&gt; /lib/x86_64-linux-gnu/libc.so.6 (0x00007f849544b000)
         /lib64/ld-linux-x86-64.so.2 (0x00007f8495650000)
 </code></pre>
 <p><code>hello</code> 很简单，只依赖 libc。链接器 <code>/lib64/ld-linux-x86-64.so.2</code> 为程序加载各种共享库，是程序的解释器 (interpreter)，也需要打包进去。我们把这两个 .so 文件复制到 AppDir 的对应目录：</p>
-<pre><code class="language-txt">AppDir
+<pre><code class="lang-txt">AppDir
 ├── lib
 │   └── x86_64-linux-gnu
 │       └── libc.so.6
@@ -67,7 +67,7 @@ AppDir
         └── hello
 </code></pre>
 <p>接下来我们创建 <code>AppRun</code> 脚本。这个脚本先设置 <code>LD_LIBRARY_PATH</code> 环境变量，然后用 AppDir 中的链接器加载运行 <code>hello</code> 程序：</p>
-<pre><code class="language-sh">#!/usr/bin/sh
+<pre><code class="lang-sh">#!/usr/bin/sh
 
 export LD_LIBRARY_PATH=${APPDIR}/lib/x86_64-linux-gnu
 ${APPDIR}/lib64/ld-linux-x86-64.so.2 ${APPDIR}/usr/bin/hello
@@ -81,7 +81,7 @@ Type=Application
 Categories=Utility;
 </code></pre>
 <p>最终 AppDir 的目录结构是这样的：</p>
-<pre><code class="language-txt">AppDir
+<pre><code class="lang-txt">AppDir
 ├── AppRun
 ├── hello.desktop
 ├── hello.svg
@@ -95,23 +95,23 @@ Categories=Utility;
         └── hello
 </code></pre>
 <p>要将 AppDir 打包成可执行文件，需要用到的工具是 appimagetool，可以到 <a href="https://github.com/AppImage/AppImageKit/releases/latest">Github</a> 下载。appimagetool 本身也是个 AppImage，下载后即可运行。执行 <code>appimagetool AppDir</code> 便可将 AppDir 打包成一个 AppImage。运行它</p>
-<pre><code class="language-sh">$ ./hello-x86_64.AppImage
+<pre><code class="lang-sh">$ ./hello-x86_64.AppImage
 Hello Appimage
 </code></pre>
 <p>因为它打包了程序所需的所有依赖，所以理论上它可以在任意一个同架构（这里是 X86_64）的 Linux 系统上运行，无论这个系统的 libc 版本是多少。你也可以修改这个程序，让它引用一些较新的 libc 里才有的函数（如 <code>gettid</code>, glibc 2.30 被加入），打包成 AppImage 后再发给一个老系统（如 CentOS 7），看看它能不能正常运行。</p>
 <h2>使用 appimage-builder</h2>
 <p>上面例子中的程序很简单，只依赖一个 libc。而实际情况下程序通常依赖很多共享库，这些共享库有可能又依赖更多其它的共享库。手动找出来非常麻烦，我们可以使用工具。appimage-builder 就是一个很方便的工具。它的原理是运行目标程序，分析它访问了哪些共享库；然后使用包管理器（如 apt）获取依赖，并制作成 AppDir。此外它还提供了一个功能强大的 AppRun，支持路径映射，通过 hook 程序的文件访问函数，将指定路径映射到 AppDir 中。</p>
 <p>appimage-builder 是一个 Python 工具，可以使用 pip 安装：</p>
-<pre><code class="language-sh">pip install appimage-builder
+<pre><code class="lang-sh">pip install appimage-builder
 </code></pre>
 <p>要用 appimage-builder 制作 AppImage，我们首先需要准备一个“基础版”的 AppDir，包含软件的可执行文件和一些相关依赖。通常那些 <code>make install</code> 复制到 <code>/usr/local/</code> 下的文件就是基础 AppDir 应当包含的文件。上面例子的基础 AppDir 结构如下:</p>
-<pre><code class="language-txt">AppDir
+<pre><code class="lang-txt">AppDir
 └── usr
     └── bin
         └── hello
 </code></pre>
 <p>appimage-builder 基于一个 yaml 配置文件制作 AppImage，称为 recipe。我们不必手动创建 recipe，可以用 <code>appimage-builder --generate</code> 命令生成，然后再根据需要修改。generate 命令是一个向导程序，会询问这个应用的基本信息。</p>
-<pre><code class="language-sh">$ appimage-builder --generate
+<pre><code class="lang-sh">$ appimage-builder --generate
 INFO:Generator:Searching AppDir
 ? ID [Eg: com.example.app]: tech.luyuhuang.hello
 ? Application Name: hello
@@ -124,7 +124,7 @@ INFO:Generator:Searching AppDir
 INFO:AppRuntimeAnalyser:/usr/bin/strace -f -E LD_LIBRARY_PATH= -e trace=openat --status=successful AppDir/usr/bin/hello
 </code></pre>
 <p>接着 appimage-builder 会用 <code>strace</code> 运行目标程序，分析它打开了哪些共享库文件；然后用包管理工具分析共享库属于哪个软件包。结束后就会生成 recipe 文件 <code>AppImageBuilder.yml</code>。它的结构如下：</p>
-<pre><code class="language-yaml">version: 1
+<pre><code class="lang-yaml">version: 1
 AppDir:
   path: /path/to/AppDir
   app_info: # 应用基础信息
@@ -171,7 +171,7 @@ AppImage:
 <li><code>AppDir.test</code> 为测试环境。appimage-builder 会拉取其中指定的 Docker 镜像，并在其中测试 AppDir。</li>
 </ul>
 <p>除这些自动生成的配置外，还有很实用的运行时配置。</p>
-<pre><code class="language-yaml">AppDir:
+<pre><code class="lang-yaml">AppDir:
   runtime:
     env:
       LD_PRELOAD: '${APPDIR}/usr/lib/libjemalloc.so'
@@ -190,7 +190,7 @@ AppImage:
 <h2>实战：制作 ccls 的 AppImage</h2>
 <p>ccls 是一个 C++ 的 language server。我想在公司的开发环境用上 ccls，但是 ccls 依赖的工具链和运行时环境都比较新，无法直接在公司的开发环境上编译、运行。因此我准备在 Ubuntu 20.04 下编译 ccls 并制作成 AppImage，让这个老系统也能用上新软件。</p>
 <p>执行如下命令构建 ccls:</p>
-<pre><code class="language-sh">sudo apt-get install clang libclang-10-dev # 安装依赖
+<pre><code class="lang-sh">sudo apt-get install clang libclang-10-dev # 安装依赖
 git clone --depth=1 --branch=0.20220729 --recursive https://github.com/MaskRay/ccls # 获取 ccls, 版本 0.20220729
 cd ccls
 cmake -H. -BRelease -DCMAKE_BUILD_TYPE=Release \
@@ -203,13 +203,13 @@ make -j8
 make install DESTDIR=AppDir # 安装到 ./AppDir
 </code></pre>
 <p>这样我们就有了基础 AppDir:</p>
-<pre><code class="language-txt">AppDir
+<pre><code class="lang-txt">AppDir
 └── usr
     └── bin
         └── ccls
 </code></pre>
 <p>接着我们执行 <code>appimage-builder --generate</code> 生成 recipe:</p>
-<pre><code class="language-sh">$ appimage-builder --generate
+<pre><code class="lang-sh">$ appimage-builder --generate
 INFO:Generator:Searching AppDir
 ? ID [Eg: com.example.app]: com.github.MaskRay.ccls
 ? Application Name: ccls
@@ -221,7 +221,7 @@ INFO:Generator:Searching AppDir
 ? Architecture: x86_64
 </code></pre>
 <p>根据 ccls 的文档（和我的测试结果），ccls 运行时要访问 clang 的 lib 目录。我的 clang 是用 apt 安装的，路径在 <code>/usr/lib/llvm-10/lib/clang/10.0.0</code>。我们需要把这个路径打包进 AppDir，并且将其映射到 AppDir 内。我们修改 <code>AppImageBuilder.yml</code>:</p>
-<pre><code class="language-yaml">AppDir:
+<pre><code class="lang-yaml">AppDir:
   files:
     include:
     - /usr/lib/llvm-10/lib/clang/10.0.0/** # 把这个路径下的全部文件包含进去
@@ -230,11 +230,11 @@ INFO:Generator:Searching AppDir
       - /usr/lib/llvm-10/lib/clang/10.0.0:$APPDIR/usr/lib/llvm-10/lib/clang/10.0.0 # 映射到 AppDir 内
 </code></pre>
 <p>然后我们还要创建个图标。虽然是命令行程序，但是 AppImage 要求每个应用都要有个图标，所以没办法。这里我们就 touch 一个空文件就好：</p>
-<pre><code class="language-sh">mkdir -p AppDir/usr/share/icons
+<pre><code class="lang-sh">mkdir -p AppDir/usr/share/icons
 touch AppDir/usr/share/icons/ccls.svg
 </code></pre>
 <p>最后执行 <code>appimage-builder --recipe AppImageBuilder.yml</code> 生成 AppImage。大功告成！</p>
-<pre><code class="language-sh">$ ./ccls-latest-x86_64.AppImage --version
+<pre><code class="lang-sh">$ ./ccls-latest-x86_64.AppImage --version
 ccls version 0.20220729-0-g7445891
 clang version 10.0.0-4ubuntu1
 </code></pre>

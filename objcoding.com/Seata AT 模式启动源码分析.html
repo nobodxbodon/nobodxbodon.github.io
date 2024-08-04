@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-11-27-seata at start.md)，<a href="https://objcoding.com/2019/11/27/seata-at-start">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-11-27-seata at start.md">仓库源文</a>，<a href="https://objcoding.com/2019/11/27/seata-at-start">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "Seata AT 模式启动源码分析"
 categories: Seata
-tags: AT
-author: 张乘辉</h2>
+tags: AT</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -13,7 +13,7 @@ author: 张乘辉</h2>
 <h2>客户端启动逻辑</h2>
 <p>TM 是负责整个全局事务的管理器，因此一个全局事务是由 TM 开启的，TM 有个全局管理类 GlobalTransaction，结构如下：</p>
 <p>io.seata.tm.api.GlobalTransaction</p>
-<pre><code class="language-java">public interface GlobalTransaction {
+<pre><code class="lang-java">public interface GlobalTransaction {
 
   void begin() throws TransactionException;
 
@@ -24,14 +24,14 @@ author: 张乘辉</h2>
   void commit() throws TransactionException;
 
   void rollback() throws TransactionException;
-  
+
   GlobalStatus getStatus() throws TransactionException;
-  
+
   // ...
 }
 </code></pre>
 <p>可以通过 GlobalTransactionContext 创建一个 GlobalTransaction，然后用 GlobalTransaction 进行全局事务的开启、提交、回滚等操作，因此我们直接用 API 方式使用 Seata AT 模式：</p>
-<pre><code class="language-java">//init seata;
+<pre><code class="lang-java">//init seata;
 TMClient.init(applicationId, txServiceGroup);
 RMClient.init(applicationId, txServiceGroup);
 //trx
@@ -48,7 +48,7 @@ try {
 </code></pre>
 <p>如果每次使用全局事务都这样写，难免会造成代码冗余，我们的项目都是基于 Spring 容器，这时我们可以利用 Spring AOP 的特性，用模板模式把这些冗余代码封装模版里，参考 Mybatis-spring 也是做了这么一件事情，那么接下来我们来分析一下基于 Spring 的项目启动 Seata 并注册全局事务时都做了哪些工作。</p>
 <p>我们开启一个全局事务是在方法上加上 <code>@GlobalTransactional</code>注解，Seata 的 Spring 模块中，有个 GlobalTransactionScanner，它的继承关系如下：</p>
-<pre><code class="language-java">public class GlobalTransactionScanner extends AbstractAutoProxyCreator implements InitializingBean, ApplicationContextAware, DisposableBean {
+<pre><code class="lang-java">public class GlobalTransactionScanner extends AbstractAutoProxyCreator implements InitializingBean, ApplicationContextAware, DisposableBean {
   // ...
 }
 </code></pre>
@@ -56,7 +56,7 @@ try {
 <p><img alt="image-20191124155455309" src="https://raw.githubusercontent.com/objcoding/objcoding.github.io/master/images/image-20191124155455309.png"/></p>
 <p>InitializingBean 的 afterPropertiesSet() 方法调用了 initClient() 方法：</p>
 <p>io.seata.spring.annotation.GlobalTransactionScanner#initClient</p>
-<pre><code class="language-java">TMClient.init(applicationId, txServiceGroup);
+<pre><code class="lang-java">TMClient.init(applicationId, txServiceGroup);
 RMClient.init(applicationId, txServiceGroup);
 </code></pre>
 <p>对 TM 和 RM 做了初始化操作。</p>
@@ -64,7 +64,7 @@ RMClient.init(applicationId, txServiceGroup);
 <li>TM 初始化</li>
 </ul>
 <p>io.seata.tm.TMClient#init</p>
-<pre><code class="language-java">public static void init(String applicationId, String transactionServiceGroup) {
+<pre><code class="lang-java">public static void init(String applicationId, String transactionServiceGroup) {
   // 获取 TmRpcClient 实例
   TmRpcClient tmRpcClient = TmRpcClient.getInstance(applicationId, transactionServiceGroup);
   // 初始化 TM Client
@@ -73,7 +73,7 @@ RMClient.init(applicationId, txServiceGroup);
 </code></pre>
 <p>调用 TmRpcClient.getInstance() 方法会获取一个 TM 客户端实例，在获取过程中，会创建 Netty 客户端配置文件对象，以及创建 messageExecutor 线程池，该线程池用于在处理各种与服务端的消息交互，在创建 TmRpcClient 实例时，创建 ClientBootstrap，用于管理 Netty 服务的启停，以及 ClientChannelManager，它是专门用于管理 Netty 客户端对象池，Seata 的 Netty 部分配合使用了对象吃，后面在分析网络模块会讲到。</p>
 <p>io.seata.core.rpc.netty.AbstractRpcRemotingClient#init</p>
-<pre><code class="language-java">public void init() {
+<pre><code class="lang-java">public void init() {
   clientBootstrap.start();
   // 定时尝试连接服务端
   timerExecutor.scheduleAtFixedRate(new Runnable() {
@@ -93,7 +93,7 @@ RMClient.init(applicationId, txServiceGroup);
 </code></pre>
 <p>调用 TM 客户端 init() 方法，最终会启动 netty 客户端（此时还未真正启动，在对象池被调用时才会被真正启动）；开启一个定时任务，定时重新发送 RegisterTMRequest（RM 客户端会发送 RegisterRMRequest）请求尝试连接服务端，具体逻辑是在 NettyClientChannelManager 中的 channels 中缓存了客户端 channel，如果此时 channels 不存在获取已过期，那么就会尝试连接服务端以重新获取 channel 并将其缓存到 channels 中；开启一条单独线程，用于处理异步请求发送，这里用得很巧妙，之后在分析网络模块在具体对其进行分析。</p>
 <p>io.seata.core.rpc.netty.AbstractRpcRemoting#init</p>
-<pre><code class="language-java">public void init() {
+<pre><code class="lang-java">public void init() {
   timerExecutor.scheduleAtFixedRate(new Runnable() {
     @Override
     public void run() {
@@ -117,7 +117,7 @@ RMClient.init(applicationId, txServiceGroup);
 <li>RM 初始化</li>
 </ul>
 <p>io.seata.rm.RMClient#init</p>
-<pre><code class="language-java">public static void init(String applicationId, String transactionServiceGroup) {
+<pre><code class="lang-java">public static void init(String applicationId, String transactionServiceGroup) {
   RmRpcClient rmRpcClient = RmRpcClient.getInstance(applicationId, transactionServiceGroup);
   rmRpcClient.setResourceManager(DefaultResourceManager.get());
   rmRpcClient.setClientMessageListener(new RmMessageListener(DefaultRMHandler.get()));
@@ -128,7 +128,7 @@ RMClient.init(applicationId, txServiceGroup);
 <p>ClientMessageListener 是 RM 消息处理监听器，用于负责处理从 TC 发送过来的指令，并对分支进行分支提交、分支回滚，以及 undo log 文件删除操作；最后 init 方法跟 TM 逻辑也大体一致；DefaultRMHandler 封装了 RM 分支事务的一些具体操作逻辑。</p>
 <p>接下来再看看 wrapIfNecessary 方法究竟做了哪些操作。</p>
 <p>io.seata.spring.annotation.GlobalTransactionScanner#wrapIfNecessary</p>
-<pre><code class="language-java">protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) {
+<pre><code class="lang-java">protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) {
   // 判断是否有开启全局事务
   if (disableGlobalTransaction) {
     return bean;
@@ -182,7 +182,7 @@ RMClient.init(applicationId, txServiceGroup);
 <p>GlobalTransactionScanner 继承了 AbstractAutoProxyCreator，用于对 Spring AOP 支持，从代码中可看出，用GlobalTransactionalInterceptor 代替了被 GlobalTransactional 和 GlobalLock 注解的方法。</p>
 <p>GlobalTransactionalInterceptor 实现了 MethodInterceptor：</p>
 <p>io.seata.spring.annotation.GlobalTransactionalInterceptor#invoke</p>
-<pre><code class="language-java">public Object invoke(final MethodInvocation methodInvocation) throws Throwable {
+<pre><code class="lang-java">public Object invoke(final MethodInvocation methodInvocation) throws Throwable {
   Class&lt;?&gt; targetClass = methodInvocation.getThis() != null ? AopUtils.getTargetClass(methodInvocation.getThis()) : null;
   Method specificMethod = ClassUtils.getMostSpecificMethod(methodInvocation.getMethod(), targetClass);
   final Method method = BridgeMethodResolver.findBridgedMethod(specificMethod);
@@ -202,7 +202,7 @@ RMClient.init(applicationId, txServiceGroup);
 </code></pre>
 <p>以上是代理方法执行的逻辑逻辑，其中 handleGlobalTransaction() 方法里面调用了 TransactionalTemplate 模版：</p>
 <p>io.seata.spring.annotation.GlobalTransactionalInterceptor#handleGlobalTransaction</p>
-<pre><code class="language-java">private Object handleGlobalTransaction(final MethodInvocation methodInvocation,
+<pre><code class="lang-java">private Object handleGlobalTransaction(final MethodInvocation methodInvocation,
                                        final GlobalTransactional globalTrxAnno) throws Throwable {
   try {
     return transactionalTemplate.execute(new TransactionalExecutor() {
@@ -222,7 +222,7 @@ RMClient.init(applicationId, txServiceGroup);
 </code></pre>
 <p>handleGlobalTransaction() 方法执行了就是 TransactionalTemplate 模版类的 execute 方法：</p>
 <p>io.seata.tm.api.TransactionalTemplate#execute</p>
-<pre><code class="language-java">public Object execute(TransactionalExecutor business) throws Throwable {
+<pre><code class="lang-java">public Object execute(TransactionalExecutor business) throws Throwable {
   // 1. get or create a transaction
   GlobalTransaction tx = GlobalTransactionContext.getCurrentOrCreate();
 
@@ -264,10 +264,10 @@ RMClient.init(applicationId, txServiceGroup);
 <h2>服务端处理逻辑</h2>
 <p>服务端收到客户端的连接，那当然是将其 channel 也缓存起来，前面也说到客户端会发送 RegisterRMRequest/RegisterTMRequest 请求给服务端，服务端收到后会调用 ServerMessageListener 监听器处理：</p>
 <p>io.seata.core.rpc.ServerMessageListener</p>
-<pre><code class="language-java">public interface ServerMessageListener {
+<pre><code class="lang-java">public interface ServerMessageListener {
   // 处理各种事务，如分支注册、分支提交、分支上报、分支回滚等等
   void onTrxMessage(RpcMessage request, ChannelHandlerContext ctx, ServerMessageSender sender);
-	// 处理 RM 客户端的注册连接
+    // 处理 RM 客户端的注册连接
   void onRegRmMessage(RpcMessage request, ChannelHandlerContext ctx,
                       ServerMessageSender sender, RegisterCheckAuthHandler checkAuthHandler);
   // 处理 TM 客户端的注册连接
@@ -279,7 +279,7 @@ RMClient.init(applicationId, txServiceGroup);
 }
 </code></pre>
 <p>ChannelManager 是服务端 channel 的管理器，服务端每次和客户端通信，都需要从 ChannelManager 中获取客户端对应的 channel，它用于保存 TM 和 RM 客户端 channel 的缓存结构如下：</p>
-<pre><code class="language-java">/**
+<pre><code class="lang-java">/**
  * resourceId -&gt; applicationId -&gt; ip -&gt; port -&gt; RpcContext
  */
 private static final ConcurrentMap&lt;String, ConcurrentMap&lt;String, ConcurrentMap&lt;String, ConcurrentMap&lt;Integer,
@@ -309,7 +309,7 @@ private static final ConcurrentMap&lt;String, ConcurrentMap&lt;Integer, RpcConte
 </ol>
 <p>以下是 RM Client 注册逻辑：</p>
 <p>io.seata.core.rpc.ChannelManager#registerRMChannel</p>
-<pre><code class="language-java">public static void registerRMChannel(RegisterRMRequest resourceManagerRequest, Channel channel)
+<pre><code class="lang-java">public static void registerRMChannel(RegisterRMRequest resourceManagerRequest, Channel channel)
   throws IncompatibleVersionException {
   Version.checkVersion(resourceManagerRequest.getVersion());
   // 将 ResourceIds 数据库连接连接信息放入一个set中
@@ -334,20 +334,20 @@ private static final ConcurrentMap&lt;String, ConcurrentMap&lt;Integer, RpcConte
     ConcurrentMap&lt;Integer, RpcContext&gt; portMap = RM_CHANNELS.computeIfAbsent(resourceId, resourceIdKey -&gt; new ConcurrentHashMap&lt;&gt;())
       .computeIfAbsent(resourceManagerRequest.getApplicationId(), applicationId -&gt; new ConcurrentHashMap&lt;&gt;())
       .computeIfAbsent(clientIp = getClientIpFromChannel(channel), clientIpKey -&gt; new ConcurrentHashMap&lt;&gt;());
-		// 将当前 rpcContext 放入 portMap 中
+        // 将当前 rpcContext 放入 portMap 中
     rpcContext.holdInResourceManagerChannels(resourceId, portMap);
     updateChannelsResource(resourceId, clientIp, resourceManagerRequest.getApplicationId());
   }
 }
 </code></pre>
 <p>从以上代码逻辑能够看出，注册 RM client 主要是将注册请求信息，放入 RM_CHANNELS 缓存中，同时还会从 IDENTIFIED_CHANNELS 中判断本次请求的 channel 是否已验证过，IDENTIFIED_CHANNELS 的结构如下：</p>
-<pre><code class="language-java">private static final ConcurrentMap&lt;Channel, RpcContext&gt; IDENTIFIED_CHANNELS
+<pre><code class="lang-java">private static final ConcurrentMap&lt;Channel, RpcContext&gt; IDENTIFIED_CHANNELS
   = new ConcurrentHashMap&lt;&gt;();
 </code></pre>
 <p>IDENTIFIED_CHANNELS 包含了所有 TM 和 RM 已注册的 channel。</p>
 <p>以下是 TM 注册逻辑：</p>
 <p>io.seata.core.rpc.ChannelManager#registerTMChannel</p>
-<pre><code class="language-java">public static void registerTMChannel(RegisterTMRequest request, Channel channel)
+<pre><code class="lang-java">public static void registerTMChannel(RegisterTMRequest request, Channel channel)
   throws IncompatibleVersionException {
   Version.checkVersion(request.getVersion());
   // 根据请求注册信息，构建 RpcContext

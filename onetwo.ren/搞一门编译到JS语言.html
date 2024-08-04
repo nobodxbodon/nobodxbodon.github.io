@@ -1,4 +1,4 @@
-<h2><a href="https://github.com/linonetwo/linonetwo.github.io/blob/master/_posts/2017-05-26-%E6%90%9E%E4%B8%80%E9%97%A8%E7%BC%96%E8%AF%91%E5%88%B0JS%E8%AF%AD%E8%A8%80.md">仓库源文</a>，<a href="https://onetwo.ren/2017/05/26/%E6%90%9E%E4%B8%80%E9%97%A8%E7%BC%96%E8%AF%91%E5%88%B0JS%E8%AF%AD%E8%A8%80">站点原文</a></h2>
+<h2><a href="https://github.com/linonetwo/linonetwo.github.io/blob/master/_posts/2017-05-26-搞一门编译到JS语言.md">仓库源文</a>，<a href="https://onetwo.ren/2017/05/26/搞一门编译到JS语言">站点原文</a></h2>
 <hr/>
 <p>layout: post
 title: '搞一门编译到JS语言'
@@ -22,7 +22,7 @@ introduction: '将一门语言解析为 AST，遍历它自底向上构建 JS 的
 <h2>COOL-language</h2>
 <p>COOL 语言是一门并没有广泛用于课堂教学的面向对象语言，全称是 ClassroomObjectOrientedLanguage，遗憾的是它不能进行物联网、VR、游戏和移动端 GUI 编程。幸运的是，熟练的情况下我们可以在三天内将它编译成 javascript，让它就像萝莉穿上魔法少女魔装一样，获得强大的能力（误）。</p>
 <p>COOL 语言的代码长这样：</p>
-<pre><code class="language-cool">
+<pre><code class="lang-cool">
 class Main inherits IO {
   jiayimiao(second: Int): Int {
     second + 1
@@ -38,7 +38,7 @@ class Main inherits IO {
 };
 </code></pre>
 <p>可以看到类型标注和 flowtype、 typescript 是一个路数，花括号和分号也很 C-style。COOL 和 JS 最大的不同是，COOL 是面向表达式（expression）的语言，jiayimiao() 函数直接返回了 second + 1 的结果，main() 函数直接返回了最后一行 out_string() 的结果，而 javascript 是基于语句（statement）的，转出来大概是这样：</p>
-<pre><code class="language-javascript">class Main extends IO {
+<pre><code class="lang-javascript">class Main extends IO {
   jiayimiao(second: number): number {
     return this.second + 1;
   }
@@ -59,7 +59,7 @@ new Main().main();
 <h2>如何得到 COOL AST</h2>
 <p>从源代码得到 AST 理论上说需要两步，用词法分析器（lexer）分词，得到切好的一个个词后用语法分析器（parser）。</p>
 <p>工程上也需要两步，第二步比较简单，就是把 COOL 的源代码传入下面这个官网给的样例函数（boilerplate）里：</p>
-<pre><code class="language-javascript">// parseCOOL.js
+<pre><code class="lang-javascript">// parseCOOL.js
 // @ts-check @flow
 import antlr4, { InputStream, CommonTokenStream } from 'antlr4';
 import { COOLLexer } from './antlrGenerated/COOLLexer';
@@ -79,7 +79,7 @@ export default function parseCOOL(coolProgram: string) {
 <h3>Antlr4 grammar</h3>
 <p>我使用了一个现代编译器编译器 Antlr4，就是把我对 COOL 语言的语法描述，编译成一个编译器的编译器，而且它很有现代感，可以编译出 Python、typescript、javascript、Java 等常用语言的 lexer 和 parser，可以大幅提高工程效率。</p>
 <p>为 Antlr4 写的 COOL 语言语法大概长这样：</p>
-<pre><code class="language-rust">// COOL.g4
+<pre><code class="lang-rust">// COOL.g4
 grammar COOL;
 
 program: programBlocks;
@@ -95,7 +95,7 @@ classDefine: CLASS TYPEID (INHERITS TYPEID)? '{' (feature ';')* '}';
 <p><img alt="bnf of cool" src="https://raw.githubusercontent.com/linonetwo/linonetwo.github.io/master/assets/img/posts/antlr/cool.PNG"/></p>
 <p>把里面的 <code>::=</code> 换成 <code>:</code>，再在每行的结尾加个分号一般就行了。但也要注意这些说明书里给出的排列顺序不一定靠谱，可能不会照顾实际使用情况，我在<a href="https://github.com/antlr/grammars-v4/pull/707">对 alrlr4 语法库的 pull request</a> 里调整了好几处顺序。</p>
 <p>除了语法，我们还需要定义语法里用到的 <code>CLASS</code>、<code>TYPEID</code> 是什么，这叫词法定义，COOL 的词法大概长这样：</p>
-<pre><code class="language-rust">// COOL.g4
+<pre><code class="lang-rust">// COOL.g4
 // skip spaces, tabs, newlines, note that \v is not suppoted in antlr
 WHITESPACE: [ \t\r\n\f]+ -&gt; skip;
 
@@ -120,7 +120,7 @@ fragment F: [fF];
 <p>fragment 则是我提交<a href="https://github.com/antlr/grammars-v4/pull/704">PR</a>时评审者提出的<a href="http://blog.ptsecurity.com/2016/06/theory-and-practice-of-source-code.html#case-insensitive-keywords">改进建议</a>，可以提升大小写不敏感关键字的可读性。</p>
 <p>做 Antlr4 的语法描述基本不需要学习（当然你首先要会正则和 BNF），参照着<a href="https://github.com/antlr/grammars-v4">语法库</a> 里其他语言的定义就可以写出来。</p>
 <p>不参考其他语言语法的话，字符串转义的部分可能会比较难写：</p>
-<pre><code class="language-rust">// COOL.g4
+<pre><code class="lang-rust">// COOL.g4
 STRING: '"' (ESC | ~ ["\\])* '"';
 fragment ESC: '\\' (["\\/bfnrt] | UNICODE);
 fragment UNICODE: 'u' HEX HEX HEX HEX;
@@ -131,14 +131,14 @@ fragment HEX: [0-9a-fA-F];
 <h2>生成 JS 写的 Lexer 和 Parser</h2>
 <p>接着就可以用刚写的 COOL.g4 来生成我们要调用的 Lexer 和 Parser 了。</p>
 <p>我使用 gulp 来做这事，先删掉生成文件夹，然后运行 antlr4，设置目标语言为 js，生成到 ./src/antlrGenerated 里，使用 COOL.g4 作为输入。</p>
-<pre><code class="language-javascript">// gulpfile.js
+<pre><code class="lang-javascript">// gulpfile.js
 gulp.task('build-compiler', async function() {
   await del('./src/antlrGenerated');
   execSync('java org.antlr.v4.Tool -Dlanguage=JavaScript -o ./src/antlrGenerated ./src/COOL.g4');
 });
 </code></pre>
 <p>然后就可以做第二步了，得到函数 <code>parseCOOL = (coolProgram: string) =&gt; AST</code>，第三步就是用起来：</p>
-<pre><code class="language-javascript">// index.js
+<pre><code class="lang-javascript">// index.js
 import { flow } from 'lodash';
 import { ParseTreeWalker } from 'antlr4/tree';
 
@@ -167,7 +167,7 @@ function generateJS(generateJSListener) {
 <h2>遍历 AST</h2>
 <p>visitCOOL() 是关键的一步，我们使用 ParseTreeWalker() 遍历 COOL AST ，并在进入和离开每个 AST 节点时通知 GenerateJSListener，然后 GenerateJSListener 就能根据经过的 COOL AST 的信息创建出 JS AST。</p>
 <p>这个类里我们写了三种函数：</p>
-<pre><code class="language-javascript">// GenerateJSListener.js
+<pre><code class="lang-javascript">// GenerateJSListener.js
 export default class GenerateJSListener extends COOLListener {
   jsAST: JSASTBuilder = new JSASTBuilder();
 
@@ -209,14 +209,14 @@ export default class GenerateJSListener extends COOLListener {
 }
 </code></pre>
 <p>它们调用了 JSASTBuilder 里的函数，JSASTBuilder 里包含一个栈（来自 ASTStack）和一些创建 IIEF 之类的 js 模板的函数（来自 ASTBuilder）。</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
 class ASTStack {}
 class ASTBuilder extends ASTStack {}
 export default class JSASTBuilder extends ASTBuilder {}
 </code></pre>
 <h3>创建 JS AST</h3>
 <p>上面遍历 COOL AST 时调用的创建 JS AST 的函数，第一种是直接创建 JS AST 节点，像这样：</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
   False(): void {
     // booleanLiteral, stringLiteral, and identifier are Expression
     this.push(t.booleanLiteral(false));
@@ -227,14 +227,14 @@ export default class JSASTBuilder extends ASTBuilder {}
   }
 </code></pre>
 <p>第二种是用 COOL AST 中的信息来创建 JS AST：</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
   String(content: string): void {
     // use JSON.parse() to remove "" double quote
     this.push(t.stringLiteral(JSON.parse(content)));
   }
 </code></pre>
 <p>第三种是根据 COOL AST 中子节点的个数，拿出相应个数的 JS AST 子节点，拼在一个 JS AST 节点里：</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
   MethodCall(functionName: string, argumentLength: number, superClassName: ?string): void {
     // Invoke someObject.method()
     // superClassName currently unavailable
@@ -259,7 +259,7 @@ export default class JSASTBuilder extends ASTBuilder {}
 <p>上文提到的 <code>this.push()</code> 意思便是将一个 JS AST 放入栈中，<code>this.pop(1)</code> 则是将一个子节点弹出栈。</p>
 <p><img alt="pushpop" src="https://raw.githubusercontent.com/linonetwo/linonetwo.github.io/master/assets/img/posts/antlr/pushtree.png"/></p>
 <p>先一层层地把 true、false、if 语句、类函数通过 jsASTStack 创建起来，最终当我们遍历到 COOL AST 的根部时，我们将大功告成的 JS AST 放进<code>jsProgramAST</code>里，就可以用它生成 js 代码了。</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
 class ASTStack {
   // We use stack to temporarly store subtree of AST, then you can use popFor() to load subtree in the stack into a container tree node
   jsASTStack: Array&lt;JSASTNode&gt; = [];
@@ -299,7 +299,7 @@ class ASTStack {
 </ol>
 <p>因此我同时使用 babel-types 和 babel-template，先用 babel-template 创建出大坨的 AST，再用 babel-types 创建节点，插入大坨中。</p>
 <p>例如这个创建 IIEF 的过程，就是先创建出一个空白的 IIEF，再用子 AST 替换掉 null：</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
 import * as t from 'babel-types';
 import template from 'babel-template';
 
@@ -330,7 +330,7 @@ class ASTBuilder extends ASTStack {
 }
 </code></pre>
 <p>FlowType 中类型标注是 <code>foo: Type</code> 的形式，其中的冒号是 <code>t.typeAnnotation()</code>，而冒号后的类型才是 <code>t.xxxTypeAnnotation()</code>，实践表明不加冒号的话，构建出的 AST 也能生成 JS 代码，而且会看起来不明觉厉。以下是加冒号的过程：</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
 class ASTBuilder extends ASTStack {
   // ...
   static typeAnnotation(typeName: string): JSASTNode {
@@ -349,7 +349,7 @@ class ASTBuilder extends ASTStack {
 </code></pre>
 <h2>从 AST 生成 JS 代码</h2>
 <p>最后我们使用 <code>babel-generator</code> 来生成代码，作为生产级的工具，它有极高的速度。</p>
-<pre><code class="language-javascript">// JSASTBuilder.js
+<pre><code class="lang-javascript">// JSASTBuilder.js
 class GenerateJSListener extends COOLListener {
   // ...
   generateJS(): string {
@@ -365,7 +365,7 @@ class GenerateJSListener extends COOLListener {
 <p>还有为了代码的可读性，我们在生成的代码的顶端加上 <code>@flow @ts-check</code>，以便编辑器提供 FlowType 或 Typescript 的 Intellisense。</p>
 <h3>runtime lib</h3>
 <p>为了让生成的代码可运行，我们还有几件事要做，第一是要提供 COOL 语言内置的功能，我通过在生成代码顶端加入相应类的形式提供它们：</p>
-<pre><code class="language-javascript">// JSASTBuilder.js Program()
+<pre><code class="lang-javascript">// JSASTBuilder.js Program()
 
 // 1. put runtime on the front
 const runtimeBuilder = template(
@@ -385,7 +385,7 @@ this.jsProgramAST.program.body.unshift(runtimeBuilder({}));
 <p>当 COOL 支持多文件 import 了，我们就必须学习 <code>babel-plugin-transform-runtime</code> ，将 runtime 合并起来，而每个文件上方只保留对它们的引用。</p>
 <h3>运行代码</h3>
 <p>由于我们使用了 flowtype，运行生成的文件就必须用：</p>
-<pre><code class="language-shell">node -r \"./node_modules/babel-core/register\" -r \"./node_modules/babel-polyfill/lib/index.js\" ./src/index.js
+<pre><code class="lang-shell">node -r \"./node_modules/babel-core/register\" -r \"./node_modules/babel-polyfill/lib/index.js\" ./src/index.js
 </code></pre>
 <p>要不就是在生成之前用 <code>babel-plugin-flow-stripe-type</code> 和 <code>babel-preset-stage-2</code>、<code>babel-preset-es2015</code> 之类的 preset 过一下。</p>
 <h2>结语</h2>

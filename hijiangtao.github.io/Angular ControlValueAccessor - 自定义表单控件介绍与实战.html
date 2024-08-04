@@ -1,13 +1,13 @@
 <h2><a href="https://github.com/hijiangtao/hijiangtao.github.io/blob/master/_posts/2020-01-30-Angular-ControlValueAccessor-Introduction-and-Example.md">仓库源文</a>，<a href="https://hijiangtao.github.io/2020/01/30/Angular-ControlValueAccessor-Introduction-and-Example">站点原文</a></h2>
 <hr/>
-<h2>title: Angular ControlValueAccessor - 自定义表单控件介绍与实战
+<p>title: Angular ControlValueAccessor - 自定义表单控件介绍与实战
 layout: post
 thread: 241
 date: 2020-01-30
 author: Joe Jiang
 categories: Document
-tags: [Angular, 表单, form, 前端, 自定义控件, 原生, 实战]
-excerpt: 本文是学习 Angular ControlValueAccessor 过程中的笔记摘要，全文结构如下……</h2>
+tags: [Angular, 表单, form, 前端, 自定义控件, 原生, 实战]</p>
+<h2>excerpt: 本文是学习 Angular ControlValueAccessor 过程中的笔记摘要，全文结构如下……</h2>
 <p>本文是学习 Angular ControlValueAccessor 过程中的笔记摘要，全文结构如下：</p>
 <ol>
 <li>表单与控件介绍 - 通过日常在 Angular 中使用表单以及自定义控件的场景引出 ControlValueAccessor</li>
@@ -21,12 +21,12 @@ excerpt: 本文是学习 Angular ControlValueAccessor 过程中的笔记摘要�
 </li>
 </ol>
 <p>本文假设你已经了解了基本的 Angular 语法与表单用法，其中所使用的完整代码可以在 GIST 上找到 <a href="https://gist.github.com/hijiangtao/1be6feba90294863a403316b3b9dc31e">https://gist.github.com/hijiangtao/1be6feba90294863a403316b3b9dc31e</a>，以下开始正文。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-01-30-Angular-ControlValueAccessor-Introduction-and-Example-Teaser.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-01-30-Angular-ControlValueAccessor-Introduction-and-Example-Teaser.png"/></p>
 <h2>1. 表单与控件介绍</h2>
 <p>不仅仅是在 Angular 中，大部分 Web 应用中（尤其是中后台系统）用表单来处理用户输入都是非常基础的功能。在 Angular 中，一个极其简单的表单应用如下所示：</p>
 <pre><code>import { Component } from '@angular/core';
 import { FormControl } from '@angular/forms';
- 
+
 @Component({
   selector: 'app-reactive-favorite-color',
   template: `
@@ -35,23 +35,25 @@ import { FormControl } from '@angular/forms';
 })
 export class FavoriteColorComponent {
   favoriteColorControl = new FormControl('');
-}</code></pre>
+}
+</code></pre>
 <p>以上例子中，我们在控件类中定义了一个 <code>FormControl</code> 属性，然后在模版中通过 <code>[formControl]</code> 将 UI (DOM) 与数据进行双向绑定。</p>
 <p>但写代码时为了以后场景复用，难免要自定义控件，当控件中涉及到用户输入交互时，可能就要与表单打交道。在 Angular 中，不管你使用模板驱动表单还是响应式表单，总是会创建<code>FormControl</code>。如果你使用响应式表单，你需要显式创建 <code>FormControl</code> 对象，并使用 <code>formControl</code> 或 <code>formControlName</code> 指令来绑定原生控件；如果你使用模板驱动表单，<code>FormControl</code> 对象会被 <code>NgModel</code> 指令隐式创建。</p>
 <p>这时，一个直观但不优雅的做法是在调用自定义控件时通过 <code>@Input</code> 传入一个表单数据 ，而控件内部写相应的逻辑对 Angular 表单进行操作。具体调用可能长成这样：</p>
 <pre><code>&lt;form [formGroup]="anyForm"&gt;                                
   &lt;some-component [form]="anyForm"&gt;&lt;/some-component&gt;      
   &lt;another-component [form]="anyForm"&gt;&lt;/another-component&gt;
-&lt;/form&gt;</code></pre>
+&lt;/form&gt;
+</code></pre>
 <p>但是为了让控件拥有 Angular 表单般的使用体验，我希望 API 设计成这样，直接通过 <code>formControlName</code> 来绑定数据：</p>
 <pre><code>&lt;form [formGroup]="anyForm"&gt;
   &lt;some-component formControlName="cool" /&gt;&lt;/some-component&gt;
   &lt;another-component type="text" formControlName="coool"&gt;&lt;/another-component&gt; 
-&lt;/form&gt;</code></pre>
+&lt;/form&gt;
+</code></pre>
 <h2>2. ControlValueAccessor API 介绍</h2>
 <p>在 Angular 中，类似的自定义表单其实是有相应接口实现的，这里就用到我们今天要谈的主角——ControlValueAccessor，其官方定义是</p>
-<blockquote>
-<p>Implement this interface to create a custom form control directive that integrates with Angular forms.</p>
+<blockquote><p>Implement this interface to create a custom form control directive that integrates with Angular forms.</p>
 </blockquote>
 <p>简单来说，这个对象桥接原生表单控件和 <code>formControl</code> 指令，并同步两者的值。</p>
 <p>任何一个控件或指令都可以通过实现 <code>ControlValueAccessor</code> 接口并注册为 <code>NG_VALUE_ACCESSOR</code>，从而转变成 <code>ControlValueAccessor</code> 类型的对象。在介绍其他内容之前，我们来看看 <code>ControlValueAccessor</code> 的数据结构：</p>
@@ -60,7 +62,8 @@ export class FavoriteColorComponent {
   registerOnChange(fn: any): void
   registerOnTouched(fn: any): void
   setDisabledState(isDisabled: boolean)?: void
-}</code></pre>
+}
+</code></pre>
 <p>这个接口定义有四个方法，为了描述准确，我们将 Angular 表单和原生表单分别用 Angular form 和 Native form 区分开：</p>
 <ul>
 <li>writeValue：任何 <code>FormControl</code> 显式调用 API 的<strong>值</strong>操作都将调用自定义表单控件的 <code>writeValue()</code> 方法，并将新值作为参数传入。其作用是设置原生表单控件的值。<strong>数据流向则是从 Angular form ➡️ Native form。</strong></li>
@@ -69,7 +72,7 @@ export class FavoriteColorComponent {
 <li>setDisabledState：当表单状态变为 <code>DISABLED</code> 或从 <code>DISABLED</code> 变更时，表单 API 会调用 <code>setDisabledState()</code> 方法，以启用或禁用对应的 DOM 元素。<strong>数据流向则是从 Angular form ➡️ Native form。</strong></li>
 </ul>
 <p>关于其中的交互关系我们可以参照下面这张图：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-01-30-Angular-ControlValueAccessor-Introduction-and-Example-1.jpeg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2020-01-30-Angular-ControlValueAccessor-Introduction-and-Example-1.jpeg"/></p>
 <h2>3. 自定义表单控件实现</h2>
 <p>介绍完概念后，我们通过一个例子来看看如何自定义表单控件。我们分以下几个步骤</p>
 <h3>3.1 初始化自定义控件</h3>
@@ -77,7 +80,7 @@ export class FavoriteColorComponent {
 <ul>
 <li><code>counter.component.html</code></li>
 </ul>
-<pre><code class="language-html">&lt;div&gt;
+<pre><code class="lang-html">&lt;div&gt;
     &lt;p&gt;当前值: {{ count }}&lt;/p&gt;
     &lt;button (click)="increment()"&gt; + &lt;/button&gt;
     &lt;button (click)="decrement()"&gt; - &lt;/button&gt;
@@ -86,8 +89,8 @@ export class FavoriteColorComponent {
 <ul>
 <li><code>counter.component.ts</code></li>
 </ul>
-<pre><code class="language-javascript">import { Component, Input } from '@angular/core';
-    
+<pre><code class="lang-javascript">import { Component, Input } from '@angular/core';
+
 @Component({
     selector: 'app-counter',
     templateUrl: './counter.component.html',
@@ -113,7 +116,8 @@ export class Counter {
     if (value) {
         this.count = value;
     }
-}</code></pre>
+}
+</code></pre>
 <p>然后我们注册两个事件，涉及到 registerOnChange 方法和 registerOnTouched 方法：</p>
 <pre><code>propagateOnChange: (value: any) =&gt; void = (_: any) =&gt; {};
 propagateOnTouched: (value: any) =&gt; void = (_: any) =&gt; {};
@@ -124,7 +128,8 @@ registerOnChange(fn: any) {
 
 registerOnTouched(fn: any) {
     this.propagateOnTouched = fn;
-}</code></pre>
+}
+</code></pre>
 <p>由于控件内 count 改变时我们需要调用事件触发函数将数据传递给 Angular form，于是针对控件内部的 count 我们做一些改造：</p>
 <pre><code>_count: number = 0;
 
@@ -135,7 +140,8 @@ get count() {
 set count(value: number) {
     this._count = value;
     this.propagateOnChange(this._count);
-}</code></pre>
+}
+</code></pre>
 <p>好了，其余内容不变。</p>
 <h3>3.3 注册 NG_VALUE_ACCESSOR 提供者</h3>
 <p>对于我们开发的自定义控件来说，实现 ControlValueAccessor 接口只完成了一半工作，我们还需要执行注册操作。<code>NG_VALUE_ACCESSOR</code> 提供者用来指定实现了 <code>ControlValueAccessor</code> 接口的类，并且被 Angular 用来和 <code>formControl</code> 同步，通常是使用控件类或指令来注册。所有表单指令都是使用<code>NG_VALUE_ACCESSOR</code> 标识来注入控件值访问器，然后选择合适的访问器。具体分以下几个步骤：</p>
@@ -144,7 +150,8 @@ set count(value: number) {
     provide: NG_VALUE_ACCESSOR,
     useExisting: forwardRef(() =&gt; Counter),
     multi: true
-};</code></pre>
+};
+</code></pre>
 <p>步骤2：配置控件 providers 信息</p>
 <pre><code>@Component({
   ...
@@ -153,7 +160,8 @@ set count(value: number) {
 })
 export class Counter implements ControlValueAccessor {
   ...
-}</code></pre>
+}
+</code></pre>
 <p>这部分我们不做深入探讨，关于 NG_VALUE_ACCESSOR 及相关概念的深入，我将部分内容附在文末的参考列表中了。</p>
 <h3>3.4 在响应式表单中使用</h3>
 <p>至此，我们的控件就写完了。由于 Angular 存在响应式表单和模版驱动表单两种，以下以响应式表单为例，我们实际调用它看看效果。首先是导入控件并注册 <code>[ReactiveFormsModule](https://angular.cn/api/forms/ReactiveFormsModule)</code>:</p>
@@ -172,9 +180,10 @@ import { Counter } from './components/counter/counter.component';
     ReactiveFormsModule,
   ],
 })
-export class AppModule { }</code></pre>
+export class AppModule { }
+</code></pre>
 <p>然后我们完善调用自定义控件的代码，假设我们是在一个叫 hello 的 component 中调用它，那么代码分以下两步，首先是 HTML：</p>
-<pre><code class="language-html">&lt;ng-container&gt;
+<pre><code class="lang-html">&lt;ng-container&gt;
     &lt;p&gt;counter 控件测试&lt;/p&gt;
     &lt;form [formGroup]="helloForm"&gt;
         &lt;app-counter formControlName="counter"&gt;&lt;/app-counter&gt;
@@ -194,13 +203,14 @@ export class HelloPageComponent implements OnInit {
     helloForm: FormGroup;
 
     constructor(private fb: FormBuilder) { }
-    
+
     ngOnInit() {
         this.helloForm = this.fb.group({
             counter: 5 // 设置初始值
         });
     }
-}</code></pre>
+}
+</code></pre>
 <p>以上便是 Angular ControlValueAccessor 在表单控件中从定义到使用的全部过程，以下附上计数器的完整 TypeScript 代码，其余完整代码见 GIST <a href="https://gist.github.com/hijiangtao/1be6feba90294863a403316b3b9dc31e">https://gist.github.com/hijiangtao/1be6feba90294863a403316b3b9dc31e</a></p>
 <p>参考</p>
 <ol>
@@ -267,4 +277,5 @@ export class Counter implements ControlValueAccessor {
     decrement() {
         this.count--;
     }
-}</code></pre>
+}
+</code></pre>

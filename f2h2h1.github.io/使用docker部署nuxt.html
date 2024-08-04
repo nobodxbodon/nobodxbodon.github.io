@@ -1,81 +1,83 @@
-<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/%E4%BD%BF%E7%94%A8docker%E9%83%A8%E7%BD%B2nuxt.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/%E4%BD%BF%E7%94%A8docker%E9%83%A8%E7%BD%B2nuxt">站点原文</a></h2>
+<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/使用docker部署nuxt.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/使用docker部署nuxt">站点原文</a></h2>
 <h1>使用 docker 部署 nuxt</h1>
 <p>下文描述的是用 docker 部署 nuxt ， nuxt 使用 ssr 。
 下文提及的 docker 版本是 18.09 。</p>
 <h2>方式1 直接使用 node 镜像部署</h2>
-<ol start="0">
+<ol>
 <li>拉取 node 的镜像， node 的版本最好和本地开发的一致</li>
 <li>确定构建的命令，一般都是 <code>npm install &amp;&amp; npm build</code></li>
 <li>确定运行的命令，一般都是 <code>npm run</code></li>
 <li>配置文件里监听的 ip 只能是 127.0.0.1 或 0.0.0.0</li>
 <li>确定配置文件里监听的端口号</li>
 <li>克隆代码仓库，并 cd 进仓库的根目录</li>
-<li>使用这样的命令运行起一个 node 容器，要注意端口号的映射<pre><code>docker run -d --restart always \
-    --name my-nuxt \
-    -p 3000:3000 \
-    -v `pwd`:/app -w /app \
-    node:14.16-slim \
-    /bin/bash -c " \
-    npm install &amp;&amp; \
-    npm run build &amp;&amp; \
-    npm run start "
+<li>使用这样的命令运行起一个 node 容器，要注意端口号的映射<pre><code> docker run -d --restart always \
+     --name my-nuxt \
+     -p 3000:3000 \
+     -v `pwd`:/app -w /app \
+     node:14.16-slim \
+     /bin/bash -c " \
+     npm install &amp;&amp; \
+     npm run build &amp;&amp; \
+     npm run start "
 </code></pre>
 </li>
-<li>docker 参数的解释<pre><code>--rm 容器停止后自动删除
--it 在前台运行容器 （这个不够准确，但可以这样简单地理解）
--d 在后台运行容器
---restart always 容器自动重启
---name 容器名
--w 容器的工作目录 这个是相对容器而言的
--p 和宿主机映射的端口 宿主机端口:容器端口
--v 和宿主机绑定的路径 宿主机路径:容器路径
+<li>docker 参数的解释<pre><code> --rm 容器停止后自动删除
+ -it 在前台运行容器 （这个不够准确，但可以这样简单地理解）
+ -d 在后台运行容器
+ --restart always 容器自动重启
+ --name 容器名
+ -w 容器的工作目录 这个是相对容器而言的
+ -p 和宿主机映射的端口 宿主机端口:容器端口
+ -v 和宿主机绑定的路径 宿主机路径:容器路径
 </code></pre>
 </li>
 <li>容器启动命令的解释
-|命令|解释|
-|:--|:--|
-|/bin/bash|运行 bash|
-|-c|这个参数是把一段命令传递给 bash|
-|npm install|安装依赖|
-|npm run build|构建|
-|npm run start|运行|</li>
-<li>nginx 里的配置大概写成这样，要注意端口号和容器启动的命令里的端口号一致<pre><code>location / {
-    # proxy_http_version 1.1; #代理使用的http协议
-    proxy_set_header Host $host; #header添加请求host信息
-    proxy_set_header X-Real-IP $remote_addr; # header增加请求来源IP信息
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # 增加代理记录
-    proxy_pass http://127.0.0.1:3000/;
-}
+ |命令|解释|
+ |:--|:--|
+ |/bin/bash|运行 bash|
+ |-c|这个参数是把一段命令传递给 bash|
+ |npm install|安装依赖|
+ |npm run build|构建|
+ |npm run start|运行|</li>
+<li>nginx 里的配置大概写成这样，要注意端口号和容器启动的命令里的端口号一致<pre><code> location / {
+     # proxy_http_version 1.1; #代理使用的http协议
+     proxy_set_header Host $host; #header添加请求host信息
+     proxy_set_header X-Real-IP $remote_addr; # header增加请求来源IP信息
+     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # 增加代理记录
+     proxy_pass http://127.0.0.1:3000/;
+ }
 </code></pre>
 </li>
-<li>如果要更新代码
-0. 先暂停并删除当前的容器
-0. 用 git 拉取新的代码
-0. 用上面的命令启动一个新的容器</li>
+<li>如果要更新代码<ol>
+<li>先暂停并删除当前的容器</li>
+<li>用 git 拉取新的代码</li>
+<li>用上面的命令启动一个新的容器</li>
+</ol>
+</li>
 </ol>
 <h2>方式2 打包一个新的镜像部署</h2>
-<ol start="0">
+<ol>
 <li>确定构建的命令，一般都是 <code>npm install &amp;&amp; npm build</code></li>
 <li>确定运行的命令，一般都是 <code>npm run</code></li>
 <li>配置文件里监听的 ip 只能是 127.0.0.1 或 0.0.0.0</li>
 <li>确定配置文件里监听的端口号</li>
 <li>克隆代码仓库，并 cd 进仓库的根目录</li>
-<li>在仓库的根目录里新建一个名为 dockerfile 的文件，并写入以下内容，请根据注释的提示修改<pre><code>FROM node:14.16-slim # node 的版本最好和本地开发的一致
-COPY . /app
-WORKDIR /app
-# 这里是构建命令
-RUN npm install &amp;&amp; npm run build
-ENTRYPOINT ["/bin/bash", "-c"]
-# 这里是运行命令
-CMD ["npm run start"]
+<li>在仓库的根目录里新建一个名为 dockerfile 的文件，并写入以下内容，请根据注释的提示修改<pre><code> FROM node:14.16-slim # node 的版本最好和本地开发的一致
+ COPY . /app
+ WORKDIR /app
+ # 这里是构建命令
+ RUN npm install &amp;&amp; npm run build
+ ENTRYPOINT ["/bin/bash", "-c"]
+ # 这里是运行命令
+ CMD ["npm run start"]
 </code></pre>
 </li>
 <li>然后运行构建镜像 <code>docker build -t my/nuxt:0.0.1 .</code></li>
-<li>然后运行容器 <code>docker </code><pre><code>docker run -d --restart always \
-    --name my-nuxt \
-    -p 3000:3000 \
-    -v `pwd`:/app -w /app \
-    my/nuxt:0.0.1
+<li>然后运行容器 <code>docker</code><pre><code> docker run -d --restart always \
+     --name my-nuxt \
+     -p 3000:3000 \
+     -v `pwd`:/app -w /app \
+     my/nuxt:0.0.1
 </code></pre>
 </li>
 <li>nginx 的配置和 方式1 里的一样</li>
@@ -96,45 +98,45 @@ CMD ["npm run start"]
 </ol>
 <h3>nginx 的配置</h3>
 <ul>
-<li>这一段的配置需要加在 server 的外面，要注意修改 端口号</li>
-</ul>
+<li><p>这一段的配置需要加在 server 的外面，要注意修改 端口号</p>
 <pre><code>upstream nuxtservice { # upstream 的名称是全局唯一的，就是在整个 nginx 里名称不能重复
-    # server 127.0.0.1:8080 weight=1 max_fails=2 fail_timeout=2;
-    # 这里的两个端口号也必须是全局唯一的
-    server 127.0.0.1:3003 backup; # 热备
-    server 127.0.0.1:3002;
-    # 这里会存在一些问题，只能祈求前端会把状态都保存在浏览器里，如果状态保存在服务端，如果刚好遇到更新，那么状态就会混乱
+  # server 127.0.0.1:8080 weight=1 max_fails=2 fail_timeout=2;
+  # 这里的两个端口号也必须是全局唯一的
+  server 127.0.0.1:3003 backup; # 热备
+  server 127.0.0.1:3002;
+  # 这里会存在一些问题，只能祈求前端会把状态都保存在浏览器里，如果状态保存在服务端，如果刚好遇到更新，那么状态就会混乱
 }
 </code></pre>
-<ul>
-<li>这一段要主要是修改了 proxy_pass 的地址， proxy_pass 要填上面那段 upstream 的名称</li>
-</ul>
+</li>
+<li><p>这一段要主要是修改了 proxy_pass 的地址， proxy_pass 要填上面那段 upstream 的名称</p>
 <pre><code>location / {
-    # proxy_http_version 1.1; #代理使用的http协议
-    proxy_set_header Host $host; #header添加请求host信息
-    proxy_set_header X-Real-IP $remote_addr; # header增加请求来源IP信息
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # 增加代理记录
-    proxy_pass http://nuxtservice/;
+  # proxy_http_version 1.1; #代理使用的http协议
+  proxy_set_header Host $host; #header添加请求host信息
+  proxy_set_header X-Real-IP $remote_addr; # header增加请求来源IP信息
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; # 增加代理记录
+  proxy_pass http://nuxtservice/;
 }
 </code></pre>
+</li>
+</ul>
 <h3>部署脚本</h3>
-<ol start="0">
+<ol>
 <li>下面这段脚本实现了自动的平滑重启</li>
 <li>请根据注释提示和实际情况修改变量</li>
 <li>主要是修改这几个变量
-|变量|解释|
-|:--|:--|
-|nodeVersion|node 的版本号|
-|buildCommand|项目构建命令 从安装依赖开始 多个命令用 &amp;&amp; 隔开|
-|runCommand|项目运行命令 多个命令用 &amp;&amp; 隔开|
-|prodPort|作为正式容器的端口 这里的端口号需要和 nginx 的配置对应上|
-|backupPort|作为热备份容器的端口 这里的端口号需要和 nginx 的配置对应上|
-|nuxtPort|nuxt 配置文件里的端口|
-|project|项目名 这个其实可以随便填的，只是为了区分不同的项目|
-|projectDir|项目根目录的绝对地址|
-|userName|镜像用户名|
-|apiUrl|接口域名|
-|dockerHostIP|宿主机的ip 一般都是 172.17.0.1|</li>
+ |变量|解释|
+ |:--|:--|
+ |nodeVersion|node 的版本号|
+ |buildCommand|项目构建命令 从安装依赖开始 多个命令用 &amp;&amp; 隔开|
+ |runCommand|项目运行命令 多个命令用 &amp;&amp; 隔开|
+ |prodPort|作为正式容器的端口 这里的端口号需要和 nginx 的配置对应上|
+ |backupPort|作为热备份容器的端口 这里的端口号需要和 nginx 的配置对应上|
+ |nuxtPort|nuxt 配置文件里的端口|
+ |project|项目名 这个其实可以随便填的，只是为了区分不同的项目|
+ |projectDir|项目根目录的绝对地址|
+ |userName|镜像用户名|
+ |apiUrl|接口域名|
+ |dockerHostIP|宿主机的ip 一般都是 172.17.0.1|</li>
 <li>每次更新会生成类似这样的镜像 <code>my/nuxt:d15b2f4-2106171413</code> ，其中 my 是用户名； nuxt 是项目名； d15b2f4 是镜像对应的 commitid ； 2106171413 是镜像构建的时间</li>
 <li>这种更新方式，每更新一次就会产生一个新的镜像，所以要定期清理不使用的镜像，不然服务器的硬盘很快就会满的</li>
 <li>如果没有提示成功，那么就是失败</li>
@@ -142,7 +144,7 @@ CMD ["npm run start"]
 <li>要注意给脚本执行权限</li>
 <li>执行脚本时加上 f 参数能强制更新镜像</li>
 </ol>
-<pre><code class="language-bash">#!/bin/bash
+<pre><code class="lang-bash">#!/bin/bash
 
 # 获取脚本当前目录
 SHELL_FOLDER=$(dirname $(readlink -f "$0"))
@@ -355,5 +357,4 @@ logger "正在删除悬空的镜像，请耐心等候"
 echo "y" | docker image prune
 
 logger "部署的所有步骤已经运行完，如无意外，部署应该是成功了的"
-
 </code></pre>

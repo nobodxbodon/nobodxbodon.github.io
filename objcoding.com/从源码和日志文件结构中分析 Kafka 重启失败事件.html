@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-03-14-kafka invalid offset exception.md)，<a href="https://objcoding.com/2020/03/14/kafka-invalid-offset-exception">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-03-14-kafka invalid offset exception.md">仓库源文</a>，<a href="https://objcoding.com/2020/03/14/kafka-invalid-offset-exception">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "从源码和日志文件结构中分析 Kafka 重启失败事件"
 categories: Kafka
-tags: log 日志分析
-author: 张乘辉</h2>
+tags: log 日志分析</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -37,21 +37,21 @@ author: 张乘辉</h2>
 <p>kafka.log.OffsetIndex#append</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200313230353.png"/></p>
 <p>以上是追加索引块核心方法，在这里可以看到 Kafka 异常栈的详细信息，Kafka 进程也就是在这里被异常中断退出的（<strong>这里吐槽一下，为什么一个分区有损坏，要整个 broker 挂掉？宁错过，不放过？就不能标记该分区不能用，然后让 broker 正常启动以提供服务给其他分区吗？建议 Kafka 在日志恢复期间加强异常处理，不知道后续版本有没有优化，后面等我拿 2.x 版本源码分析一波</strong>），退出的条件是：</p>
-<pre><code class="language-scala">_entries == 0 || offset &gt; _lastOffset = false
+<pre><code class="lang-scala">_entries == 0 || offset &gt; _lastOffset = false
 </code></pre>
 <p><strong>也就是说，假设索引文件中的索引条目为 0，说明索引文件内容为空，那么直接可以追加索引，而如果索引文件中有索引条目了，需要消息批次中的 baseOffset 大于索引文件最后一个条目中的位移，因为索引文件是递增的，因此不允许比最后一个条目的索引还小的消息位移。</strong></p>
 <p>现在也就很好理解了，产生这个异常报错的根本原因，是因为后面的消息批次中，有位移比最后索引位移还要小（或者等于）。</p>
 <p>前面也说过了，消息批次中的 baseOffset 不一定是第一条记录的偏移量，那么问题是不是出在这里？我的理解是这里有可能会造成两个消息批次获取到的 baseOffset 有相交的值？对此我并没有继续研究下去了，但我确定的是，在 kafka 2.2.1 版本中，append() 方法中的 offset 已经改成 消息批次中的 lastOffset 了：</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200314153516.png"/></p>
 <p>这里我也需要吐槽一下，<strong>如果出现这个 bug，意味着这个问题除非是将这些故障的日志文件和索引文件删除，否则该节点永远启动不了，这也太暴力了吧？</strong>我花了非常多时间去专门看了很多相关 issue，目前还没看到有解决这个问题的方案？或者我需要继续寻找？我把相关 issue 贴出来：</p>
-<p>https://issues.apache.org/jira/browse/KAFKA-1211</p>
-<p>https://issues.apache.org/jira/browse/KAFKA-3919</p>
-<p>https://issues.apache.org/jira/browse/KAFKA-3955</p>
+<p><a href="https://issues.apache.org/jira/browse/KAFKA-1211">https://issues.apache.org/jira/browse/KAFKA-1211</a></p>
+<p><a href="https://issues.apache.org/jira/browse/KAFKA-3919">https://issues.apache.org/jira/browse/KAFKA-3919</a></p>
+<p><a href="https://issues.apache.org/jira/browse/KAFKA-3955">https://issues.apache.org/jira/browse/KAFKA-3955</a></p>
 <p>严重建议各位尽快把 Kafka 版本升级到 2.x 版本，旧版本太多问题了，后面我着重研究 2.x 版本的源码。</p>
 <p>下面我从日志文件结构中继续分析。</p>
 <h2>从日志文件结构中看到问题的本质</h2>
 <p>我们用 Kafka 提供的 DumpLogSegments 工具打开 log 和 index 文件：</p>
-<pre><code class="language-bash">$ ~/kafka_2.11-0.11.0.2/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --files /dfs5/kafka/data/secLog-2/00000000000110325000.log &gt; secLog.log
+<pre><code class="lang-bash">$ ~/kafka_2.11-0.11.0.2/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --files /dfs5/kafka/data/secLog-2/00000000000110325000.log &gt; secLog.log
 
 $ ~/kafka_2.11-0.11.0.2/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --files /dfs5/kafka/data/secLog-2/00000000000110325000.index &gt; secLog-index.log
 </code></pre>

@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-10-11-rocketmq push message.md)，<a href="https://objcoding.com/2019/10/11/rocketmq-push-message">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-10-11-rocketmq push message.md">仓库源文</a>，<a href="https://objcoding.com/2019/10/11/rocketmq-push-message">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "关于RocketMQ消息消费与重平衡的一些问题"
 categories: RocketMQ
-tags: consumer push pull rebalance
-author: 张乘辉</h2>
+tags: consumer push pull rebalance</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -20,7 +20,7 @@ author: 张乘辉</h2>
 <p>之前有写过一篇文章：「<a href="https://mp.weixin.qq.com/s/8fB-Z5oFPbllp13EcqC9dw">RocketMQ为什么要保证订阅关系的一致性？</a>」，里面有说过 消息拉取是从 PullRequestQueue 阻塞队列中取出 PullRequest 拉取任务进行消息拉取的，但 PullRequest 是怎么放进 PullRequestQueue 阻塞队列中的呢？</p>
 <p>RocketMQ 一共提供了以下方法：</p>
 <p>org.apache.rocketmq.client.impl.consumer.PullMessageService#executePullRequestImmediately：</p>
-<pre><code class="language-java">public void executePullRequestImmediately(final PullRequest pullRequest) {
+<pre><code class="lang-java">public void executePullRequestImmediately(final PullRequest pullRequest) {
   try {
     this.pullRequestQueue.put(pullRequest);
   } catch (InterruptedException e) {
@@ -31,7 +31,7 @@ author: 张乘辉</h2>
 <p>从调用链发现，除了重平衡会调用该方法之外，在 push 模式下，PullCallback 回调对象中的 onSuccess 方法在消息消费时，也调用了该方法：</p>
 <p>org.apache.rocketmq.client.consumer.PullCallback#onSuccess：</p>
 <p>case FOUND:</p>
-<pre><code class="language-java">// 如果本次拉取消息为空，则继续将pullRequest放入阻塞队列中
+<pre><code class="lang-java">// 如果本次拉取消息为空，则继续将pullRequest放入阻塞队列中
 if (pullResult.getMsgFoundList() == null || pullResult.getMsgFoundList().isEmpty()) {
   DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
 } else {
@@ -44,12 +44,11 @@ if (pullResult.getMsgFoundList() == null || pullResult.getMsgFoundList().isEmpty
   // 将pullRequest放入阻塞队列中
   DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);  
 }
-
 </code></pre>
 <p>当从 broker 拉取到消息后，如果消息被过滤掉，则继续将pullRequest放入阻塞队列中继续循环执行消息拉取任务，否则将消息放入消费者消费线程去执行，在pullRequest放入阻塞队列中。</p>
 <p>case NO_NEW_MESSAGE：</p>
 <p>case NO_MATCHED_MSG：</p>
-<pre><code class="language-java">pullRequest.setNextOffset(pullResult.getNextBeginOffset());
+<pre><code class="lang-java">pullRequest.setNextOffset(pullResult.getNextBeginOffset());
 DefaultMQPushConsumerImpl.this.correctTagsOffset(pullRequest);
 DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
 </code></pre>
@@ -60,7 +59,7 @@ DefaultMQPushConsumerImpl.this.executePullRequestImmediately(pullRequest);
 <p>继续再想一个问题，如果重平衡后，发现某个队列被新的消费者分配了，怎么办，总不能继续从该队列中拉取消息吧？</p>
 <p>RocketMQ 重平衡后会检查 pullRequest 是否还在新分配的列表中，如果不在，则丢弃，调用 isDrop() 可查出该pullRequest是否已丢弃：</p>
 <p>org.apache.rocketmq.client.impl.consumer.DefaultMQPushConsumerImpl#pullMessage：</p>
-<pre><code class="language-java">final ProcessQueue processQueue = pullRequest.getProcessQueue();
+<pre><code class="lang-java">final ProcessQueue processQueue = pullRequest.getProcessQueue();
 if (processQueue.isDropped()) {
   log.info("the pull request[{}] is dropped.", pullRequest.toString());
   return;
@@ -69,7 +68,7 @@ if (processQueue.isDropped()) {
 <p>在消息拉取之前，首先判断该队列是否被丢弃，如果已丢弃，则直接放弃本次拉取任务。</p>
 <p>那什么时候队列被丢弃呢？</p>
 <p>org.apache.rocketmq.client.impl.consumer.RebalanceImpl#updateProcessQueueTableInRebalance：</p>
-<pre><code class="language-java">Iterator&lt;Entry&lt;MessageQueue, ProcessQueue&gt;&gt; it = this.processQueueTable.entrySet().iterator();
+<pre><code class="lang-java">Iterator&lt;Entry&lt;MessageQueue, ProcessQueue&gt;&gt; it = this.processQueueTable.entrySet().iterator();
 while (it.hasNext()) {
   Entry&lt;MessageQueue, ProcessQueue&gt; next = it.next();
   MessageQueue mq = next.getKey();
@@ -108,7 +107,7 @@ while (it.hasNext()) {
 <p>updateProcessQueueTableInRebalance 方法在重平衡时执行，用于更新 processQueueTable，它是当前消费者的队列缓存列表，以上方法逻辑判断当前缓存 MessageQueue 是否包含在最新的 mqSet 中，如果不包含其中，则说明经过这次重平衡后，该队列被分配给其它消费者了，或者拉取时间间隔太大过期了，则调用 setDropped(true) 方法将队列置为丢弃状态。</p>
 <p>可能你会问，processQueueTable 跟 pullRequest 里面 processQueue 有什么关联，往下看：</p>
 <p>org.apache.rocketmq.client.impl.consumer.RebalanceImpl#updateProcessQueueTableInRebalance：</p>
-<pre><code class="language-java">// 新建 ProcessQueue 
+<pre><code class="lang-java">// 新建 ProcessQueue 
 ProcessQueue pq = new ProcessQueue();
 long nextOffset = this.computePullFromWhere(mq);
 if (nextOffset &gt;= 0) {
@@ -136,14 +135,14 @@ if (nextOffset &gt;= 0) {
 <p>我当时回答他 RocketMQ 正常也是没有重复消费，但后来发现其实 RocketMQ 在某些情况下，也是会出现消息重复消费的现象。</p>
 <p>前面讲到，RocketMQ 消息消费时，会将消息放进消费线程中去执行，代码如下：</p>
 <p>org.apache.rocketmq.client.consumer.PullCallback#onSuccess：</p>
-<pre><code class="language-java">DefaultMQPushConsumerImpl.this.consumeMessageService.submitConsumeRequest(//
+<pre><code class="lang-java">DefaultMQPushConsumerImpl.this.consumeMessageService.submitConsumeRequest(//
   pullResult.getMsgFoundList(), //
   processQueue, //
   pullRequest.getMessageQueue(), //
   dispathToConsume);
 </code></pre>
 <p>ConsumeMessageService 类实现消息消费的逻辑，它有两个实现类：</p>
-<pre><code class="language-java">// 并发消息消费逻辑实现类
+<pre><code class="lang-java">// 并发消息消费逻辑实现类
 org.apache.rocketmq.client.impl.consumer.ConsumeMessageConcurrentlyService;
 // 顺序消息消费逻辑实现类
 org.apache.rocketmq.client.impl.consumer.ConsumeMessageOrderlyService;
@@ -151,7 +150,7 @@ org.apache.rocketmq.client.impl.consumer.ConsumeMessageOrderlyService;
 <p>先看并发消息消费相关处理逻辑：</p>
 <p>ConsumeMessageConcurrentlyService：</p>
 <p>org.apache.rocketmq.client.impl.consumer.ConsumeMessageConcurrentlyService.ConsumeRequest#run：</p>
-<pre><code class="language-java">if (this.processQueue.isDropped()) {
+<pre><code class="lang-java">if (this.processQueue.isDropped()) {
   log.info("the message queue not be able to consume, because it's dropped. group={} {}", ConsumeMessageConcurrentlyService.this.consumerGroup, this.messageQueue);
   return;
 }
@@ -170,7 +169,7 @@ if (!processQueue.isDropped()) {
 <p>再来看看顺序消费相关处理逻辑：</p>
 <p>ConsumeMessageOrderlyService：</p>
 <p>org.apache.rocketmq.client.impl.consumer.ConsumeMessageOrderlyService.ConsumeRequest#run：</p>
-<pre><code class="language-java">public void run() {
+<pre><code class="lang-java">public void run() {
   // 判断队列是否被丢弃
   if (this.processQueue.isDropped()) {
     log.warn("run, the message queue not be able to consume, because it's dropped. {}", this.messageQueue);
@@ -189,10 +188,10 @@ if (!processQueue.isDropped()) {
           log.warn("the message queue not be able to consume, because it's dropped. {}", this.messageQueue);
           break;
         }
-        
+
         // 消息消费处理逻辑
         // ...
-        
+
           continueConsume = ConsumeMessageOrderlyService.this.processConsumeResult(msgs, status, context, this);
         } else {
           continueConsume = false;

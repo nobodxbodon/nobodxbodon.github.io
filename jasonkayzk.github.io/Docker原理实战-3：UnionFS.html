@@ -1,27 +1,28 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-3%EF%BC%9AUnionFS.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-3%EF%BC%9AUnionFS">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Docker原理实战-3：UnionFS.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2021/08/29/Docker原理实战-3：UnionFS">站点原文</a></h2>
 <hr/>
-<h2>title: Docker原理实战-3：UnionFS
+<p>title: Docker原理实战-3：UnionFS
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?3'
+cover: '<a href="https://img.paulzzh.com/touhou/random?3">https://img.paulzzh.com/touhou/random?3</a>'
 date: 2021-08-29 20:27:09
 categories: Docker
-tags: [Docker, Linux, UnionFS, AUFS]
-description: 讲述Docker底层原理的第三篇文章，本文讲述了和Docker底层文件存储相关的技术：UnionFS以及AUFS；</h2>
+tags: [Docker, Linux, UnionFS, AUFS]</p>
+<h2>description: 讲述Docker底层原理的第三篇文章，本文讲述了和Docker底层文件存储相关的技术：UnionFS以及AUFS；</h2>
 <p>讲述Docker底层原理的第三篇文章；</p>
 <p>本文讲述了和Docker底层文件存储相关的技术：UnionFS以及AUFS；</p>
 <p>系列文章：</p>
 <ul>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-1%EF%BC%9ANamespace/">Docker原理实战-1：Namespace</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-2%EF%BC%9ACgroups/">Docker原理实战-2：Cgroups</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-3%EF%BC%9AUnionFS/">Docker原理实战-3：UnionFS</a></li>
-<li><a href="/2021/09/05/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-4%EF%BC%9A%E5%AE%B9%E5%99%A8Container/">Docker原理实战-4：容器Container</a></li>
+<li><a href="/2021/08/29/Docker原理实战-1：Namespace/">Docker原理实战-1：Namespace</a></li>
+<li><a href="/2021/08/29/Docker原理实战-2：Cgroups/">Docker原理实战-2：Cgroups</a></li>
+<li><a href="/2021/08/29/Docker原理实战-3：UnionFS/">Docker原理实战-3：UnionFS</a></li>
+<li><a href="/2021/09/05/Docker原理实战-4：容器Container/">Docker原理实战-4：容器Container</a></li>
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/my_docker</li>
+<li><a href="https://github.com/JasonkayZK/my_docker">https://github.com/JasonkayZK/my_docker</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2><strong>Union File System</strong></h2>
 <h3><strong>什么是Union File System</strong></h3>
 <p>Union File System，简称UnionFS，是一种为 Linux 、FreeBSD 和 NetBSD 操作系统设计的，把其他文件系统联合到一个联合挂载点的文件系统服务；</p>
@@ -29,43 +30,41 @@ description: 讲述Docker底层原理的第三篇文章，本文讲述了和Dock
 <p>这些 branch 或者是 read-only 的、或者是 read-write 的，所以当对这个虚拟后的联合文件系统进行写操作的时候 , 系统是真正写到了一个新的文件中！</p>
 <p>看起来这个虚拟后的联合文件系统是可以对任何文件进行操作的 , 但是其实它并没有改变原来的文件！</p>
 <p>这是因为：UnionFS 用到了一个重要的资源管理技术：写时复制；</p>
-<blockquote>
-<p>写时复制（copy-on-write ,下文简称 CoW），也被称为隐式共享，是一种对可修改资源实现高
-效复制的资源管理技术；</p>
-<p>&lt;font color="#f00"&gt;<strong>UnionFS的思想是：如果一个资源是重复的，并且没有任何修改，这时并不需要立即创建一个新的资源，这个资源可以被新旧实例共享；</strong>&lt;/font&gt;</p>
+<blockquote><p>写时复制（copy-on-write ,下文简称 CoW），也被称为隐式共享，是一种对可修改资源实现高
+  效复制的资源管理技术；</p>
+<p>&lt;font color="#f00"&gt;**UnionFS的思想是：如果一个资源是重复的，并且没有任何修改，这时并不需要立即创建一个新的资源，这个资源可以被新旧实例共享；**&lt;/font&gt;</p>
 <p>而创建新资源发生在第一次写操作（也就是对资源进行修改的时候）；</p>
 <p>通过这种资源共享的方式可以显著地减少未修改资源复制带来的消耗，但是也会在进行资源修改时增加小部分的开销；</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3><strong>AUFS</strong></h3>
 <p>AUFS是Docker使用的第一种存储驱动，目前Docker也是支持的！</p>
-<blockquote>
-<p>目前Docker默认的存储驱动已经变为了<code>overlay2</code>，这里只是简单的介绍AUFS；</p>
+<blockquote><p>目前Docker默认的存储驱动已经变为了<code>overlay2</code>，这里只是简单的介绍AUFS；</p>
 <p>查看Docker的存储驱动：</p>
-<pre><code class="language-bash">root@jasonkay:~/workspace/my_docker/chapter2_basic# docker info
-Client:
-Context:    default
-Debug Mode: false
-Plugins:
- app: Docker App (Docker Inc., v0.9.1-beta3)
- buildx: Build with BuildKit (Docker Inc., v0.6.1-docker)
- scan: Docker Scan (Docker Inc., v0.8.0)
-
-Server:
-Containers: 1
- Running: 1
- Paused: 0
- Stopped: 0
-Images: 2
-Server Version: 20.10.8
-Storage Driver: overlay2
- Backing Filesystem: extfs
- Supports d_type: true
- Native Overlay Diff: true
- userxattr: false
-Logging Driver: json-file
-Cgroup Driver: cgroupfs
-Cgroup Version: 1
+<pre><code class="lang-bash">  root@jasonkay:~/workspace/my_docker/chapter2_basic# docker info
+  Client:
+  Context:    default
+  Debug Mode: false
+  Plugins:
+   app: Docker App (Docker Inc., v0.9.1-beta3)
+   buildx: Build with BuildKit (Docker Inc., v0.6.1-docker)
+   scan: Docker Scan (Docker Inc., v0.8.0)
+  
+  Server:
+  Containers: 1
+   Running: 1
+   Paused: 0
+   Stopped: 0
+  Images: 2
+  Server Version: 20.10.8
+  Storage Driver: overlay2
+   Backing Filesystem: extfs
+   Supports d_type: true
+   Native Overlay Diff: true
+   userxattr: false
+  Logging Driver: json-file
+  Cgroup Driver: cgroupfs
+  Cgroup Version: 1
 </code></pre>
 <p>可以看到<code>Storage Driver: overlay2</code>；</p>
 </blockquote>
@@ -79,7 +78,7 @@ Cgroup Version: 1
 <p>接着，在 aufs 目录下创建一个名为 container-layer 的目录，里面有一个名为container-layer.txt的文件，文件内容为<code>I am container layer</code>；</p>
 <p>同样地 , 继续在 aufs 目录下创建 4 个名为 <code>image-layer{n}</code> 的文件夹( n 取值分别为 1到4），里面有一个名为<code>image-layer{n}.txt</code>的文件，文件内容为<code>I am image layer ${n}</code>；</p>
 <p>命令如下：</p>
-<pre><code class="language-bash">############################ 创建AUFS目录 ############################
+<pre><code class="lang-bash">############################ 创建AUFS目录 ############################
 mkdir aufs
 cd aufs/
 mkdir mnt
@@ -92,7 +91,7 @@ echo "I am image layer3" &gt;image-layer3/image-layer3.txt
 echo "I am image layer4" &gt;image-layer4/image-layer4.txt
 </code></pre>
 <p>检查目录结构：</p>
-<pre><code class="language-bash">root@jasonkay:~/workspace/test/aufs# tree
+<pre><code class="lang-bash">root@jasonkay:~/workspace/test/aufs# tree
 .
 ├── container-layer
 │   └── container-layer.txt
@@ -111,7 +110,7 @@ echo "I am image layer4" &gt;image-layer4/image-layer4.txt
 <p>&lt;br/&gt;</p>
 <h4><strong>使用AUFS挂载目录</strong></h4>
 <p>接下来将<code>container-layer</code>和4个<code>image-layer{n}</code>的目录使用AUFS的方式挂载至当前的mnt目录下；</p>
-<pre><code class="language-bash">############################ 挂载目录到mnt ############################
+<pre><code class="lang-bash">############################ 挂载目录到mnt ############################
 
 # 使用AUFS挂载
 sudo mount -t aufs -o dirs=./container-layer:./image-layer4:./image-layer3:./image-layer2:./image-layer1 node ./mnt
@@ -127,12 +126,11 @@ tree mnt/
 #
 #0 directories, 5 files
 </code></pre>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>注：在<code>mount aufs</code>命令中，没有指定待挂载的 5 个目录的权限；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>则默认情况下的行为是：dirs 指定的左边起第一个目录是 <code>read-write</code> 权限, 后续的都是 <code>read-only</code> 权限！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**注：在`mount aufs`命令中，没有指定待挂载的 5 个目录的权限；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**则默认情况下的行为是：dirs 指定的左边起第一个目录是 `read-write` 权限, 后续的都是 `read-only` 权限！**&lt;/font&gt;</p>
 </blockquote>
 <p>确认新 mount 的文件系统中，每个目录的权限：</p>
-<pre><code class="language-bash"># 查看当前系统全部AUFS的文件
+<pre><code class="lang-bash"># 查看当前系统全部AUFS的文件
 root@jasonkay:~/workspace/test/aufs# ls /sys/fs/aufs/
 config  si_452a0e92fdc8093d
 
@@ -156,7 +154,7 @@ root@jasonkay:~/workspace/test/aufs# cat /sys/fs/aufs/si_452a0e92fdc8093d/*
 <h4><strong>修改AUFS文件</strong></h4>
 <p>接下来修改layer-4，以确认AUFS的CoW工作方式；</p>
 <p>向 <code>mnt/image-layer-4.txt</code> 文件末尾添加一行文字：</p>
-<pre><code class="language-bash"># 添加文字
+<pre><code class="lang-bash"># 添加文字
 echo -e "\nwrite to mnt's image-layer4.txt" &gt;&gt;./mnt/image-layer4.txt
 
 # 查看添加后的文件内容
@@ -170,12 +168,12 @@ cat mnt/image-layer4.txt
 <p>从 cat 命令输出可以看到，<code>mnt/image-layer-4.txt</code> 文件内容的确发生了变化；</p>
 <p>但是这里的mnt只是一个虚拟挂载点，接下来需要查看实际的文件修改位置；</p>
 <p>查看 <code>image-layer4/image-layer4.txt</code>：</p>
-<pre><code class="language-bash">cat image-layer4/image-layer4.txt
+<pre><code class="lang-bash">cat image-layer4/image-layer4.txt
 # I am image layer4
 </code></pre>
 <p>发现实际的 <code>image-layer4/image-layer4.txt</code> 文件并未变化！</p>
 <p>检查 <code>container-layer/</code> 目录下的内容，发现多了一个名为 <code>image-layer4.txt</code> 的文件，并且文件内容如下：</p>
-<pre><code class="language-bash">ll container-layer/
+<pre><code class="lang-bash">ll container-layer/
 # total 24
 # drwxr-xr-x 4 jasonkay jasonkay 4096 3月  16 14:32 ./
 # drwxr-xr-x 8 jasonkay jasonkay 4096 3月  16 14:23 ../
@@ -193,15 +191,14 @@ cat container-layer/image-layer4.txt
 </code></pre>
 <p>可见，当尝试修改 <code>mnt/image-layer4.txt</code> 时，系统首先在 <code>mnt</code> 目录下查找名为 <code>image-layer4.txt</code> 的文件，并将其拷贝到 read-write 层的 <code>container-layer</code> 目录中；</p>
 <p>接着，对 <code>container-layer</code> 目录中的 <code>image-layer4.txt</code> 文件进行写操作，即：CoW；</p>
-<blockquote>
-<p><strong>注：试验结束别忘了将挂载点恢复：</strong></p>
-<pre><code class="language-bash">pwd # /root/workspace/test/aufs
-
-# 取消挂载mnt目录
-sudo umount ./mnt
-
-# 查看AUFS，发现si_452a0e92fdc8093d已经不存在！
-ls /sys/fs/aufs/ # config
+<blockquote><p><strong>注：试验结束别忘了将挂载点恢复：</strong></p>
+<pre><code class="lang-bash">  pwd # /root/workspace/test/aufs
+  
+  # 取消挂载mnt目录
+  sudo umount ./mnt
+  
+  # 查看AUFS，发现si_452a0e92fdc8093d已经不存在！
+  ls /sys/fs/aufs/ # config
 </code></pre>
 </blockquote>
 <p>&lt;br/&gt;</p>
@@ -212,13 +209,13 @@ ls /sys/fs/aufs/ # config
 <h1><strong>附录</strong></h1>
 <p>系列文章：</p>
 <ul>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-1%EF%BC%9ANamespace/">Docker原理实战-1：Namespace</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-2%EF%BC%9ACgroups/">Docker原理实战-2：Cgroups</a></li>
-<li><a href="/2021/08/29/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-3%EF%BC%9AUnionFS/">Docker原理实战-3：UnionFS</a></li>
-<li><a href="/2021/09/05/Docker%E5%8E%9F%E7%90%86%E5%AE%9E%E6%88%98-4%EF%BC%9A%E5%AE%B9%E5%99%A8Container/">Docker原理实战-4：容器Container</a></li>
+<li><a href="/2021/08/29/Docker原理实战-1：Namespace/">Docker原理实战-1：Namespace</a></li>
+<li><a href="/2021/08/29/Docker原理实战-2：Cgroups/">Docker原理实战-2：Cgroups</a></li>
+<li><a href="/2021/08/29/Docker原理实战-3：UnionFS/">Docker原理实战-3：UnionFS</a></li>
+<li><a href="/2021/09/05/Docker原理实战-4：容器Container/">Docker原理实战-4：容器Container</a></li>
 </ul>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/my_docker</li>
+<li><a href="https://github.com/JasonkayZK/my_docker">https://github.com/JasonkayZK/my_docker</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

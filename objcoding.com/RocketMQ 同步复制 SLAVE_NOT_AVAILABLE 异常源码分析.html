@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-11-03-rocketmq slave not available.md)，<a href="https://objcoding.com/2019/11/03/rocketmq-slave-not-available">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-11-03-rocketmq slave not available.md">仓库源文</a>，<a href="https://objcoding.com/2019/11/03/rocketmq-slave-not-available">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "RocketMQ 同步复制 SLAVE_NOT_AVAILABLE 异常源码分析"
 categories: RocketMQ
-tags: 同步复制 异常
-author: 张乘辉</h2>
+tags: 同步复制 异常</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -13,7 +13,7 @@ author: 张乘辉</h2>
 <p>于是我决定撸一波源码。</p>
 <p>既然是主从同步的问题，那么我们直接定位到处理同步复制的方法：</p>
 <p>org.apache.rocketmq.store.CommitLog#handleHA</p>
-<pre><code class="language-java">public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
+<pre><code class="lang-java">public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
   if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
     HAService service = this.defaultMessageStore.getHaService();
     if (messageExt.isWaitStoreMsgOK()) {
@@ -41,7 +41,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>消息写入时需要判断 master 是否为 SYNC_MASTER 模式，从源码可以看出来，isSlaveOK() 方法决定是否报 SLAVE_NOT_AVAILABLE 异常码的关键逻辑，所以关键就是要看这个方法：</p>
 <p>org.apache.rocketmq.store.ha.HAService#isSlaveOK</p>
-<pre><code class="language-java">public boolean isSlaveOK(final long masterPutWhere) {
+<pre><code class="lang-java">public boolean isSlaveOK(final long masterPutWhere) {
     boolean result = this.connectionCount.get() &gt; 0;
     result =
         result
@@ -55,7 +55,7 @@ author: 张乘辉</h2>
 <p>下面重点分析 slave 如何上报 push2SlaveMaxOffset 给master。</p>
 <p>master 收到 slave 的位移量之后，是从以下方法进行更新的：</p>
 <p>org.apache.rocketmq.store.ha.HAService#notifyTransferSome</p>
-<pre><code class="language-java">public void notifyTransferSome(final long offset) {
+<pre><code class="lang-java">public void notifyTransferSome(final long offset) {
     for (long value = this.push2SlaveMaxOffset.get(); offset &gt; value; ) {
         boolean ok = this.push2SlaveMaxOffset.compareAndSet(value, offset);
         if (ok) {
@@ -69,7 +69,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>从调用栈来看，该方法在服务端处理读请求类中调用了，我们接着往下看：</p>
 <p>org.apache.rocketmq.store.ha.HAConnection.ReadSocketService#processReadEvent</p>
-<pre><code class="language-java">if (readSize &gt; 0) {
+<pre><code class="lang-java">if (readSize &gt; 0) {
   readSizeZeroTimes = 0;
   this.lastReadTimestamp = HAConnection.this.haService.getDefaultMessageStore().getSystemClock().now();
   if ((this.byteBufferRead.position() - this.processPostion) &gt;= 8) {
@@ -89,7 +89,7 @@ author: 张乘辉</h2>
 <p>如上源码逻辑，如果读取到的字节大于 0，并且大于等于 8，则说明了收到了 slave 端反馈过来的位移量，于是将其取出并更新到  push2SlaveMaxOffset 中。</p>
 <p>接着我们来看 slave 是如何上报位移的。</p>
 <p>org.apache.rocketmq.store.ha.HAService.HAClient#run</p>
-<pre><code class="language-java">if (this.isTimeToReportOffset()) {
+<pre><code class="lang-java">if (this.isTimeToReportOffset()) {
   boolean result = this.reportSlaveMaxOffset(this.currentReportedOffset);
   if (!result) {
     this.closeMaster();
@@ -98,7 +98,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>以上逻辑在 slave 端处理拉取同步消息线程 run 方法中，首先判断是否到了需要上报位移的时间间隔了，到了直接调用上报位移方法。</p>
 <p>org.apache.rocketmq.store.ha.HAService.HAClient#isTimeToReportOffset</p>
-<pre><code class="language-java">private boolean isTimeToReportOffset() {
+<pre><code class="lang-java">private boolean isTimeToReportOffset() {
     long interval =
         HAService.this.defaultMessageStore.getSystemClock().now() - this.lastWriteTimestamp;
     boolean needHeart = interval &gt; HAService.this.defaultMessageStore.getMessageStoreConfig()
@@ -109,7 +109,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>首先求出距离上次同步消息的时时间间隔的大小，再与 haSendHeartbeatInterval 作对比，若大于 haSendHeartbeatInterval 则发送心跳包上报位移。</p>
 <p>org.apache.rocketmq.store.ha.HAService.HAClient#reportSlaveMaxOffset</p>
-<pre><code class="language-java">private boolean reportSlaveMaxOffset(final long maxOffset) {
+<pre><code class="lang-java">private boolean reportSlaveMaxOffset(final long maxOffset) {
     this.reportOffset.position(0);
     this.reportOffset.limit(8);
     this.reportOffset.putLong(maxOffset);
@@ -130,4 +130,4 @@ author: 张乘辉</h2>
 }
 </code></pre>
 <p>该方法向主服务器上报已拉取的位移，具体做法是将 ByteBuffer 读取位置 position 值为 0，其实调用 flip() 方法也可以，然后调用 putLong() 方法将 maxOffset 写入 ByteBuffer，将 limit 设置为 8，跟写入 ByteBuffer 中的 maxOffset（long 型）大小一样，最后采取 for 循环将 maxOffset 写入网络通道中，并调用 hasRemaining() 方法，该方法的逻辑为判断 position 是否小于 limit，即判断 ByteBuffer 中的字节流是否全部写入到通道中。</p>
-<p>最后总结，如果 slave 正常运行，报这个错是正常的，你可以适当调整 haSendHeartbeatInterval 参数（1000 * 5）的大小，它决定 slave 上报同步位移的心跳频率，以及 haSlaveFallbehindMax 参数值（默认 1024 * 1024 * 256），它决定允许 slave 最多落后 master 的位移。</p>
+<p>最后总结，如果 slave 正常运行，报这个错是正常的，你可以适当调整 haSendHeartbeatInterval 参数（1000 <em> 5）的大小，它决定 slave 上报同步位移的心跳频率，以及 haSlaveFallbehindMax 参数值（默认 1024 </em> 1024 * 256），它决定允许 slave 最多落后 master 的位移。</p>

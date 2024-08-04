@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2021-07-27-message-dedup.md">仓库源文</a>，<a href="https://objcoding.com/2021/07/27/message-dedup">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "阿里经典面试题：消息队列的消费幂等性如何保证？"
 categories: Kafka RocketMQ 消息引擎
-tags: Kafka RocketMQ 消息引擎
-author: 薛定谔的风口猪</h2>
+tags: Kafka RocketMQ 消息引擎</p>
+<h2>author: 薛定谔的风口猪</h2>
 <ul>
 <li>content
 {:toc}
@@ -41,8 +41,7 @@ if(order.status != null) {
 <p>但无论是select for update， 还是乐观锁这种解决方案，实际上都是基于业务表本身做去重，这无疑增加了业务开发的复杂度， 一个业务系统里面很大部分的请求处理都是依赖MQ的，如果每个消费逻辑本身都需要基于业务本身而做去重/幂等的开发的话，这是繁琐的工作量。本文希望探索出一个通用的消息幂等处理的方法，从而抽象出一定的工具类用以适用各个业务场景。</p>
 <h2>Exactly Once</h2>
 <p>在消息中间件里，有一个投递语义的概念，而这个语义里有一个叫”Exactly Once”，即消息肯定会被成功消费，并且只会被消费一次。以下是阿里云里对Exactly Once的解释：</p>
-<blockquote>
-<p>Exactly-Once 是指发送到消息系统的消息只能被消费端处理且仅处理一次，即使生产端重试消息发送导致某消息重复投递，该消息在消费端也只被消费一次。</p>
+<blockquote><p>Exactly-Once 是指发送到消息系统的消息只能被消费端处理且仅处理一次，即使生产端重试消息发送导致某消息重复投递，该消息在消费端也只被消费一次。</p>
 </blockquote>
 <p>在我们业务消息幂等处理的领域内，可以认为业务消息的代码肯定会被执行，并且只被执行一次，那么我们可以认为是Exactly Once。</p>
 <p>但这在分布式的场景下想找一个通用的方案几乎是不可能的。不过如果是针对基于数据库事务的消费逻辑，实际上是可行的。</p>
@@ -60,7 +59,7 @@ if(order.status != null) {
 <p>说明：</p>
 <p>这时候如果消息消费成功并且事务提交了，那么消息表就插入成功了，这时候就算RocketMQ还没有收到消费位点的更新再次投递，也会插入消息失败而视为已经消费过，后续就直接更新消费位点了。这保证我们消费代码只会执行一次。</p>
 <p>如果事务提交之前服务挂了（例如重启），对于本地事务并没有执行所以订单没有更新，消息表也没插入成功；而对于RocketMQ服务端来说，消费位点也没更新，所以消息还会继续投递下来，投递下来发现这个消息插入消息表也是成功的，所以可以继续消费。这保证了消息不丢失。</p>
-<p>事实上，阿里云ONS的EXACTLY-ONCE语义的实现上，就是类似这个方案基于数据库的事务特性实现的。更多详情可参考：https://help.aliyun.com/document_detail/102777.html</p>
+<p>事实上，阿里云ONS的EXACTLY-ONCE语义的实现上，就是类似这个方案基于数据库的事务特性实现的。更多详情可参考：<a href="https://help.aliyun.com/document_detail/102777.html">https://help.aliyun.com/document_detail/102777.html</a></p>
 <p>基于这种方式，的确这是有能力拓展到不同的应用场景，因为他的实现方案与具体业务本身无关——而是依赖一个消息表。</p>
 <p>但是这里有它的局限性:</p>
 <ol>
@@ -132,9 +131,9 @@ if(order.status != null) {
 <li>上面我们讲到的超时时间可以直接利用Redis本身的ttl实现</li>
 </ol>
 <p>当然Redis存储的数据可靠性、一致性等方面是不如MySQL的，需要用户自己取舍。</p>
-<p>以上方案针对RocketMQ的Java实现已经开源放到Github中，具体的使用文档可以参考https://github.com/Jaskey/RocketMQDedupListener ，</p>
+<p>以上方案针对RocketMQ的Java实现已经开源放到Github中，具体的使用文档可以参考<a href="https://github.com/Jaskey/RocketMQDedupListener">https://github.com/Jaskey/RocketMQDedupListener</a> ，</p>
 <p>以下仅贴一个Readme中利用Redis去重的使用样例，用以意业务中如果使用此工具加入消息去重幂等的是多么简单：</p>
-<pre><code class="language-java">//利用Redis做幂等表
+<pre><code class="lang-java">//利用Redis做幂等表
 DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("TEST-APP1");
 consumer.subscribe("TEST-TOPIC", "*");
 
@@ -184,4 +183,4 @@ consumer.start();
 <li>消费者做好优雅退出处理。这是为了尽可能避免消息消费到一半程序退出导致的消息重试。一些无法做到幂等的操作，至少要做到终止消费并告警。例如锁库存的操作，如果统一的业务流水锁成功了一次库存，再触发锁库存，如果做不到幂等的处理，至少要做到消息消费触发异常（例如主键冲突导致消费异常等）</li>
 <li>在#3做好的前提下，做好消息的消费监控，发现消息重试不断失败的时候，手动做好#1的回滚，使得下次重试消费成功。</li>
 </ol>
-<p>原文：https://jaskey.github.io/blog/2020/06/08/rocketmq-message-dedup/</p>
+<p>原文：<a href="https://jaskey.github.io/blog/2020/06/08/rocketmq-message-dedup/">https://jaskey.github.io/blog/2020/06/08/rocketmq-message-dedup/</a></p>

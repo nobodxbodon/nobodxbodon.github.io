@@ -1,25 +1,24 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/ssr-cdn-cache.md">仓库源文</a>，<a href="https://claude-ray.github.io/ssr-cdn-cache">站点原文</a></h2>
 <hr/>
-<h2>title: SSR 页面 CDN 缓存实践
+<p>title: SSR 页面 CDN 缓存实践
 date: 2020-07-03 19:38:57
-tags: [SSR,CDN,Cache]
-categories: Architect</h2>
+tags: [SSR,CDN,Cache]</p>
+<h2>categories: Architect</h2>
 <p>SSR 是一项资源密集型任务，要抵抗更大流量、提供更快的服务，缓存是其中的必修课。</p>
 <p>而 CDN 缓存——作为静态资源的首要支撑，适合武装到 SSR 页面吗？</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>开始之前</h2>
 <p>大家对 CDN 应该已经耳熟能详，如果不甚了解也没关系，我们先通过一系列问答带诸位走近这个话题。</p>
 <h3>为什么接入 CDN？</h3>
 <p>抽象一个简单的请求链路，方便理解 CDN 的定位。</p>
 <p>接入前：</p>
-<p><img alt="cdn1" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/source/image/ssr-cdn-cache/cdn1.png"/></p>
-<blockquote>
-<p>用户 -&gt; Nginx -&gt; App Server</p>
+<p><img alt="cdn1" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/claude-ray.github.io/source/image/ssr-cdn-cache/cdn1.png"/></p>
+<blockquote><p>用户 -&gt; Nginx -&gt; App Server</p>
 </blockquote>
 <p>接入后：</p>
-<p><img alt="cdn2" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/source/image/ssr-cdn-cache/cdn2.png"/></p>
-<blockquote>
-<p>用户 -&gt; CDN -&gt; Nginx -&gt; App Server</p>
+<p><img alt="cdn2" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/claude-ray.github.io/source/image/ssr-cdn-cache/cdn2.png"/></p>
+<blockquote><p>用户 -&gt; CDN -&gt; Nginx -&gt; App Server</p>
 </blockquote>
 <p>看似增加了一层传输成本，其实不然。</p>
 <p>CDN 利用自身广大的服务器资源，能动态优化访问路由、就近提供访问节点，以更低延迟、更高带宽从源站获取数据，优化了网络层面的用户体验。</p>
@@ -28,7 +27,7 @@ categories: Architect</h2>
 <p>开启后：浏览器 &lt;-&gt; CDN</p>
 <p>CDN 能够缓存用户请求到的资源，并且可以包含 HTTP 响应头。在下一次任意用户请求同样的资源时，用缓存的资源直接响应用户，节省了本该由源站处理的所有后续步骤。</p>
 <p>更直观的表达，就是截短了请求链路。</p>
-<p><img alt="cdn3" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/source/image/ssr-cdn-cache/cdn3.png"/></p>
+<p><img alt="cdn3" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/claude-ray.github.io/source/image/ssr-cdn-cache/cdn3.png"/></p>
 <h3>如何开启 CDN 缓存？</h3>
 <p>在不考虑自研 CDN 的情况下，开启 CDN 缓存的步骤非常简单：</p>
 <ol>
@@ -71,7 +70,7 @@ categories: Architect</h2>
 <p>代码配置有一个前提，即 CDN 后台需要开启读取源站 Cache-Control 的支持。</p>
 <p>而后，只要简单地添加响应头，就能从运维手中接管设置 CDN 缓存规则的主动权。</p>
 <p>以 Node.js Koa 中间件为例，全局的初始化版本如下</p>
-<pre><code class="language-js">app.use((ctx, next) =&gt; {
+<pre><code class="lang-js">app.use((ctx, next) =&gt; {
   ctx.set('Cache-Control', `max-age=300`)
 })
 </code></pre>
@@ -79,7 +78,7 @@ categories: Architect</h2>
 <h3>二、控制路径</h3>
 <p>虽然 CDN 后台也可以配置路径，但配置方式乃至路径数量都有局限性，不如代码形式灵活。</p>
 <p>假如我们只需要缓存 /foo 页面，就加入 if 判断</p>
-<pre><code class="language-js">app.use((ctx, next) =&gt; {
+<pre><code class="lang-js">app.use((ctx, next) =&gt; {
   if (ctx.path === '/foo') {
     ctx.set('Cache-Control', `max-age=300`)
   }
@@ -88,7 +87,7 @@ categories: Architect</h2>
 <p>这就陷入了第一个陷阱，一定要注意路由对 path 的处理。一般地，'/foo' 和 '/foo/' 是两个独立的 path。可能因为 ctx.path === '/foo' 而漏掉了请求 path 为 /foo/ 的处理。</p>
 <h3>三、补充路径</h3>
 <p>伪代码如下</p>
-<pre><code class="language-js">app.use((ctx, next) =&gt; {
+<pre><code class="lang-js">app.use((ctx, next) =&gt; {
   if ([ '/foo', '/foo/' ].includes(ctx.path)) {
     ctx.set('Cache-Control', `max-age=300`)
   }
@@ -98,7 +97,7 @@ categories: Architect</h2>
 <h3>四、忽略降级页面</h3>
 <p>在服务端渲染失败时，为了提高容错，我们会返回降级之后的页面，转为客户端渲染。如果因为偶然的网络波动，导致 CDN 缓存了降级页面，将在一段时间内持续影响用户体验。</p>
 <p>所以我们又引入了 ctx._degrade 自定义变量，标识页面是否触发了降级</p>
-<pre><code class="language-js">app.use(async (ctx, next) =&gt; {
+<pre><code class="lang-js">app.use(async (ctx, next) =&gt; {
   if ([ '/foo', '/foo/' ].includes(ctx.path)) {
     ctx.set('Cache-Control', `max-age=300`)
   }
@@ -117,7 +116,7 @@ categories: Architect</h2>
 <p>新的问题正是来自一个不希望被缓存的响应头。</p>
 <p>应用 Cookie 的设置依赖于响应头 Set-Cookie 字段，Set-Cookie 的缓存直接会导致所有用户的 Cookie 被刷新为同一个。</p>
 <p>有多个解决方案，一是该页面不要设置任何 Cookie，二是代理层过滤掉 Set-Cookie 字段。可惜腾讯 CDN 目前还不支持对响应头的过滤，这步容错必须自己操作。</p>
-<pre><code class="language-js">app.use(async (ctx, next) =&gt; {
+<pre><code class="lang-js">app.use(async (ctx, next) =&gt; {
   const enableCache = [ '/foo', '/foo/' ].includes(ctx.path)
 
   if (enableCache) {
@@ -141,8 +140,7 @@ categories: Architect</h2>
 <h3>六、定制缓存路径</h3>
 <p>现在功能总算趋于正常，然而缓存规则复杂多变，如果想设置更多页面，还要单独定制缓存时间呢？这段代码仍需要不断地变动。</p>
 <p>例如，我们只想缓存 /foo/:id，而不缓存 /foo/foo、/foo/bar 等路径。</p>
-<blockquote>
-<p>注意 CDN 后台可能只支持配置一个 /foo/ 开头的缓存路径，这就要求我们需要将 ctx.set('Cache-Control', 'no-cache') 做为默认处理，加在中间件的第一行。</p>
+<blockquote><p>注意 CDN 后台可能只支持配置一个 /foo/ 开头的缓存路径，这就要求我们需要将 ctx.set('Cache-Control', 'no-cache') 做为默认处理，加在中间件的第一行。</p>
 </blockquote>
 <p>又比如，我们想缓存 /foo 页面 5 分钟，/bar 页面 1 天，又需要引入一个时间配置表。</p>
 <p>这个中间件和相应的配置就会变得越来越难以维护。</p>

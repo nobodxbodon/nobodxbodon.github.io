@@ -1,19 +1,19 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2017-06-08-problems-caused-by-fetch-post.md">仓库源文</a>，<a href="https://qingbob.com/problems-caused-by-fetch-post">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 使用fetch接口post数据时记得指定 Content-Type
 modified: 2017-06-08
 tags: [javascript]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>本文只是想提醒你，使用<code>fetch</code>接口的时候，记得指定<code>Content-Type</code>，不然容易出错。</p>
 <h2>使用原生fetch接口post数据</h2>
 <p>前几天尝试使用原生的<code>fetch</code>接口向后台传输数据，当然是使用<code>post</code>方法。后端服务是由基于Node.js的Express框架提供。作为DEMO，前端代码非常简单：</p>
-<pre><code class="language-javascript">var request = new Request('/upload', {
+<pre><code class="lang-javascript">var request = new Request('/upload', {
     method: 'POST',
     body: JSON.stringify({
         'city': 'Beijing'
@@ -23,7 +23,7 @@ share: true</h2>
 fetch(request);
 </code></pre>
 <p>后端Express因为需要解析Post数据，所以需要安装<code>bodyParser</code>库进行解析，DEMO代码如下：</p>
-<pre><code class="language-javascript">const express = require('express');
+<pre><code class="lang-javascript">const express = require('express');
 const app = express();
 const bodyParser = require('body-parser')
 
@@ -45,7 +45,7 @@ app.listen(80);
 <p>负责解析数据的并不是<code>bodyParser</code>自己，而是<code>bodyParser</code>提供的中间件（<code>bodyParser</code>文档里的原话是<code>The bodyParser object exposes various factories to create middlewares.</code>）。</p>
 <p>顺便解释一下中间件（middleware）。一般情况下，当Express收到请求后，它会把请求转交给路由，交由具体的路径处理函数处理，就像上述代码里的<code>app.post('/upload', function (req, res) {}</code>一样。而中间件是一系列函数，在请求交给最终的路由函数处理之前，预先被Express调用，并可以提前拿到请求，对它进行一些加工。就像商品被转交消费者之前提前的工序。req对象本身是不带有<code>body</code>参数的，这个<code>body</code>参数是由<code>bodyParser</code>提供的中间件为我们加上的。为的是方便的提供我们拿到用户上传的数据。</p>
 <p>你当然不一定需要中间件，甚至也不需要要Express框架，如果你收使用原生的Node.js代码解析请求数据的话，会比较麻烦：</p>
-<pre><code class="language-javascript">var http = require('http');
+<pre><code class="lang-javascript">var http = require('http');
 
 http.createServer(function(request, response) {
   var headers = request.headers;
@@ -65,15 +65,14 @@ http.createServer(function(request, response) {
 </code></pre>
 <p>注意上述代码的<code>request.on('data')</code>和<code>on('end')</code>事件，我们需要手动的把stream中的请求片段拼装成为一个完整的请求。而框架和中间件帮我们完成了这一系列工作。</p>
 <p>回到<code>bodyParser</code>，为什么它没能成功的解析我们的数据，我们首先需要了解一下它的工作原理，根据文档的说法是：</p>
-<blockquote>
-<p>All middlewares will populate the req.body property with the parsed body when the Content-Type request header matches the type option, or an empty object ({}) if there was no body to parse, the Content-Type was not matched, or an error occurred.</p>
+<blockquote><p>All middlewares will populate the req.body property with the parsed body when the Content-Type request header matches the type option, or an empty object ({}) if there was no body to parse, the Content-Type was not matched, or an error occurred.</p>
 </blockquote>
 <p>也就是说，当我们使用<code>bodyParser</code>提供的中间件时，可以传入<code>option</code>对象参数，这个对象参数里有一个<code>type</code>字段用于描述<code>Content-Type</code>。只有当请求的<code>Content-Type</code>与<code>type</code>字段匹配时，才会对请求中的body进行解析。</p>
 <p>当然每一类中间件都有默认解析的<code>Content-Type</code>，比如<code>bodyParser.json()</code>中间件默认解析<code>application/json</code>类型请求；而<code>bodyParser.urlencoded</code>默认解析<code>application/x-www-form-urlencoded</code>类型请求。</p>
 <p>很明显我们在使用<code>fetch</code>接口时，没有指定<code>Content-Type</code>参数。但因为body是字符串的缘故，浏览器默认给请求<code>Content-Type</code>的赋值是<code>text/plain</code>。而在服务端，我们只使用了两类中间件解析了两种类型的请求：<code>application/json</code>和<code>application/x-www-form-urlencoded</code>，所以<code>Content-Type</code>无法匹配上，自然上传的数据也就无法解析。</p>
 <p>值得一提的是，和jQuery提供的<code>$.ajax</code>接口不同，<code>fetch</code>接口相对底层，所以一部分工作需要手动自己完成。</p>
 <p>所以只要我们继续在请求中创建<code>headers</code>参数，并指定为<code>application/json</code>后端就能正常解析了：</p>
-<pre><code class="language-javascript">var request = new Request('/upload', {
+<pre><code class="lang-javascript">var request = new Request('/upload', {
     method: 'POST',
     headers: new Headers({
         'Content-Type': 'application/json'
@@ -86,12 +85,12 @@ http.createServer(function(request, response) {
 fetch(request);
 </code></pre>
 <p>或者修改服务端代码，添加对字符串解析的中间件：</p>
-<pre><code class="language-javascript">app.use(bodyParser.text());
+<pre><code class="lang-javascript">app.use(bodyParser.text());
 </code></pre>
 <h2>故事还没有结束</h2>
 <h3>自定义<code>Content-Type</code></h3>
 <p><code>bodyParser</code>还同时支持自定义的<code>Content-Type</code>，例如我在前端发出请求时使用的是自定义的<code>Content-Type</code>值为<code>secret</code>:</p>
-<pre><code class="language-javascript">var request = new Request('/upload', {
+<pre><code class="lang-javascript">var request = new Request('/upload', {
     method: 'POST',
     headers: new Headers({
         'Content-Type': 'secret'
@@ -102,7 +101,7 @@ fetch(request);
 });
 </code></pre>
 <p>而在后端的中间件函数中，<code>type</code>字段可以定义为函数。例如我们想以JSON的方式解析上述类型的请求，则继续使用<code>bodyParser.json</code>中间件，并重新定义<code>type</code>字段：</p>
-<pre><code class="language-javascript">app.use( bodyParser.json({ 
+<pre><code class="lang-javascript">app.use( bodyParser.json({ 
   type: (req) =&gt; {
     return req.get('Content-Type') === 'secret'
   } 
@@ -113,7 +112,7 @@ fetch(request);
 <p>既然想使用原生的<code>fetch</code>接口，那么首先考察的想必是<code>fetch</code>接口的polyfill：<a href="https://github.com/github/fetch">https://github.com/github/fetch</a></p>
 <p>目前除了IE仍然不支持这个接口以外，其余的最新版本现代浏览器都支持这个接口。所以我们只能在IE上测试这个polyfill。测试结果是，就本文的前端代码来说，工作预期和原生的接口是一样的。</p>
 <p>但是有一个例外。例如我们将body改为一个对象，而不是字符串：</p>
-<pre><code class="language-javascript">var request = new Request('/upload', {
+<pre><code class="lang-javascript">var request = new Request('/upload', {
     method: 'POST',
     body: {
         'city': 'Beijing'
@@ -122,7 +121,7 @@ fetch(request);
 </code></pre>
 <p>那polyfill就报错了，而原生的fetch接口仍然能够发送数据，只不过发送请求中不存在<code>Content-Type</code>字段，后端收到的同样也是<code>undefined</code>。</p>
 <p>而为什么会报错，我们看它的源代码就能得出端倪：</p>
-<pre><code class="language-javascript">this._initBody = function(body) {
+<pre><code class="lang-javascript">this._initBody = function(body) {
     this._bodyInit = body
     if (!body) {
         this._bodyText = ''
@@ -147,7 +146,7 @@ fetch(request);
 <p>很显然它在生成<code>Content-Type</code>阶段，使用目前支持的数据类型去匹配即将上传的数据，而我们上传的objct不属于任何一种，所以就报错了。</p>
 <p><strong>jQuery</strong></p>
 <p>我们尝试使用<code>$.ajax</code>接口上传刚刚的数据：</p>
-<pre><code class="language-javascript">$.ajax({
+<pre><code class="lang-javascript">$.ajax({
     url: '/upload',
     method: 'POST',
     timeout: 1000 * 1,

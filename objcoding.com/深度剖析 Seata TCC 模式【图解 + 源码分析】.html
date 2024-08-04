@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2022-01-17-seata-tcc.md">仓库源文</a>，<a href="https://objcoding.com/2022/01/17/seata-tcc">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "深度剖析 Seata TCC 模式【图解 + 源码分析】"
 categories: Seata
-tags: TCC
-author: 张乘辉</h2>
+tags: TCC</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -22,7 +22,7 @@ Seata 目前支持 AT 模式、XA 模式、TCC 模式和 SAGA 模式，之前文
 <h2>Seata TCC 模式</h2>
 <p>Seata TCC 模式跟通用型 TCC 模式原理一致，我们先来使用 Seata TCC 模式实现一个分布式事务：</p>
 <p>假设现有一个业务需要同时使用服务 A 和服务 B 完成一个事务操作，我们在服务 A 定义该服务的一个 TCC 接口：</p>
-<pre><code class="language-java">public interface TccActionOne {
+<pre><code class="lang-java">public interface TccActionOne {
     @TwoPhaseBusinessAction(name = "DubboTccActionOne", commitMethod = "commit", rollbackMethod = "rollback")
     public boolean prepare(BusinessActionContext actionContext, @BusinessActionContextParameter(paramName = "a") String a);
     public boolean commit(BusinessActionContext actionContext);
@@ -30,7 +30,7 @@ Seata 目前支持 AT 模式、XA 模式、TCC 模式和 SAGA 模式，之前文
 }
 </code></pre>
 <p>同样，在服务 B 定义该服务的一个 TCC 接口：</p>
-<pre><code class="language-java">public interface TccActionTwo {
+<pre><code class="lang-java">public interface TccActionTwo {
     @TwoPhaseBusinessAction(name = "DubboTccActionTwo", commitMethod = "commit", rollbackMethod = "rollback")
     public void prepare(BusinessActionContext actionContext, @BusinessActionContextParameter(paramName = "b") String b);
     public void commit(BusinessActionContext actionContext);
@@ -38,11 +38,11 @@ Seata 目前支持 AT 模式、XA 模式、TCC 模式和 SAGA 模式，之前文
 }
 </code></pre>
 <p>在业务所在系统中开启全局事务并执行服务 A 和服务 B 的 TCC 预留资源方法：</p>
-<pre><code class="language-java">@GlobalTransactional
+<pre><code class="lang-java">@GlobalTransactional
 public String doTransactionCommit() {
     //服务A事务参与者
     tccActionOne.prepare(null, "one");
-	//服务B事务参与者
+    //服务B事务参与者
     tccActionTwo.prepare(null, "two");
 }
 </code></pre>
@@ -57,11 +57,11 @@ public String doTransactionCommit() {
 <p>资源解析即是把 TCC 接口进行解析并注册，前面说过，TCC 接口可以是 PRC，也可以是 JVM 内部调用，在 Seata TCC 模块中中一个 remoting 模块，该模块专门用于解析具有 <code>TwoPhaseBusinessAction</code> 注解的 TCC 接口资源：</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20220116175059.png"/></p>
 <p><code>RemotingParser</code> 接口主要有 <code>isRemoting</code>、<code>isReference</code>、<code>isService</code>、<code>getServiceDesc</code> 等方法，默认的实现为 <code>DefaultRemotingParser</code>，其余各自的 RPC 协议解析类都在 <code>DefaultRemotingParser</code> 中执行，Seata 目前已经实现了对 Dubbo、HSF、SofaRpc、LocalTCC 的 RPC 协议的解析，同时具备 SPI 可扩展性，未来欢迎大家为 Seata 提供更多的 RPC 协议解析类。</p>
-<p>在 Seata 启动过程中，有个 <code>GlobalTransactionScanner </code> 注解进行扫描，会执行以下方法：</p>
+<p>在 Seata 启动过程中，有个 <code>GlobalTransactionScanner</code> 注解进行扫描，会执行以下方法：</p>
 <p><code>io.seata.spring.util.TCCBeanParserUtils#isTccAutoProxy</code></p>
 <p>该方法目的是判断 bean 是否已被 TCC 代理，在过程中会先判断 bean 是否是一个 Remoting bean，如果是则调用 <code>getServiceDesc</code> 方法对 remoting bean 进行解析，同时判断如果是一个发起方，则对其进行资源注册：</p>
 <p>io.seata.rm.tcc.remoting.parser.DefaultRemotingParser#parserRemotingServiceInfo</p>
-<pre><code class="language-java">public RemotingDesc parserRemotingServiceInfo(Object bean, String beanName, RemotingParser remotingParser) {
+<pre><code class="lang-java">public RemotingDesc parserRemotingServiceInfo(Object bean, String beanName, RemotingParser remotingParser) {
     RemotingDesc remotingBeanDesc = remotingParser.getServiceDesc(bean, beanName);
     if (remotingBeanDesc == null) {
         return null;
@@ -115,7 +115,7 @@ public String doTransactionCommit() {
 <p><strong>1、资源注册</strong></p>
 <p>Seata TCC 模式的资源叫 <code>TCCResource</code>，其资源管理器叫 <code>TCCResourceManager</code>，前面讲过，当解析完 TCC 接口 RPC 资源后，如果是发起方，则会对其进行资源注册：</p>
 <p>io.seata.rm.tcc.TCCResourceManager#registerResource</p>
-<pre><code class="language-java">public void registerResource(Resource resource) {
+<pre><code class="lang-java">public void registerResource(Resource resource) {
     TCCResource tccResource = (TCCResource)resource;
     tccResourceCache.put(tccResource.getResourceId(), tccResource);
     super.registerResource(tccResource);
@@ -124,7 +124,7 @@ public String doTransactionCommit() {
 <p><code>TCCResource</code> 包含了 TCC 接口的相关信息，同时会在本地进行缓存。继续调用父类 <code>registerResource</code> 方法（封装了通信方法）向 TC 注册，TCC 资源的 resourceId 是 actionName，actionName 就是 <code>@TwoParseBusinessAction</code> 注解中的 name。</p>
 <p><strong>2、资源提交/回滚</strong></p>
 <p>io.seata.rm.tcc.TCCResourceManager#branchCommit</p>
-<pre><code class="language-java">public BranchStatus branchCommit(BranchType branchType, String xid, long branchId, String resourceId,
+<pre><code class="lang-java">public BranchStatus branchCommit(BranchType branchType, String xid, long branchId, String resourceId,
                                  String applicationData) throws TransactionException {
     TCCResource tccResource = (TCCResource)tccResourceCache.get(resourceId);
     if (tccResource == null) {
@@ -160,7 +160,7 @@ public String doTransactionCommit() {
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20220116192544.png"/></p>
 <p>如图，当 <code>GlobalTransactionalScanner</code> 扫描到 TCC 接口调用方（Reference）时，会使 <code>TccActionInterceptor</code> 对其进行代理拦截处理，<code>TccActionInterceptor</code> 实现 <code>MethodInterceptor</code>。</p>
 <p>在 <code>TccActionInterceptor</code> 中还会调用 <code>ActionInterceptorHandler</code> 类型执行拦截处理逻辑，事务相关处理就在 <code>ActionInterceptorHandler#proceed</code> 方法中：</p>
-<pre><code class="language-java">public Object proceed(Method method, Object[] arguments, String xid, TwoPhaseBusinessAction businessAction,
+<pre><code class="lang-java">public Object proceed(Method method, Object[] arguments, String xid, TwoPhaseBusinessAction businessAction,
                       Callback&lt;Object&gt; targetCallback) throws Throwable {
     //Get action context from arguments, or create a new one and then reset to arguments
     BusinessActionContext actionContext = getOrCreateActionContextAndResetToArguments(method.getParameterTypes(), arguments);

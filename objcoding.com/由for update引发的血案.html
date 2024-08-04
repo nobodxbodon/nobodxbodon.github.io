@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-05-16-for update.md)，<a href="https://objcoding.com/2019/05/16/for-update">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-05-16-for update.md">仓库源文</a>，<a href="https://objcoding.com/2019/05/16/for-update">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "由for update引发的血案"
 categories: Spring Mybatis Mysql Oracle
-tags: autocommit forupdate 数据库事务
-author: 张乘辉</h2>
+tags: autocommit forupdate 数据库事务</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -15,10 +15,10 @@ author: 张乘辉</h2>
 <h2>案例分析</h2>
 <p>基于案发现场的问题所在，我特地写了几个针对问题的案例分析测试代码，"talk is cheap, show you the code"：</p>
 <h3>加 Spring 事务执行但不提交事务</h3>
-<pre><code class="language-java">public void forupdateByTransaction() throws Exception {
+<pre><code class="lang-java">public void forupdateByTransaction() throws Exception {
   // 主线程获取独占锁
   reentrantLock.lock();
-  
+
   new Thread(() -&gt; transactionTemplate.execute(transactionStatus -&gt; {
     // select * from forupdate where name = #{name} for update
     this.forupdateMapper.findByName("testforupdate");
@@ -28,9 +28,9 @@ author: 张乘辉</h2>
     reentrantLock.lock();
     return null;
   })).start();
-  
+
   countDownLatch.await();
-  
+
   System.out.println("==========for update has countdown==========");
   this.forupdateMapper.updateByName("testforupdate");
   System.out.println("==========update success==========");
@@ -40,7 +40,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>此时 for update 被包装在 Spring 事务中，将事务交由 Spring 管理，根据数据事务机制，sql 执行过程中，只有执行了 commit 或者 rollback 操作， 才会提交事务，所以此时每次执行 commit，for update 没有被释放，会锁住对应资源，直到提交事务释放 for udpate。所以此时的主线程执行更新操作会阻塞。</p>
 <h3>不加 Spring 事务并发执行</h3>
-<pre><code class="language-java">public void forupdateByConcurrent() {
+<pre><code class="lang-java">public void forupdateByConcurrent() {
   AtomicInteger atomicInteger = new AtomicInteger();
 
   for (int i = 0; i &lt; 100; i++) {
@@ -59,7 +59,7 @@ author: 张乘辉</h2>
 <p>由于我们使用的 druid 连接池，它的 autoCommit 默认为 true，所以我此时将 druid 连接池的 autoCommit 参数设置为 false，再次跑测试代码，发现此时 oracle 不会发生阻塞，我们先记住这个测试结果，下面我会带大家走一波源码，来解释这个现象。</p>
 <p>聪明的你可能会想到，Mybatis 的底层源码不是给我们封装了一些重复性操作吗，比如我们执行一条 sql 语句，mybatis 自动为我们 commit 或者 rollback了，这也是 JDBC 框架的基本要求，那么既然 Mybatis 帮我们 commit 了，for update 应该会被释放才对，为什么还会发生阻塞问题呢？如果你能想到这个问题，说明你是个认真思考的人，这个问题我们也是先记住，后面会有解释。</p>
 <h3>加 Spring 事务并发执行</h3>
-<pre><code class="language-java">private void forupdateByConcurrentAndTransaction() {
+<pre><code class="lang-java">private void forupdateByConcurrentAndTransaction() {
   AtomicInteger atomicInteger = new AtomicInteger();
 
   for (int i = 0; i &lt; 100; i++) {
@@ -80,7 +80,7 @@ author: 张乘辉</h2>
 <li>不加 Spring 事务并发执行 for update 语句，并且 druid 连接池的 autocommit=false，不会发生阻塞；</li>
 <li>加 Spring 事务并发执行 for update 语句，不会发生阻塞。</li>
 </ol>
-<p>贴上测试代码地址：https://github.com/objcoding/test-forupdate</p>
+<p>贴上测试代码地址：<a href="https://github.com/objcoding/test-forupdate">https://github.com/objcoding/test-forupdate</a></p>
 <h2>源码走一波</h2>
 <p>基于上述的案例分析，我们源码走一波，从底层源码的角度来解析为什么会有这样的结果。</p>
 <h3>Mybatis 事务管理器</h3>
@@ -89,14 +89,14 @@ author: 张乘辉</h2>
 <p>「<a href="https://mp.weixin.qq.com/s/tTTLDOoqPfqHJLW12Zdo6A">钟同学，this is for you！</a>」</p>
 <p>在创建 SqlSession 时，相应地会创建一个事务管理器：</p>
 <p>org.mybatis.spring.transaction.SpringManagedTransactionFactory#newTransaction：</p>
-<pre><code class="language-java">public Transaction newTransaction(DataSource dataSource, TransactionIsolationLevel level, boolean autoCommit) {
+<pre><code class="lang-java">public Transaction newTransaction(DataSource dataSource, TransactionIsolationLevel level, boolean autoCommit) {
   return new SpringManagedTransaction(dataSource);
 }
 </code></pre>
 <p>创建一个 transaction 时，我们发现传入的 autoCommit 根本没有赋值给 SpringManagedTransaction，这里暗藏玄机，我们继续往下看：</p>
 <p>执行 sql 时，Mybatis 会从事务管理器中从数据库连接池中获取一个 connection 对象：</p>
 <p>org.mybatis.spring.transaction.SpringManagedTransaction#openConnection：</p>
-<pre><code class="language-java">private void openConnection() throws SQLException {
+<pre><code class="lang-java">private void openConnection() throws SQLException {
   this.connection = DataSourceUtils.getConnection(this.dataSource);
   this.autoCommit = this.connection.getAutoCommit();
   this.isConnectionTransactional = DataSourceUtils.isConnectionTransactional(this.connection, this.dataSource);
@@ -113,7 +113,7 @@ author: 张乘辉</h2>
 <p>这里会从数据库连接池中获取 connection 对象，然后将 connection 对象中的 autoCommit 值赋值给 SpringManagedTransaction！可以这么理解，在 Spring 体系下的 Mybatis 事务管理器，autoCommit 的值被数据库连接池的覆盖掉了！而后面的 debug 日志也说明了，这个 JDBC connection 对象不归你 Spring 管理，我 Mybatis 自己就可以管理了，你 Spring 就别瞎参合了。</p>
 <p>sql 执行完之后，Mybatis 会自动帮我们 commit，我们来看 SqlSessionTemplate 的 sqlSession 代理：</p>
 <p>org.mybatis.spring.SqlSessionTemplate.SqlSessionInterceptor：</p>
-<pre><code class="language-java">if (!isSqlSessionTransactional(sqlSession, SqlSessionTemplate.this.sqlSessionFactory)) {
+<pre><code class="lang-java">if (!isSqlSessionTransactional(sqlSession, SqlSessionTemplate.this.sqlSessionFactory)) {
   // force commit even on non-dirty sessions because some databases require
   // a commit/rollback before calling close()
   sqlSession.commit(true);
@@ -121,7 +121,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>判断如果不归 Spring 事务管理，那么会强制执行 commit 操作，我们点进去，发现最终调用的是 Mybatis 的事务管理器的 commit 方法：</p>
 <p>org.mybatis.spring.transaction.SpringManagedTransaction#commit：</p>
-<pre><code class="language-java">public void commit() throws SQLException {
+<pre><code class="lang-java">public void commit() throws SQLException {
   if (this.connection != null &amp;&amp; !this.isConnectionTransactional &amp;&amp; !this.autoCommit) {
     if (LOGGER.isDebugEnabled()) {
       LOGGER.debug("Committing JDBC Connection [" + this.connection + "]");
@@ -133,14 +133,14 @@ author: 张乘辉</h2>
 <p>问题就出现在这里，前面我也说了，我们使用的 druid 数据库连接池的 autoCommit 默认为 true，而事务管理器获取 connection 对象时，又将 connection 的 autocommit 赋值给事务管理器，如果此时 autoCommit 为 true，Mybatis 认为 connection 已经自动提交事务了，既然这事不归我管，那么我 Mybatis 自然就不会再去 commit 了。</p>
 <p>根据测试结果，将 druid 的 autoCommit 设置为 false 后，不会发生阻塞现象，即 Mybaits 会执行下面的 commit 操作。那么问题来了，connection 的 autocommit = true 时，到底有没有 commit ？从测试结果来看，很明显没有 commit。这里就要从数据库层来解释了，由于公司 Oracle 数据库的 autocommit 使用的是默认的 false 值，即需要显式提交 commit 事务才会被提交。这也就是为什么当 druid 的 autoCommit=false 时，并发执行不会产生阻塞现象，因为 Mybatis 已经帮我们自动 commit 了。</p>
 <p>而为什么当  druid 的 autoCommit=true 时，Mysql 依然不会阻塞呢？我先开启 Mysql 的日志打印：</p>
-<pre><code class="language-bash">set global general_log = 1;
+<pre><code class="lang-bash">set global general_log = 1;
 </code></pre>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/transaction_1.png"/></p>
 <p>查看日志，发现 Mysql 会为每条执行的 sql 设置 autocommit=1，即自动提交事务，无须显式提交 commit，每条 sql 就是一个事务。</p>
 <h3>Spring 事务管理器</h3>
 <p>上面的案例分析中，加了 Spring 事务的并发执行，并不会产生阻塞现象，显然肯定是 Spring 事务做了一些不可描述的动作，Spring 的事务管理器有很多个，这里我们用的是数据库连接池那个管理器，叫  DataSourceTransactionManager，我这里为了灵活控制事务范围的细粒度，用的是声明式事务，我们继续走一波源码，从事务入口一路跟踪进来，发现第一步需要调用 doBegin 方法：</p>
 <p>org.springframework.jdbc.datasource.DataSourceTransactionManager#doBegin：</p>
-<pre><code class="language-java">// Switch to manual commit if necessary. This is very expensive in some JDBC drivers,
+<pre><code class="lang-java">// Switch to manual commit if necessary. This is very expensive in some JDBC drivers,
 // so we don't want to do it unnecessarily (for example if we've explicitly
 // configured the connection pool to set it already).
 if (con.getAutoCommit()) {
@@ -153,7 +153,7 @@ if (con.getAutoCommit()) {
 </code></pre>
 <p>我们在 doBegin 方法发现了它偷偷地篡改了连接对象 autoCommit 的值，将它设为 false，这里想必大家都会明白其中的原理吧，Spring 管理事务其实就是在 sql 执行前将当前的 connection 对象设置为不自动提交模式，接下来执行的 sql 都不会自动提交，等待事务结束时，Spring 事务管理器会帮我们 commit 提交事务。这也就是为什么加了 Spring 事务的并发执行并不会产生阻塞的原因，原理与上述 Mybatis 所描述的一样。</p>
 <p>org.springframework.jdbc.datasource.DataSourceTransactionManager#doCleanupAfterCompletion：</p>
-<pre><code class="language-java">// Reset connection.
+<pre><code class="lang-java">// Reset connection.
 Connection con = txObject.getConnectionHolder().getConnection();
 try {
   if (txObject.isMustRestoreAutoCommit()) {

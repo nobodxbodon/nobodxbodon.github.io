@@ -1,18 +1,18 @@
 <h2><a href="https://github.com/vivaxyblog/vivaxyblog.github.io/blob/master/_posts/2019-12-07-decode-a-png-image-with-javascript-cn.md">仓库源文</a>，<a href="https://vivaxyblog.github.io/2019/12/07/decode-a-png-image-with-javascript-cn">站点原文</a></h2>
 <hr/>
-<h2>layout: post
-title: 一步一步解码 PNG 图片
-tags: [image, png, javascript, decode, decoder, parser, parse]</h2>
+<p>layout: post
+title: 一步一步解码 PNG 图片</p>
+<h2>tags: [image, png, javascript, decode, decoder, parser, parse]</h2>
 <p>解码 PNG 图片就是把一张图片从二进制数据转成包含像素数据的 <code>ImageData</code>。</p>
 <p>图片的二进制数据可以从 <code>&lt;canvas&gt;</code>，<code>&lt;img&gt;</code>，Object URLs，Image URLs，<code>Blob</code> 对象上获取到。参见<a href="https://vivaxyblog.github.io/2019/11/08/comprehensive-image-processing-on-browsers-cn.html">浏览器图像转换手册</a>。</p>
 <p><code>ImageData</code> 是一个包括了像素数据、图片宽高数据的对象。</p>
 <h2>示例图片</h2>
-<p><img alt="示例图片" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2019-12-07-decode-a-png-image-with-javascript-cn/pixels.png"/></p>
+<p><img alt="示例图片" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/vivaxyblog.github.io/assets/2019-12-07-decode-a-png-image-with-javascript-cn/pixels.png"/></p>
 <p>👆 这是一张我们接下去要解码的图片，但它太小了，放大了展示给大家看下。👇</p>
 <p>&lt;img src="/assets/2019-12-07-decode-a-png-image-with-javascript-cn/pixels-large.png" width="100px"&gt;</p>
 <h2>二进制数据</h2>
 <p>我们先从浏览器的 <code>&lt;input&gt;</code> 标签上读取到 <code>Blob</code> 对象，然后拿到这张图片的二进制数据。</p>
-<pre><code class="language-html">&lt;input type="file" /&gt;
+<pre><code class="lang-html">&lt;input type="file" /&gt;
 &lt;script&gt;
   const input = document.querySelector('input');
   input.addEventListener('change', async function(e) {
@@ -26,52 +26,168 @@ tags: [image, png, javascript, decode, decoder, parser, parse]</h2>
 &lt;/script&gt;
 </code></pre>
 <p>得到的 <code>arrayBuffer</code> 如下：</p>
-<p>&lt;style&gt;
+&lt;style&gt;
 table {
   font-size: 12px;
 }
 table tbody tr td {
   padding: .6rem .4rem;
 }
-&lt;/style&gt;</p>
-<p>|           | 0 ~ 3             | 4 ~ 7                | 8 ~ 11            | 12 ~ 15           |
-| --------- | ----------------- | -------------------- | ----------------- | ----------------- |
-| 0 ~ 15    | <code>137, 80, 78, 71</code> | <code>13, 10, 26, 10</code>     | <code>0, 0, 0, 13</code>     | <code>73, 72, 68, 82</code>  |
-| 16 ~ 31   | <code>0, 0, 0, 2</code>      | <code>0, 0, 0, 2</code>         | <code>2, 3, 0, 0</code>      | <code>0, 15, 216, 229</code> |
-| 32 ~ 47   | <code>183, 0, 0, 0</code>    | <code>1, 115, 82, 71</code>     | <code>66, 1, 217, 201</code> | <code>44, 127, 0, 0</code>   |
-| 48 ~ 63   | <code>0, 9, 112, 72</code>   | <code>89, 115, 0, 0</code>      | <code>11, 19, 0, 0</code>    | <code>11, 19, 1, 0</code>    |
-| 64 ~ 79   | <code>154, 156, 24, 0</code> | <code>0, 0, 12, 80</code>       | <code>76, 84, 69, 255</code> | <code>0, 0, 0, 255</code>    |
-| 80 ~ 95   | <code>0, 0, 0, 255</code>    | <code>255, 255, 255, 251</code> | <code>0, 96, 246, 0</code>   | <code>0, 0, 4, 116</code>    |
-| 96 ~ 111  | <code>82, 78, 83, 255</code> | <code>255, 255, 127, 128</code> | <code>144, 197, 89, 0</code> | <code>0, 0, 12, 73</code>    |
-| 112 ~ 127 | <code>68, 65, 84, 120</code> | <code>156, 99, 16, 96</code>    | <code>216, 0, 0, 0</code>    | <code>228, 0, 193, 39</code> |
-| 128 ~ 143 | <code>168, 232, 87, 0</code> | <code>0, 0, 0, 73</code>        | <code>69, 78, 68, 174</code> | <code>66, 96, 130</code>     |</p>
+&lt;/style&gt;<table>
+<thead><tr>
+<th></th>
+<th>0 ~ 3</th>
+<th>4 ~ 7</th>
+<th>8 ~ 11</th>
+<th>12 ~ 15</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0 ~ 15</td>
+<td><code>137, 80, 78, 71</code></td>
+<td><code>13, 10, 26, 10</code></td>
+<td><code>0, 0, 0, 13</code></td>
+<td><code>73, 72, 68, 82</code></td>
+</tr>
+<tr>
+<td>16 ~ 31</td>
+<td><code>0, 0, 0, 2</code></td>
+<td><code>0, 0, 0, 2</code></td>
+<td><code>2, 3, 0, 0</code></td>
+<td><code>0, 15, 216, 229</code></td>
+</tr>
+<tr>
+<td>32 ~ 47</td>
+<td><code>183, 0, 0, 0</code></td>
+<td><code>1, 115, 82, 71</code></td>
+<td><code>66, 1, 217, 201</code></td>
+<td><code>44, 127, 0, 0</code></td>
+</tr>
+<tr>
+<td>48 ~ 63</td>
+<td><code>0, 9, 112, 72</code></td>
+<td><code>89, 115, 0, 0</code></td>
+<td><code>11, 19, 0, 0</code></td>
+<td><code>11, 19, 1, 0</code></td>
+</tr>
+<tr>
+<td>64 ~ 79</td>
+<td><code>154, 156, 24, 0</code></td>
+<td><code>0, 0, 12, 80</code></td>
+<td><code>76, 84, 69, 255</code></td>
+<td><code>0, 0, 0, 255</code></td>
+</tr>
+<tr>
+<td>80 ~ 95</td>
+<td><code>0, 0, 0, 255</code></td>
+<td><code>255, 255, 255, 251</code></td>
+<td><code>0, 96, 246, 0</code></td>
+<td><code>0, 0, 4, 116</code></td>
+</tr>
+<tr>
+<td>96 ~ 111</td>
+<td><code>82, 78, 83, 255</code></td>
+<td><code>255, 255, 127, 128</code></td>
+<td><code>144, 197, 89, 0</code></td>
+<td><code>0, 0, 12, 73</code></td>
+</tr>
+<tr>
+<td>112 ~ 127</td>
+<td><code>68, 65, 84, 120</code></td>
+<td><code>156, 99, 16, 96</code></td>
+<td><code>216, 0, 0, 0</code></td>
+<td><code>228, 0, 193, 39</code></td>
+</tr>
+<tr>
+<td>128 ~ 143</td>
+<td><code>168, 232, 87, 0</code></td>
+<td><code>0, 0, 0, 73</code></td>
+<td><code>69, 78, 68, 174</code></td>
+<td><code>66, 96, 130</code></td>
+</tr>
+</tbody>
+</table>
 <p>每个表格的单元格内有 4 字节数据，每个字节由 8 位组成，1 位代表的是 <code>0</code> 或者 <code>1</code> 的一个数字。</p>
 <h2>PNG 文件签名</h2>
 <p>一张 PNG 图片二进制数据的开头必须是这 8 字节：<code>0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a</code>。</p>
 <p><code>0x</code> 代表这个数字是 16 进制表示的，<code>0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a</code> 转换为 10 进制是 <code>137, 80, 78, 71, 13, 10, 26, 10</code>。</p>
-<p>| 0 ~ 3                    | 4 ~ 7                    |
-| ------------------------ | ------------------------ |
-| <code>137, 80, 78, 71</code>        | <code>13, 10, 26, 10</code>         |
-| <code>0x89, 0x50, 0x4e, 0x47</code> | <code>0x0d, 0x0a, 0x1a, 0x0a</code> |</p>
+<table>
+<thead><tr>
+<th>0 ~ 3</th>
+<th>4 ~ 7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>137, 80, 78, 71</code></td>
+<td><code>13, 10, 26, 10</code></td>
+</tr>
+<tr>
+<td><code>0x89, 0x50, 0x4e, 0x47</code></td>
+<td><code>0x0d, 0x0a, 0x1a, 0x0a</code></td>
+</tr>
+</tbody>
+</table>
 <p>这张图片的前 8 个字节满足签名的要求。</p>
 <h2>数据块</h2>
 <p>数据块包含了图片所有的数据，一个数据块可以分为数据块的开始信息、数据块的数据信息和数据块的结束信息。</p>
 <p>一个数据块的开始信息包含 2 个 32 位的数字，换算成字节的话，就是 8 个字节。前 4 个字节会被合并成一个 32 位的数字，表示数据信息的长度，后面 4 个字节可以被转换成文本，表示数据块的类型。</p>
 <p>我们从第 8 个字节开始解析数据块的开始信息。</p>
 <h2>开始信息 1</h2>
-<p>| 8 ~ 11        | 12 ~ 15          |
-| ------------- | ---------------- |
-| <code>0, 0, 0, 13</code> | <code>73, 72, 68, 82</code> |
-| 长度          | 类型             |
-| <code>13</code>          | <code>IHDR</code>           |</p>
+<table>
+<thead><tr>
+<th>8 ~ 11</th>
+<th>12 ~ 15</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 13</code></td>
+<td><code>73, 72, 68, 82</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td>类型</td>
+</tr>
+<tr>
+<td><code>13</code></td>
+<td><code>IHDR</code></td>
+</tr>
+</tbody>
+</table>
 <p>这个数据块是 <code>IHDR</code> 类型，有 <code>13</code> 字节的数据信息。</p>
 <h2>数据信息 1 <code>IHDR</code></h2>
 <p><code>IHDR</code> 里面的数据信息如下：</p>
-<p>| 16 ~ 19      | 20 ~ 23      | 24 ~ 27                                       | 28          |
-| ------------ | ------------ | --------------------------------------------- | ----------- |
-| <code>0, 0, 0, 2</code> | <code>0, 0, 0, 2</code> | <code>2, 3, 0, 0</code>                                  | <code>0</code>         |
-| <code>width</code>      | <code>height</code>     | <code>depth</code>, <code>colorType</code>, <code>compression</code>, <code>filter</code> | <code>interlace</code> |
-| <code>2</code>          | <code>2</code>          | <code>2, 3, 0, 0</code>                                  | <code>0</code>         |</p>
+<table>
+<thead><tr>
+<th>16 ~ 19</th>
+<th>20 ~ 23</th>
+<th>24 ~ 27</th>
+<th>28</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 2</code></td>
+<td><code>0, 0, 0, 2</code></td>
+<td><code>2, 3, 0, 0</code></td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>width</code></td>
+<td><code>height</code></td>
+<td><code>depth</code>, <code>colorType</code>, <code>compression</code>, <code>filter</code></td>
+<td><code>interlace</code></td>
+</tr>
+<tr>
+<td><code>2</code></td>
+<td><code>2</code></td>
+<td><code>2, 3, 0, 0</code></td>
+<td><code>0</code></td>
+</tr>
+</tbody>
+</table>
 <ul>
 <li><code>width</code>（宽）和 <code>height</code>（高）表示图片的宽高。</li>
 <li><code>depth</code> （通道深度）代表每个色彩通道用几位数据表示。一张 PNG 图片是由像素组成的，每个像素由色彩通道组成，每个色彩通道又是由位来组成。</li>
@@ -82,22 +198,54 @@ table tbody tr td {
 </ul>
 <p>从上面的信息看出，这是一张 2 * 2 像素的图片，使用色板作为颜色类型，每个像素由 1 个色彩通道组成，每个色彩通道由 2 位组成。像素数据没有交错，经过 <code>0</code> 的过滤函数类型后，经过 <code>deflate</code> 压缩，</p>
 <h2>结束信息 1</h2>
-<p>| 29 ~ 32             |
-| ------------------- |
-| <code>15, 216, 229, 183</code> |</p>
+<table>
+<thead><tr>
+<th>29 ~ 32</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>15, 216, 229, 183</code></td>
+</tr>
+</tbody>
+</table>
 <p>结束信息包括了 4 字节的 CRC32 校验和。解码器应该根据数据块类型和数据块的数据信息计算 CRC32 校验和，并与结束信息中的校验和比对。如果相等，则认为图片数据被正确传输。</p>
 <h2>开始信息 2</h2>
-<p>| 33 ~ 36      | 37 ~ 40           |
-| ------------ | ----------------- |
-| <code>0, 0, 0, 1</code> | <code>115, 82, 71, 66</code> |
-| 长度         | 类型              |
-| <code>1</code>          | <code>sRGB</code>            |</p>
+<table>
+<thead><tr>
+<th>33 ~ 36</th>
+<th>37 ~ 40</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 1</code></td>
+<td><code>115, 82, 71, 66</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td>类型</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td><code>sRGB</code></td>
+</tr>
+</tbody>
+</table>
 <p>这个数据块是 <code>sRGB</code> 信息，长度是 1 字节。</p>
 <p>这个数据块类型是小写字母开头的，这表示这个数据块是辅助数据块，大写字母开头的数据块类型表示关键数据块。</p>
 <h2>数据信息 2 <code>sRGB</code></h2>
-<p>| 41  |
-| --- |
-| <code>1</code> |</p>
+<table>
+<thead><tr>
+<th>41</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1</code></td>
+</tr>
+</tbody>
+</table>
 <p><code>sRGB</code> 表示图片使用的色彩空间。</p>
 <ul>
 <li><code>0</code> 表示感性的，用于展示照片等。</li>
@@ -106,149 +254,459 @@ table tbody tr td {
 <li><code>3</code> 表示绝对色彩，用于展示图片原本的色彩。</li>
 </ul>
 <h2>结束信息 2</h2>
-<p>| 42 ~ 45             |
-| ------------------- |
-| <code>217, 201, 44, 127</code> |</p>
+<table>
+<thead><tr>
+<th>42 ~ 45</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>217, 201, 44, 127</code></td>
+</tr>
+</tbody>
+</table>
 <p>需要比对 CRC32。</p>
 <h2>开始信息 3</h2>
-<p>| 46 ~ 49      | 50 ~ 53            |
-| ------------ | ------------------ |
-| <code>0, 0, 0, 9</code> | <code>112, 72, 89, 115</code> |
-| 长度         | 类型               |
-| <code>9</code>          | <code>pHYs</code>             |</p>
+<table>
+<thead><tr>
+<th>46 ~ 49</th>
+<th>50 ~ 53</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 9</code></td>
+<td><code>112, 72, 89, 115</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td>类型</td>
+</tr>
+<tr>
+<td><code>9</code></td>
+<td><code>pHYs</code></td>
+</tr>
+</tbody>
+</table>
 <p>9 个字节的 <code>pHYs</code> 辅助数据信息。</p>
 <h2>数据信息 3 <code>pHYs</code></h2>
-<p>| 54 ~ 57            | 58 ~ 61            | 62   |
-| ------------------ | ------------------ | ---- |
-| <code>0, 0, 11, 19</code>     | <code>0, 0, 11, 19</code>     | <code>1</code>  |
-| X 轴每个单位像素数 | Y 轴每个单位像素数 | 单位 |
-| <code>2835</code>             | <code>2835</code>             | 米   |</p>
+<table>
+<thead><tr>
+<th>54 ~ 57</th>
+<th>58 ~ 61</th>
+<th>62</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 11, 19</code></td>
+<td><code>0, 0, 11, 19</code></td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td>X 轴每个单位像素数</td>
+<td>Y 轴每个单位像素数</td>
+<td>单位</td>
+</tr>
+<tr>
+<td><code>2835</code></td>
+<td><code>2835</code></td>
+<td>米</td>
+</tr>
+</tbody>
+</table>
 <p><code>pHYs</code> 数据块代表图片的物理世界大小，从上面的数据可以看出，这张图在现实世界中应该被渲染成每米 2835 像素，宽高一样。</p>
 <h2>结束信息 3</h2>
-<p>| 63 ~ 66           |
-| ----------------- |
-| <code>0, 154, 156, 24</code> |</p>
+<table>
+<thead><tr>
+<th>63 ~ 66</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 154, 156, 24</code></td>
+</tr>
+</tbody>
+</table>
 <p>比对 CRC32。</p>
 <h2>开始信息 4</h2>
-<p>| 67 ~ 70       | 71 ~ 74          |
-| ------------- | ---------------- |
-| <code>0, 0, 0, 12</code> | <code>80, 76, 84, 69</code> |
-| 长度          | 类型             |
-| <code>12</code>          | <code>PLTE</code>           |</p>
+<table>
+<thead><tr>
+<th>67 ~ 70</th>
+<th>71 ~ 74</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 12</code></td>
+<td><code>80, 76, 84, 69</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td>类型</td>
+</tr>
+<tr>
+<td><code>12</code></td>
+<td><code>PLTE</code></td>
+</tr>
+</tbody>
+</table>
 <p>12 字节 <code>PLTE</code> 色板数据，是关键数据块。</p>
 <h2>数据信息 4 <code>PLTE</code></h2>
-<p>| 75 ~ 78        | 79 ~ 82        | 83 ~ 86              |
-| -------------- | -------------- | -------------------- |
-| <code>255, 0, 0, 0</code> | <code>255, 0, 0, 0</code> | <code>255, 255, 255, 255</code> |</p>
+<table>
+<thead><tr>
+<th>75 ~ 78</th>
+<th>79 ~ 82</th>
+<th>83 ~ 86</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>255, 0, 0, 0</code></td>
+<td><code>255, 0, 0, 0</code></td>
+<td><code>255, 255, 255, 255</code></td>
+</tr>
+</tbody>
+</table>
 <p>色板中包含的数据是 RGB 数据，以 <code>R, G, B</code> 的形式保存，这里一共 12 字节，表示了 4 个色块。得到的色板信息如下：</p>
 <h3>色板</h3>
 <p><code>[[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]]</code></p>
 <h2>结束信息 4</h2>
-<p>| 87 ~ 90           |
-| ----------------- |
-| <code>251, 0, 96, 246</code> |</p>
+<table>
+<thead><tr>
+<th>87 ~ 90</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>251, 0, 96, 246</code></td>
+</tr>
+</tbody>
+</table>
 <p>比对 CRC32。</p>
 <h2>开始信息 5</h2>
-<p>| 91 ~ 94      | 95 ~ 98           |
-| ------------ | ----------------- |
-| <code>0, 0, 0, 4</code> | <code>116, 82, 78, 83</code> |
-| 长度         | 类型              |
-| <code>4</code>          | <code>tRNS</code>            |</p>
+<table>
+<thead><tr>
+<th>91 ~ 94</th>
+<th>95 ~ 98</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 4</code></td>
+<td><code>116, 82, 78, 83</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td>类型</td>
+</tr>
+<tr>
+<td><code>4</code></td>
+<td><code>tRNS</code></td>
+</tr>
+</tbody>
+</table>
 <p>4 字节 <code>tRNS</code> 透明度数据，是辅助数据块。</p>
 <h2>数据信息 5 <code>tRNS</code></h2>
-<p>| 99 ~ 102             |
-| -------------------- |
-| <code>255, 255, 255, 127</code> |</p>
+<table>
+<thead><tr>
+<th>99 ~ 102</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>255, 255, 255, 127</code></td>
+</tr>
+</tbody>
+</table>
 <p>这个数据块为色板提供透明信息，每个字节表示一个色块的透明信息。与色板组合后的色板如下：</p>
 <h3>色板</h3>
 <p><code>[[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 255, 127]]</code></p>
 <h2>结束信息 5</h2>
-<p>| 103 ~ 106           |
-| ------------------- |
-| <code>128, 144, 197, 89</code> |</p>
+<table>
+<thead><tr>
+<th>103 ~ 106</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>128, 144, 197, 89</code></td>
+</tr>
+</tbody>
+</table>
 <p>比对 CRC32。</p>
 <h2>开始信息 6</h2>
-<p>| 107 ~ 110     | 111 ~ 114        |
-| ------------- | ---------------- |
-| <code>0, 0, 0, 12</code> | <code>73, 68, 65, 84</code> |
-| 长度          | 类型             |
-| <code>12</code>          | <code>IDAT</code>           |</p>
+<table>
+<thead><tr>
+<th>107 ~ 110</th>
+<th>111 ~ 114</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 12</code></td>
+<td><code>73, 68, 65, 84</code></td>
+</tr>
+<tr>
+<td>长度</td>
+<td>类型</td>
+</tr>
+<tr>
+<td><code>12</code></td>
+<td><code>IDAT</code></td>
+</tr>
+</tbody>
+</table>
 <p>12 字节 <code>IDAT</code> 像素数据，是关键数据块。</p>
 <h2>数据信息 6 <code>IDAT</code></h2>
-<p>| 115 ~ 118          | 119 ~ 122       | 123 ~ 126        |
-| ------------------ | --------------- | ---------------- |
-| <code>120, 156, 99, 16</code> | <code>96, 216, 0, 0</code> | <code>0, 228, 0, 193</code> |</p>
+<table>
+<thead><tr>
+<th>115 ~ 118</th>
+<th>119 ~ 122</th>
+<th>123 ~ 126</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>120, 156, 99, 16</code></td>
+<td><code>96, 216, 0, 0</code></td>
+<td><code>0, 228, 0, 193</code></td>
+</tr>
+</tbody>
+</table>
 <p>在解析像素数据前，我们先要了解下像素数据是如何编码的。每行像素都会先经过过滤函数处理，每行像素的过滤函数可以不同。然后所有行的像素数据会经过 deflate 压缩算法压缩。所以，我们需要对这里的像素数据先解压，这里我们直接使用了 <code>zlib.inflate()</code> 函数。在浏览器上，可以使用 <a href="https://github.com/nodeca/pako"><code>pako</code></a> 工具包。</p>
 <p>解压出来的像素数据是 Uint8Array：<code>0, 16, 0, 176</code>。</p>
 <p>接下去我们需要仔细了解每行像素是如何编码，才能把上面的数据还原成像素点。</p>
 <h3>扫描线 Scanline</h3>
 <p>一根扫描线包含图片一行像素的数据。我们知道这张图片的高度是 2，也就是像素数据中有 2 行扫描线。</p>
 <p>一根扫描线由 1 字节的过滤函数标记和像素信息组成。像素信息一个接一个地排列，中间没有多余的空位。如果扫描线长度不足以填满字节的位数，最后几位会被补齐。一根扫描线的结构如下：</p>
-<p>| 过滤函数 | 像素...[补齐...]                      |
-| -------- | ------------------------------------- |
-| <code>8 位</code>   | <code>每像素位数</code> * <code>每行像素数</code> + <code>补齐</code> |</p>
+<table>
+<thead><tr>
+<th>过滤函数</th>
+<th>像素...[补齐...]</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>8 位</code></td>
+<td><code>每像素位数</code> * <code>每行像素数</code> + <code>补齐</code></td>
+</tr>
+</tbody>
+</table>
 <p>所以我们先要知道每个像素的位数才能解码扫描线。</p>
 <h3>色彩类型 - 色彩通道 - 通道深度 - 每像素位数</h3>
-<p>| 色彩类型 | 色彩                   | 每像素通道数 | 通道深度       | 每像素位数     |
-| -------- | ---------------------- | ------------ | -------------- | -------------- |
-| <code>0</code>      | 灰度                   | 1            | 1, 2, 4, 8, 16 | 1, 2, 4, 8, 16 |
-| <code>2</code>      | 真彩色（RGB）          | 3            | 8, 16          | 24, 48         |
-| <code>3</code>      | 色板                   | 1            | 1, 2, 4, 8     | 1, 2, 4, 8     |
-| <code>4</code>      | 灰度和透明度           | 2            | 8, 16          | 16, 32         |
-| <code>6</code>      | 色彩色和透明度（RGBA） | 4            | 8, 16          | 32, 64         |</p>
+<table>
+<thead><tr>
+<th>色彩类型</th>
+<th>色彩</th>
+<th>每像素通道数</th>
+<th>通道深度</th>
+<th>每像素位数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td>灰度</td>
+<td>1</td>
+<td>1, 2, 4, 8, 16</td>
+<td>1, 2, 4, 8, 16</td>
+</tr>
+<tr>
+<td><code>2</code></td>
+<td>真彩色（RGB）</td>
+<td>3</td>
+<td>8, 16</td>
+<td>24, 48</td>
+</tr>
+<tr>
+<td><code>3</code></td>
+<td>色板</td>
+<td>1</td>
+<td>1, 2, 4, 8</td>
+<td>1, 2, 4, 8</td>
+</tr>
+<tr>
+<td><code>4</code></td>
+<td>灰度和透明度</td>
+<td>2</td>
+<td>8, 16</td>
+<td>16, 32</td>
+</tr>
+<tr>
+<td><code>6</code></td>
+<td>色彩色和透明度（RGBA）</td>
+<td>4</td>
+<td>8, 16</td>
+<td>32, 64</td>
+</tr>
+</tbody>
+</table>
 <p>这张图片的色彩类型是 <code>3</code>，所以每个像素包含 <code>1</code> 个色彩通道。又因为图片的通道深度是 <code>2</code>，所以我们知道每个像素是用 <code>2</code> 位来表示的。</p>
 <p>所以我们可以解码扫描线了。</p>
 <h3>解码扫描线</h3>
-<p>| 行  | 过滤函数 | 像素...[补齐...]                             |
-| --- | -------- | -------------------------------------------- |
-|     | <code>8 位</code>   | <code>每像素 2 位 * 2 像素</code> + <code>4 位补齐</code> = <code>8 位</code> |
-| <code>0</code> | <code>0</code>      | <code>00010000</code> (<code>16</code>)                            |
-| <code>1</code> | <code>0</code>      | <code>10110000</code> (<code>176</code>)                           |</p>
+<table>
+<thead><tr>
+<th>行</th>
+<th>过滤函数</th>
+<th>像素...[补齐...]</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td><code>8 位</code></td>
+<td><code>每像素 2 位 * 2 像素</code> + <code>4 位补齐</code> = <code>8 位</code></td>
+</tr>
+<tr>
+<td><code>0</code></td>
+<td><code>0</code></td>
+<td><code>00010000</code> (<code>16</code>)</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td><code>0</code></td>
+<td><code>10110000</code> (<code>176</code>)</td>
+</tr>
+</tbody>
+</table>
 <h3>过滤函数</h3>
 <p>在扫描线被压缩前，每根扫描线都会被单独的过滤函数处理，以使后面的压缩效果更好。</p>
 <p>在过滤函数类型 <code>0</code> 中，有 5 种过滤函数：</p>
-<p>| 过滤函数 | 函数  | 过滤方式                                       |
-| -------- | ----- | ---------------------------------------------- |
-| 0        | 无    | 保留原始数据                                   |
-| 1        | 减    | 减去 A                                         |
-| 2        | 上    | 减去 B                                         |
-| 3        | 平均  | 根据 A 和 B 取平均，并向下取证                 |
-| 4        | Paeth | 使用最接近于 p = A + B − C 的 A、B 或 C 的数值 |</p>
-<p><img alt="过滤函数" src="/media/wwww/share/study/聚聚/源数据/博客聚合/vivaxyblog.github.io/assets/2019-12-07-decode-a-png-image-with-javascript-cn/filter-functions.png"/></p>
+<table>
+<thead><tr>
+<th>过滤函数</th>
+<th>函数</th>
+<th>过滤方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>无</td>
+<td>保留原始数据</td>
+</tr>
+<tr>
+<td>1</td>
+<td>减</td>
+<td>减去 A</td>
+</tr>
+<tr>
+<td>2</td>
+<td>上</td>
+<td>减去 B</td>
+</tr>
+<tr>
+<td>3</td>
+<td>平均</td>
+<td>根据 A 和 B 取平均，并向下取证</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Paeth</td>
+<td>使用最接近于 p = A + B − C 的 A、B 或 C 的数值</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="过滤函数" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/vivaxyblog.github.io/assets/2019-12-07-decode-a-png-image-with-javascript-cn/filter-functions.png"/></p>
 <p>过滤函数用 A、B、C 三点的数值来计算当前点 X。</p>
 <p>这张图片里面的过滤函数 <code>0</code> 表示这张图数据未经过滤。所以我们只要保留原始数据就行了。</p>
 <h3>扫描线像素</h3>
-<p>| 行  | 第 1 列 | 第 2 列 | 补齐... |
-| --- | ------- | ------- | ------- |
-| <code>0</code> | <code>00</code>    | <code>01</code>    | <code>0000</code>  |
-| <code>1</code> | <code>10</code>    | <code>11</code>    | <code>0000</code>  |</p>
+<table>
+<thead><tr>
+<th>行</th>
+<th>第 1 列</th>
+<th>第 2 列</th>
+<th>补齐...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td><code>00</code></td>
+<td><code>01</code></td>
+<td><code>0000</code></td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td><code>10</code></td>
+<td><code>11</code></td>
+<td><code>0000</code></td>
+</tr>
+</tbody>
+</table>
 <p>这里每个像素中的数据表示了这个像素的颜色在色板中的索引。根据色板，我们可以还原出图片的像素信息：<code>[[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 255, 127]]</code>。</p>
 <h3>图片像素</h3>
-<p>| 行\列 | <code>0</code>                | <code>1</code>                    |
-| ----- | ------------------ | ---------------------- |
-| <code>0</code>   | <code>(255, 0, 0, 255)</code> | <code>(0, 255, 0, 255)</code>     |
-| <code>1</code>   | <code>(0, 0, 255, 255)</code> | <code>(255, 255, 255, 127)</code> |</p>
+<table>
+<thead><tr>
+<th>行\列</th>
+<th><code>0</code></th>
+<th><code>1</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td><code>(255, 0, 0, 255)</code></td>
+<td><code>(0, 255, 0, 255)</code></td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td><code>(0, 0, 255, 255)</code></td>
+<td><code>(255, 255, 255, 127)</code></td>
+</tr>
+</tbody>
+</table>
 <h2>结束信息 6</h2>
-<p>| 127 ~ 130          |
-| ------------------ |
-| <code>39, 168, 232, 87</code> |</p>
+<table>
+<thead><tr>
+<th>127 ~ 130</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>39, 168, 232, 87</code></td>
+</tr>
+</tbody>
+</table>
 <p>比对 CRC32。</p>
 <h2>开始信息 7</h2>
-<p>| 131 ~ 134    | 135 ~ 138        |
-| ------------ | ---------------- |
-| <code>0, 0, 0, 0</code> | <code>73, 69, 78, 68</code> |
-| <code>0</code>          | <code>IEND</code>           |</p>
+<table>
+<thead><tr>
+<th>131 ~ 134</th>
+<th>135 ~ 138</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0, 0, 0, 0</code></td>
+<td><code>73, 69, 78, 68</code></td>
+</tr>
+<tr>
+<td><code>0</code></td>
+<td><code>IEND</code></td>
+</tr>
+</tbody>
+</table>
 <p>0 字节 <code>IEND</code> 图片结束数据块，是关键数据块。</p>
 <h2>数据信息 7 <code>IEND</code></h2>
 <p>无。</p>
 <h2>结束信息 7</h2>
-<p>| 139 ~ 142          |
-| ------------------ |
-| <code>174, 66, 96, 130</code> |</p>
+<table>
+<thead><tr>
+<th>139 ~ 142</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>174, 66, 96, 130</code></td>
+</tr>
+</tbody>
+</table>
 <p>比对 CRC32。</p>
 <p>整张图片解码完成，最终的 <code>ImageData</code> 对象是:</p>
 <h2>ImageData</h2>
-<pre><code class="language-js">imageData = {
+<pre><code class="lang-js">imageData = {
   width: 2,
   height: 2,
   data: [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 127],

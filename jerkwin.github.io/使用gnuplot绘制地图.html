@@ -1,8 +1,8 @@
-<h2><a href="https://github.com/jerkwin/jerkwin.github.io//blob/master/_posts/2021-12-23-%E4%BD%BF%E7%94%A8gnuplot%E7%BB%98%E5%88%B6%E5%9C%B0%E5%9B%BE.md">仓库源文</a>，<a href="https://jerkwin.github.io/2021/12/23/%E4%BD%BF%E7%94%A8gnuplot%E7%BB%98%E5%88%B6%E5%9C%B0%E5%9B%BE">站点原文</a></h2>
+<h2><a href="https://github.com/jerkwin/jerkwin.github.io//blob/master/_posts/2021-12-23-使用gnuplot绘制地图.md">仓库源文</a>，<a href="https://jerkwin.github.io/2021/12/23/使用gnuplot绘制地图">站点原文</a></h2>
 <hr/>
 <p>layout: post
-title: 使用gnuplot绘制地图
-categories:</p>
+ title: 使用gnuplot绘制地图
+ categories:</p>
 <ul>
 <li>科
 tags:</li>
@@ -16,9 +16,9 @@ tags:</li>
 <p>在gnuplot中实现牛顿迭代法并不困难, 但如果想将其封装成一个函数, 那就必须绕一些弯弯. 这是因为gnuplot所支持的函数只能使用一条语句, 而不能直接在其中使用判断, 循环等复合语句. 而我们要用的牛顿迭代法, 那是必须要进行迭代的. 怎么解决这个矛盾呢? 我想到的方法有两种, 一种基于<code>eval</code>, 先将要执行的语句拼接成字符串, 然后用<code>eval</code>执行拼好的字符串. 这种方法并不能算是完美地实现了函数, 因为没有办法直接获得返回值, 而且必须使用全局变量, 但可以算是比较通用的一种解决方法, 因为任何语句都可以这么做. 另一种方法就是将迭代改成写递归, gnuplot只支持尾递归, 递归深度也有限制(好像是255), 所以不是任何迭代都可以这么做, 好在我们需要的牛顿迭代方法是可以改写成尾递归形式的.</p>
 <p>实现了Mollweide投影方法之后, 我们就可以根据球面上每个点的经纬度将其转换为平面坐标, 如果再将每个地点的一些性质也一起绘制出来, 就成为地图了. gis(地理信息系统)程序做的就是类似的事, 研究地球物理的也经常做这种事, <a href="https://gmt-china.org/#">GMT</a>是这个领域比较常用的程序. 用gnuplot做这种事不专业, 但可以学到gnuplot的一些高级用法, 虽然免不了编写脚本.</p>
 <p>在编写gnuplot脚本的时候, 我才发现它竟然支持使用utf-8字符作变量, 所以使用中文字符也就没有问题了. 有了这个"大"发现, 我一度想将脚本中的所有变量都用中文定义, 从而让脚本看起来像中文语言的样子, 但试了试之后就放弃了, 觉得这并不是好的做法. 用中文写公式虽然可行, 但已经废弃很久了. 至于原因, 读读晚清李善兰翻译的<a href="https://www.163.com/dy/article/GQ2BR2LQ0511ABV6.html">全中文微积分课本</a>, 你就理解了.</p>
-<p><img alt="" src="https://jerkwin.github.io/pic/%E4%B8%AD%E6%96%87%E5%BE%AE%E7%A7%AF%E5%88%86.jpg"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/中文微积分.jpg"/></p>
 <p>我不知道现在中学的解题格式是什么样子的了, 我中学时候的理科考试, 试卷是中文的, 但答题时也没有人完全用中文写公式, 大多是先说明一下符号的含义, 后面就直接用那些符号了. 所用符号大致是英文字母和希腊字母, 下标什么的可以用中文, 如<code>令时间为t, 初速度为v0, 则其位移为s=v0*t</code>之类, 和教科书上的写法类似. 你真要完全写成中文, 我觉得还更难记, 而且也耗费更多时间. 所以呢, 一种编程语言支持使用任意字符做变量是好的, 但这不意味着我们要用它做完全的中文编程. 真要那么做的话, 建议你学学<a href="https://wy-lang.org/">文言编程</a>, 格调还更高一些. 所以, 我们可以在脚本中有限制合理地使用一些中文字符, 希腊字符, 如<code>λmin=起始经度=-180; λmax=终止经度=180; λ0=中心经度=0; dλ=经度步长=10</code>之类, 起到注释作用, 让脚本变得更易读易懂是可以的, 但完全的中文编程, 既没有必要, 也浪费时间.</p>
-<p><img alt="" src="https://jerkwin.github.io/pic/%E6%96%87%E8%A8%80.png"/></p>
+<p><img alt="" src="https://jerkwin.github.io/pic/文言.png"/></p>
 <p>还是让我们回到地图的绘制吧.</p>
 <p>就让我们绘制全球的海拔高度和海洋深度图吧, 这是我们熟悉的. 为此, 我们需要全球的高程和海深数据. 公开的这类数据不是很多, 比较全的有两份, 一份来自<a href="https://www.gebco.net/">GEBCO</a>, 一份来自<a href="https://lpdaac.usgs.gov/products/nasadem_hgtv001/">NASA</a>. 前者2021版数据的分辨率为15弧秒, 涵盖了海拔和水深, 数据完整. 后者是汇编多个数据集而成的, 分辨率为1弧秒, 只有海拔, 大致涵盖了全球80%的陆地区域. 这类全球数据都很大的, 动辄上G, 多使用二进制格式, 处理使用起来都比较麻烦, 需要进行转换.</p>
 <p>绘制海拔高度还需要合适的颜色映射方案. 常用颜色方案有<a href="https://docs.gmt-china.org/latest/cpt/builtin-cpt/">GMT自带的那些</a>, M_Map修改过的, 还有一个<a href="https://www.ipgp.fr/~beaudu/matlab.html">我觉得比较漂亮的</a> , 它们的特点是看起来直观, 与实际情况比较符合.</p>

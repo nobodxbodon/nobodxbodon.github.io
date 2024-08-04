@@ -1,18 +1,19 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Java%E5%B9%B6%E5%8F%91%E6%80%BB%E7%BB%93-3-ThreadLocalRandom%E7%B1%BB.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/09/14/Java%E5%B9%B6%E5%8F%91%E6%80%BB%E7%BB%93-3-ThreadLocalRandom%E7%B1%BB">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Java并发总结-3-ThreadLocalRandom类.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/09/14/Java并发总结-3-ThreadLocalRandom类">站点原文</a></h2>
 <hr/>
-<h2>title: Java并发总结-3-ThreadLocalRandom类
-toc: true
+<p>title: Java并发总结-3-ThreadLocalRandom类
+toc: true 
 date: 2019-09-14 22:52:14
 categories: 并发编程
-cover:  https://timgsa.baidu.com/timg?image&amp;quality=80&amp;size=b9999_10000&amp;sec=1567750837551&amp;di=fae22e8ce73ecbc87820964da733b106&amp;imgtype=0&amp;src=http%3A%2F%2Fimg3m1.ddimg.cn%2F31%2F20%2F1465705921-1_u_1.jpg
-tags: [并发编程]
-description: Java并发编程之美-3-ThreadLocalRandom类</h2>
+cover:  <a href="https://timgsa.baidu.com/timg?image&amp;quality=80&amp;size=b9999_10000&amp;sec=1567750837551&amp;di=fae22e8ce73ecbc87820964da733b106&amp;imgtype=0&amp;src=http%3A%2F%2Fimg3m1.ddimg.cn%2F31%2F20%2F1465705921-1_u_1.jpg">https://timgsa.baidu.com/timg?image&amp;quality=80&amp;size=b9999_10000&amp;sec=1567750837551&amp;di=fae22e8ce73ecbc87820964da733b106&amp;imgtype=0&amp;src=http%3A%2F%2Fimg3m1.ddimg.cn%2F31%2F20%2F1465705921-1_u_1.jpg</a>
+tags: [并发编程]</p>
+<h2>description: Java并发编程之美-3-ThreadLocalRandom类 </h2>
 <p>ThreadLocalRandom类是JDK 7 在JUC下新增的随机数生成器, 弥补了在多线程下的缺陷. 本文主要讲解为何要在JUC下新增该类, 以及该类的实现原理!</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h3>1. Random类及其局限性</h3>
-<p>在JDK 7之前和现在, <code>java.util.Random类</code>都是使用广泛的随机数生成工具类, 并且&lt;font color="#ff0000"&gt;<code>java.lang.Math</code>中的随机数生成也是用的此类的实例!&lt;/font&gt;</p>
+<p>在JDK 7之前和现在, <code>java.util.Random类</code>都是使用广泛的随机数生成工具类, 并且&lt;font color="#ff0000"&gt;`java.lang.Math`中的随机数生成也是用的此类的实例!&lt;/font&gt;</p>
 <p><strong>例:</strong></p>
-<pre><code class="language-java">package club.jasonkayzk666.chapter3.threadlocalrandom.lesson1.randomfalut;
+<pre><code class="lang-java">package club.jasonkayzk666.chapter3.threadlocalrandom.lesson1.randomfalut;
 
 import java.util.Random;
 
@@ -27,15 +28,14 @@ public class RandomDemo {
         }
     }
 }
-
 </code></pre>
-<p>&lt;font color="#0000ff"&gt;随机数的生成需要一个默认的种子, 这个种子其实是一个long类型的数字! <em>也可以在创建<code>Random对象</code>时通过构造函数指定!</em>&lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;随机数的生成需要一个默认的种子, 这个种子其实是一个long类型的数字! *也可以在创建`Random对象`时通过构造函数指定!*&lt;/font&gt;</p>
 <p>对于生成随机数的源码:</p>
-<pre><code class="language-java">public int nextInt(int bound) {
+<pre><code class="lang-java">public int nextInt(int bound) {
     // 参数检查
     if (bound &lt;= 0) 
         throw new IllegalArgumentException(BadBound);
-    
+
     // 根据老的种子, 生成新的种子!
     int r = next(31);
     // 根据新的种子计算随机数
@@ -59,18 +59,18 @@ public class RandomDemo {
 </ul>
 <p>&lt;br/&gt;</p>
 <h4>1): 局限性: 多线程无法保证随机性</h4>
-<p>&lt;font color="#0000ff"&gt;对于单线程而言: <em>每次调用<code>nextInt</code>都是根据老的种子计算出新的种子</em>, 此时可以保证随机性!&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;在多线程的情况下: 多个线程可能拿到的是同一个老的种子去执行计算新的种子, 此时会<em>导致多个线程产生的新种子是一样的!</em> 而g的算法也是固定的, 所以多个线程最终产生的随机数是一样的! 所以最终无法保证多线程随机性.&lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;对于单线程而言: *每次调用`nextInt`都是根据老的种子计算出新的种子*, 此时可以保证随机性!&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;在多线程的情况下: 多个线程可能拿到的是同一个老的种子去执行计算新的种子, 此时会*导致多个线程产生的新种子是一样的!* 而g的算法也是固定的, 所以多个线程最终产生的随机数是一样的! 所以最终无法保证多线程随机性.&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h4>2): 局限性的一种解决方案:</h4>
 <p>&lt;font color="#ff0000"&gt;使得通过老种子产生新种子的步骤是原子的即可!&lt;/font&gt;</p>
-<p>即, &lt;font color="#0000ff"&gt;当多个线程根据老种子计算新种子时, 第一个线程的新种子被计算出来后, 第二个线程要<em>丢弃自己的老种子</em>, 而使用第一个线程的新种子来计算自己的新种子.....&lt;/font&gt;</p>
+<p>即, &lt;font color="#0000ff"&gt;当多个线程根据老种子计算新种子时, 第一个线程的新种子被计算出来后, 第二个线程要*丢弃自己的老种子*, 而使用第一个线程的新种子来计算自己的新种子.....&lt;/font&gt;</p>
 <p>&lt;font color="#ff0000"&gt;Random函数内部使用了一个原子变量达到了这个效果, 在创建Random对象时初始化的种子就已经被保存在了种子的原子变量中!&lt;/font&gt;</p>
 <p><code>Random类中next()方法</code>源码如下所示</p>
-<pre><code class="language-java">protected int next(int bits) {
+<pre><code class="lang-java">protected int next(int bits) {
     long oldseed, nextseed;
     AtomicLong seed = this.seed;
-    
+
     // 使用while循环来计算新的种子
     do {
         // (6) 获取当前原子变量种子的值
@@ -85,17 +85,17 @@ public class RandomDemo {
 </code></pre>
 <p><strong>在代码(8)中使用CAS操作的原因:</strong></p>
 <p>&lt;font color="#0000ff"&gt;在多线程下, 可能多个线程都执行到了(6), 此时多个线程拿到的当前种子是同一个值! 然后执行步骤(7)计算的新种子也是同一个!&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;但是CAS操作保证了只能有一个线程可以更新老的种子为新的! <em>失败的线程会通过循环而重新获取更新后的种子作为当前种子来计算</em>, 这就保证了随机性!&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;但是CAS操作保证了只能有一个线程可以更新老的种子为新的! *失败的线程会通过循环而重新获取更新后的种子作为当前种子来计算*, 这就保证了随机性!&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h4>3): 总结</h4>
 <p>每个Random实例中都有一个<strong>原子性的种子变量</strong>来记录当前种子的值, 当要生成新的随机数时, &lt;font color="#0000ff"&gt;需要根据当前种子计算新的种子并更新回原子变量种!&lt;/font&gt;</p>
-<p>&lt;font color="#ff0000"&gt;但是当在多线程下, 当多个线程同时计算新的种子时, 多个线程会<em>竞争同一个原子变量的更新操作</em>, 由于原子变量的更新是CAS操作, 会造成大量线程自旋重试! 这降低了并发性能!&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;但是当在多线程下, 当多个线程同时计算新的种子时, 多个线程会*竞争同一个原子变量的更新操作*, 由于原子变量的更新是CAS操作, 会造成大量线程自旋重试! 这降低了并发性能!&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <hr/>
 <h3>2. ThreadLocalRandom类</h3>
 <p>为了弥补多线程高并发下Random的缺陷, 在JUC包下, 新增了ThreadLocalRandom类.</p>
 <h4>1): 使用</h4>
-<pre><code class="language-java">package club.jasonkayzk666.chapter3.threadlocalrandom.lesson2.threadlocalrandom;
+<pre><code class="lang-java">package club.jasonkayzk666.chapter3.threadlocalrandom.lesson2.threadlocalrandom;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -113,7 +113,6 @@ public class ThreadLocalRandomDemo {
     }
 
 }
-
 </code></pre>
 <p>&lt;br/&gt;</p>
 <h4>2): 实现原理</h4>
@@ -126,10 +125,10 @@ public class ThreadLocalRandomDemo {
 <h3>3. 源码分析</h3>
 <h4>1): ThreadLocalRandom类图结构</h4>
 <p>ThreadLocalRandom类图结构如下:</p>
-<p><img alt="ThreadLocalRandom类图结构" src="https://upload-images.jianshu.io/upload_images/5879294-de63d1e5f21bd72c.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/598"/></p>
+<p><img alt="ThreadLocalRandom类图结构" src="https://upload-images.jianshu.io/upload_images/5879294-de63d1e5f21bd72c.png?imageMogr2/auto-orient/strip|imageView2/2/w/598"/></p>
 <p>可知:</p>
 <ul>
-<li><p>&lt;font color="#0000ff"&gt;ThreadLocalRandom<em>继承了Random</em>并重写了<code>nextInt方法</code>;&lt;/font&gt;</p>
+<li><p>&lt;font color="#0000ff"&gt;ThreadLocalRandom*继承了Random*并重写了`nextInt方法`;&lt;/font&gt;</p>
 </li>
 <li><p>ThreadLocalRandom中并没有使用继承自Random的原子性种子变量:</p>
 <p>&lt;font color="#ff0000"&gt;ThreadLocalRandom中并没有具体存放种子，具体的种子是存放到具体的调用线程的 threadLocalRandomSeed变量里面的, ThreadLocalRandom类似于ThreadLocal类就是个工具类;&lt;/font&gt;</p>
@@ -138,24 +137,24 @@ public class ThreadLocalRandomDemo {
 <p>&lt;font color="#0000ff"&gt;ThreadLocalRandom负责初始化调用线程的 threadLocalRandomSeed变量，也就是初始化种子;&lt;/font&gt;</p>
 </li>
 <li><p>当调用ThreadLocalRandom的nextInt方法时候:</p>
-<p>&lt;font color="#0000ff"&gt;实际上是<em>获取当前线程的<code>threadLocalRandomSeed变量</code>作为当前种子</em>来计算新的种子，然后更新新的种子到当前线程的threadLocalRandomSeed变量，然后在根据新种子和具体算法计算随机数;&lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;实际上是*获取当前线程的`threadLocalRandomSeed变量`作为当前种子*来计算新的种子，然后更新新的种子到当前线程的threadLocalRandomSeed变量，然后在根据新种子和具体算法计算随机数;&lt;/font&gt;</p>
 </li>
 </ul>
 <p>&lt;br/&gt;</p>
 <p><strong>这里需要注意的是:</strong></p>
 <ul>
-<li><p>&lt;font color="#ff0000"&gt;<code>threadLocalRandomSeed</code>变量就是<em>Thread类里面的一个普通long变量，并不是原子性变量!</em> 因为这个变量是线程级别的，根本不需要使用原子性变量! &lt;/font&gt;</p>
+<li><p>&lt;font color="#ff0000"&gt;`threadLocalRandomSeed`变量就是*Thread类里面的一个普通long变量，并不是原子性变量!* 因为这个变量是线程级别的，根本不需要使用原子性变量! &lt;/font&gt;</p>
 </li>
-<li><p>&lt;font color="#ff0000"&gt;变量<code>seeder和probeGenerator</code>是两个<em>原子性变量</em>, 在<em>初始化调用线程的种子和探针变量时候用到</em>，每个线程只会使用一次! &lt;/font&gt;</p>
+<li><p>&lt;font color="#ff0000"&gt;变量`seeder和probeGenerator`是两个*原子性变量*, 在*初始化调用线程的种子和探针变量时候用到*，每个线程只会使用一次! &lt;/font&gt;</p>
 </li>
-<li><p>&lt;font color="#ff0000"&gt;变量instance是个ThreadLocalRandom的一个实例，该变量是<code>static</code>的!&lt;/font&gt;</p>
-<p>当多线程通过ThreadLocalRandom的current方法获取ThreadLocalRandom的实例时候: &lt;font color="#0000ff"&gt;其实获取的是同一个，但是由于具体的种子是存放到线程里面的，所以ThreadLocalRandom的实例里面<em>只是与线程无关的通用算法</em>，所以是线程安全的.&lt;/font&gt;</p>
+<li><p>&lt;font color="#ff0000"&gt;变量instance是个ThreadLocalRandom的一个实例，该变量是`static`的!&lt;/font&gt;</p>
+<p>当多线程通过ThreadLocalRandom的current方法获取ThreadLocalRandom的实例时候: &lt;font color="#0000ff"&gt;其实获取的是同一个，但是由于具体的种子是存放到线程里面的，所以ThreadLocalRandom的实例里面*只是与线程无关的通用算法*，所以是线程安全的.&lt;/font&gt;</p>
 </li>
 </ul>
 <p>&lt;br/&gt;</p>
 <p>下面看看ThreadLocalRandom的主要代码实现逻辑</p>
 <h4>2): Unsafe 机制的使用</h4>
-<pre><code class="language-java">    private static final sun.misc.Unsafe UNSAFE;
+<pre><code class="lang-java">    private static final sun.misc.Unsafe UNSAFE;
     private static final long SEED;
     private static final long PROBE;
     private static final long SECONDARY;
@@ -181,7 +180,7 @@ public class ThreadLocalRandomDemo {
 <p>&lt;br/&gt;</p>
 <h4>3): ThreadLocalRandom current()方法</h4>
 <p>该方法&lt;font color="#0000ff"&gt;获取ThreadLocalRandom实例，并初始化调用线程中threadLocalRandomSeed和threadLocalRandomProbe变量;&lt;/font&gt;</p>
-<pre><code class="language-java">    static final ThreadLocalRandom instance = new ThreadLocalRandom();
+<pre><code class="lang-java">    static final ThreadLocalRandom instance = new ThreadLocalRandom();
     public static ThreadLocalRandom current() {
         //(12)
         if (UNSAFE.getInt(Thread.currentThread(), PROBE) == 0)
@@ -201,11 +200,11 @@ public class ThreadLocalRandomDemo {
 </code></pre>
 <ul>
 <li><p>代码(12):</p>
-<p>如果当前线程中threadLocalRandomProbe变量值为0 (默认情况下线程的这个变量为0): &lt;font color="#0000ff"&gt;说明当前<em>线程第一次调用ThreadLocalRandom的current方法</em>，那么就需要调用localInit方法计算当前线程的初始化种子变量;&lt;/font&gt;</p>
+<p>如果当前线程中threadLocalRandomProbe变量值为0 (默认情况下线程的这个变量为0): &lt;font color="#0000ff"&gt;说明当前*线程第一次调用ThreadLocalRandom的current方法*，那么就需要调用localInit方法计算当前线程的初始化种子变量;&lt;/font&gt;</p>
 <p>&lt;font color="#0000ff"&gt;这里设计为了延迟初始化，不需要使用随机数功能时候Thread类中的种子变量就不需要被初始化，这是一种优化.&lt;/font&gt;</p>
 </li>
 <li><p>代码(13):</p>
-<p>&lt;font color="#0000ff"&gt;首先根据probeGenerator<em>计算当前线程中threadLocalRandomProbe的初始化值</em>，然后根据seeder计算当前线程的初始化种子，然后把这两个变量设置到当前线程;&lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;首先根据probeGenerator*计算当前线程中threadLocalRandomProbe的初始化值*，然后根据seeder计算当前线程的初始化种子，然后把这两个变量设置到当前线程;&lt;/font&gt;</p>
 </li>
 <li><p>代码(14):</p>
 <p>返回ThreadLocalRandom的实例. &lt;font color="#ff0000"&gt;需要注意的是这个方法是静态方法，多个线程返回的是同一个ThreadLocalRandom实例!&lt;/font&gt;</p>
@@ -214,7 +213,7 @@ public class ThreadLocalRandomDemo {
 <p>&lt;br/&gt;</p>
 <h4>4): int nextInt(int bound)方法：</h4>
 <p>计算当前线程的下一个随机数;</p>
-<pre><code class="language-java">    public int nextInt(int bound) {
+<pre><code class="lang-java">    public int nextInt(int bound) {
         //(15)参数校验
         if (bound &lt;= 0)
             throw new IllegalArgumentException(BadBound);
@@ -234,7 +233,7 @@ public class ThreadLocalRandomDemo {
     }
 </code></pre>
 <p>如上代码逻辑步骤与Random相似，我们重点看下nextSeed()方法：</p>
-<pre><code class="language-java">    final long nextSeed() {
+<pre><code class="lang-java">    final long nextSeed() {
         Thread t; 
         long r; 
         UNSAFE.putLong(t = Thread.currentThread(), SEED,
@@ -242,7 +241,7 @@ public class ThreadLocalRandomDemo {
         return r;
     }
 </code></pre>
-<p>&lt;font color="#0000ff"&gt;首先使用 <code>r = UNSAFE.getLong(t,  SEED)</code>获取当前线程中threadLocalRandomSeed变量的值，然后在种子的基础上<code>累加GAMMA值作为新种子</code>，然后使用UNSAFE的putLong方法把新种子放入当前线程的threadLocalRandomSeed变量. &lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;首先使用 `r = UNSAFE.getLong(t,  SEED)`获取当前线程中threadLocalRandomSeed变量的值，然后在种子的基础上`累加GAMMA值作为新种子`，然后使用UNSAFE的putLong方法把新种子放入当前线程的threadLocalRandomSeed变量. &lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <hr/>
 <h3>4. 总结</h3>

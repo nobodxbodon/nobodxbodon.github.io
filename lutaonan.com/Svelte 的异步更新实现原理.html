@@ -1,19 +1,19 @@
 <h2><a href="https://github.com/djyde/blog-2022/blob/master/src/pages/blog/how-svelte-set-state-works.md">仓库源文</a>，<a href="https://lutaonan.com/blog/how-svelte-set-state-works">站点原文</a></h2>
 <hr/>
-<h2>title: Svelte 的异步更新实现原理
+<p>title: Svelte 的异步更新实现原理
 layout: '../../layouts/Post.astro'
 tags: blog
-date: 2021-04-11
-pin: true</h2>
+date: 2021-04-11</p>
+<h2>pin: true</h2>
 <p>在 <a href="/blog/svelte">我对 Svelte 的看法</a> 一文里，我分析了 Svelte 在编译时实现 Reactive 的原理。在这篇文章，我将分析在 Svelte 里更新一个状态 (state) 值后更新到 UI 的这一过程。</p>
 <p>阅读本文前，你应该至少：</p>
 <ul>
-<li>读过 <a href="/blog/svelte">我对 Svelte 的看法</a></li>
+<li>读过 <a href="/blog/svelte">我对 Svelte 的看法</a> </li>
 <li>明白 JavaScript 中的 <a href="https://javascript.info/event-loop">事件循环</a> 机制</li>
 </ul>
 <h2>原理分析</h2>
 <p>为了保持简单，先从一个和 Svelte 无关的例子讲起：</p>
-<pre><code class="language-js">// 假设我们正在实现一个 counter, 只有一个 state，就是 count, 它是一个 number:
+<pre><code class="lang-js">// 假设我们正在实现一个 counter, 只有一个 state，就是 count, 它是一个 number:
 let count = 0
 
 // 我们可以实现一个 setCount, 来改变 count 的值，顺便执行更新 UI:
@@ -31,7 +31,7 @@ setCount(2) //=&gt; update ui with count: 2
 setCount(3) //=&gt; update ui with count: 3
 </code></pre>
 <p>这样实现很简单，但是有一个严重的问题：连续的状态更新会连续触发 <code>updateUI</code>, 性能会非常糟糕。解决这个问题的方法是：<strong>把同一个事件循环里的所有状态更新造成的 UI 更新统一合并（batch）到一个 microtask 里统一执行。</strong></p>
-<pre><code class="language-js">// 基于 Promise 实现一个把函数放到 microtask 里的函数
+<pre><code class="lang-js">// 基于 Promise 实现一个把函数放到 microtask 里的函数
 function createMicroTask(fn) {
   Promise.resovle().then(fn);
 }
@@ -53,7 +53,7 @@ function updateUI() {
 // 在 setCount 时，不再直接触发 updateUI, 而是 schedule 一个 update
 function setCount(newVal) {
   count = newVal
-	scheduleUpdate()
+    scheduleUpdate()
 }
 
 setCount(1)
@@ -63,28 +63,28 @@ setCount(3)
 </code></pre>
 <p>这样，在同一个事件循环里，多个状态更新只会触发一次 UI 更新。</p>
 <p>现在假设页面上有一个 <code>h1</code>, <code>updateUI</code> 中会更新它：</p>
-<pre><code class="language-js">let count = 0
+<pre><code class="lang-js">let count = 0
 const h1 = document.querySelector('h1')
 
 function updateUI() {
   updateScheduled = false
-	h1.innerHTML = `${count}`
+    h1.innerHTML = `${count}`
 }
 
 setCount(1)
 setCount(2)
 setCount(3)
-//=&gt; update ui with count: 3 
+//=&gt; update ui with count: 3
 </code></pre>
 <p>So far so good. 但是相信不少人年轻的时候曾经写过这样的代码：</p>
-<pre><code class="language-js">setCount(1)
+<pre><code class="lang-js">setCount(1)
 setCount(2)
 setCount(3)
 console.log(h1.innerHTML) //=&gt; 0
 </code></pre>
 <p>在 <code>setCount(3)</code> 后， <code>h1.innerHTML</code> 竟不是预期中的 3. 仔细一想，当然了，<code>updateUI</code> 是在同步代码执行完后，开始执行 microtask 队列的时候才触发的啊。</p>
 <p>为了可以在 <code>setCount</code> 后拿到更新后正确的值，我们可以把关于 UI 的操作也放到下一个 microtask 才执行。为了方便，我们可以写一个 <code>tick</code> 函数：</p>
-<pre><code class="language-js">function tick() {
+<pre><code class="lang-js">function tick() {
   return new Promise.resolve()
 }
 
@@ -98,7 +98,7 @@ async () =&gt; {
 </code></pre>
 <h2>Svelte 的实际做法</h2>
 <p>回到 Svelte:</p>
-<pre><code class="language-html">&lt;script&gt;
+<pre><code class="lang-html">&lt;script&gt;
     let count = 0
 &lt;/script&gt;
 
@@ -109,70 +109,69 @@ async () =&gt; {
 &lt;/div&gt;
 </code></pre>
 <p>这个组件会被编译成一个 fragment （你不需要读懂下面的代码）:</p>
-<pre><code class="language-js">function create_fragment(ctx) {
-	let div;
-	let span;
-	let t0;
-	let t1;
-	let button0;
-	let t3;
-	let button1;
-	let mounted;
-	let dispose;
+<pre><code class="lang-js">function create_fragment(ctx) {
+    let div;
+    let span;
+    let t0;
+    let t1;
+    let button0;
+    let t3;
+    let button1;
+    let mounted;
+    let dispose;
 
-	return {
-		c() {
-			div = element("div");
-			span = element("span");
-			t0 = text(/*count*/ ctx[0]);
-			t1 = space();
-			button0 = element("button");
-			button0.textContent = "+";
-			t3 = space();
-			button1 = element("button");
-			button1.textContent = "-";
-		},
-		m(target, anchor) {
-			insert(target, div, anchor);
-			append(div, span);
-			append(span, t0);
-			append(div, t1);
-			append(div, button0);
-			append(div, t3);
-			append(div, button1);
+    return {
+        c() {
+            div = element("div");
+            span = element("span");
+            t0 = text(/*count*/ ctx[0]);
+            t1 = space();
+            button0 = element("button");
+            button0.textContent = "+";
+            t3 = space();
+            button1 = element("button");
+            button1.textContent = "-";
+        },
+        m(target, anchor) {
+            insert(target, div, anchor);
+            append(div, span);
+            append(span, t0);
+            append(div, t1);
+            append(div, button0);
+            append(div, t3);
+            append(div, button1);
 
-			if (!mounted) {
-				dispose = [
-					listen(button0, "click", /*click_handler*/ ctx[1]),
-					listen(button1, "click", /*click_handler_1*/ ctx[2])
-				];
+            if (!mounted) {
+                dispose = [
+                    listen(button0, "click", /*click_handler*/ ctx[1]),
+                    listen(button1, "click", /*click_handler_1*/ ctx[2])
+                ];
 
-				mounted = true;
-			}
-		},
-		p(ctx, [dirty]) {
-			if (dirty &amp; /*count*/ 1) set_data(t0, /*count*/ ctx[0]);
-		},
-		i: noop,
-		o: noop,
-		d(detaching) {
-			if (detaching) detach(div);
-			mounted = false;
-			run_all(dispose);
-		}
-	};
+                mounted = true;
+            }
+        },
+        p(ctx, [dirty]) {
+            if (dirty &amp; /*count*/ 1) set_data(t0, /*count*/ ctx[0]);
+        },
+        i: noop,
+        o: noop,
+        d(detaching) {
+            if (detaching) detach(div);
+            mounted = false;
+            run_all(dispose);
+        }
+    };
 }
 
 function instance($$self, $$props, $$invalidate) {
-	let count = 0;
-	const click_handler = () =&gt; $$invalidate(0, count++, count);
-	const click_handler_1 = () =&gt; $$invalidate(0, count--, count);
-	return [count, click_handler, click_handler_1];
+    let count = 0;
+    const click_handler = () =&gt; $$invalidate(0, count++, count);
+    const click_handler_1 = () =&gt; $$invalidate(0, count--, count);
+    return [count, click_handler, click_handler_1];
 }
-
 </code></pre>
 <p>不要被吓到，一个 Svelte Fragment 实际上是一个函数返回几个必要的方法：</p>
-<pre><code class="language-js">function createFragment(ctx) {
+<pre><code class="lang-js">function createFragment(ctx) {
   return {
     // 创建 DOM 的方法
     c(): {},
@@ -180,7 +179,7 @@ function instance($$self, $$props, $$invalidate) {
     m(): {},
     // DOM 节点更新的方法
     p(): {},
-		// unmount 的方法
+        // unmount 的方法
     d() {}
   }
 }

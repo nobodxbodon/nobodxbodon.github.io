@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/mabbs/mabbs.github.io/blob/master/_posts/2024-03-16-ssl-pinning.md">仓库源文</a>，<a href="https://mabbs.github.io/2024/03/16/ssl-pinning">站点原文</a></h2>
 <hr/>
-<h2>layout: post
-title: 如何用requests库验证证书
-tags: [Python, requests, ssl]</h2>
+<p>layout: post
+title: 如何用requests库验证证书</p>
+<h2>tags: [Python, requests, ssl]</h2>
 <p>用Python制作的程序怎么样？&lt;!--more--&gt;</p>
 <h1>起因</h1>
 <p>之前在抓包某些APP的时候，可能会遇到即使信任了抓包软件的CA根证书也无法抓包的情况，听说之所以遇到这种情况是因为那些APP使用了“SSL Pinning”的技术，可以只信任代码中认为可以信任的证书。不过对于逆向之类的事情我并不擅长，这种问题我也不太会解决。但是不能解决问题我可以创造问题啊，Java的APP我不会写，但是我会用Python写，所以今天来看看怎么样用Python实现类似“SSL Pinning”的技术。</p>
 <h1>实现方案</h1>
 <p>真正的SSL Pinning似乎是通过预置网站所使用的根证书或者中间证书来实现的，这样的好处是即使证书到期换了证书也能继续验证。不过我觉得其实没必要这么麻烦，一般Python程序要连接的后端也没必要在浏览器中调用，大不了就自签一个证书，然后自己验证证书就好了，反正中间人攻击重新签的公钥证书的指纹肯定和原来网站公钥证书的指纹不一样，用这一点就可以判断有没有被抓包。<br/>
-不过我搜了一下，如果想实现这个功能，首先请求的时候就要获得网站的证书，很多资料都是直接用socket和ssl这两个包实现的，但是在python上请求一般都是用requests，用socket操作有点太麻烦了吧，再问问AI呢？AI给出的回复是：<code>response.raw.connection.getpeercert()</code>，结果执行了根本没有这个方法，不愧是只会东拼西凑，这应该是ssl库的函数吧……要么可以用<code>urllib3.contrib.pyopenssl.ssl.get_server_certificate()</code>这个方法获取，但是这个方法不是在发起请求的时候获取的证书，而是直接先访问了一下服务器然后直接获取的证书，这样每次调用接口的时候可能就要请求两次服务器了，感觉不怎么好……后来去Stack Overflow上搜了一下，还真有关于类似这个问题的<a href="https://stackoverflow.com/questions/16903528/how-to-get-response-ssl-certificate-from-requests-in-python">讨论</a>，于是我简单改编了一下，最终效果如下：</p>
-<pre><code class="language-python">import requests
+  不过我搜了一下，如果想实现这个功能，首先请求的时候就要获得网站的证书，很多资料都是直接用socket和ssl这两个包实现的，但是在python上请求一般都是用requests，用socket操作有点太麻烦了吧，再问问AI呢？AI给出的回复是：<code>response.raw.connection.getpeercert()</code>，结果执行了根本没有这个方法，不愧是只会东拼西凑，这应该是ssl库的函数吧……要么可以用<code>urllib3.contrib.pyopenssl.ssl.get_server_certificate()</code>这个方法获取，但是这个方法不是在发起请求的时候获取的证书，而是直接先访问了一下服务器然后直接获取的证书，这样每次调用接口的时候可能就要请求两次服务器了，感觉不怎么好……后来去Stack Overflow上搜了一下，还真有关于类似这个问题的<a href="https://stackoverflow.com/questions/16903528/how-to-get-response-ssl-certificate-from-requests-in-python">讨论</a>，于是我简单改编了一下，最终效果如下：</p>
+<pre><code class="lang-python">import requests
 import hashlib
 
 HTTPSConnection = requests.packages.urllib3.connection.HTTPSConnection

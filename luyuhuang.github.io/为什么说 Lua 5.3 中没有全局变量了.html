@@ -1,12 +1,12 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2020-03-20-lua53-environment.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2020/03/20/lua53-environment">站点原文</a></h2>
 <hr/>
-<h2>key: 28
-title: 为什么说 Lua 5.3 中没有全局变量了
-tag: lua</h2>
+<p>key: 28
+title: 为什么说 Lua 5.3 中没有全局变量了</p>
+<h2>tag: lua</h2>
 <p>过去笔者一直使用 Lua 5.1, 对 Lua 5.3 中的 <code>_ENV</code> 一知半解. 最近新项目中使用了 Lua 5.3, 于是特意研究了下. 这篇文章总结下 Lua 5.3 中的环境和全局变量, <code>_ENV</code> 的含义以及与之相关的用法.</p>
 <h3>Lua 变量的类型</h3>
 <p>Lua 中的变量可分为局部变量, 上值(upvalue)和全局变量. 经常使用 Lua 的同学应该都很熟悉, 举个例子:</p>
-<pre><code class="language-lua">local up = "str"
+<pre><code class="lang-lua">local up = "str"
 local function foo(a)
     local b = a
     print(up, b)
@@ -15,7 +15,7 @@ end
 <p>对于 function <code>foo</code> 来说, <code>a</code> 和 <code>b</code> 是局部变量, <code>up</code> 是上值, <code>print</code> 则是全局变量.</p>
 <h3>局部变量和上值</h3>
 <p>一个变量是什么变量在编译时就能确定: 从当前函数依次向上寻找, 能在当前函数找到的变量为局部变量, 在上层函数找到的变量为上值, 都找不到的为全局变量.  下面是 Lua 寻找变量的代码:</p>
-<pre><code class="language-c">/*
+<pre><code class="lang-c">/*
   Find variable with given name 'n'. If it is an upvalue, add this
   upvalue into all intermediate functions.
 */
@@ -47,7 +47,7 @@ static void singlevaraux (FuncState *fs, TString *n, expdesc *var, int base) {
 <p>在运行时, 对于局部变量, 直接通过索引即可获得这个变量的值; 对于上值, 如果在栈中, 则通过索引在上层函数的局部变量中获得这个变量的值, 否则通过索引在上层函数的上值中获得这个变量的值. 也就是说, 对于局部变量和上值, Lua 在编译的时候就为它们编上号了, 运行时通过编号获取变量, 不 care 变量名.(所以不要再说变量名起短些运行效率高了)</p>
 <h3>全局变量</h3>
 <p>那么对于无法在局部变量和上值中找到的全局变量 Lua 是怎么做的呢? 这就是最有意思的地方了. 我们来看 <code>singlevaraux</code> 的调用者 <code>singlevar</code>. 当 Lua 编译时每遇到一个变量都会调用它:</p>
-<pre><code class="language-c">static void singlevar (LexState *ls, expdesc *var) {
+<pre><code class="lang-c">static void singlevar (LexState *ls, expdesc *var) {
   TString *varname = str_checkname(ls);
   FuncState *fs = ls-&gt;fs;
   singlevaraux(fs, varname, var, 1);
@@ -62,7 +62,7 @@ static void singlevaraux (FuncState *fs, TString *n, expdesc *var, int base) {
 </code></pre>
 <p>首先 <code>singlevar</code> 调用 <code>singlevaraux</code> 寻找变量, 如果找不到, 则第 6 行开始处理全局变量. 这里它首先调用 <code>singlevaraux</code> 传入了 <code>ls-&gt;envn</code>. 查查代码就能发现, <code>ls-&gt;envn</code> 的值为 <code>"_ENV"</code>, 也就是它要寻找一个名为 <code>_ENV</code> 的变量. 接着在第 9 行将变量名作为字符串存储在常量区, 然后第 10 行生成了一个表查找指令, 在变量 <code>_ENV</code> 中查找键为该变量名的值.</p>
 <p>也就是说对于每个全局变量 <code>var</code> 来说, Lua 都处理成 <code>_ENV.var</code>. 那么在我们没有手动定义的情况下, 这个 <code>_ENV</code> 变量是从何而来的呢? 我们可以找到它被设置的地方:</p>
-<pre><code class="language-c">/* lparser.c */
+<pre><code class="lang-c">/* lparser.c */
 static void mainfunc (LexState *ls, FuncState *fs) {
   BlockCnt bl;
   expdesc v;
@@ -102,7 +102,7 @@ LUA_API int lua_load (lua_State *L, lua_Reader reader, void *data,
 </code></pre>
 <p>当调用 <code>load</code>, <code>loadfile</code> 或 <code>dofile</code> 等方法的时候, 都会调用到 <code>lua_load</code>, 这会加载代码并进行编译. 先在 23 行调用 <code>luaD_protectedparser</code> 编译代码, 这会调用到 <code>mainfunc</code> 编译 main 函数(或者说 chunk). 注意到第 8 行, 它会给 main 函数设置一个名为 <code>_ENV</code> 的上值变量. 然后在 31 行将全局 table 设为 main 函数的第一个上值, 也是它唯一的上值, 即 <code>_ENV</code>. 这个全局 table 在 Lua 虚拟机初始化的时候就被创建, 里面包含各种标准库函数.</p>
 <p>也就是说在我们访问全局变量的时候, 实际上是在访问上值 <code>_ENV</code> 中的键值; 由于嵌套定义的函数会继承其上层函数的上值, 这使得所有的函数访问到的 <code>_ENV</code> 变量都是同一个变量, 看上去就像共用相同的全局变量了. 下面这段代码举了个例子:</p>
-<pre><code class="language-lua">local function foo()
+<pre><code class="lang-lua">local function foo()
     a = 1
     (function()
       b = "str"

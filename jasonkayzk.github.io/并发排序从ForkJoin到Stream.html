@@ -1,13 +1,13 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/%E5%B9%B6%E5%8F%91%E6%8E%92%E5%BA%8F%E4%BB%8EForkJoin%E5%88%B0Stream.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/02/25/%E5%B9%B6%E5%8F%91%E6%8E%92%E5%BA%8F%E4%BB%8EForkJoin%E5%88%B0Stream">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/并发排序从ForkJoin到Stream.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/02/25/并发排序从ForkJoin到Stream">站点原文</a></h2>
 <hr/>
-<h2>title: 并发排序从ForkJoin到Stream
+<p>title: 并发排序从ForkJoin到Stream
 toc: true
 date: 2020-02-25 17:37:53
-cover: https://img.paulzzh.com/touhou/random?11
+cover: <a href="https://img.paulzzh.com/touhou/random?11">https://img.paulzzh.com/touhou/random?11</a>
 categories: 并发编程
-tags: [算法, 并发编程]
-description: 在前面"几种常见排序方法的优化(下)"一文中, 我总结了针对归并排序的一些优化方法. 但是即使是优化, 整个排序过程也是建立在单个线程当中的. 而自顶向下的归并排序在将数组拆分之后, 左右两部分是不会被同一个递归栈访问的, 容易想到可以开辟两个线程(递归的)分别进行左右归并排序. 本篇就在此基础之上探讨有关ForkJoin和Stream的一些操作</h2>
-<p>在前面<a href="https://jasonkayzk.github.io/2020/02/24/%E5%87%A0%E7%A7%8D%E5%B8%B8%E8%A7%81%E6%8E%92%E5%BA%8F%E6%96%B9%E6%B3%95%E7%9A%84%E4%BC%98%E5%8C%96-%E4%B8%8B/">几种常见排序方法的优化(下)</a>一文中, 我总结了针对归并排序的一些优化方法.但是即使是优化, 整个排序过程也是建立在单个线程当中的</p>
+tags: [算法, 并发编程]</p>
+<h2>description: 在前面"几种常见排序方法的优化(下)"一文中, 我总结了针对归并排序的一些优化方法. 但是即使是优化, 整个排序过程也是建立在单个线程当中的. 而自顶向下的归并排序在将数组拆分之后, 左右两部分是不会被同一个递归栈访问的, 容易想到可以开辟两个线程(递归的)分别进行左右归并排序. 本篇就在此基础之上探讨有关ForkJoin和Stream的一些操作</h2>
+<p>在前面<a href="https://jasonkayzk.github.io/2020/02/24/几种常见排序方法的优化-下/">几种常见排序方法的优化(下)</a>一文中, 我总结了针对归并排序的一些优化方法.但是即使是优化, 整个排序过程也是建立在单个线程当中的</p>
 <p>而自顶向下的归并排序在将数组拆分之后, 左右两部分是不会被同一个递归栈访问的, 容易想到可以开辟两个线程(递归的)分别进行左右归并排序</p>
 <p>本篇就在此基础之上探讨有关ForkJoin和Stream的一些操作</p>
 <p>本文内容包括:</p>
@@ -19,13 +19,14 @@ description: 在前面"几种常见排序方法的优化(下)"一文中, 我总�
 </ul>
 <p>源代码:</p>
 <ul>
-<li>源代码: https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/sort</li>
-<li>测试代码: https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/test/java/algorithm/sort</li>
+<li>源代码: <a href="https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/sort">https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/sort</a></li>
+<li>测试代码: <a href="https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/test/java/algorithm/sort">https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/test/java/algorithm/sort</a></li>
 </ul>
 <p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
 <p>内容和博客同步更新~</p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>并发排序从ForkJoin到Stream</h2>
 <p>对于分治思想, 每一次递归在将问题划分为子问题时, 如果两个子问题之间没有关联, 则都可以通过单独开辟一个线程进行并发完成子问题, 并等待两个子问题解决后完成归并;</p>
 <p>对于多线程的归并排序就是这种思想</p>
@@ -38,8 +39,7 @@ description: 在前面"几种常见排序方法的优化(下)"一文中, 我总�
 <p>线程池中的<strong>每条工作线程都有自己的双端工作队列并且会将新任务放到这个队列中</strong>去:</p>
 <p>它从队列的头部读取任务: 如果队列是空的，工作线程就尝试从另外一个队列的末尾获取一个任务</p>
 <p><strong>窃取操作不会很频繁，因为工作线程会采用后进先出的顺序将任务放入它们的队列中</strong>，同时工作项的规模会随着问题分割成子问题而变小; 你一开始把任务交给一个中心的工作线程，之后它会继续将这个任务分解成更小的任务, 最终所有的工作线程都只会设计很少量的同步操作</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p>更多关于Fort/Join的内容见:</p>
 <ul>
 <li><a href="http://gee.cs.oswego.edu/dl/papers/fj.pdf">Doug Lea 大神写的Fork/Join框架的论文</a></li>
@@ -66,7 +66,7 @@ description: 在前面"几种常见排序方法的优化(下)"一文中, 我总�
 <p>由于在归并排序时, 使用到了RecursiveAction, 这里就举一个RecursiveTask的例子:</p>
 <p>通过ForkJoin并行计算斐波那契start~end的和:</p>
 <p>MultiThreadFibonacci.java</p>
-<pre><code class="language-java">import java.util.concurrent.RecursiveTask;
+<pre><code class="lang-java">import java.util.concurrent.RecursiveTask;
 
 /**
  * 通过ForkJoin并行计算斐波那契start~end的和
@@ -119,8 +119,7 @@ public class MultiThreadFibonacci extends RecursiveTask&lt;Long&gt; {
     }
 }
 </code></pre>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>代码说明:</strong></p>
 <p><strong>① 类的定义</strong></p>
 <p>代码定义了MultiThreadFibonacci并继承自<code>RecursiveTask&lt;Long&gt;</code>说明这是一个有返回值的Task, 其中泛型表示返回值类型</p>
@@ -134,7 +133,7 @@ public class MultiThreadFibonacci extends RecursiveTask&lt;Long&gt; {
 </blockquote>
 <p>运行代码:</p>
 <p>MultiThreadFibonacciTest.java</p>
-<pre><code class="language-java">import algorithm.util.iostream.StdOut;
+<pre><code class="lang-java">import algorithm.util.iostream.StdOut;
 import org.junit.Test;
 
 import static algorithm.basic.Fibonacci.fibByFormula;
@@ -184,23 +183,22 @@ public class MultiThreadFibonacciTest {
 <p>需要注意的是: 求和的值是fib(1) + … + fib(100000000), 计算结果可能已经溢出很多次了</p>
 <p>(但是, 我们关注的是计算的性能比较, 所以仅在末尾比较两种方法的结果是否相等: <code>assert res1 == res2</code>)</p>
 <p>结果如下:</p>
-<pre><code class="language-java">fibByFormula: (4547 milliseconds)
+<pre><code class="lang-java">fibByFormula: (4547 milliseconds)
 MultiThreadFibonacci: (960 milliseconds)
 The sum of 1th~100000000th fibonacci is: 1293530146058730797
 </code></pre>
 <p>可见并行的速度还是很快的!</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>说明:</strong></p>
 <p>这个试验方法仅仅作为测试, 实际上通过自底向上的计算菲波那切并叠加计算的效率在<strong>单线程下</strong>会更高</p>
 <p>&lt;br/&gt;</p>
-<p>源代码: https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/basic</p>
-<p>更多斐波那契额相关: <a href="https://jasonkayzk.github.io/2020/02/25/Fibonacci%E5%BA%8F%E5%88%97%E7%94%9F%E6%88%90%E7%AE%97%E6%B3%95%E7%9A%84%E4%BC%98%E5%8C%96/">Fibonacci序列生成算法的优化</a></p>
+<p>源代码: <a href="https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/basic">https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/basic</a></p>
+<p>更多斐波那契额相关: <a href="https://jasonkayzk.github.io/2020/02/25/Fibonacci序列生成算法的优化/">Fibonacci序列生成算法的优化</a></p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3>二.基于多线程(ForkJoin)的归并排序的实现</h3>
 <p>下面看看如何用ForkJoin框架实现多线程归并排序</p>
-<pre><code class="language-java">import java.util.concurrent.ForkJoinPool;
+<pre><code class="lang-java">import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
 
 /**
@@ -319,7 +317,7 @@ public class ParallelMergeSort extends BaseSort {
 <hr/>
 <p><strong>② 继承自BaseSort</strong></p>
 <p>BaseSort提供了排序通用的比较方法less(), 以及交换exch()等;</p>
-<p>更详细的内容见: <a href="https://jasonkayzk.github.io/2020/02/24/%E5%87%A0%E7%A7%8D%E5%B8%B8%E8%A7%81%E6%8E%92%E5%BA%8F%E6%96%B9%E6%B3%95%E7%9A%84%E4%BC%98%E5%8C%96(%E4%B8%8A">几种常见排序方法的优化(上)</a>/)</p>
+<p>更详细的内容见: <a href="https://jasonkayzk.github.io/2020/02/24/几种常见排序方法的优化(上">几种常见排序方法的优化(上)</a>/)</p>
 <hr/>
 <p><strong>③ 内部类MergeTask</strong></p>
 <p>MergeTask继承自RecursiveAction(表示是一个无返回值的任务), 使用了THRESHOLD优化排序, 并通过arr和tmp数组共享排序数组和辅助数组;</p>
@@ -330,8 +328,7 @@ public class ParallelMergeSort extends BaseSort {
 <hr/>
 <p><strong>④ 辅助方法</strong></p>
 <p>定义了merge()和insertionSort()方法, 分别用来完成并发排序后两个子数组的归并和针对小数组切换为插入排序的优化</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>延伸:</strong></p>
 <p>快排也是基于分治的思想实现的, 当然递归会返回轴(pivot)的索引, 那么如何使用RecursiveTask实现一个并发的快排呢?</p>
 </blockquote>
@@ -347,7 +344,7 @@ public class ParallelMergeSort extends BaseSort {
 <p>&lt;br/&gt;</p>
 <h4>2.运行实例</h4>
 <p>使用ParallelMergeSort, 尝试对一百万个随机数排序:</p>
-<pre><code class="language-java">public class ParallelMergeSortTest {
+<pre><code class="lang-java">public class ParallelMergeSortTest {
     @Test
     public void parallelMergeSortTest() {
         // 排序大小
@@ -373,15 +370,13 @@ public class ParallelMergeSort extends BaseSort {
 <p>JDK8中的Stream是对集合(Collection)对象功能的增强</p>
 <p>它专注于对集合对象进行各种非常便利、高效的聚合操作(aggregate  operation)，或者大批量数据操作(bulk data operation). Stream API借助于同样新出现的Lambda表达式极大的提高编程效率和程序可读性</p>
 <p>Stream不是集合元素，它不是数据结构并不保存数据，它是有关算法和计算的，它更像一个高级版本的 Iterator:</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p>原始版本的Iterator: 用户只能显式地一个一个遍历元素并对其执行某些操作；</p>
 <p>而高级版本的Stream: 用户只要给出需要对其包含的元素执行什么操作, 比如: 过滤掉长度大于 10 的字符串、获取每个字符串的首字母等(Stream会隐式地在内部进行遍历，做出相应的数据转换)</p>
 </blockquote>
 <p>Stream 就如同一个迭代器(Iterator): <strong>单向, 不可往复, 数据只能遍历一次, 遍历过一次后即用尽了</strong>(就好比流水流过, 一去不复返)</p>
 <p>和迭代器又不同的是, Stream 可以并行化操作, 而迭代器只能命令式地、串行化操作</p>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p>通常编写并行代码很难而且容易出错, 但使用 Stream API无需编写一行多线程的代码，就可以很方便地写出高性能的并发程序</p>
 <p>所以说，Java 8 中首次出现的java.util.stream是一个函数式语言+多核时代综合影响的产物</p>
 </blockquote>
@@ -390,10 +385,10 @@ public class ParallelMergeSort extends BaseSort {
 <p>Stream的并行操作依赖于 Java7 中引入的 Fork/Join 框架（JSR166y）来拆分任务和加速处理过程. 即: <strong>实际上Stream并行流实际上就是一个帮你fork/join 后的API!</strong></p>
 <h4>2.一个stream实例</h4>
 <p>下面一段代码通过Stream将一个Collection排序, 并将结果放入数组中:</p>
-<pre><code class="language-java">public void streamSortTest() {
+<pre><code class="lang-java">public void streamSortTest() {
     // 排序大小
     final int sortSize = 1000000;
-    
+
     // 通过stream和一个Integer数组创建一个list
     List&lt;Integer&gt; list = Arrays
         .stream(RandomArrayUtil.getRandomBoxedIntArray(sortSize))
@@ -407,9 +402,8 @@ public class ParallelMergeSort extends BaseSort {
     assert BaseSort.isSorted(res);
 }
 </code></pre>
-<blockquote>
-<p>&lt;br/&gt;</p>
-<p>更多关于Stream和Lambda表达式: <a href="https://jasonkayzk.github.io/2019/09/16/Lambda%E8%A1%A8%E8%BE%BE%E5%BC%8F%E6%80%BB%E7%BB%93/">Lambda表达式总结</a></p>
+<blockquote><p>&lt;br/&gt;</p>
+<p>更多关于Stream和Lambda表达式: <a href="https://jasonkayzk.github.io/2019/09/16/Lambda表达式总结/">Lambda表达式总结</a></p>
 </blockquote>
 <p>运行结果: ParallelStream time is: 198 milliseconds</p>
 <p>将一百万个随机数排序仅仅用了198毫秒!</p>
@@ -417,7 +411,7 @@ public class ParallelMergeSort extends BaseSort {
 <h3>四.排序性能测试</h3>
 <p>分别使用单线程归并排序, ForkJoin并发排序和Stream流排序对十万个、一百万个、一亿个随机数进行排序, 排序代码如下:</p>
 <p>ParallelMergeSortTest.java</p>
-<pre><code class="language-java">public class ParallelMergeSortTest {
+<pre><code class="lang-java">public class ParallelMergeSortTest {
     /**
      * 比较单线程归并排序, ForkJoin并发排序和Stream流排序
      */
@@ -452,7 +446,7 @@ public class ParallelMergeSort extends BaseSort {
 }
 </code></pre>
 <p>执行结果为:</p>
-<pre><code class="language-markdown">1.排序十万个数:
+<pre><code class="lang-markdown">1.排序十万个数:
   Sequent time is: 4 milliseconds
   Parallel time [16 processors] is: 34 milliseconds
   ParallelStream time is: 29 milliseconds
@@ -488,8 +482,8 @@ public class ParallelMergeSort extends BaseSort {
 </ul>
 <p>源代码:</p>
 <ul>
-<li>源代码: https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/sort</li>
-<li>测试代码: https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/test/java/algorithm/sort</li>
+<li>源代码: <a href="https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/sort">https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/main/java/algorithm/sort</a></li>
+<li>测试代码: <a href="https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/test/java/algorithm/sort">https://github.com/JasonkayZK/Java_Algorithm/tree/master/src/test/java/algorithm/sort</a></li>
 </ul>
 <p>如果觉得文章写的不错, 可以关注微信公众号: Coder张小凯</p>
 <p>公众号内容和博客同步更新~</p>

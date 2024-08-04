@@ -1,17 +1,18 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/mysql-pagination.md">仓库源文</a>，<a href="https://claude-ray.github.io/mysql-pagination">站点原文</a></h2>
 <hr/>
-<h2>title: MySQL 分页查询优化思路
+<p>title: MySQL 分页查询优化思路
 date: 2019-03-11 22:11:05
-tags: [MySQL]
-categories: MySQL</h2>
+tags: [MySQL]</p>
+<h2>categories: MySQL</h2>
 <h2>前言</h2>
 <p>突破查询瓶颈的方法有很多，但这里先不谈分库分表之流，当头问题就一个：单数据表分页查询过慢怎么办？</p>
 <p>其实讲分页优化的博客真不少，但很多博主只顾分享点子忽略了细节，还有很多值得补充的地方。笔者回顾了曾经在千万级 BBS 项目的优化经历，尽可能结合实际地聊聊个人对分页查询的见解。也希望读者在亲身操作中验证，任何优化脱离了实际场景都是纸上谈兵。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>分页方式</h2>
 <p>首先介绍最常见的数据分页方式，即传统分页和流式分页。</p>
 <h3>传统分页</h3>
-<p><img alt="贴吧PC分页" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/source/image/mysql-pagination/01.png"/></p>
+<p><img alt="贴吧PC分页" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/claude-ray.github.io/source/image/mysql-pagination/01.png"/></p>
 <p>传统分页的基本逻辑是每页展示固定的条目数、通过页码分页和翻页，包含要素如下：</p>
 <ul>
 <li>首页：按序查询出一页长度的数据，作为顶部数据，无须处理偏移量。</li>
@@ -23,7 +24,7 @@ categories: MySQL</h2>
 </ul>
 <p>翻页和跳转功能为查询效率带来了极大挑战，一方面带着偏移量的 MySQL 查询效率不高，另一方面功能上也存在缺陷，例如浏览当前页面的过程中发生数据新增或删除，页码编号已经重置，此时翻页后会出现数据“重复”或“缺失”的问题。</p>
 <h3>流式分页</h3>
-<p><img alt="贴吧Mobile分页" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/source/image/mysql-pagination/02.png"/></p>
+<p><img alt="贴吧Mobile分页" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/claude-ray.github.io/source/image/mysql-pagination/02.png"/></p>
 <p>流式分页简单得多，即只能一页一页向下加载，偏移量不固定，不提供跳转。常见于移动端，它不仅解决了传统分页的功能缺陷，间接对查询性能有所提升。</p>
 <p>因此分页设计时产品层的优化必不可少，尽量选择流式分页。</p>
 <p>不过 BBS 类型的 Web 项目为了方便用户，奉行 PC 端使用传统分页，移动端使用流式分页的设计理念。如果对这种设计没概念，可以左转百度贴吧。这要求我们必须直面传统分页带来的性能挑战。</p>
@@ -31,27 +32,26 @@ categories: MySQL</h2>
 <p>索引优化的套路属于另一个范畴了，应当视具体引擎、数据分布、锁等信息来权衡处理。在这里主要强调一点，使用覆盖索引避免回表查询。因为 InnoDB 查询偏移量 offset 的过程是先查出 offset + limit 条数据，再抛弃前 offset 条数据，偏移量过大时查询效率将低到令人发指。</p>
 <p>因此，必须禁止分页查询时使用<code>select *</code>，充分利用索引中存储的信息，才能避免大量的回表取值操作。</p>
 <p>不必追求一次查询得到完整结果，如果索引不包含待查询的字段，只查出主键 id 亦可，如下：</p>
-<pre><code class="language-sql">select id from table_name
+<pre><code class="lang-sql">select id from table_name
 order by create_time desc
 limit 10000,10;
 </code></pre>
 <p>拿到 id 的集合后，大部分博客的处理都将这一步作为子查询，使用 <code>in</code>、<code>join</code> 或<code>比较符</code>继续查出数据详情。</p>
-<p>但我们应当慎用子查询，尽量将查 id 和查数据分开进行，这便于之后的<a href="#%E7%BC%93%E5%AD%98%E4%BC%98%E5%8C%96">缓存优化</a>。</p>
+<p>但我们应当慎用子查询，尽量将查 id 和查数据分开进行，这便于之后的<a href="#缓存优化">缓存优化</a>。</p>
 <h2>缓存优化</h2>
 <p>要提升查询效率，最终实现的效果必然是所有查询都命中缓存。</p>
 <p>为了避免频繁使用 count()，数据总数应当放在缓存中，但同时也破坏了一致性。如果你十分看重总数目的准确性，注意加上定时任务或缓存淘汰等同步机制。</p>
 <p>对分页数据的缓存，不要直接以页数存储整页数据，否则任何数据的增减都将使所有页缓存作废。</p>
 <p>区分开哪些内容是频繁更新的、哪些是相对稳定的。相对一页应该存哪几条数据，具体数据内容的更新频率低很多，因此较好的做法是使用 hash 缓存每一页的 id 列表，使用 string (whatever) 缓存每一条数据。</p>
 <p>拿到 id 列表之后，无需回表，可直接到 redis 获取对应信息。</p>
-<blockquote>
-<p>另外针对新手提醒一点，不要 for 循环查询 redis，多次请求 redis 的网络开销得不偿失。可以使用 pipeline 将一串请求包起来，且整个管道操作是非原子的，不会阻塞 redis。至于另一类原生批量操作是原子的，如 mget，会阻塞其他 redis 操作。</p>
+<blockquote><p>另外针对新手提醒一点，不要 for 循环查询 redis，多次请求 redis 的网络开销得不偿失。可以使用 pipeline 将一串请求包起来，且整个管道操作是非原子的，不会阻塞 redis。至于另一类原生批量操作是原子的，如 mget，会阻塞其他 redis 操作。</p>
 </blockquote>
 <h2>末页优化</h2>
 <p>尽管理论上 B+Tree 近乎二分查找，但对于有较大复杂度的数据表，不可能为每种查询都建立最优索引。优化到一定程度后索引数量和效率的折中就是拆东墙补西墙了，最终很可能威胁到某个 sql 的大偏移量查询。而末页查询恰好是 offset 最大的时候。</p>
 <p>喜欢翻旧账的可能人不多，但看到“最后一页”按钮时，恐怕没几个人能忍住不点一下。这个按钮的受欢迎程度就算不如“第二页”，也肯定超过“四五六七八...页”。</p>
 <p>不少的点击量加大了数据的查询压力，若是查询过慢导致内容半天加载不出来，更会诱发用户主动刷新发起更多请求。想想就够恐怖的。</p>
 <p>笔者在使用才 500 万的数据做复杂查询时，offset 效率就又一次成为瓶颈。但查询第一页的效率总是非常快，那只要保证末页的速度达到和首页一样快，也就能达成优化目标。具体做法看下面的 sql ：</p>
-<pre><code class="language-sql">select id from table_name
+<pre><code class="lang-sql">select id from table_name
 order by create_time asc
 limit 10;
 </code></pre>

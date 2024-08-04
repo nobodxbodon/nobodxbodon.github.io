@@ -1,11 +1,11 @@
-<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2017-11-24-%E5%A6%82%E4%BD%95%E4%BD%BFGCC%E6%94%AF%E6%8C%81%E4%B8%AD%E6%96%87(utf-8">仓库源文</a>的变量名、函数名？.markdown)，<a href="http://codeinchinese.com/2017/11/24/%E5%A6%82%E4%BD%95%E4%BD%BFGCC%E6%94%AF%E6%8C%81%E4%B8%AD%E6%96%87(utf-8">站点原文</a>的变量名、函数名？.markdown)</h2>
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2017-11-24-如何使GCC支持中文(utf-8">仓库源文</a>的变量名、函数名？.markdown)，<a href="http://codeinchinese.com/2017/11/24/如何使GCC支持中文(utf-8">站点原文</a>的变量名、函数名？.markdown)</h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 comments: true
 title:  如何使GCC支持中文(utf-8)的变量名、函数名？
 description: 通过修改gcc编译器源码, 使之支持中文变量名, 函数名. Allow gcc to support unicode identifiers.
-date:   2017-11-24 00:37:00 -0700
-categories: 命名 编译器</h2>
+date:   2017-11-24 00:37:00 -0700</p>
+<h2>categories: 命名 编译器</h2>
 <p><a href="https://zhuanlan.zhihu.com/p/31370146">知乎原文地址</a> 作者:@狗屎咖啡</p>
 <p>目前VS 和Clang都是支持utf-8的变量名、函数名，但 GCC不支持。</p>
 <p>有人提意见，提了好几年了：<a href="https://gcc.gnu.org/bugzilla/show_bug.cgi?id=67224">UTF-8 support for identifier names in GCC</a></p>
@@ -29,45 +29,45 @@ categories: 命名 编译器</h2>
 <p>2.复制一份函数lex_identifier，命名为lex_utf8_identifier</p>
 <pre><code>if (! starts_ucn)
 {
-	while (ISIDNUM (*cur))
-	{
-		hash = HT_HASHSTEP (hash, *cur);
-		cur++;
-	}
-	NORMALIZE_STATE_UPDATE_IDNUM (nst, *(cur - 1));
+    while (ISIDNUM (*cur))
+    {
+        hash = HT_HASHSTEP (hash, *cur);
+        cur++;
+    }
+    NORMALIZE_STATE_UPDATE_IDNUM (nst, *(cur - 1));
 }
 </code></pre>
 <p>中ISIDNUM 改成 is_utf8_char:</p>
 <pre><code>if (! starts_ucn)
 {
-	while (is_utf8_char (*cur))
-	{
-		hash = HT_HASHSTEP (hash, *cur);
-		cur++;
-	}
-	NORMALIZE_STATE_UPDATE_IDNUM (nst, *(cur - 1));
+    while (is_utf8_char (*cur))
+    {
+        hash = HT_HASHSTEP (hash, *cur);
+        cur++;
+    }
+    NORMALIZE_STATE_UPDATE_IDNUM (nst, *(cur - 1));
 }
 </code></pre>
 <p>3.在函数 _cpp_lex_direct 中修改 switch 的 default</p>
-<pre><code>	default:
-		create_literal (pfile, result, buffer-&gt;cur - 1, 1, CPP_OTHER);
-		break;
+<pre><code>    default:
+        create_literal (pfile, result, buffer-&gt;cur - 1, 1, CPP_OTHER);
+        break;
 </code></pre>
 <p>改为：</p>
-<pre><code>	default:
-		if (is_utf8_char(c))
-		{
-			struct normalize_state nst = INITIAL_NORMALIZE_STATE;
-			result-&gt;type = CPP_NAME;
-			result-&gt;val.node.node = lex_utf8_identifier(pfile, buffer-&gt;cur - 1, false,
-				&amp;nst, &amp;result-&gt;val.node.spelling);
-			warn_about_normalization(pfile, result, &amp;nst);
-		}
-		else
-		{
-			create_literal (pfile, result, buffer-&gt;cur - 1, 1, CPP_OTHER);
-		}
-		break;
+<pre><code>    default:
+        if (is_utf8_char(c))
+        {
+            struct normalize_state nst = INITIAL_NORMALIZE_STATE;
+            result-&gt;type = CPP_NAME;
+            result-&gt;val.node.node = lex_utf8_identifier(pfile, buffer-&gt;cur - 1, false,
+                &amp;nst, &amp;result-&gt;val.node.spelling);
+            warn_about_normalization(pfile, result, &amp;nst);
+        }
+        else
+        {
+            create_literal (pfile, result, buffer-&gt;cur - 1, 1, CPP_OTHER);
+        }
+        break;
 </code></pre>
 <p>OK！完工了。make bootstrap &amp;&amp; make install 吧。</p>
 <p>你就可以愉快地使用 UTF-8 变量，函数了。</p>

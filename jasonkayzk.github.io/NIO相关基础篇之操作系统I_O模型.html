@@ -1,24 +1,25 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/NIO%E7%9B%B8%E5%85%B3%E5%9F%BA%E7%A1%80%E7%AF%87%E4%B9%8B%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9FI-O%E6%A8%A1%E5%9E%8B.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/09/26/NIO%E7%9B%B8%E5%85%B3%E5%9F%BA%E7%A1%80%E7%AF%87%E4%B9%8B%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9FI-O%E6%A8%A1%E5%9E%8B">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/NIO相关基础篇之操作系统I-O模型.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2019/09/26/NIO相关基础篇之操作系统I-O模型">站点原文</a></h2>
 <hr/>
-<h2>title: NIO相关基础篇之操作系统I/O模型
+<p>title: NIO相关基础篇之操作系统I/O模型
 toc: true
 date: 2019-09-26 10:56:22
-cover: https://ss2.bdstatic.com/70cFvnSh_Q1YnxGkpoWK1HF6hhy/it/u=1660559555,3010069585&amp;fm=26&amp;gp=0.jpg
+cover: <a href="https://ss2.bdstatic.com/70cFvnSh_Q1YnxGkpoWK1HF6hhy/it/u=1660559555,3010069585&amp;fm=26&amp;gp=0.jpg">https://ss2.bdstatic.com/70cFvnSh_Q1YnxGkpoWK1HF6hhy/it/u=1660559555,3010069585&amp;fm=26&amp;gp=0.jpg</a>
 categories: IO基础
-tags: [NIO, 操作系统, IO模型]
-description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈一些Linux 网络 I/O模型、零拷贝等一些内容.</h2>
+tags: [NIO, 操作系统, IO模型]</p>
+<h2>description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈一些Linux 网络 I/O模型、零拷贝等一些内容.</h2>
 <p>本篇继上篇之后, 继续NIO相关话题内容，主要谈谈一些Linux 网络 I/O模型下与NIO相关的知识, 主要包括:</p>
 <ul>
-<li>用户空间以及内核空间:</li>
+<li>用户空间以及内核空间: </li>
 <li>Linux 网络 I/O模型: Blocking I/O, Non-Blocking I/O, I/O Multiplexing, Signal Driven I/O, Asynchronous I/O</li>
 <li>五种I/O模型对比</li>
 <li>文件描述符fd以及Linux内核命令: select, poll, epoll等</li>
 <li>Zero-Copy相关;</li>
 <li>直接内存</li>
-<li>Selector空轮询在Netty中的处理:</li>
+<li>Selector空轮询在Netty中的处理: </li>
 <li>......</li>
 </ul>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>NIO相关基础篇之操作系统I/O模型</h2>
 <h3>一. 用户空间以及内核空间概念</h3>
 <p>我们知道现在操作系统都是采用虚拟存储器，那么对32位操作系统而言，它的寻址空间（虚拟存储空间）为4G（2的32次方）。操心系统的核心是内核，独立于普通的应用程序，可以访问受保护的内存空间，也有访问底层硬件设备的所有权限。&lt;font color="#0000ff"&gt;为了保证用户进程不能直接操作内核，保证内核的安全，操心系统将虚拟空间划分为两部分，一部分为内核空间，一部分为用户空间。&lt;/font&gt;</p>
@@ -31,8 +32,7 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <p><img alt="linux_structure" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/linux_structure.png"/></p>
 <p>&lt;br/&gt;</p>
 <p><strong>需要注意的细节问题，从上图可以看出内核的组成:</strong></p>
-<blockquote>
-<ol>
+<blockquote><ol>
 <li>&lt;font color="#ff0000"&gt;内核空间中存放的是内核代码和数据，而进程的用户空间中存放的是用户程序的代码和数据。不管是内核空间还是用户空间，它们都处于虚拟空间中&lt;/font&gt;</li>
 <li>Linux使用两级保护机制：0级供内核使用，3级供用户程序使用。</li>
 </ol>
@@ -40,7 +40,7 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <p>&lt;br/&gt;</p>
 <hr/>
 <h3>二. Linux 网络 I/O模型(五种)</h3>
-<p>我们都知道，为了OS的安全性等的考虑，&lt;font color="#ff0000"&gt;进程是无法直接操作I/O设备的，其<em>必须通过</em>系统调用请求内核来协助完成I/O动作，而内核会为每个I/O设备维护一个buffer&lt;/font&gt;</p>
+<p>我们都知道，为了OS的安全性等的考虑，&lt;font color="#ff0000"&gt;进程是无法直接操作I/O设备的，其*必须通过*系统调用请求内核来协助完成I/O动作，而内核会为每个I/O设备维护一个buffer&lt;/font&gt;</p>
 <p>如下图所示：</p>
 <p><img alt="io_buffer" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/io_buffer.png"/></p>
 <p>&lt;font color="#ff0000"&gt;整个请求过程为： 用户进程发起请求，内核接受到请求后，从I/O设备中获取数据到buffer中，再将buffer中的数据copy到用户进程的地址空间，该用户进程获取到数据后再响应客户端&lt;/font&gt;</p>
@@ -51,14 +51,15 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <li><strong>非阻塞I/O (Non-Blocking I/O)</strong></li>
 <li><strong>I/O复用（I/O Multiplexing)</strong></li>
 <li><strong>信号驱动的I/O (Signal Driven I/O)</strong></li>
-<li><strong>异步I/O (Asynchrnous I/O)</strong></li>
+<li><strong>异步I/O (Asynchrnous I/O)</strong> </li>
 </ul>
 <p><strong>说明：</strong>如果像了解更多可能需要linux/unix方面的知识了，可自行去学习一些网络编程原理应该有详细说明，<strong>不过对大多数java程序员来说，不需要了解底层细节，知道个概念就行，知道对于系统而言，底层是支持的</strong>。</p>
-<blockquote>
-<p><strong>记住这两点很重要</strong></p>
+<blockquote><p><strong>记住这两点很重要</strong></p>
 <ol>
-<li>等待数据准备 (Waiting for the data to be ready)</li>
+<li>等待数据准备 (Waiting for the data to be ready) <ol>
 <li>将数据从内核拷贝到进程中 (Copying the data from the kernel to the process)</li>
+</ol>
+</li>
 </ol>
 </blockquote>
 <p>&lt;br/&gt;</p>
@@ -75,7 +76,7 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <p><img alt="nonblockingIO" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/nonblockingIO.png"/></p>
 <p>&lt;font color="#0000ff"&gt;当用户进程调用recvfrom时，系统不会阻塞用户进程，而是立刻返回一个ewouldblock错误，从用户进程角度讲，并不需要等待，而是马上就得到了一个结果.&lt;/font&gt;</p>
 <p>用户进程判断标志是ewouldblock时，就知道数据还没准备好，于是它就可以去做其他的事了，于是它可以再次发送recvfrom，一旦内核中的数据准备好了。并且又再次收到了用户进程的system call，那么它马上就将数据拷贝到了用户内存，然后返回.</p>
-<p>&lt;font color="#ff0000"&gt;当一个应用程序在一个循环里对一个非阻塞调用recvfrom，我们称为轮询. 应用程序不断轮询内核，看看是否已经准备好了某些操作. 这通常是<em>浪费CPU时间</em>，但这种模式偶尔会遇到.&lt;/font&gt;</p>
+<p>&lt;font color="#ff0000"&gt;当一个应用程序在一个循环里对一个非阻塞调用recvfrom，我们称为轮询. 应用程序不断轮询内核，看看是否已经准备好了某些操作. 这通常是*浪费CPU时间*，但这种模式偶尔会遇到.&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h4>3. I/O复用（I/O Multiplexing)</h4>
 <p>IO multiplexing这个词可能有点陌生，但是如果我说select，epoll，大概就都能明白了。有些地方也称这种IO方式为<code>event driven IO</code>.</p>
@@ -84,7 +85,7 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <p><img alt="io_multiplexing" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/io_multiplexing.png"/></p>
 <p>当用户进程调用了select，那么整个进程会被block，而同时，内核会“监视”所有select负责的socket，当任何一个socket中的数据准备好了，select就会返回。这个时候用户进程再调用read操作，将数据从内核拷贝到用户进程.</p>
 <p>这个图和blocking IO的图其实并没有太大的不同，事实上，还更差一些。因为这里需要使用两个system call (select 和 recvfrom)，而blocking IO只调用了一个system call (recvfrom)。</p>
-<p>&lt;font color="#0000ff"&gt;但是，用select的优势在于它可以同时处理多个connection. 所以，如果处理的连接数不是很高的话，<em>使用select/epoll的webserver不一定比使用multi-threading + blocking IO的web server性能更好，可能延迟还更大</em>.&lt;/font&gt;</p>
+<p>&lt;font color="#0000ff"&gt;但是，用select的优势在于它可以同时处理多个connection. 所以，如果处理的连接数不是很高的话，*使用select/epoll的webserver不一定比使用multi-threading + blocking IO的web server性能更好，可能延迟还更大*.&lt;/font&gt;</p>
 <p>&lt;font color="#ff0000"&gt;select/epoll的优势并不是对于单个连接能处理得更快，而是在于能处理更多的连接.&lt;/font&gt;</p>
 <p>在IO multiplexing Model中，实际中，对于每一个socket，一般都设置成为non-blocking，但是，如上图所示，整个用户的process其实是一直被block的。只不过process是被select这个函数block，而不是被socket IO给block。</p>
 <p>&lt;br/&gt;</p>
@@ -135,9 +136,8 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <li>效率提升，不是轮询的方式，不会随着FD数目的增加效率下降。 只有活跃可用的FD才会调用callback函数；即Epoll最大的优点就在于它只管你“活跃”的连接，而跟连接总数无关，因此在实际的网络环境中，Epoll的效率就会远远高于select和poll;</li>
 <li>内存拷贝，利用mmap()文件映射内存加速与内核空间的消息传递；即epoll使用mmap减少复制开销。</li>
 </ul>
-<p>&lt;font color="#ff0000"&gt;<strong>JDK1.5_update10版本使用epoll替代了传统的select/poll，极大的提升了NIO通信的性能。</strong>&lt;/font&gt;</p>
-<blockquote>
-<p><strong>备注：</strong>JDK NIO的BUG，例如臭名昭著的epoll bug，它会导致Selector空轮询，最终导致CPU 100%。官方声称在JDK1.6版本的update18修复了该问题，但是直到JDK1.7版本该问题仍旧存在，只不过该BUG发生概率降低了一些而已，它并没有被根本解决。后文将介绍空轮询问题.</p>
+<p>&lt;font color="#ff0000"&gt;**JDK1.5_update10版本使用epoll替代了传统的select/poll，极大的提升了NIO通信的性能。**&lt;/font&gt;</p>
+<blockquote><p><strong>备注：</strong>JDK NIO的BUG，例如臭名昭著的epoll bug，它会导致Selector空轮询，最终导致CPU 100%。官方声称在JDK1.6版本的update18修复了该问题，但是直到JDK1.7版本该问题仍旧存在，只不过该BUG发生概率降低了一些而已，它并没有被根本解决。后文将介绍空轮询问题.</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h4>6. 信号驱动的I/O (Signal Driven I/O)</h4>
@@ -154,8 +154,7 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <hr/>
 <h3>三. 五种I/O模型的对比</h3>
 <p><img alt="fiveIO_conpare" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/fiveIO_conpare.png"/></p>
-<blockquote>
-<p><strong>结果表明：</strong>前四个模型之间的主要区别是第一阶段，四个模型的第二阶段是一样的：过程受阻在调用recvfrom当数据从内核拷贝到用户缓冲区。然而，异步I/O处理两个阶段，与前四个不同。</p>
+<blockquote><p><strong>结果表明：</strong>前四个模型之间的主要区别是第一阶段，四个模型的第二阶段是一样的：过程受阻在调用recvfrom当数据从内核拷贝到用户缓冲区。然而，异步I/O处理两个阶段，与前四个不同。</p>
 </blockquote>
 <p><strong>从同步、异步，以及阻塞、非阻塞两个维度来划分来看：</strong></p>
 <p><img alt="fiveIO_conpare2" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/fiveIO_conpare2.png"/></p>
@@ -164,7 +163,7 @@ description: 本篇继上篇之后, 继续NIO相关话题内容，主要谈谈�
 <h3>四. Zero-Copy(零拷贝)</h3>
 <h4>1. 为什么需要零拷贝</h4>
 <p>考虑这样一种常用的情形：你需要将静态内容（类似图片、文件）展示给用户。那么这个情形就意味着你需要先将静态内容从磁盘中拷贝出来放到一个内存buf中，然后将这个buf通过socket传输给用户，进而用户或者静态内容的展示。这看起来再正常不过了，但是实际上这是很低效的流程，我们把上面的这种情形抽象成下面的过程：</p>
-<pre><code class="language-java">read(file, tmp_buf, len);
+<pre><code class="lang-java">read(file, tmp_buf, len);
 write(socket, tmp_buf, len);
 </code></pre>
 <p>首先调用read将静态内容，这里假设为文件A，读取到tmp_buf, 然后调用write将tmp_buf写入到socket中，如图：</p>
@@ -186,10 +185,10 @@ write(socket, tmp_buf, len);
 <p>&lt;br/&gt;</p>
 <h4>2. 零拷贝详述</h4>
 <p>Zero-Copy技术省去了将操作系统的read buffer拷贝到程序的buffer，以及从程序buffer拷贝到socket buffer的步骤，直接将read buffer拷贝到socket buffer. Java NIO中的FileChannal.transferTo()方法就是这样的实现，这个实现是依赖于操作系统底层的sendFile()实现的。</p>
-<pre><code class="language-java">public void transferTo(long position, long count, WritableByteChannel target);
+<pre><code class="lang-java">public void transferTo(long position, long count, WritableByteChannel target);
 </code></pre>
 <p>他底层的调用时系统调用<strong>sendFile()</strong>方法：</p>
-<pre><code class="language-c++">#include &lt;sys/socket.h&gt;
+<pre><code class="lang-c++">#include &lt;sys/socket.h&gt;
 ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count);
 </code></pre>
 <p>下图展示了在transferTo()之后的数据流向：</p>
@@ -208,7 +207,7 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count);
 <p>&lt;br/&gt;</p>
 <h4>3. 零拷贝进阶</h4>
 <p>Linux 2.1内核开始引入了sendfile函数（上一节有提到）,用于将文件通过socket传送。</p>
-<pre><code class="language-c++">sendfile(socket, file, len);
+<pre><code class="lang-c++">sendfile(socket, file, len);
 </code></pre>
 <p>该函数通过一次系统调用完成了文件的传送，减少了原来read/write方式的模式切换。此外更是减少了数据的copy, sendfile的详细过程如图：</p>
 <p><img alt="zerocopy_timesequence2" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/zerocopy_timesequence2.png"/></p>
@@ -243,7 +242,8 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count);
 <h3>五. 直接内存</h3>
 <p>首先，它的作用位置处于传统IO（BIO）与零拷贝之间，为何这么说？</p>
 <pre><code>传统IO，可以把磁盘的文件经过内核空间，读到JVM空间，然后进行各种操作，最后再写到磁盘或是发送到网络，效率较慢但支持数据文件操作。
-零拷贝则是直接在内核空间完成文件读取并转到磁盘（或发送到网络）。由于它没有读取文件数据到JVM这一环，因此程序无法操作该文件数据，尽管效率很高！</code></pre>
+零拷贝则是直接在内核空间完成文件读取并转到磁盘（或发送到网络）。由于它没有读取文件数据到JVM这一环，因此程序无法操作该文件数据，尽管效率很高！
+</code></pre>
 <p>而直接内存则介于两者之间，效率一般且可操作文件数据。直接内存（mmap技术）将文件直接映射到内核空间的内存，返回一个操作地址（address），它解决了文件数据需要拷贝到JVM才能进行操作的窘境。而是直接在内核空间直接进行操作，省去了内核空间拷贝到用户空间这一步操作。</p>
 <p>NIO的直接内存是由MappedByteBuffer实现的。核心即是map()方法，该方法把文件映射到内存中，获得内存地址addr，然后通过这个addr构造MappedByteBuffer类，以暴露各种文件操作API。</p>
 <p>由于MappedByteBuffer申请的是堆外内存，因此不受Minor GC控制，只能在发生Full GC时才能被回收。而DirectByteBuffer改善了这一情况，它是MappedByteBuffer类的子类，同时它实现了DirectBuffer接口，维护一个Cleaner对象来完成内存回收。因此它既可以通过Full GC来回收内存，也可以调用clean()方法来进行回收。</p>
@@ -261,13 +261,13 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count);
 <h3>六. 总结</h3>
 <p>本篇从Linux的用户空间以及内核空间为起始, 讲述了:</p>
 <ul>
-<li>用户空间以及内核空间:</li>
+<li>用户空间以及内核空间: </li>
 <li>Linux 网络 I/O模型: Blocking I/O, Non-Blocking I/O, I/O Multiplexing, Signal Driven I/O, Asynchronous I/O</li>
 <li>五种I/O模型对比</li>
 <li>文件描述符fd以及Linux内核命令: select, poll, epoll等</li>
 <li>Zero-Copy相关;</li>
 <li>直接内存</li>
-<li>Selector空轮询在Netty中的处理:</li>
+<li>Selector空轮询在Netty中的处理: </li>
 <li>......</li>
 </ul>
 <p>&lt;br/&gt;</p>

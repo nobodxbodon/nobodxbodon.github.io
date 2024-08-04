@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-09-21-rocketmq Master slave ha.md)，<a href="https://objcoding.com/2019/09/21/rocketmq-Master-slave-ha">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-09-21-rocketmq Master slave ha.md">仓库源文</a>，<a href="https://objcoding.com/2019/09/21/rocketmq-Master-slave-ha">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "RocketMQ主从同步源码分析"
 categories: RocketMQ
-tags: HA Master Slave
-author: 张乘辉</h2>
+tags: HA Master Slave</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -34,7 +34,7 @@ author: 张乘辉</h2>
 <p>从 HA 实现逻辑可看出，可大致分为两个过程，分别是从服务器上报偏移量，以及主服务器发送未同步消息到从服务器。</p>
 <p>从上面的实现类可知，从服务器向主服务器上报偏移量的逻辑在 HAClient 类中，HAClient 类是一个继承了 ServiceThread 类，即它是一个线程服务类，在 Broker 启动后，Broker 启动开一条线程定时执行从服务器上报偏移量到主服务器的任务。</p>
 <p>org.apache.rocketmq.store.ha.HAService.HAClient#run:</p>
-<pre><code class="language-java">public void run() {
+<pre><code class="lang-java">public void run() {
   log.info(this.getServiceName() + " service started");
 
   while (!this.isStopped()) {
@@ -48,7 +48,7 @@ author: 张乘辉</h2>
             this.closeMaster();
           }
         }
-				// 每隔一秒钟轮询一遍
+                // 每隔一秒钟轮询一遍
         this.selector.select(1000);
 
         // 处理主服务器发送过来的消息
@@ -56,9 +56,9 @@ author: 张乘辉</h2>
         if (!ok) {
           this.closeMaster();
         }
-        
+
         // ......
-        
+
       } else {
         this.waitForRunning(1000 * 5);
       }
@@ -73,7 +73,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>以上是 HAClient 线程 run 方法逻辑，主要是做了主动连接主服务器，并上报偏移量到主服务器，以及处理主服务器发送过来的消息，并不断循环执行以上逻辑。</p>
 <p>org.apache.rocketmq.store.ha.HAService.HAClient#connectMaster:</p>
-<pre><code class="language-java">private boolean connectMaster() throws ClosedChannelException {
+<pre><code class="lang-java">private boolean connectMaster() throws ClosedChannelException {
   if (null == socketChannel) {
     String addr = this.masterAddress.get();
     if (addr != null) {
@@ -94,7 +94,7 @@ author: 张乘辉</h2>
 <p>该方法是从服务器连接主服务器的逻辑，拿到主服务器地址并且连接上以后，会获取一个 socketChannel 对象，接着还会记录当前时间戳为上次写入的时间戳，lastWriteTimestamp 的作用时用来计算主从同步时间间隔，这里需要注意一点，如果没有配置主服务器地址，该方法会返回 false，即不会执行主从复制。</p>
 <p>该方法还会调用 DefaultMessageStore 的 getMaxPhyOffset() 方法获取 commitLog 文件最大偏移量，作为本次上报的偏移量。</p>
 <p>org.apache.rocketmq.store.ha.HAService.HAClient#reportSlaveMaxOffset:</p>
-<pre><code class="language-java">private boolean reportSlaveMaxOffset(final long maxOffset) {
+<pre><code class="lang-java">private boolean reportSlaveMaxOffset(final long maxOffset) {
   this.reportOffset.position(0);
   this.reportOffset.limit(8);
   this.reportOffset.putLong(maxOffset);
@@ -116,7 +116,7 @@ author: 张乘辉</h2>
 <p>该方法向主服务器上报已拉取偏移量，具体做法是将 ByteBuffer 读取位置 position 值为 0，其实跳用 flip() 方法也可以，然后调用 putLong() 方法将 maxOffset 写入 ByteBuffer，将 limit 设置为 8，跟写入 ByteBuffer 中的 maxOffset（long 型）大小一样，最后采取 for 循环将 maxOffset 写入网络通道中，并调用 hasRemaining() 方法，该方法的逻辑为判断 position 是否小于 limit，即判断 ByteBuffer 中的字节流是否全部写入到通道中。</p>
 <h2>Master -&gt; Slave 过程</h2>
 <p>org.apache.rocketmq.store.ha.HAService.AcceptSocketService#run:</p>
-<pre><code class="language-java">public void run() {
+<pre><code class="lang-java">public void run() {
   log.info(this.getServiceName() + " service started");
 
   while (!this.isStopped()) {
@@ -159,13 +159,13 @@ author: 张乘辉</h2>
 </code></pre>
 <p>主服务器收到从服务器的拉取偏移量后，会封装成一个 HAConnection 对象，前面也说过 HAConnection 封装主服务端 HA 连接对象的封装，其中有读实现类和写实现类，start() 方法即开启了读写线程：</p>
 <p>org.apache.rocketmq.store.ha.HAConnection#start：</p>
-<pre><code class="language-java">public void start() {
+<pre><code class="lang-java">public void start() {
   this.readSocketService.start();
   this.writeSocketService.start();
 }
 </code></pre>
 <p>org.apache.rocketmq.store.ha.HAConnection.ReadSocketService#processReadEvent:</p>
-<pre><code class="language-java">private boolean processReadEvent() {
+<pre><code class="lang-java">private boolean processReadEvent() {
   int readSizeZeroTimes = 0;
 
   if (!this.byteBufferRead.hasRemaining()) {
@@ -218,7 +218,7 @@ author: 张乘辉</h2>
 <li>唤醒主从同步消费者发送消息同步返回的线程，该方法实现了主从同步-同步复制的功能。</li>
 </ol>
 <p>org.apache.rocketmq.store.ha.HAConnection.WriteSocketService#run:</p>
-<pre><code class="language-java">public void run() {
+<pre><code class="lang-java">public void run() {
   HAConnection.log.info(this.getServiceName() + " service started");
 
   while (!this.isStopped()) {
@@ -351,7 +351,7 @@ author: 张乘辉</h2>
 <p>关于第一步，我还需要详细讲解一下，因为之前有想到一个问题：</p>
 <p>把 brokerA 的从服务器去掉，再启动一台新的从服务器指向brokerA 主服务器，这时的主服务器的消息是否会全量同步到从服务？</p>
 <p>org.apache.rocketmq.store.MappedFileQueue#getMaxOffset:</p>
-<pre><code class="language-java">public long getMaxOffset() {
+<pre><code class="lang-java">public long getMaxOffset() {
     MappedFile mappedFile = getLastMappedFile();
     if (mappedFile != null) {
         return mappedFile.getFileFromOffset() + mappedFile.getReadPosition();
@@ -360,7 +360,7 @@ author: 张乘辉</h2>
 }
 </code></pre>
 <p>org.apache.rocketmq.store.ha.HAConnection.WriteSocketService#run:</p>
-<pre><code class="language-java">// 求出最后一个commitLog偏移量的初始偏移量
+<pre><code class="lang-java">// 求出最后一个commitLog偏移量的初始偏移量
 masterOffset =
   masterOffset
             - (masterOffset % HAConnection.this.haService.getDefaultMessageStore().getMessageStoreConfig()
@@ -368,11 +368,11 @@ masterOffset =
 </code></pre>
 <p>从以上逻辑可找到答案，如果有新的从服务器同步主服务器消息，则从最后一个 commitLog 文件的初始偏移量开始同步。</p>
 <p>回到最开始开启 HAClient 线程上报偏移量的方法，我们发现里面还做了一件事：</p>
-<pre><code class="language-java">// 处理主服务器发送过来的消息
+<pre><code class="lang-java">// 处理主服务器发送过来的消息
 boolean ok = this.processReadEvent();
 </code></pre>
 <p>org.apache.rocketmq.store.ha.HAService.HAClient#processReadEvent:</p>
-<pre><code class="language-java">private boolean processReadEvent() {
+<pre><code class="lang-java">private boolean processReadEvent() {
   int readSizeZeroTimes = 0;
   while (this.byteBufferRead.hasRemaining()) {
     try {

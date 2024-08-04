@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/forecho/hugo-blog/blob/master/content/posts/yiiaccessrules-yong-fa.md">仓库源文</a>，<a href="https://blog.forecho.com/yiiaccessrules-yong-fa.html">站点原文</a></h2>
 <hr/>
-<h2>title: "Yii—accessRules 用法"
+<p>title: "Yii—accessRules 用法"
 date: 2012-12-12T11:58:00+08:00
-categories:
-draft: false
-toc: true</h2>
+categories: 
+draft: false</p>
+<h2>toc: true</h2>
 <p><strong>一、访问控制过滤器（Access Control Filter）</strong> 访问控制过滤器是检查当前用户是否能执行访问的 controller action 的初步授权模式。这种授权模式基于用户名，客户 IP 地址和访问类型。访问控制过滤器适用于简单的验证。需要复杂的访问控制，需要使用将要讲解到的基于角色访问控制（role-based access (RBAC)）. 在控制器（controller）里重载<code>CController::filters</code>方法设置访问过滤器来控制访问动作 (看 Filter 了解更多过滤器设置信息)。</p>
 <pre><code>class PostController extends CController
 {
@@ -15,7 +15,8 @@ public function filters()
             'accessControl',
         );
     }
-}</code></pre>
+}
+</code></pre>
 <p>在上面，设置的<a href="http://www.yiiframework.com/doc/api/1.1/CController#filterAccessControl">access control</a>过滤器将应用于<code>PostController</code>里每个动作。过滤器具体的授权规则通过重载控制器的<a href="http://www.yiiframework.com/doc/api/1.1/CController#accessRules">CController::accessRules</a>方法来指定。</p>
 <pre><code>class PostController extends CController
 {
@@ -37,7 +38,8 @@ public function filters()
             ),
         );
     }
-}</code></pre>
+}
+</code></pre>
 <p>上面设定了三个规则，每个用个数组表示。数组的第一个元素不是<code>'allow'</code>就是<code>'deny'</code>，其他的是名 - 值成对形式设置规则参数的。上面的规则这样理解：<code>create</code>和<code>edit</code>动作不能被匿名执行；<code>delete</code>动作可以被<code>admin</code>角色的用户执行；<code>delete</code>动作不能被任何人执行。 访问规则是一个一个按照设定的顺序一个一个来执行判断的。和当前判断模式（例如：用户名、角色、客户端 IP、地址）相匹配的第一条规则决定授权的结果。如果这个规则是<code>allow</code>，则动作可执行；如果是<code>deny</code>，不能执行；如果没有规则匹配，动作可以执行。 为了确保某类动作在没允许情况下不被执行，设置一个匹配所有人的<code>deny</code>规则在最后，类似如下：</p>
 <pre><code>return array(
  // ... 别的规则...
@@ -45,55 +47,56 @@ public function filters()
  array('deny',
  'action'=&gt;'delete',
  ),
- );</code></pre>
+ );
+</code></pre>
 <p>因为如果没有设置规则匹配动作，动作缺省会被执行。 访问规则通过如下的上下文参数设置： <a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#actions">actions</a>: 设置哪个动作匹配此规则。 <a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#users">users</a>: 设置哪个用户匹配此规则。此当前用户的<a href="http://www.yiiframework.com/doc/api/1.1/CWebUser#name">name</a> 被用来匹配。三种设定字符在这里可以用：</p>
 <ul>
-<li><p><code>*</code>: 任何用户，包括匿名和验证通过的用户。</p>
-</li>
-<li><p><code>?</code>: 匿名用户。</p>
-</li>
-<li><p><code>@</code>: 验证通过的用户。
-<a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#roles">roles</a>: 设定哪个角色匹配此规则。这里用到了将在后面描述的<a href="http://www.yiiframework.com/doc/guide/1.1/zh_cn/topics.auth#role-based-access-control">role-based access control</a>技术。In particular, the rule is applied if <a href="http://www.yiiframework.com/doc/api/1.1/CWebUser#checkAccess">CWebUser::checkAccess</a> returns true for one of the roles.提示，用户角色应该被设置成<code>allow</code>规则，因为角色代表能做某些事情。 <a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#ips">ips</a>: 设定哪个客户端 IP 匹配此规则。 <a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#verbs">verbs</a>: 设定哪种请求类型 (例如：<code>GET</code>, <code>POST</code>) 匹配此规则。 <strong>二、访问规则中：</strong> expression: 设定一个 PHP 表达式。它的值用来表明这条规则是否适用。在表达式，你可以使用一个叫<code>$user</code>的变量，它代表的是<code>Yii::app()-&gt;user</code>。 expression 的具体用法：</p>
-<p>class AdminController extends CController
-{</p>
-<p>……
-public function accessRules()
-{
-return array(
-array('allow',  //允许所有人执行'login','error','index'
-'actions'=&gt;array('login','error','index'),
-'users'=&gt;array('<em>'),
-),
-array('allow', //允许超级管理员执行所有动作
-'actions'=&gt;array('create','update','delete'),
-'expression'=&gt;array($this,'isSuperAdmin'),
-),
-array('allow',//允许普通管理员执行
-'actions'=&gt;array('update'),
-'expression'=&gt;array($this,'isNormalAdmin'),    //表示调用$this(即 AdminController) 中的 isNormalAdmin 方法。
-),<br/>
-array('deny',  // deny all users
-'users'=&gt;array('</em>'),
-),
-);
-}
-protected function isSuperAdmin($user)//判断是否是超级管理员
-{
-return ($this-&gt;loadModel($user-&gt;id)-&gt;adminAdminFlag==1);
-}
-protected function isNormalAdmin($user)//判断是否是普通管理员
-{
-return ($this-&gt;loadModel($user-&gt;id)-&gt;adminAdminFlag==0);
-}</p>
-<pre><code>public function loadModel($id)
-{
-    $model=Admin::model()-&gt;findByPk((int)$id);
-    if($model===null){
-        throw new CHttpException(404,'页面不存在');     
-    }
-    return $model;
-}</code></pre>
-<p>}</p>
-</li>
+<li><code>*</code>: 任何用户，包括匿名和验证通过的用户。</li>
+<li><code>?</code>: 匿名用户。</li>
+<li><code>@</code>: 验证通过的用户。
+<a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#roles">roles</a>: 设定哪个角色匹配此规则。这里用到了将在后面描述的<a href="http://www.yiiframework.com/doc/guide/1.1/zh_cn/topics.auth#role-based-access-control">role-based access control</a>技术。In particular, the rule is applied if <a href="http://www.yiiframework.com/doc/api/1.1/CWebUser#checkAccess">CWebUser::checkAccess</a> returns true for one of the roles.提示，用户角色应该被设置成<code>allow</code>规则，因为角色代表能做某些事情。 <a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#ips">ips</a>: 设定哪个客户端 IP 匹配此规则。 <a href="http://www.yiiframework.com/doc/api/1.1/CAccessRule#verbs">verbs</a>: 设定哪种请求类型 (例如：<code>GET</code>, <code>POST</code>) 匹配此规则。 <strong>二、访问规则中：</strong> expression: 设定一个 PHP 表达式。它的值用来表明这条规则是否适用。在表达式，你可以使用一个叫<code>$user</code>的变量，它代表的是<code>Yii::app()-&gt;user</code>。 expression 的具体用法： </li>
 </ul>
+<pre><code>class AdminController extends CController
+{
+
+……
+    public function accessRules()
+    {
+        return array(
+        array('allow',  //允许所有人执行'login','error','index'
+                'actions'=&gt;array('login','error','index'),
+                'users'=&gt;array('*'),
+        ),
+        array('allow', //允许超级管理员执行所有动作
+                'actions'=&gt;array('create','update','delete'),
+                'expression'=&gt;array($this,'isSuperAdmin'),
+        ),
+        array('allow',//允许普通管理员执行
+                'actions'=&gt;array('update'),
+                'expression'=&gt;array($this,'isNormalAdmin'),    //表示调用$this(即 AdminController) 中的 isNormalAdmin 方法。
+        ),      
+        array('deny',  // deny all users
+                'users'=&gt;array('*'),
+        ),
+        );
+    }
+    protected function isSuperAdmin($user)//判断是否是超级管理员
+    {
+        return ($this-&gt;loadModel($user-&gt;id)-&gt;adminAdminFlag==1);
+    }
+    protected function isNormalAdmin($user)//判断是否是普通管理员
+    {
+        return ($this-&gt;loadModel($user-&gt;id)-&gt;adminAdminFlag==0);
+    }
+
+    public function loadModel($id)
+    {
+        $model=Admin::model()-&gt;findByPk((int)$id);
+        if($model===null){
+            throw new CHttpException(404,'页面不存在');     
+        }
+        return $model;
+    }
+}
+</code></pre>
 <p>注：其中$user 代表<code>Yii::app()-&gt;user</code>即登录用户。</p>

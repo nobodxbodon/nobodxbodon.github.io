@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E8%8A%B1%E6%9C%B5%E7%9A%84%E6%B8%A9%E5%AE%A4/%E8%BD%AF%E4%BB%B6%E5%A6%82%E4%BD%95%E5%9C%A8CPU%E4%B8%8A%E8%BF%90%E8%A1%8C%E8%B5%B7%E6%9D%A5%E7%9A%84.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/花朵的温室/软件如何在CPU上运行起来的.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2023-2024</p>
 <p>:Authors: Kenneth Lee
 :Version: 0.2
@@ -44,20 +44,20 @@ netlist变成芯片的，是生产厂家，比如台积电，中芯国际等企�
 EDA工具，其他所有用来配合电路设计的工具都叫EDA工具），可以帮你把写好的“硬件代
 码”，翻译成数字电路。</p>
 <p>下面是一个用System C写的加法器的电路代码：::</p>
-<p>#include "systemc.h"
-SC_MODULE(half_add) {
-sc_in&lt;bool&gt; a, b;
-sc_out&lt;bool&gt; sum, carry;
-void prc_half_add();
-SC_CTOR(half_add) {
-SC_METHOD(prc_half_add);
-sensitive&lt;&lt;a&lt;&lt;b;
-}
-}
-void half_add::pre_half_add() {
-sum=a*b;
-carry=a&amp;b;
-}</p>
+<h1>include "systemc.h"</h1>
+<p>SC_MODULE(half_add) {
+    sc_in&lt;bool&gt; a, b;
+    sc_out&lt;bool&gt; sum, carry;
+    void prc_half_add();
+    SC_CTOR(half_add) {
+      SC_METHOD(prc_half_add);
+      sensitive&lt;&lt;a&lt;&lt;b;
+    }
+  }
+  void half_add::pre_half_add() {
+    sum=a*b;
+    carry=a&amp;b
+  }</p>
 <p>看起来是不是和C++很像？它其实就是多了一些说明输入输出引脚的声明（sc_in，sc_out
 那些，要注意这不一定一位，多位的输入输出就是多条线，代表一个二进制的数就行了），
 并说明怎么从输入得到输出（下面的pre_half_add函数），剩下的电路怎么搭就全部让
@@ -123,12 +123,12 @@ EDA工具给你生成了。</p>
 要什么输入，什么输出，要多少个时钟才能算完，就可以了。</p>
 <p>上面这个电路可以直接用软件进行模拟，比如你用C++写个程序：::</p>
 <p>int main(void) {
-for(int i = 0; i &lt; 1000000; i++) {
-for(auto module: modules) {
-module-&gt;run_one_cycle();
-}
-}
-}</p>
+    for(int i = 0; i &lt; 1000000; i++) {
+        for(auto module: modules) {
+          module-&gt;run_one_cycle();
+        }
+    }
+  }</p>
 <p>剩下的事情就是自己预计一下这个硬件模块每个cycle干些什么。这样不用做出电路，但
 可以计算出所有模块组合起来，这个电路可以跑多快。module::run_one_cycle的实现也
 不需要真的算每个cycle具体怎么做，只需要预计自己要几个cycle做一个动作，每那么多
@@ -179,76 +179,77 @@ module-&gt;run_one_cycle();
 <p>比如，一开始我们需要取指，给PC这个模块LDPC信号，给后面的三角PC-B信号，这一个时
 钟周期搞定，所以它就这样画图：::</p>
 <p>+---------+
-| PC-&gt;AR  |  PC-B, LDAR
-| PC=PC+1 |
-+---------+</p>
+  | PC-&gt;AR  |  PC-B, LDAR 
+  | PC=PC+1 |
+  +---------+</p>
 <p>这是一跳，下一跳把AR的数据输入内存，做MR（读），写到DR上，所以就这样画：::</p>
 <p>+---------+
-| PC-&gt;AR  |  PC-B, LDAR
-| PC=PC+1 |
-+----+----+
-|
-V
-+---------+
-| MEM-&gt;DR |  MR,LDDR
-| DR-&gt;IR  |  LDIR         （这两个动作能否合并在一跳，和硬件实现相关。）
-+---------+
-数据到了IR就直接控制控制单元发出执行的信号了。什么步骤可以合并在一个时钟周期基
+  | PC-&gt;AR  |  PC-B, LDAR 
+  | PC=PC+1 |
+  +----+----+
+       |
+       V
+  +---------+
+  | MEM-&gt;DR |  MR,LDDR
+  | DR-&gt;IR  |  LDIR         （这两个动作能否合并在一跳，和硬件实现相关。）
+  +---------+</p>
+<p>数据到了IR就直接控制控制单元发出执行的信号了。什么步骤可以合并在一个时钟周期基
 本是实现相关的，只能记住。</p>
 <p>执行就是先把R1, R2送入A，B：::</p>
 <p>+---------+
-| R1-&gt;A   |  R1o,LDA
-| R2-&gt;B   |  R2o,LDB
-+---------+</p>
+  | R1-&gt;A   |  R1o,LDA
+  | R2-&gt;B   |  R2o,LDB
+  +---------+</p>
 <p>然后在ALU上计算，写过要写内存，所以要写到DR中，R3做地址，R3要写AR中：::</p>
 <p>+---------+
-| R1-&gt;A   |  R1o,LDA
-| R2-&gt;B   |  R2o,LDB
-+----+----+
-|
-V
-+---------+
-| ALU-&gt;DR |  ALU-B
-| DR-&gt;AR  |  R3o, LDAR
-+---------+</p>
+  | R1-&gt;A   |  R1o,LDA
+  | R2-&gt;B   |  R2o,LDB
+  +----+----+
+       |
+       V
+  +---------+
+  | ALU-&gt;DR |  ALU-B
+  | DR-&gt;AR  |  R3o, LDAR
+  +---------+</p>
 <p>然后写入内存：::</p>
 <p>+---------+
-| R1-&gt;A   |  R1o,LDA
-| R2-&gt;B   |  R2o,LDB
-+----+----+
-|
-V
-+---------+
-| ALU-&gt;DR |  ALU-B
-| DR-&gt;AR  |  R3o, LDAR
-+----+----+
-|
-V
-+---------+
-| AR-&gt;MEM | MW
-| DR-&gt;MEM |
-+---------+</p>
+  | R1-&gt;A   |  R1o,LDA
+  | R2-&gt;B   |  R2o,LDB
+  +----+----+
+       |
+       V
+  +---------+
+  | ALU-&gt;DR |  ALU-B
+  | DR-&gt;AR  |  R3o, LDAR
+  +----+----+
+       |
+       V
+  +---------+
+  | AR-&gt;MEM | MW
+  | DR-&gt;MEM |
+  +---------+</p>
 <p>两个合并起来，就是这样：::</p>
 <p>取指周期                        执行周期</p>
 <pre><code>                          +-------+
-                          |       V</code></pre>
+                          |       V
+</code></pre>
 <p>+---------+                 |   +---------+
-| PC-&gt;AR  |  PC-B, LDAR     |   | R1-&gt;A   |  R1o,LDA
-| PC=PC+1 |                 |   | R2-&gt;B   |  R2o,LDB
-+----+----+                 |   +----+----+
-|                     /         |
-V                    /          V
-+---------+              /      +---------+
-| MEM-&gt;DR |  MR,LDDR    /       | ALU-&gt;DR |  ALU-B
-| DR-&gt;IR  |  LDIR      /        | DR-&gt;AR  |  R3o, LDAR
-+----+----+           /         +----+----+
-|               /               |
-+--------------/                V
-+---------+
-| AR-&gt;MEM | MW
-| DR-&gt;MEM |
-+----+----+
-|
-V
------/   （重复）
-/</p>
+  | PC-&gt;AR  |  PC-B, LDAR     |   | R1-&gt;A   |  R1o,LDA
+  | PC=PC+1 |                 |   | R2-&gt;B   |  R2o,LDB
+  +----+----+                 |   +----+----+
+       |                     /         |
+       V                    /          V
+  +---------+              /      +---------+
+  | MEM-&gt;DR |  MR,LDDR    /       | ALU-&gt;DR |  ALU-B
+  | DR-&gt;IR  |  LDIR      /        | DR-&gt;AR  |  R3o, LDAR
+  +----+----+           /         +----+----+
+       |               /               |
+       +--------------/                V
+                                  +---------+
+                                  | AR-&gt;MEM | MW
+                                  | DR-&gt;MEM |
+                                  +----+----+
+                                       |
+                                       V
+                                     -----/   （重复）
+                                    /</p>

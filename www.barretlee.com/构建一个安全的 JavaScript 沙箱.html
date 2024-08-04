@@ -13,22 +13,23 @@ tags:</li>
 date: 2016-08-23 01:05:13</li>
 </ul>
 <hr/>
-<p><img alt="Sandbox for Addies Birthday!! from //homesteadroots.blogspot.com/2010/07/sandbox-for-addies-birthday-could-also.html" src="/media/wwww/share/study/聚聚/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2016/08/23/6c0378f8gw1f730uldkfrj20p00dwaf1.jpg"/>&lt;!--&lt;source src="http://ww1.sinaimg.cn/large/6c0378f8gw1f730uldkfrj20p00dwaf1.jpg"&gt;--&gt;</p>
+<p><img alt="Sandbox for Addies Birthday!! from //homesteadroots.blogspot.com/2010/07/sandbox-for-addies-birthday-could-also.html" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/www.barretlee.com/blog/src/_posts/../blogimgs/2016/08/23/6c0378f8gw1f730uldkfrj20p00dwaf1.jpg"/>&lt;!--&lt;source src="http://ww1.sinaimg.cn/large/6c0378f8gw1f730uldkfrj20p00dwaf1.jpg"&gt;--&gt;</p>
 <p>在 Node.js 中有一个模块叫做 VM，它提供了几个 API，允许代码在 V8 虚拟机上下文中运行，如：</p>
-<pre><code class="language-javascript">const vm = require('vm');
+<pre><code class="lang-javascript">const vm = require('vm');
 const sandbox = { a: 1, b: 2 };
 const script = new vm.Script('a + b');
 const context = new vm.createContext(sandbox);
 script.runInContext(context);
 </code></pre>
 <p><code>vm.Script</code> 中的代码是预编译好的，通过 <code>vm.createContext</code> 将代码加载到一个上下文环境中，置入沙箱（sandbox），然后通过 <code>script.runInContext</code> 执行代码，整个操作都在封闭的 VM 中进行。这是 Node.js 提供给我们的便捷功能，那么，在浏览器环境中呢？是否也能做到将代码运行在沙箱中？本文带着大家来探索一番。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h3>代码编译工具</h3>
 <p><strong>邪恶的 <code>eval</code></strong></p>
 <p><code>eval</code> 函数可以将一个 Javascript 字符串视作代码片段执行，不过它存在诸多问题，如调试困难、性能问题等，并且它在运行时可以访问闭包环境和全局作用域，存在代码注入的安全风险，作为沙箱，这也是我们不期望看到的。<code>eval</code> 虽然好用，但是经常被滥用，在这里我们不多讨论它。</p>
 <p><strong><code>new Function</code></strong></p>
 <p>Function 构造函数会创建一个新的函数对象，它可以作为 <code>eval</code> 的替代品:</p>
-<pre><code class="language-javascript">fn = new Function(...args, 'functionBody');
+<pre><code class="lang-javascript">fn = new Function(...args, 'functionBody');
 </code></pre>
 <p>返回的 <code>fn</code> 是一个定义好的函数，最后一个参数为函数体。它和 <code>eval</code> 不太一样：</p>
 <ul>
@@ -38,7 +39,7 @@ script.runInContext(context);
 <p>如何阻止它访问全局作用域呢？</p>
 <h3><code>with</code> 关键词</h3>
 <p><code>with</code> 是阻止程序访问上一级作用域的一道防火墙：</p>
-<pre><code class="language-javascript">function compileCode(code) {
+<pre><code class="lang-javascript">function compileCode(code) {
   code = 'with (sandbox) {' + code + '}';
   return new Function('sandbox', code);
 }
@@ -47,7 +48,7 @@ script.runInContext(context);
 <p>似乎在 ECMAScript 5 中掌握的知识已经不足以解决 <code>code</code> 逃逸沙箱的问题了，此时我们可以把焦点放在 ES6 提供的新特性上。</p>
 <h3>ES6 Proxy</h3>
 <p>ES6 中提供了一个 Proxy 函数，它是访问对象前的一个拦截器，下面举一个简单的栗子：</p>
-<pre><code class="language-javascript">const p = new Proxy({}, {
+<pre><code class="lang-javascript">const p = new Proxy({}, {
   get(target, key) {
     if(key === 'a') {
       return 1;
@@ -60,7 +61,7 @@ p.s // undefined
 </code></pre>
 <p>代码中，<code>Proxy</code> 给 <code>{}</code> 设置了属性访问拦截器，倘若访问的属性为 <code>a</code> 则返回 1，否则走正常程序。</p>
 <p>这里我们可以使用 <code>proxy</code> 对访问做拦截处理，<code>sandbox</code> 本不存在的属性会追溯到全局变量上访问，此时我们可以欺骗程序，告诉它这个「不存在的属性」是存在的，于是有了下面的代码：</p>
-<pre><code class="language-javascript">function compileCode(code) {
+<pre><code class="lang-javascript">function compileCode(code) {
   code = 'with (sandbox) {' + code + '}';
   const fn = new Function('sandbox', code);
   return (sandbox) =&gt; {
@@ -76,7 +77,7 @@ p.s // undefined
 <p>似乎这么做就可以了，但既然用到了 ES6 的特性，我们便不能忽略 ES6 中一个可以控制 <code>with</code> 关键词行为的变量。</p>
 <h3>Symbol.unscopables</h3>
 <p><code>Symbol</code> 是 JS 的第七种数据类型，它能够产生一个唯一的值，同时也具备一些内建属性，这些属性可以用来进行元编程（meta programming），即对语言本身编程，影响语言行为。其中一个内建属性 <code>Symbol.unscopables</code>，通过它可以影响 <code>with</code> 的行为。</p>
-<pre><code class="language-javascript">const foo = () =&gt; 'global';
+<pre><code class="lang-javascript">const foo = () =&gt; 'global';
 class A {
   foo() { return 'clourse'; }
   get [Symbol.unscopables]() {
@@ -90,7 +91,7 @@ with(A.prototype) {
 }
 </code></pre>
 <p>上面对 A 设置做了 <code>Symbol.unscopables</code> 的设定，声明 <code>foo</code> 属性在 A 上是不存在的，从而使得代码从 <code>with</code> 中逃逸。对此，我们需要对它做一层加固：</p>
-<pre><code class="language-javascript">function compileCode(code) {
+<pre><code class="lang-javascript">function compileCode(code) {
   code = 'with (sandbox) {' + code + '}';
   const fn = new Function('sandbox', code);
   return (sandbox) =&gt; {
@@ -117,7 +118,7 @@ with(A.prototype) {
 <li><code>code</code> 中可以使用 <code>eval</code> 和 <code>new Function</code> 直接逃逸</li>
 </ul>
 <p>对于第一个问题，我们可以通过堆栈深度检测：</p>
-<pre><code class="language-javascript">let stack = 0;
+<pre><code class="lang-javascript">let stack = 0;
 for (let char of code) {
   if (char === '{') {
     stack++;
@@ -131,7 +132,7 @@ for (let char of code) {
 }
 </code></pre>
 <p>事实上，这样做依然不严谨，比如代码注释中出现花括号问题，如 <code>/*{*/'} alert(this); {'/*}*/</code>；而对于第二个问题，暂时还没有什么好的办法，尤其是 <code>Function</code>，它可以通过很多方式构造出来：</p>
-<pre><code class="language-javascript">(function(){}).constructor("alert(this)")();
+<pre><code class="lang-javascript">(function(){}).constructor("alert(this)")();
 /2/.constructor.constructor("alert(this)")();
 </code></pre>
 <h3>最后</h3>

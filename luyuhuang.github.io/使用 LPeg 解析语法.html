@@ -1,18 +1,20 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2020-06-24-lpeg.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2020/06/24/lpeg">站点原文</a></h2>
 <hr/>
-<h2>key: 34
+<p>key: 34
 title: 使用 LPeg 解析语法
 math: true
-tag:
-- tools
-- lua</h2>
+tag:</p>
+<pre><code>- tools
+- lua
+</code></pre>
+<hr/>
 <p>LPeg 是一个 Lua 的模式匹配库. 笔者刚刚接触到 LPeg 时, 以为它只是另一种形式的正则表达式; 深入了解才发现, 它的功能远远强于正则表达式, 能够轻易匹配正则表达式难以匹配的复杂模式, 乃至解析语法. 事实上, LPeg 即是 Parsing Expression Grammars for Lua, 它设计出来就是用来解析语法的. 使用 LPeg 能够轻松地解析各种语法, 比如用四百行代码<a href="https://github.com/andremm/lua-parser">将 Lua 源码解析成抽象语法树</a>. 有了它, 静态分析代码, 自定义 DSL(Domain Specific Language) 将会变得易如反掌.</p>
 <p>本文不会详细介绍 LPeg 中的每一个函数, 每一个操作符, 这些内容<a href="http://www.inf.puc-rio.br/~roberto/lpeg/">官方文档</a>中都很清楚; 这里主要介绍 LPeg 的匹配机制以及使用思路. 如果你是第一次接触 PEG 和 LPeg, 可以先阅读本文, 实践时需要了解详细用法再参阅官方文档. 由于 LPeg 是 PEG 的 Lua 实现, 我们先从 PEG 说起.</p>
 <h3>PEG(Parsing Expression Grammars)</h3>
 <p>说到模式匹配, 很多同学首先想到的是正则表达式. 对于简单的模式而言, 正则表达式是很方便的; 然而一旦情况变得复杂, 正则表达式就显得力不从心了. 你能想象使用正则表达式匹配条件表达式吗? 此外正则表达式存在效率问题, 一些奇怪的正则表达式可能导致反复回溯, 甚至达到指数级的时间复杂度. 为了匹配复杂的模式, 我们需要更加强大的工具, PEG 就是其中一个.</p>
 <h4>介绍</h4>
 <p>PEG 最早是在 2004 年 MIT 的一篇论文 <a href="http://pdos.csail.mit.edu/papers/parsing:popl04.pdf">Parsing Expression Grammars: A Recognition-Based Syntactic Foundation</a> 中提出的. 它很像 CFG(Context-Free Grammars), 不同的是 CFG 是对语言的描述, 而 PEG 是对语言的解析, 稍后我们能看到这一区别. <a href="http://www.lua.org/manual/5.3/manual.html#9">Lua 文档的最后一节</a>有一份用 BNF(Backus Naur Form) 描述的完整语法, BNF 就是 CFG 的一种表示法. 下面是用 PEG 对其语法的自描述:</p>
-<pre><code class="language-peg">grammar     &lt;-  (nonterminal ’&lt;-’ sp pattern)+
+<pre><code class="lang-peg">grammar     &lt;-  (nonterminal ’&lt;-’ sp pattern)+
 pattern     &lt;-  alternative (’/’ sp alternative)*
 alternative &lt;-  ([!&amp;]? sp suffix)+
 suffix      &lt;-  primary ([*+?] sp)*
@@ -61,28 +63,68 @@ B   &lt;-  ...
 <p>总之, 虽然 PEG 相比正则表达式不那么符合人类直觉, 但是其规则更简单, 更接近模式匹配的本质.</p>
 <h3>LPeg</h3>
 <p>LPeg 是 PEG 的 Lua 实现. LPeg 并没有实现 PEG 的语法, 相反, 它使用 Lua 的特性, 实现一系列的函数, 对象, 通过重载运算符来构造模式. 我们先来看 LPeg 的几个基本函数和操作:</p>
-<p>| Operator | Description |
-|:---------|:------------|
-| <code>lpeg.P(string)</code> | 匹配字面量 <code>string</code>. 相当于 PEG 中的 <code>’’</code> |
-| <code>lpeg.P(n)</code> | 匹配 n 个任意字符 |
-| <code>lpeg.S(string)</code> | 匹配 <code>string</code> 中的任意字符. 相当于 PEG 中的 <code>[]</code> |
-| <code>lpeg.R("xy")</code> | 匹配 <code>x</code> 至 <code>y</code> 范围内的所有字符. 相当于 PEG 中的 <code>[x-y]</code> |
-| <code>patt ^ n</code> | <code>patt</code> 重复至少 <code>n</code> 次 |
-| <code>patt ^ -n</code> | <code>patt</code> 重复至多 <code>n</code> 次 |
-| <code>patt1 * patt2</code> | <code>patt1</code> 后紧跟 <code>patt2</code>. 相当于 PEG 中的 <code>patt1 patt2</code> |
-| <code>patt1 + patt2</code> | 顺序选择. 匹配 <code>patt1</code> 或 <code>patt2</code>. 相当于 PEG 中的 <code>patt1 / patt2</code> |
-| <code>patt1 - patt2</code> | 只有 <code>patt2</code> 不匹配, 才匹配 <code>patt1</code>. 相当于 PEG 中的 <code>!patt2 patt1</code>. 可以理解成差集 |
-| <code>-patt</code> | 相当于 <code>"" - patt</code>. 不匹配 <code>patt</code>. 相当于 PEG 中的 <code>!patt</code> |
-| <code>#patt</code> | 匹配 <code>patt</code> 但是不消耗输入. 相当于 PEG 中的 <code>&amp;patt</code> |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">Operator</th>
+<th style="text-align:left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code>lpeg.P(string)</code></td>
+<td style="text-align:left">匹配字面量 <code>string</code>. 相当于 PEG 中的 <code>’’</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.P(n)</code></td>
+<td style="text-align:left">匹配 n 个任意字符</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.S(string)</code></td>
+<td style="text-align:left">匹配 <code>string</code> 中的任意字符. 相当于 PEG 中的 <code>[]</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.R("xy")</code></td>
+<td style="text-align:left">匹配 <code>x</code> 至 <code>y</code> 范围内的所有字符. 相当于 PEG 中的 <code>[x-y]</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt ^ n</code></td>
+<td style="text-align:left"><code>patt</code> 重复至少 <code>n</code> 次</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt ^ -n</code></td>
+<td style="text-align:left"><code>patt</code> 重复至多 <code>n</code> 次</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt1 * patt2</code></td>
+<td style="text-align:left"><code>patt1</code> 后紧跟 <code>patt2</code>. 相当于 PEG 中的 <code>patt1 patt2</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt1 + patt2</code></td>
+<td style="text-align:left">顺序选择. 匹配 <code>patt1</code> 或 <code>patt2</code>. 相当于 PEG 中的 <code>patt1 / patt2</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt1 - patt2</code></td>
+<td style="text-align:left">只有 <code>patt2</code> 不匹配, 才匹配 <code>patt1</code>. 相当于 PEG 中的 <code>!patt2 patt1</code>. 可以理解成差集</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>-patt</code></td>
+<td style="text-align:left">相当于 <code>"" - patt</code>. 不匹配 <code>patt</code>. 相当于 PEG 中的 <code>!patt</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code>#patt</code></td>
+<td style="text-align:left">匹配 <code>patt</code> 但是不消耗输入. 相当于 PEG 中的 <code>&amp;patt</code></td>
+</tr>
+</tbody>
+</table>
 <p>可以看到, LPeg 与 PEG 大同小异, 只是换了一个形式而已. <code>lpeg.P</code>, <code>lpeg.S</code>, <code>lpeg.R</code> 等方法都会返回 pattern 对象, pattern 对象重载了运算符, 可以与其他 pattern 执行各种运算, 这些运算的结果仍是 pattern. 例如前面提到的 <code>S &lt;- (!’X’ .)* ’X’</code> 使用 LPeg 就可以写成这样:</p>
-<pre><code class="language-lua">local lpeg = require "lpeg"
+<pre><code class="lang-lua">local lpeg = require "lpeg"
 local S = (lpeg.P(1) - "X") ^ 0 * "X"
 </code></pre>
 <p>调用 pattern 的 <code>match</code> 方法可匹配字符串, 会返回匹配结束的位置:</p>
-<pre><code class="language-lua">S:match("abcdXefghXijk") --&gt; 6
+<pre><code class="lang-lua">S:match("abcdXefghXijk") --&gt; 6
 </code></pre>
 <p>如何实现 <code>S &lt;- ’X’ / . S</code> 这样的递归模式呢? <code>lpeg.P</code> 还支持传入一个 table. 这个 table 包含一系列键值 <code>k = v</code>, 键代表一个非终结符, 值定义模式. 使用 <code>lpeg.V</code> 引用其他非终结符. 此外还要求这个 table 的第一个值 <code>table[1]</code> 为初始符号, 因为 Lua 的 table 是无序的. 例如 <code>S &lt;- ’X’ / . S</code> 用 LPeg 就可以写成这样:</p>
-<pre><code class="language-lua">local lpeg = require "lpeg"
+<pre><code class="lang-lua">local lpeg = require "lpeg"
 local P, V = lpeg.P, lpeg.V
 
 local S = P{"S",
@@ -90,7 +132,7 @@ local S = P{"S",
 }
 </code></pre>
 <p>下面是一个稍复杂的例子:</p>
-<pre><code class="language-lua">local lpeg = require "lpeg"
+<pre><code class="lang-lua">local lpeg = require "lpeg"
 local P, V = lpeg.P, lpeg.V
 
 local S = P{"S",
@@ -106,21 +148,58 @@ B   &lt;-  ’b’ S / ’a’ B B
 </code></pre>
 <h4>捕获</h4>
 <p>只能匹配字符串返回位置未免太乏味了. LPeg 的功能远不止这些, LPeg 还有强大的捕获功能. 下面列出了一些 LPeg 的捕获方法:</p>
-<p>| Operation | What it Produces |
-|:----------|:-----------------|
-| <code>lpeg.C(patt)</code> | 匹配模式 <code>patt</code> 并捕获它 |
-| <code>lpeg.Ct(patt)</code> | 将 <code>patt</code> 产生的所有捕获放在一个 table 中 |
-| <code>lpeg.Cs(patt)</code> | 将 <code>patt</code> 中的所有匹配都视为捕获, 并将他们拼接成一个字符串 |
-| <code>lpeg.Cc(values)</code> | 匹配空串并将给定值 <code>values</code> 作为捕获 |
-| <code>lpeg.Cp()</code> | 匹配空串并将当前位置作为捕获 |
-| <code>lpeg.Cf(patt, f)</code> | 将 <code>patt</code> 产生的所有捕获依次传入函数 <code>f</code>, 类似于 reduce 操作. 如 <code>patt</code> 产生捕获 $C_1, C_2, ..., C_n$ , 则会执行 $f(...f(f(C_1, C_2), C_3)..., C_n)$ , 最后以函数的最终返回值作为捕获 |
-| <code>patt / string</code> | 将 <code>patt</code> 的捕获结果替换为字符串 <code>string</code> |
-| <code>patt / number</code> | 取 <code>patt</code> 的第 n 个捕获结果. 如果为 0 则无捕获结果 |
-| <code>patt / table</code> | 若 <code>patt</code> 的捕获结果为 <code>c</code>, 则将 <code>table[c]</code> 作为捕获结果 |
-| <code>patt / function</code> | 将 <code>patt</code> 的捕获结果传入 <code>function</code>, 取其返回值作为捕获结果 |</p>
+<table>
+<thead><tr>
+<th style="text-align:left">Operation</th>
+<th style="text-align:left">What it Produces</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><code>lpeg.C(patt)</code></td>
+<td style="text-align:left">匹配模式 <code>patt</code> 并捕获它</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.Ct(patt)</code></td>
+<td style="text-align:left">将 <code>patt</code> 产生的所有捕获放在一个 table 中</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.Cs(patt)</code></td>
+<td style="text-align:left">将 <code>patt</code> 中的所有匹配都视为捕获, 并将他们拼接成一个字符串</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.Cc(values)</code></td>
+<td style="text-align:left">匹配空串并将给定值 <code>values</code> 作为捕获</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.Cp()</code></td>
+<td style="text-align:left">匹配空串并将当前位置作为捕获</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>lpeg.Cf(patt, f)</code></td>
+<td style="text-align:left">将 <code>patt</code> 产生的所有捕获依次传入函数 <code>f</code>, 类似于 reduce 操作. 如 <code>patt</code> 产生捕获 $C_1, C_2, ..., C_n$ , 则会执行 $f(...f(f(C_1, C_2), C_3)..., C_n)$ , 最后以函数的最终返回值作为捕获</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt / string</code></td>
+<td style="text-align:left">将 <code>patt</code> 的捕获结果替换为字符串 <code>string</code></td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt / number</code></td>
+<td style="text-align:left">取 <code>patt</code> 的第 n 个捕获结果. 如果为 0 则无捕获结果</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt / table</code></td>
+<td style="text-align:left">若 <code>patt</code> 的捕获结果为 <code>c</code>, 则将 <code>table[c]</code> 作为捕获结果</td>
+</tr>
+<tr>
+<td style="text-align:left"><code>patt / function</code></td>
+<td style="text-align:left">将 <code>patt</code> 的捕获结果传入 <code>function</code>, 取其返回值作为捕获结果</td>
+</tr>
+</tbody>
+</table>
 <p>需要说明的是只有在对应模式匹配成功时才会产生捕获结果. 例如模式 <code>lpeg.C(lpeg.P"a" ^ -1)</code> 在匹配不以 <code>a</code> 开头的字符串时会返回空串.</p>
 <p>例如, 用指定字符分割字符串, 就可以这样写:</p>
-<pre><code class="language-lua">function split(s, sep)
+<pre><code class="lang-lua">function split(s, sep)
     sep = lpeg.P(sep)
     local elem = lpeg.C((1 - sep) ^ 0)
     local p = elem * (sep * elem) ^ 0
@@ -129,7 +208,7 @@ end
 </code></pre>
 <p>其中 <code>1 - sep</code> 匹配不为分隔符的任意字符, 然后再 <code>^ 0</code> 让其重复 0 次以上; 然后 <code>elem * (sep * elem) ^ 0</code> 让这种分割模式重复若干次.</p>
 <p>如果需要将结果放在一个 table 里, 只需这样写:</p>
-<pre><code class="language-lua">function split(s, sep)
+<pre><code class="lang-lua">function split(s, sep)
     sep = lpeg.P(sep)
     local elem = lpeg.C((1 - sep) ^ 0)
     local p = lpeg.Ct(elem * (sep * elem) ^ 0)   -- make a table capture

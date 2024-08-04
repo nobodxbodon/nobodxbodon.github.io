@@ -1,68 +1,69 @@
 <h2><a href="https://github.com/forecho/hugo-blog/blob/master/content/posts/using-golang-for-api-testing.md">仓库源文</a>，<a href="https://blog.forecho.com/using-golang-for-api-testing.html">站点原文</a></h2>
 <hr/>
-<h2>title: "我是如何用 Golang 做接口测试的"
+<p>title: "我是如何用 Golang 做接口测试的"
 date: 2021-08-16T10:59:00+08:00
 tags: ["技术分享", "Golang"]
-draft: false
-toc: true</h2>
+draft: false</p>
+<h2>toc: true</h2>
 <h2>引言</h2>
 <p>最近公司项目用 Golang 重写，总算是有机会实战了。这篇文章主要分享与记录我是怎么在 Golang 的项目中写接口测试的。</p>
 <p>因为是换语言重写 API 项目，所以一定要保证新旧项目对外输出的结果一致性。由于我使用 Golang 的时间不算太久，本篇文章如有错误、不足之处，还请大家多多指教。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>接口测试</h2>
 <p>接口测试的代码有参考 <a href="https://github.com/qiangxue/go-rest-api/blob/master/internal/auth/api_test.go#L21">qiangxue/go-rest-api</a> 的代码，但是因为使用的包和结构也不太一样，所以会有调整，但是思路是差不多的。</p>
 <h3>tests 包</h3>
 <p>先建一个 tests 包，写一个 <code>Endpoint</code> 方法：</p>
-<pre><code class="language-go">package tests
+<pre><code class="lang-go">package tests
 
 import (
-	"bytes"
-	"fmt"
-	"github.com/julienschmidt/httprouter"
-	"github.com/kinbiko/jsonassert"
-	"github.com/stretchr/testify/assert"
-	"net/http"
-	"net/http/httptest"
-	"testing"
+    "bytes"
+    "fmt"
+    "github.com/julienschmidt/httprouter"
+    "github.com/kinbiko/jsonassert"
+    "github.com/stretchr/testify/assert"
+    "net/http"
+    "net/http/httptest"
+    "testing"
 )
 
 // APITestCase represents the data needed to describe an API test case.
 type APITestCase struct {
-	Name         string
-	Method       string
-	URL          string
-	Body         string
-	Header       http.Header
-	WantStatus   int
-	WantResponse string
+    Name         string
+    Method       string
+    URL          string
+    Body         string
+    Header       http.Header
+    WantStatus   int
+    WantResponse string
 }
 
 
 // Endpoint tests an HTTP endpoint using the given APITestCase spec.
 func Endpoint(t *testing.T, router *httprouter.Router, tc APITestCase) {
-	t.Run(tc.Name, func(t *testing.T) {
-		req, _ := http.NewRequest(tc.Method, tc.URL, bytes.NewBufferString(tc.Body))
-		if tc.Header != nil {
-			req.Header = tc.Header
-		}
-		if req.Header.Get("Content-Type") == "" {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		res := httptest.NewRecorder()
-		router.ServeHTTP(res, req)
-		assert.Equal(t, tc.WantStatus, res.Code, "status mismatch")
-		if tc.WantResponse != "" {
-			ja := jsonassert.New(t)
-			ja.Assertf(res.Body.String(), tc.WantResponse)
-		}
-	})
+    t.Run(tc.Name, func(t *testing.T) {
+        req, _ := http.NewRequest(tc.Method, tc.URL, bytes.NewBufferString(tc.Body))
+        if tc.Header != nil {
+            req.Header = tc.Header
+        }
+        if req.Header.Get("Content-Type") == "" {
+            req.Header.Set("Content-Type", "application/json")
+        }
+        res := httptest.NewRecorder()
+        router.ServeHTTP(res, req)
+        assert.Equal(t, tc.WantStatus, res.Code, "status mismatch")
+        if tc.WantResponse != "" {
+            ja := jsonassert.New(t)
+            ja.Assertf(res.Body.String(), tc.WantResponse)
+        }
+    })
 }
 
 
 func MockAuthHeader(JWT string) http.Header {
-	header := http.Header{}
-	header.Set("Authorization", fmt.Sprintf("Bearer %v", JWT))
-	return header
+    header := http.Header{}
+    header.Set("Authorization", fmt.Sprintf("Bearer %v", JWT))
+    return header
 }
 </code></pre>
 <p>几点需要说明：</p>
@@ -73,47 +74,47 @@ func MockAuthHeader(JWT string) http.Header {
 </ul>
 <h3>接口测试</h3>
 <p>一个示例：</p>
-<pre><code class="language-go">func mockNewServer() *Server {
-	return NewServer()
+<pre><code class="lang-go">func mockNewServer() *Server {
+    return NewServer()
 }
 
 func TestAccount(t *testing.T) {
-	c := mockNewServer()
-	JWT, _ := jwt.MakeJWT(tests.ClientId, tests.ClientSecret)
-	header := tests.MockAuthHeader(JWT)
+    c := mockNewServer()
+    JWT, _ := jwt.MakeJWT(tests.ClientId, tests.ClientSecret)
+    header := tests.MockAuthHeader(JWT)
 
-	items := []tests.APITestCase{
-		{
-			"test_unauthorized",
-			"GET",
-			"/api/v1/account/1155501",
-			"",
-			nil,
-			http.StatusUnauthorized,
-			`{"request_id":"&lt;&lt;PRESENCE&gt;&gt;","code":50000,"status_code":401,"message":"token 验证失败：未识别的 payload"}`,
-		},
-		{
-			"get_account_info",
-			"GET",
-			"/api/v1/account/1155501",
-			"",
-			header,
-			http.StatusOK,
-			`{"request_id":"&lt;&lt;PRESENCE&gt;&gt;","message":"success","code":0,"data":{"union_id":1155501,"status":"valid","created_at":"2021-06-18T14:57:18+08:00","updated_at":"2021-06-22T10:44:26+08:00"}}`,
-		},
-		{
-			"account_not_found",
-			"GET",
-			"/api/v1/points/account/1551734",
-			"",
-			header,
-			http.StatusOK,
-			`{"request_id":"&lt;&lt;PRESENCE&gt;&gt;","code":42003,"status_code":400,"message":"parameter union_id is invalid."}`,
-		},
-	}
-	for _, tc := range items {
-		tests.Endpoint(t, c.router, tc)
-	}
+    items := []tests.APITestCase{
+        {
+            "test_unauthorized",
+            "GET",
+            "/api/v1/account/1155501",
+            "",
+            nil,
+            http.StatusUnauthorized,
+            `{"request_id":"&lt;&lt;PRESENCE&gt;&gt;","code":50000,"status_code":401,"message":"token 验证失败：未识别的 payload"}`,
+        },
+        {
+            "get_account_info",
+            "GET",
+            "/api/v1/account/1155501",
+            "",
+            header,
+            http.StatusOK,
+            `{"request_id":"&lt;&lt;PRESENCE&gt;&gt;","message":"success","code":0,"data":{"union_id":1155501,"status":"valid","created_at":"2021-06-18T14:57:18+08:00","updated_at":"2021-06-22T10:44:26+08:00"}}`,
+        },
+        {
+            "account_not_found",
+            "GET",
+            "/api/v1/points/account/1551734",
+            "",
+            header,
+            http.StatusOK,
+            `{"request_id":"&lt;&lt;PRESENCE&gt;&gt;","code":42003,"status_code":400,"message":"parameter union_id is invalid."}`,
+        },
+    }
+    for _, tc := range items {
+        tests.Endpoint(t, c.router, tc)
+    }
 }
 </code></pre>
 <ul>
@@ -126,40 +127,40 @@ func TestAccount(t *testing.T) {
 <p>我们使用的是 <a href="https://github.com/jarcoal/httpmock">jarcoal/httpmock</a> 这个包，可以很好的满足我们的需求。</p>
 <p>使用方法我们分两步：</p>
 <h3>先定义 Mock 数据</h3>
-<pre><code class="language-go">type mockServiceAPI struct {
-	Method       string
-	URL          string
-	Body         string
-	WantStatus   int
-	WantResponse string
+<pre><code class="lang-go">type mockServiceAPI struct {
+    Method       string
+    URL          string
+    Body         string
+    WantStatus   int
+    WantResponse string
 }
 
 func MockNotificationServiceAPI() {
     // 读配置文件
-	domain := config.GetString("notification_service_api")
-	items := []mockServiceAPI{
-		{
-			http.MethodPost,
-			"/api/v1/template/send",
-			`{"app_key":"website","topic":"points","topic_sub_key":"login","types":["mail"],"data":[{"union_id":1551630,"template_data":{"url":"https://blog.forecho.com/"}}]}`,
-			http.StatusOK,
-			`{"code": 200,"msg": "请求成功","data": []}`,
-		},
-	}
-	for _, item := range items {
-		httpmock.Activate()
-		httpmock.RegisterResponder(
-			"POST",
-			fmt.Sprintf("%s%s", domain, item.URL),
-			httpmock.NewStringResponder(item.WantStatus, item.WantResponse),
-		)
-	}
+    domain := config.GetString("notification_service_api")
+    items := []mockServiceAPI{
+        {
+            http.MethodPost,
+            "/api/v1/template/send",
+            `{"app_key":"website","topic":"points","topic_sub_key":"login","types":["mail"],"data":[{"union_id":1551630,"template_data":{"url":"https://blog.forecho.com/"}}]}`,
+            http.StatusOK,
+            `{"code": 200,"msg": "请求成功","data": []}`,
+        },
+    }
+    for _, item := range items {
+        httpmock.Activate()
+        httpmock.RegisterResponder(
+            "POST",
+            fmt.Sprintf("%s%s", domain, item.URL),
+            httpmock.NewStringResponder(item.WantStatus, item.WantResponse),
+        )
+    }
 }
 </code></pre>
 <h3>使用 Mock</h3>
-<pre><code class="language-go">func TestSendNotification(t *testing.T) {
-	tests.MockNotificationServiceAPI()
-	defer httpmock.DeactivateAndReset()
+<pre><code class="lang-go">func TestSendNotification(t *testing.T) {
+    tests.MockNotificationServiceAPI()
+    defer httpmock.DeactivateAndReset()
     // something test code
 }
 </code></pre>

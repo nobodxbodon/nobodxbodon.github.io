@@ -1,6 +1,6 @@
-<h2>[仓库源文](https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2021-04-30-木兰语言 0.0.17.2 实现简易网页浏览器，又一次碰到语法歧义.md)</h2>
+<h2><a href="https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2021-04-30-木兰语言 0.0.17.2 实现简易网页浏览器，又一次碰到语法歧义.md">仓库源文</a></h2>
 <p>上周试用木兰语言加 QtWebkit 实现简易网页浏览器（<a href="https://gitee.com/zhishi/simple-browser">已开源在 Gitee</a> ，81 行代码）时，发现需要复现带参数的 super：</p>
-<pre><code class="language-python">super(演示, self).__init__()
+<pre><code class="lang-python">super(演示, self).__init__()
 </code></pre>
 <p>实现过程中，又一次遇到了这个头疼的报错：</p>
 <pre><code>ParserGeneratorWarning: 1 shift/reduce conflict
@@ -9,7 +9,7 @@
 <p>rply 的调试信息有限，貌似 <a href="https://github.com/alex/rply/issues/28">七年前就是如此</a>，包括 shift/reduce 在内的所有信息都极简，项目现在似乎也没有什么改进的迹象。由于它是参考 ply 重写的，于是查看了 <a href="https://ply.readthedocs.io/en/latest/ply.html#dealing-with-ambiguous-grammars">ply 对歧义语法的调试信息示例</a>。纠结了一下是把木兰用 ply 重写还是修改 rply 来获得类似调试信息，决定走后者。</p>
 <p>这里记一下：任何框架或工具，包括编程语言，可调试性——即告知用户“哪儿出错了？”——对于可用性非常非常重要。任何的反馈信息，包括警告、报错，都应以用户可理解、问题可定位、提供解决方案为首要目标。</p>
 <p>首先，分别创建了 <a href="https://gitee.com/Program-in-Chinese/study/blob/master/%E6%9C%A8%E5%85%B0/ply/%E6%AD%A7%E4%B9%89.py">ply</a> 和 <a href="https://gitee.com/Program-in-Chinese/study/blob/master/%E6%9C%A8%E5%85%B0/rply/%E5%85%A5%E9%97%A8/%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90/%E6%AD%A7%E4%B9%89.py">rply</a> 的最简歧义演示。语法如下（ply 不支持在语法定义中使用中文标识符，下面是 rply 的表示）：</p>
-<pre><code class="language-pnf">表达式 : 数
+<pre><code class="lang-pnf">表达式 : 数
 表达式 : 表达式 减 表达式
 </code></pre>
 <p>测试表达式为 <code>2 - 3 - 4</code>。在没有优先级设置时，会报警：<code>1 shift/reduce conflict</code>  而且输出：3</p>
@@ -57,8 +57,20 @@
         超类: super . ( )
 </code></pre>
 <p>到这里看出，其实很简单，没有优先级设置时，<code>super()</code> 有两种解析方式：</p>
-<p>| 步骤 | 符号栈 | 词输入 | 行为
-| ---- | ---- | ---- | ---- |
-1 | | super ( ) | 移入 super
+<table>
+<thead><tr>
+<th>步骤</th>
+<th>符号栈</th>
+<th>词输入</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>1 | | super ( ) | 移入 super
 2 | super | ( ) |  歧义：1）根据 <code>超类: super</code>，可以直接消减（reduce）为 <code>超类</code>；2） 根据 <code>超类: super ( )</code>，可以移入 <code>(</code></p>
 <p>问题确定之后，就是如何确定优先级高低，待继续研究。</p>

@@ -15,7 +15,7 @@ series: 着色器天书浅引
 excerpt: 在上一篇博客中，介绍了什么是着色器，以及着色器能实现的一些效果。在这一篇博客中，我将通过卡通渲染的例子，介绍如何写一个非常简单的着色器。</li>
 </ul>
 <hr/>
-<p>[上一篇博客]({{ site.url }}/2017/02/24/what-is-a-shader/)介绍了什么是着色器，以及着色器能实现的一些效果。在这一篇博客中，我将通过<a href="https://zh.wikipedia.org/wiki/%E5%8D%A1%E9%80%9A%E6%B8%B2%E6%9F%93">卡通渲染</a>的例子，介绍如何写一个非常简单的着色器。在本文结束的时候，我们将能够实现一种将画面中的颜色分为若干颜色层次的卡通渲染效果。</p>
+<p><a href="{{ site.url }}/2017/02/24/what-is-a-shader/">上一篇博客</a>介绍了什么是着色器，以及着色器能实现的一些效果。在这一篇博客中，我将通过<a href="https://zh.wikipedia.org/wiki/%E5%8D%A1%E9%80%9A%E6%B8%B2%E6%9F%93">卡通渲染</a>的例子，介绍如何写一个非常简单的着色器。在本文结束的时候，我们将能够实现一种将画面中的颜色分为若干颜色层次的卡通渲染效果。</p>
 <p>这一系列教程的源代码可以在 GitHub 的 &lt;a href="https://github.com/Ovilia/cezanne" onclick="_gaq.push(['_trackEvent', 'ToGitHub', window.location.pathname, 'cezanne1']);"&gt;Ovilia/cezanne&lt;/a&gt; 项目访问到，欢迎关注项目。</p>
 <p>{% capture imgSrc %}{{ site.url }}/img/post/2017-03-05-cartoon-shading-1-result.png{% endcapture %}
 {% include figure.html src=imgSrc caption='本文实现的卡通渲染效果' %}</p>
@@ -24,8 +24,7 @@ excerpt: 在上一篇博客中，介绍了什么是着色器，以及着色器�
 <h1>着色器的分类</h1>
 <p>最常用到的两种着色器分别为<em>顶点着色器</em>（<em>Vertex Shader</em>）和<em>片元着色器</em>（<em>Fragment Shader</em>）。</p>
 <p>首先需要明确的概念是，<strong>片元着色器是在顶点着色器之后被调用的</strong>，因而也可以从顶点着色器往片元着色器传递参数。</p>
-<blockquote>
-<p>其他类型的着色器参阅 <a href="https://www.khronos.org/opengl/wiki/Shader">Shader - OpenGL Wiki - Khronos Group</a>。</p>
+<blockquote><p>其他类型的着色器参阅 <a href="https://www.khronos.org/opengl/wiki/Shader">Shader - OpenGL Wiki - Khronos Group</a>。</p>
 </blockquote>
 <h2>顶点着色器</h2>
 <p>什么是顶点呢？</p>
@@ -36,19 +35,16 @@ excerpt: 在上一篇博客中，介绍了什么是着色器，以及着色器�
 <p>“片元”的概念大家可能相对陌生一些。但是一个相似的概念是“像素”，这你一定听说过。</p>
 <p>场景渲染到显示器的过程中，有一个步骤叫<em>光栅化</em>（<em>Rasterization</em>）。由于我们现在的显示器绝大多数是基于像素的（就是由一个个非常小的红绿蓝 LED 组成的显示单元），所以“连续”的三维场景，要显示到“离散”的显示器上，需要经过的变化操作就叫光栅化。</p>
 <p>光栅化后得到的就得到了一个个“片元”。片元和像素已经非常接近了，但两者仍是有区别的。用一种通俗的说法来解释的话，就是比如三维空间内有两个从摄像机角度看过去一前一后的三角形，它们重叠部分的显示区域，每个像素对应两个片元；不重叠的部分，像素和片元一一对应。当然，这个例子是我简化过的，真实的对应关系可能更复杂一些。</p>
-<blockquote>
-<p>更专业的说法是，片元在成为像素之前，还会做多种测试（比如深度测试、透明度测试、模板测试）以决定其最终是否会被显示为像素。所以，严格来说，“片元”和“像素”并不是一一对应的。</p>
+<blockquote><p>更专业的说法是，片元在成为像素之前，还会做多种测试（比如深度测试、透明度测试、模板测试）以决定其最终是否会被显示为像素。所以，严格来说，“片元”和“像素”并不是一一对应的。</p>
 </blockquote>
 <p>但是，这里我们并不需要了解片元的概念太深刻，只要知道它是非常接近像素，但是又不等同于像素的就可以了。</p>
 <p>同样，<strong>片元着色器就是每个片元调用一次的程序</strong>。</p>
 <p>在片元着色器中，可以访问到片元在二维屏幕上的坐标、深度信息、颜色等信息。通过改变这些值，可以实现特定的渲染效果。</p>
-<blockquote>
-<p>注意，同样是颜色信息，在顶点着色器中，得到的是顶点的颜色，而在片元着色器中，得到的是片元的颜色——也就是说，如果三角形的三个顶点颜色是不同的，片元的颜色就是根据这三个顶点的颜色进行插值后的，也可以通俗地理解为，是渐变的。</p>
+<blockquote><p>注意，同样是颜色信息，在顶点着色器中，得到的是顶点的颜色，而在片元着色器中，得到的是片元的颜色——也就是说，如果三角形的三个顶点颜色是不同的，片元的颜色就是根据这三个顶点的颜色进行插值后的，也可以通俗地理解为，是渐变的。</p>
 </blockquote>
 <h1>卡通渲染</h1>
 <p>我们在本文实现的根据亮度分为若干颜色梯度的效果，是卡通渲染（Toon Shading）的一种形式，称为 Cel Shading。</p>
-<blockquote>
-<p><em>"Cel" is the first syllable of "celluloid", a plastic made of cellulose nitrate. Before digital ink-and-paint software, the pencil drawings used in hand-drawn animation were transferred onto these sheets of clear plastic by skilled artists using ink and paint, or by using a special Xerox process ("Xerography") and paint. Later cels were made of cellulose acetate instead of cellulose nitrate, but still called "cels." Collectors spend a lot of money to buy these pieces of animation history.</em></p>
+<blockquote><p><em>"Cel" is the first syllable of "celluloid", a plastic made of cellulose nitrate. Before digital ink-and-paint software, the pencil drawings used in hand-drawn animation were transferred onto these sheets of clear plastic by skilled artists using ink and paint, or by using a special Xerox process ("Xerography") and paint. Later cels were made of cellulose acetate instead of cellulose nitrate, but still called "cels." Collectors spend a lot of money to buy these pieces of animation history.</em></p>
 <p>From <a href="http://www.celshader.com/FAQ.html">Celshader.com FAQ</a></p>
 </blockquote>
 <p>如何在 Three.js 中使用着色器的方法，请参考<a href="https://read.douban.com/ebook/7412854/">《Three.js 入门指南》</a>，本文不再赘述。不了解的读者，也不影响阅读后面的着色器算法部分。</p>
@@ -65,14 +61,12 @@ excerpt: 在上一篇博客中，介绍了什么是着色器，以及着色器�
 <p>这里，我们就要祭出我画的这个神图了——</p>
 <p>{% capture imgSrc %}{{ site.url }}/img/post/2015-08-28-opengl-matrix-transformations-02.png{% endcapture %}
 {% include figure.html src=imgSrc caption='OpenGL 中的矩阵变换示意图' %}</p>
-<blockquote>
-<p>想详细了解的读者，请参见我之前写的博文[《这次，彻底搞懂 OpenGL 矩阵转换》]({{ site.url }}/2015/08/28/opengl-matrix-transformations/)。</p>
+<blockquote><p>想详细了解的读者，请参见我之前写的博文<a href="{{ site.url }}/2015/08/28/opengl-matrix-transformations/">《这次，彻底搞懂 OpenGL 矩阵转换》</a>。</p>
 </blockquote>
 <p>本文将不对矩阵变换的细节详细展开，你只需要知道这个公式：</p>
 <p>&lt;img class="single-img" src="{{ site.loadingImg }}" data-src="{{ site.url }}/img/post/2017-03-05-cartoon-shading-1-matrix.png" /&gt;</p>
 <p>其中，中间的三项有个非常霸气的名字：<strong>MVP 矩阵</strong>！</p>
-<blockquote>
-<p>为什么不是 PVM 啊？</p>
+<blockquote><p>为什么不是 PVM 啊？</p>
 <p>因为从逻辑上来说，是先把模型点坐标向量乘以模型矩阵，然后乘以视图矩阵，然后乘以投影矩阵，然后乘以视口矩阵的。所以先后顺序的确是 MVP。</p>
 </blockquote>
 <p>我们知道矩阵乘法是一个很耗时的操作，而由于模型矩阵和视图矩阵更可能是不变的，因而根据矩阵结合律，将它们先相乘得到模型视图矩阵（modal-view matrix），再与点坐标相乘。这样，以后几帧的计算，就可以不用分别乘以模型矩阵和视图矩阵，而是只乘以模型视图矩阵，达到减少矩阵乘法的次数的效果。</p>
@@ -90,7 +84,7 @@ excerpt: 在上一篇博客中，介绍了什么是着色器，以及着色器�
 <p>让我们通过卡通渲染的顶点着色器代码，了解着色器的基础知识。</p>
 <h2>顶点着色器</h2>
 <p>顶点着色器的完整代码如下：</p>
-<pre><code class="language-c">uniform vec3 color;
+<pre><code class="lang-c">uniform vec3 color;
 uniform vec3 light;
 
 varying vec3 vColor;
@@ -116,12 +110,11 @@ void main()
 | attribute | 从 OpenGL 代码传入顶点着色器的变量，每个顶点分别对应一个值 |
 | uniform | 从 OpenGL 代码传入顶点着色器的变量，所有顶点对应同样的值 |
 | varing | 从顶点着色器传入片元着色器的变量 |</p>
-<blockquote>
-<p>参见 <a href="https://www.khronos.org/files/webgl/webgl-reference-card-1_0.pdf">WebGL 1.0 API Quick Reference Card</a>。</p>
+<blockquote><p>参见 <a href="https://www.khronos.org/files/webgl/webgl-reference-card-1_0.pdf">WebGL 1.0 API Quick Reference Card</a>。</p>
 </blockquote>
 <h3><code>uniform</code> 和 <code>attribute</code></h3>
 <p><code>uniform</code> 和 <code>attribute</code> 是在 OpenGL 代码中传入着色器的，在 Three.js 中，通常是这么写的：</p>
-<pre><code class="language-js">var material = new THREE.ShaderMaterial({
+<pre><code class="lang-js">var material = new THREE.ShaderMaterial({
     vertexShader: ...,  // 可以通过 AJAX 加载 *.vs 代码，内容传给这个变量
     fragmentShader: ...,
     uniforms: {
@@ -153,7 +146,7 @@ mesh.material = material;
 <h1>算法理解</h1>
 <h2>顶点着色器</h2>
 <p>现在，我们应该能够读懂着色器代码了。再来看下 <code>main</code> 函数中的代码：</p>
-<pre><code class="language-js">void main()
+<pre><code class="lang-js">void main()
 {
     // pass to fs
     vColor = color;
@@ -165,13 +158,11 @@ mesh.material = material;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 </code></pre>
-<blockquote>
-<p>注意，这个 <code>main</code> 函数会被每个顶点执行一次，并且是在 GPU 中并行执行的。</p>
+<blockquote><p>注意，这个 <code>main</code> 函数会被每个顶点执行一次，并且是在 GPU 中并行执行的。</p>
 </blockquote>
 <p>首先，我们将从 Three.js 中获得的颜色赋值给 <code>vColor</code> 变量，让它传递给片元着色器。</p>
 <p>然后，使用法向矩阵乘以法向量，并将其归一化后，传递给 <code>vNormal</code>。</p>
-<blockquote>
-<p>等等……这里怎么又出现一个新矩阵了？我头都晕啦！</p>
+<blockquote><p>等等……这里怎么又出现一个新矩阵了？我头都晕啦！</p>
 <p>好吧，你其实并不需要知道<a href="http://www.lighthouse3d.com/tutorials/glsl-12-tutorial/the-normal-matrix/">背后的原理</a>，只需要知道，这是为了将物体坐标系下的法向量方向，转变成视图坐标系下的法向量方向。而之所以不能和光源位置 <code>light</code> 一样乘以 <code>modelViewMatrix</code>，本质上的区别是，它们虽然都是三维向量，但法向量表示的是一个方向，而光源位置表示的是一个坐标。如果用法向量乘以 <code>modelViewMatrix</code> 的话，得到的结果就可能不再垂直于面片了。</p>
 </blockquote>
 <p>接着，使用光源位置乘以视图矩阵，得到光源在视图坐标系下的位置，传递给 <code>vLight</code>。</p>
@@ -179,7 +170,7 @@ mesh.material = material;
 <p>现在，我们已经读懂顶点着色器啦！</p>
 <h2>片元着色器</h2>
 <p>有了顶点着色器代码理解的基础，片元着色器就很容易读懂啦！</p>
-<pre><code class="language-c">varying vec3 vColor;
+<pre><code class="lang-c">varying vec3 vColor;
 varying vec3 vNormal;
 varying vec3 vLight;
 
@@ -201,8 +192,7 @@ void main() {
     gl_FragColor = vec4(vColor * diffuse, 1.0);
 }
 </code></pre>
-<blockquote>
-<p>注意，这个 <code>main</code> 函数会被每个片元执行一次，并且是在 GPU 中并行执行的。</p>
+<blockquote><p>注意，这个 <code>main</code> 函数会被每个片元执行一次，并且是在 GPU 中并行执行的。</p>
 </blockquote>
 <p>在 <code>main</code> 函数的上方，我们还是定义了一些外部来的变量。在这个例子中，它们都是从顶点着色器传递过来的 <code>varing</code> 变量。</p>
 <p>在 <code>main</code> 函数中，我们根据把归一化后的光源方向，和法向量进行点乘，计算每个片元的亮度值。</p>
@@ -214,8 +204,7 @@ void main() {
 <h1>小结</h1>
 <p>哇晒！我们全学会了！:heart_eyes:</p>
 <p>数学不好、没有图形学基础，但也看懂了的同学请举个手！:muscle:</p>
-<p>&lt;div class="split"&gt;&lt;/div&gt;</p>
-<p>之后的教程也会像这篇一样，在介绍有限的数学、图形学相关知识的条件下，尽可能让大家明白着色器的算法原理。并且让感兴趣的读者，也能够有进一步研究实现方式的途径。希望能和大家一起学习！</p>
+&lt;div class="split"&gt;&lt;/div&gt;<p>之后的教程也会像这篇一样，在介绍有限的数学、图形学相关知识的条件下，尽可能让大家明白着色器的算法原理。并且让感兴趣的读者，也能够有进一步研究实现方式的途径。希望能和大家一起学习！</p>
 <p>欢迎大家在 GitHub 上关注 &lt;a href="https://github.com/Ovilia/cezanne" onclick="_gaq.push(['_trackEvent', 'ToGitHub', window.location.pathname, 'cezanne2']);"&gt;Ovilia/cezanne&lt;/a&gt;，查看源码或关注更新~ 也非常欢迎交流讨论！:wink:</p>
 <p>下一篇，我们将介绍卡通渲染算法中，添加描边的效果，敬请期待！</p>
 <h1>参考资料</h1>

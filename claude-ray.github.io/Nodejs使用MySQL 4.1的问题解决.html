@@ -1,13 +1,13 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/old-sms-mas-nodejs.md">仓库源文</a>，<a href="https://claude-ray.github.io/old-sms-mas-nodejs">站点原文</a></h2>
 <hr/>
-<h2>title: Nodejs使用MySQL 4.1的问题解决
+<p>title: Nodejs使用MySQL 4.1的问题解决
 date: 2018-10-12 22:04:17
 tag: [Node.js,MySQL]
-categories: Node.js
-description: 近期有同学在玩一台老古董服务器，要使用node连上4.1版本的MySQL进行操作。并且不让改动数据库配置，凭啥？人家是移动提供的MAS……本文分享一下帮忙时填的坑，主要为解决“数据库连接”和“编码转换”问题。</h2>
+categories: Node.js</p>
+<h2>description: 近期有同学在玩一台老古董服务器，要使用node连上4.1版本的MySQL进行操作。并且不让改动数据库配置，凭啥？人家是移动提供的MAS……本文分享一下帮忙时填的坑，主要为解决“数据库连接”和“编码转换”问题。</h2>
 <h2>数据库连接</h2>
 <p>如果使用<code>old authentication</code>方式连接4.1版本之前的mysql，<code>sequelize</code>和<code>mysql2</code>无法通过认证：</p>
-<pre><code class="language-sh">{ Error: Access denied for user: '@127.0.0.x' (Using password: NO)
+<pre><code class="lang-sh">{ Error: Access denied for user: '@127.0.0.x' (Using password: NO)
     at Packet.asError (/home/claude/Workspace/packages/sql/node_modules/mysql2/lib/packets/packet.js:714:13)
     at ClientHandshake.Command.execute (/home/claude/Workspace/packages/sql/node_modules/mysql2/lib/commands/command.js:28:22)
     at Connection.handlePacket (/home/claude/Workspace/packages/sql/node_modules/mysql2/lib/connection.js:513:28)
@@ -28,15 +28,14 @@ description: 近期有同学在玩一台老古董服务器，要使用node连上
 <p>处理倒不困难，在不能改动数据库的情况下，可以改用npm包<code>mysql</code>。</p>
 <h2>编码转换</h2>
 <p>移动mas的接入文档有描述如下：</p>
-<blockquote>
-<p>mysql使用ISO8859-1编码，往db接口写入数据时应先把编码格式转化为ISO8859-1...</p>
+<blockquote><p>mysql使用ISO8859-1编码，往db接口写入数据时应先把编码格式转化为ISO8859-1...</p>
 </blockquote>
 <p>上述编码实际为<code>latin1</code>，为早期mysql的默认编码。实际文档存在误导，未指出mas机的db接口是使用gbk编码写入的，因此将字符进行转化gbk再使用该接口即可，无需再将编码转为<code>latin1</code>。</p>
 <p>但如果想从数据库中读取，同事在创建连接时指定了<code>charset=latin1</code>获取到的中文是乱码。</p>
 <p>这涉及到mysql如何用<code>latin1</code>存储中文的问题：<code>latin1</code>为0x00 to 0xFF范围的单字节编码（<code>ASCII</code>是它的子集），理论上单字节范围可以无损存储数据，任意编码均可以用字节流形式存储。</p>
 <p>也就是说，mas机写入之前用的是gbk字节流，读取时直接用nodejs默认的utf8编码自然不行。那么怎样读出二进制数据呢？在npm <code>mysql</code>库的README中搜索<code>buffer</code>字样，找到了如下方法。</p>
 <p>mysqljs支持在query中自定义<a href="https://github.com/mysqljs/mysql#string">typeCast</a>方法，可用于提取数据的步骤进行编码转换。</p>
-<pre><code class="language-js">const mysql = require('mysql');
+<pre><code class="lang-js">const mysql = require('mysql');
 const iconv = require('iconv-lite');
 const connection = mysql.createConnection({
   host     : 'localhost',

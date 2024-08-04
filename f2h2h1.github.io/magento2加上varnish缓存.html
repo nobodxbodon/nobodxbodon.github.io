@@ -1,19 +1,19 @@
-<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/magento2%E5%8A%A0%E4%B8%8Avarnish%E7%BC%93%E5%AD%98.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/magento2%E5%8A%A0%E4%B8%8Avarnish%E7%BC%93%E5%AD%98">站点原文</a></h2>
+<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/magento2加上varnish缓存.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/magento2加上varnish缓存">站点原文</a></h2>
 <h1>magento2 加上 varnish 缓存</h1>
 <p>假设已经安装好 magneto2 和 docker</p>
 <ol>
-<li>拉取 varnish 的镜像<pre><code>docker pull varnish:6.0
+<li>拉取 varnish 的镜像<pre><code> docker pull varnish:6.0
 </code></pre>
 </li>
 <li>生成 varnish 的配置文件<ul>
-<li>在管理后台生成<pre><code>Admin &gt; Stores &gt; Settings &gt; Configuration &gt; Advanced &gt; System &gt; Full Page Cache
+<li>在管理后台生成<pre><code>  Admin &gt; Stores &gt; Settings &gt; Configuration &gt; Advanced &gt; System &gt; Full Page Cache
 </code></pre>
 </li>
-<li>用命令行生成<pre><code>php bin/magento varnish:vcl:generate --access-list localhost --backend-host localhost --backend-port 8080 --export-version 6 --grace-period 300 --output-file var/default.vcl
+<li>用命令行生成<pre><code>  php bin/magento varnish:vcl:generate --access-list localhost --backend-host localhost --backend-port 8080 --export-version 6 --grace-period 300 --output-file var/default.vcl
 </code></pre>
 </li>
 <li>配置文件生成后通常能直接使用，也可以根据项目的具体情况进行修改<ul>
-<li>配置文件的修改可以参考 varnish 文档 https://varnish-cache.org/docs/</li>
+<li>配置文件的修改可以参考 varnish 文档 <a href="https://varnish-cache.org/docs/">https://varnish-cache.org/docs/</a></li>
 </ul>
 </li>
 <li>这是各个配置项的解释<ul>
@@ -28,11 +28,11 @@
 </ul>
 </li>
 <li>用生成的配置文件启动或重启 varnish<ul>
-<li>启动<pre><code>docker run --name varnishd --restart always -d -v var/default.vcl:/etc/varnish/default.vcl:ro --tmpfs /var/lib/varnish:exec varnish
+<li>启动<pre><code>  docker run --name varnishd --restart always -d -v var/default.vcl:/etc/varnish/default.vcl:ro --tmpfs /var/lib/varnish:exec varnish
 </code></pre>
 </li>
-<li>重启<pre><code>docker cp `pwd`/var/default.vcl varnishd:etc/varnish/default.vcl
-docker exec varnishd varnishreload
+<li>重启<pre><code>  docker cp `pwd`/var/default.vcl varnishd:etc/varnish/default.vcl
+  docker exec varnishd varnishreload
 </code></pre>
 </li>
 <li>要注意容器的端口映射</li>
@@ -42,32 +42,32 @@ docker exec varnishd varnishreload
 <li>通常情况下 varnish 会部署在 http 服务的前面，如果 varnish 和 http 服务部署在同一个服务器里，可能需要修改 http 服务的端口，然后由 varnish 监听 80 端口。</li>
 <li>又因为 varnish 不支持 https 所以，在 varnish 前面还需要有一个 tls 的代理。<ul>
 <li>tls 代理通常是 nginx 或 stunnel</li>
-<li>https://varnish-cache.org/docs/6.0/phk/ssl_again.html</li>
+<li><a href="https://varnish-cache.org/docs/6.0/phk/ssl_again.html">https://varnish-cache.org/docs/6.0/phk/ssl_again.html</a></li>
 </ul>
 </li>
-<li>varnish 商业版是支持 tls 的 https://www.varnish-software.com/solutions/varnish-enterprise/ssl-tls-support/</li>
+<li>varnish 商业版是支持 tls 的 <a href="https://www.varnish-software.com/solutions/varnish-enterprise/ssl-tls-support/">https://www.varnish-software.com/solutions/varnish-enterprise/ssl-tls-support/</a></li>
 </ul>
 </li>
 <li>确认部署好后<ul>
 <li>删除 var/page_cache 文件夹里的内容</li>
 <li>打开 magento 的开发者模式</li>
 <li>然后访问首页，多访问几次</li>
-<li>如果 http 响应头里出现这类值，则表示 varnish 已经生效了<pre><code>X-Magento-Cache-Debug: MISS
-X-Magento-Cache-Debug: HIT
+<li>如果 http 响应头里出现这类值，则表示 varnish 已经生效了<pre><code>  X-Magento-Cache-Debug: MISS
+  X-Magento-Cache-Debug: HIT
 </code></pre>
 </li>
 <li>varnish 生效时， var/page_cache 里应该是没有文件的</li>
 </ul>
 </li>
-<li>清除缓存<p>&lt;!-- - varnish 清理缓存的策略比想象中的要复杂不少 --&gt;</p>
-<ul>
+<li>清除缓存
+ &lt;!-- - varnish 清理缓存的策略比想象中的要复杂不少 --&gt;<ul>
 <li>varnish 可以用 命令行 telnet http 三种方式发送清除缓存的命令</li>
 <li>varnish 清理缓存 purge 和 ban<ul>
 <li>purge 是使缓存失效<ul>
 <li>--access-list 的地址就是用在这里的</li>
-<li>如果要是某个 url 的缓存失效，可以这样访问<pre><code>假设原本的 url 是 magento.localhost/test1
-假设 access-list 的地址是 purge.localhost
-那么删除 /test1 的缓存，就只需要请求一次 purge.localhost/test1
+<li>如果要是某个 url 的缓存失效，可以这样访问<pre><code>  假设原本的 url 是 magento.localhost/test1
+  假设 access-list 的地址是 purge.localhost
+  那么删除 /test1 的缓存，就只需要请求一次 purge.localhost/test1
 </code></pre>
 </li>
 </ul>
@@ -75,15 +75,15 @@ X-Magento-Cache-Debug: HIT
 <li>ban 是忽略缓存直接访问后端</li>
 </ul>
 </li>
-<li>参考 https://varnish-cache.org/docs/6.0/users-guide/purging.html</li>
+<li>参考 <a href="https://varnish-cache.org/docs/6.0/users-guide/purging.html">https://varnish-cache.org/docs/6.0/users-guide/purging.html</a></li>
 </ul>
 </li>
 <li>其它<ul>
-<li>varnish 配置文件模板的路径<pre><code>vendor\magento\module-page-cache\etc\varnish6.vcl
+<li>varnish 配置文件模板的路径<pre><code>  vendor\magento\module-page-cache\etc\varnish6.vcl
 </code></pre>
 </li>
 <li>原生的安装方式可以参考 magento 文档
-https://devdocs.magento.com/guides/v2.4/config-guide/varnish/config-varnish-magento.html</li>
+  <a href="https://devdocs.magento.com/guides/v2.4/config-guide/varnish/config-varnish-magento.html">https://devdocs.magento.com/guides/v2.4/config-guide/varnish/config-varnish-magento.html</a></li>
 </ul>
 </li>
 </ol>

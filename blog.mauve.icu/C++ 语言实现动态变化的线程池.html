@@ -12,7 +12,7 @@ tag:</p>
 <h1>线程池</h1>
 <h2>Job</h2>
 <p>Job 作为任务的类型</p>
-<pre><code class="language-cpp">class Job {
+<pre><code class="lang-cpp">class Job {
     void *data;
     function&lt;void(void *data)&gt; func;
 public:
@@ -24,7 +24,7 @@ public:
 <p>其中定义两个变量，<code>data</code>，和 <code>func</code>。</p>
 <p><code>func</code> 用来保存需要调用的方法，当执行任务时，调用此函数即可。考虑到需要传递参数的可能，所以定义参数为一个指针，而另一个变量 data 则为需要传递给 func 的参数指针</p>
 <p>函数的实现为</p>
-<pre><code class="language-cpp">Job::Job(void *data, function&lt;void(void *)&gt; func) {
+<pre><code class="lang-cpp">Job::Job(void *data, function&lt;void(void *)&gt; func) {
     this-&gt;data = data;
     this-&gt;func = move(func);
 }
@@ -34,7 +34,7 @@ void Job::exec() {
 }
 </code></pre>
 <h2>线程池核心代码</h2>
-<pre><code class="language-cpp">class ThreadPool {
+<pre><code class="lang-cpp">class ThreadPool {
 private:
     Mutex&lt;map&lt;pthread_t, thread *&gt;&gt; threadPool;             // 线程池
     Mutex&lt;queue&lt;Job *&gt;&gt; enqueue;                            // 任务队列
@@ -70,107 +70,101 @@ public:
 <li>通过 submit 的函数提交任务，必须是一个 job 指针，且必须是单独 new 出来的，线程池会自动清理已经完成的任务</li>
 <li>可以随时通过 getAccumulation 来获取到当前堆积的任务，使得可以手动调整线程池数量</li>
 <li>使用 upateCore 来调整核心线程数量</li>
-<li>建议通过 wait 来实现终止线程池</li>
+<li><p>建议通过 wait 来实现终止线程池</p>
+<p>```cpp
+ThreadPool::ThreadPool(int core) : maxCore(core), killed(false), needKill(0) {
+ for (int i = 0; i &lt; core; ++i) addThread();
+}</p>
+</li>
 </ul>
-<pre><code class="language-cpp">ThreadPool::ThreadPool(int core) : maxCore(core), killed(false), needKill(0) {
-   for (int i = 0; i &lt; core; ++i) addThread();
-}
+<p>Job <em>ThreadPool::takeJob() {
+    Job </em>cur = nullptr;
+    enqueue.run(<a href="queue&lt;Job *&gt; &amp;q">&amp;</a> {
+        if (q.empty()) return;
+        cur = q.front();
+        q.pop();
+    });
+    return cur;
+}</p>
+<p>void ThreadPool::addThread() {
+    auto work = <a href="">&amp;</a> {
+        while (true) {
+            Job *cur = takeJob();
+            if (cur != nullptr) {
+                cur-&gt;exec();
+                delete cur;
+            } else {
+                bool dead = false;
+                needKill.run(<a href="int &amp;count">&amp;</a> {
+                    if (count &lt;= 0) return;
+                    dead = true;
+                    count--;
+                });
+                if (dead) break;</p>
+<pre><code>            clean();
+            unique_lock&lt;mutex&gt; lk(noTaskCvMutex);
+            noTaskCv.wait(lk);
+        }
+    }
+    threadPool.run([&amp;](map&lt;pthread_t, thread *&gt; &amp;data) {
+        auto iter = data.find(pthread_self());
+        deathThread.run([&amp;](vector&lt;thread *&gt; &amp;data) {
+            data.push_back(iter-&gt;second);
+        });
+        data.erase(iter);
+    });
+};
 
-Job *ThreadPool::takeJob() {
-   Job *cur = nullptr;
-   enqueue.run([&amp;](queue&lt;Job *&gt; &amp;q) {
-       if (q.empty()) return;
-       cur = q.front();
-       q.pop();
-   });
-   return cur;
-}
-
-void ThreadPool::addThread() {
-   auto work = [&amp;]() {
-       while (true) {
-           Job *cur = takeJob();
-           if (cur != nullptr) {
-               cur-&gt;exec();
-               delete cur;
-           } else {
-               bool dead = false;
-               needKill.run([&amp;](int &amp;count) {
-                   if (count &lt;= 0) return;
-                   dead = true;
-                   count--;
-               });
-               if (dead) break;
-
-               clean();
-               unique_lock&lt;mutex&gt; lk(noTaskCvMutex);
-               noTaskCv.wait(lk);
-           }
-       }
-       threadPool.run([&amp;](map&lt;pthread_t, thread *&gt; &amp;data) {
-           auto iter = data.find(pthread_self());
-           deathThread.run([&amp;](vector&lt;thread *&gt; &amp;data) {
-               data.push_back(iter-&gt;second);
-           });
-           data.erase(iter);
-       });
-   };
-
-   auto *newThread = new thread(work);
-   threadPool.run([&amp;](map&lt;pthread_t, thread *&gt; &amp;data) {
-       data.insert({newThread-&gt;native_handle(), newThread});
-   });
-}
-
-void ThreadPool::clean() {
-   if (deathThread.get().empty()) return;
-   deathThread.run([&amp;](vector&lt;thread *&gt; &amp;data) {
-       for (auto &amp;item: data) delete item;
-   });
-}
-
-void ThreadPool::submit(Job *job) {
-   if (killed) return;
-   enqueue.run([&amp;](queue&lt;Job *&gt; &amp;q) {
-       q.push(job);
-       noTaskCv.notify_one();
-   });
-}
-
-int ThreadPool::getAccumulation() {
-   return (int) enqueue.get().size();
-}
-
-void ThreadPool::updateCore(int newCount) {
-   if (killed) return;
-   needKill.run([&amp;](int &amp;cleaned) {
-       if (newCount &gt; this-&gt;maxCore)
-           for (int i = this-&gt;maxCore; i &lt; newCount; ++i)
-               addThread();
-       else {
-           cleaned += this-&gt;maxCore - newCount;
-           noTaskCv.notify_all();
-       }
-   });
-}
-
-void ThreadPool::wait() {
-   updateCore(0);
-   killed = true;
-   map&lt;pthread_t, thread *&gt; tmp = threadPool.get();
-   for (auto &amp;item: tmp)
-       item.second-&gt;join();
-}
-
-void ThreadPool::close() {
-   killed = true;
-   map&lt;pthread_t, thread *&gt; tmp = threadPool.get();
-   for (auto &amp;item: tmp) {
-       pthread_kill(item.first, SIGKILL);
-       delete item.second;
-   }
-}
+auto *newThread = new thread(work);
+threadPool.run([&amp;](map&lt;pthread_t, thread *&gt; &amp;data) {
+    data.insert({newThread-&gt;native_handle(), newThread});
+});
 </code></pre>
+<p>}</p>
+<p>void ThreadPool::clean() {
+    if (deathThread.get().empty()) return;
+    deathThread.run(<a href="vector&lt;thread *&gt; &amp;data">&amp;</a> {
+        for (auto &amp;item: data) delete item;
+    });
+}</p>
+<p>void ThreadPool::submit(Job <em>job) {
+    if (killed) return;
+    enqueue.run([&amp;](queue&lt;Job </em>&gt; &amp;q) {
+        q.push(job);
+        noTaskCv.notify_one();
+    });
+}</p>
+<p>int ThreadPool::getAccumulation() {
+    return (int) enqueue.get().size();
+}</p>
+<p>void ThreadPool::updateCore(int newCount) {
+    if (killed) return;
+    needKill.run(<a href="int &amp;cleaned">&amp;</a> {
+        if (newCount &gt; this-&gt;maxCore)
+            for (int i = this-&gt;maxCore; i &lt; newCount; ++i)
+                addThread();
+        else {
+            cleaned += this-&gt;maxCore - newCount;
+            noTaskCv.notify_all();
+        }
+    });
+}</p>
+<p>void ThreadPool::wait() {
+    updateCore(0);
+    killed = true;
+    map&lt;pthread_t, thread *&gt; tmp = threadPool.get();
+    for (auto &amp;item: tmp)
+        item.second-&gt;join();
+}</p>
+<p>void ThreadPool::close() {
+    killed = true;
+    map&lt;pthread_t, thread *&gt; tmp = threadPool.get();
+    for (auto &amp;item: tmp) {
+        pthread_kill(item.first, SIGKILL);
+        delete item.second;
+    }
+}
+ ```</p>
 <h2>线程任务流程</h2>
 <ul>
 <li>尝试获取一个任务</li>

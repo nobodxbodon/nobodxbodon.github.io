@@ -1,40 +1,41 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/apm-server-startup-troubleshooting.md">仓库源文</a>，<a href="https://claude-ray.github.io/apm-server-startup-troubleshooting">站点原文</a></h2>
 <hr/>
-<h2>title: 如何解决 Debian 系 Elastic apm-server 7.x 启动失败
+<p>title: 如何解决 Debian 系 Elastic apm-server 7.x 启动失败
 date: 2019-09-13 11:55:57
-tags: [APM,Elastic-APM,apm-server,Debian]
-categories: Linux</h2>
+tags: [APM,Elastic-APM,apm-server,Debian]</p>
+<h2>categories: Linux</h2>
 <p>本来是几个月前在 Ubuntu 部署 Elastic apm-server 遇到的问题，当时处理起来没遇到特别的卡点，就只是把解决过程丢到 Evernote 了。最近发现还有人在重复踩这个坑，因此我把笔记整理之后搬到这里作一个极简的分享。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h1>apm-server 安装</h1>
 <p>实际步骤就不需要我复述了，官方提供现成的 deb 安装包。除了查看官方文档，更推荐使用 Kibana APM 看板自带的指南。</p>
-<p>指南的 url 路径大概是 http://localhost:5601/app/kibana#/home/tutorial/apm?_g=()</p>
+<p>指南的 url 路径大概是 <a href="http://localhost:5601/app/kibana#/home/tutorial/apm?_g=(">http://localhost:5601/app/kibana#/home/tutorial/apm?_g=(</a>)</p>
 <p>不仅有安装引导，还提供按钮协助检查 apm-server 的服务状态。</p>
-<p><img alt="Kibana apm-server tutorial" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/source/image/apm-server-startup-troubleshooting/kibana-apm-server-tutorial.png"/></p>
+<p><img alt="Kibana apm-server tutorial" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/claude-ray.github.io/source/image/apm-server-startup-troubleshooting/kibana-apm-server-tutorial.png"/></p>
 <h1>启动异常</h1>
 <p>在 debian 系发行版安装 apm-server 后，执行 <code>service apm-server start</code> 报告失败，且切换到 <code>systemctl</code> 也无效。</p>
 <p><code>service apm-server status</code>报错如下：</p>
-<pre><code class="language-sh">$ service apm-server status                                                                                          
+<pre><code class="lang-sh">$ service apm-server status                                                                                          
 ● apm-server.service - Elastic APM Server                                                                               
    Loaded: loaded (/lib/systemd/system/apm-server.service; enabled; vendor preset: enabled)                             
    Active: failed (Result: exit-code) since Tue 2019-04-16 14:44:42 CST; 3s ago                                         
      Docs: https://www.elastic.co/solutions/apm                                                                         
   Process: 4783 ExecStart=/usr/share/apm-server/bin/apm-server $BEAT_LOG_OPTS $BEAT_CONFIG_OPTS $BEAT_PATH_OPTS (code=ex
  Main PID: 4783 (code=exited, status=1/FAILURE)                                                                         
-                                                                                                                        
+
 4 月 16 14:44:42 ray systemd[1]: apm-server.service: Service hold-off time over, scheduling restart.                     
 4 月 16 14:44:42 ray systemd[1]: apm-server.service: Scheduled restart job, restart counter is at 5.                     
 4 月 16 14:44:42 ray systemd[1]: Stopped Elastic APM Server.                                                             
 4 月 16 14:44:42 ray systemd[1]: apm-server.service: Start request repeated too quickly.                                 
 4 月 16 14:44:42 ray systemd[1]: apm-server.service: Failed with result 'exit-code'.                                     
-4 月 16 14:44:42 ray systemd[1]: Failed to start Elastic APM Server. 
+4 月 16 14:44:42 ray systemd[1]: Failed to start Elastic APM Server.
 </code></pre>
 <h1>检查日志</h1>
 <p>首先使用 <code>journalctl</code> 查看 systemd 的日志，如下</p>
-<pre><code class="language-sh">$ journalctl -u apm-server.service
+<pre><code class="lang-sh">$ journalctl -u apm-server.service
 </code></pre>
 <p>打印日志</p>
-<pre><code class="language-sh">-- Logs begin at Wed 2019-04-10 09:30:25 CST, end at Tue 2019-04-16 14:44:42 CST. --                                    
+<pre><code class="lang-sh">-- Logs begin at Wed 2019-04-10 09:30:25 CST, end at Tue 2019-04-16 14:44:42 CST. --                                    
 4 月 16 13:43:23 ray systemd[1]: Started Elastic APM Server.                                                             
 4 月 16 13:43:23 ray apm-server[2487]: Exiting: error loading config file: config file ("/etc/apm-server/apm-server.yml")
 4 月 16 13:43:23 ray systemd[1]: apm-server.service: Main process exited, code=exited, status=1/FAILURE                  
@@ -57,11 +58,11 @@ categories: Linux</h2>
 <p>这样找出真正的启动错误是 <code>Exiting: error loading config file: config file ("/etc/apm-server/apm-server.yml")</code></p>
 <h1>解决方法</h1>
 <p>配置文件异常，采用 <code>apm-server export config</code> 进一步观察。提示如下：</p>
-<pre><code class="language-sh">error initializing beat: error loading config file: config file ("/etc/apm-server/apm-server.yml") must be owned by the beat user (uid=1000) or root
+<pre><code class="lang-sh">error initializing beat: error loading config file: config file ("/etc/apm-server/apm-server.yml") must be owned by the beat user (uid=1000) or root
 </code></pre>
 <p><a href="https://github.com/elastic/apm-server/issues/2001">github issues</a> 上找到了类似的问题，但没有给出推荐的处理方案，所以决定自己动手解决。</p>
 <p><code>ls -l</code> 观察 <code>/etc/apm-server/</code> 的信息，发现除了 apm-server.yml 之外，owner 都是 root</p>
-<pre><code class="language-sh">$ ls -l /etc/apm-server
+<pre><code class="lang-sh">$ ls -l /etc/apm-server
 total 148K
 drwxr-xr-x   2 root       root       4.0K 4 月  16 14:11 .
 drwxr-xr-x 142 root       root        12K 4 月  16 14:11 ..
@@ -69,10 +70,10 @@ drwxr-xr-x 142 root       root        12K 4 月  16 14:11 ..
 -rw-r--r--   1 root       root        94K 4 月   6 05:48 fields.yml
 </code></pre>
 <p>那么统一将权限变更到 root 吧！</p>
-<pre><code class="language-sh">$ sudo chown root:root /etc/apm-server/apm-server.yml
+<pre><code class="lang-sh">$ sudo chown root:root /etc/apm-server/apm-server.yml
 </code></pre>
 <p>改之后测试</p>
-<pre><code class="language-sh">$ sudo apm-server test config
+<pre><code class="lang-sh">$ sudo apm-server test config
 Config OK
 </code></pre>
 <p>再尝试启动则提示成功。</p>

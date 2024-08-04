@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2020-10-23-lua-next.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2020/10/23/lua-next">站点原文</a></h2>
 <hr/>
-<h2>key: 41
-title: Lua next 函数的一个有趣问题
-tag: lua</h2>
+<p>key: 41
+title: Lua next 函数的一个有趣问题</p>
+<h2>tag: lua</h2>
 <p>熟悉 Lua 的同学都知道, Lua 是允许在 <code>for ... pairs</code> 循环中修改和删除表中元素的. 下面这样的代码是没有任何问题的:</p>
-<pre><code class="language-lua">local t = {a = 1, b = 2, c = 3}
+<pre><code class="lang-lua">local t = {a = 1, b = 2, c = 3}
 for k, v in pairs(t) do
     if v == 1 then
         t[k] = nil
@@ -12,7 +12,7 @@ for k, v in pairs(t) do
 end
 </code></pre>
 <p>但是, 如果我们在遍历时既删除元素又新增元素, 就会有问题了. 比如说:</p>
-<pre><code class="language-lua">local t = {a = 1, b = 2, c = 3}
+<pre><code class="lang-lua">local t = {a = 1, b = 2, c = 3}
 for k, v in pairs(t) do
     if v == 1 then
         t[k] = nil
@@ -30,7 +30,7 @@ stack traceback:
 <p>熟悉 Lua 的同学对这个报错应该不会陌生. 解决方案就是避免在遍历时给 table 新增元素. <a href="https://www.lua.org/manual/5.3/manual.html#pdf-next">Lua 官方文档</a>也说的很明白: 如果在遍历期间将任何值赋给表中不存在的字段，则 <code>next</code> 的行为是未定义的. 不过这个报错本身很有意思, 背后涉及 Lua 多方面的机制, 我认为这是个了解 Lua 内部实现的好契机.</p>
 <h3>令人费解的行为</h3>
 <p>为什么说它很有意思呢? 首先这个报错还不一定会出现 (文档也说了 "行为未定义"), 比如下面的代码就没这个问题:</p>
-<pre><code class="language-lua">local t = {a = 1, b = 2, c = 3, d = 4, e = 5, f = 6}
+<pre><code class="lang-lua">local t = {a = 1, b = 2, c = 3, d = 4, e = 5, f = 6}
 for k, v in pairs(t) do
     if v == 1 then
         t[k] = nil
@@ -47,20 +47,20 @@ stack traceback:
         [C]: in ?
 </code></pre>
 <p>熟悉的报错. 既然这样, 本文开头的代码也应该报错才对, 因为当 <code>v</code> 等于 1 时, 相应的 key 就会被删掉, 导致下次迭代调用 <code>next</code> 时尝试为一个不存在 table 中的 key 求下一个元素. 但不仅它能正常运行, 下面这段代码也能正常运行:</p>
-<pre><code class="language-lua">local t = {a = 1, b = 2}
+<pre><code class="lang-lua">local t = {a = 1, b = 2}
 print(next(t, 'a')) -- b    2
 t.a = nil
 print(next(t, 'a')) -- b    2
 </code></pre>
 <p>第二个 <code>next</code> 调用正常返回, 就好像 <code>a</code> 还在 <code>t</code> 中一样. 而当我们删除后再插入一个新元素时, 报错就出现了:</p>
-<pre><code class="language-lua">local t = {a = 1, b = 2}
+<pre><code class="lang-lua">local t = {a = 1, b = 2}
 print(next(t, 'a')) -- b    2
 t.a = nil
 t.a1 = 2
 print(next(t, 'a')) -- error: invalid key to 'next'
 </code></pre>
 <p>当然还有更好玩的, 要得到这个报错, 不一定要插入新的元素, 有时 GC 下就出来了:</p>
-<pre><code class="language-lua">local k = 'a'..'b'
+<pre><code class="lang-lua">local k = 'a'..'b'
 local t = {
     a = 1,
     [k] = 2,
@@ -73,7 +73,7 @@ next(t, 'a'..'b') -- error: invalid key to 'next'
 <p>写法比较奇怪, 这都是为了迎合 Lua 某些机制. 上面的代码稍微改改, 比如说把最后的 <code>next(t, 'a'..'b')</code> 改成 <code>next(t, 'ab')</code>, 报错就不会出现了.</p>
 <h3>next 函数的实现</h3>
 <p>调用 <code>next(t, k)</code> 时, <code>k</code> 应该要存在于 <code>t</code> 中; 但若 <code>k</code> 是刚刚被删除的似乎也可以. 这是怎么做到的呢? 我们来看看 <code>next</code> 函数的实现:</p>
-<pre><code class="language-c">/* ltable.c */
+<pre><code class="lang-c">/* ltable.c */
 
 static unsigned int findindex (lua_State *L, Table *t, StkId key) {
   unsigned int i;
@@ -130,7 +130,7 @@ int luaH_next (lua_State *L, Table *t, StkId key) {
 <li>如果直到链表结尾仍然找不到与 <code>key</code> 相等的节点, 查找失败, 23 行抛出错误 <code>invalid key to 'next'</code>.</li>
 </ul>
 <p>前面我们看到, 当一个元素置为 <code>nil</code> 后立刻调用 <code>next</code>, 是能够正常返回的. 这说明 <code>findindex</code> 成功找到了这个元素的位置. 注意到 13 行的注释: "key may be dead already, but it is ok to use it in 'next'", 也就是说一个被删除的 key 对于 <code>next</code> 来说是没问题的? 带着这个疑问, 我们首先来看看当我们执行 <code>t[k] = nil</code> 时发生了什么.</p>
-<pre><code class="language-c">/* lvm.h */
+<pre><code class="lang-c">/* lvm.h */
 
 #define luaV_fastset(L,t,k,slot,f,v) \
   (!ttistable(t) \
@@ -177,7 +177,7 @@ void luaV_execute (lua_State *L) {
 </ul>
 <p>当我们使用 <code>t[k] = nil</code> 删除一个元素时, <code>k</code> 显然是在 <code>t</code> 中的, 因此会执行到第 9 行, 直接给 <code>slot</code> 赋值. 注意到 <code>slot</code> 实际上是 <code>luaH_get</code> 的返回值, 它会等于 <code>k</code> 对应的 value. 因此执行 <code>t[k] = nil</code> 时, 只会将 <code>k</code> 对应的 value 赋值为 <code>nil</code>, 并不会改变 key. 这也给 <code>next</code> 函数提供了机会.</p>
 <p>我们再回过来看 <code>luaH_next</code>. 它在 <code>findindex</code> 中会执行</p>
-<pre><code class="language-c">if (luaV_rawequalobj(gkey(n), key) ||
+<pre><code class="lang-c">if (luaV_rawequalobj(gkey(n), key) ||
       (ttisdeadkey(gkey(n)) &amp;&amp; iscollectable(key) &amp;&amp;
        deadvalue(gkey(n)) == gcvalue(key))) {
     ...
@@ -187,7 +187,7 @@ void luaV_execute (lua_State *L) {
 <h3>Lua 的 GC 机制</h3>
 <p><code>(ttisdeadkey(gkey(n)) &amp;&amp; iscollectable(key) &amp;&amp; deadvalue(gkey(n)) == gcvalue(key))</code> 就是用于处理当 key 被 GC 掉的情况. 如果当前位置是一个 deadkey, 且 <code>key</code> 是 GCObject, 就比较 <code>deadvalue(gkey(n)) == gcvalue(key)</code>, 也就是比较当前位置的 key (即 <code>gkey(n)</code>) 和传入的 <code>key</code> 的地址是否相等. 那么什么是 deadkey 呢? 这就涉及到 Lua 的 GC 机制了.</p>
 <p>Lua GC 的原理就是, 将所有的 GCObject 串成一个链表; 然后定期扫描并标记虚拟机中的所有对象, 没有标记到的即是需要被回收的. 我们来看扫描 table 的函数:</p>
-<pre><code class="language-c">/* lgc.c */
+<pre><code class="lang-c">/* lgc.c */
 
 static void traversestrongtable (global_State *g, Table *h) {
   Node *n, *limit = gnodelast(h);
@@ -216,11 +216,11 @@ static void traversestrongtable (global_State *g, Table *h) {
 </li>
 </ul>
 <p>没有被标记的对象都是要被回收的, 因此如果一个元素的 value 为 <code>nil</code>, 它就会在这次 GC 中被回收. 不过在回收之前, 还会调用 <code>removeentry</code>, 它做了什么呢?</p>
-<pre><code class="language-c">/* lobject.h */
+<pre><code class="lang-c">/* lobject.h */
 
-#define settt_(o,t)	((o)-&gt;tt_=(t))
+#define settt_(o,t) ((o)-&gt;tt_=(t))
 
-#define setdeadvalue(obj)	settt_(obj, LUA_TDEADKEY)
+#define setdeadvalue(obj)   settt_(obj, LUA_TDEADKEY)
 
 
 /* lgc.c */

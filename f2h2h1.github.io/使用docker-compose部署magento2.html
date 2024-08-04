@@ -1,4 +1,4 @@
-<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/%E4%BD%BF%E7%94%A8docker-compose%E9%83%A8%E7%BD%B2magento2.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/%E4%BD%BF%E7%94%A8docker-compose%E9%83%A8%E7%BD%B2magento2">站点原文</a></h2>
+<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/使用docker-compose部署magento2.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/使用docker-compose部署magento2">站点原文</a></h2>
 <h1>使用 docker-compose 部署 magento2</h1>
 <h2>环境</h2>
 <ul>
@@ -29,88 +29,90 @@
 <p>为了方便表述，下文会假设 magento 的根目录是 /var/html/www</p>
 <h2>配置文件</h2>
 <ol>
-<li>在 magento 的根目录新建一个文件夹 docker ，在 docker 里再新建一个 vm 文件夹<pre><code>mkdir -p docker/vm
+<li>在 magento 的根目录新建一个文件夹 docker ，在 docker 里再新建一个 vm 文件夹<pre><code> mkdir -p docker/vm
 </code></pre>
 </li>
 <li>在 vm 文件夹里新建<ul>
 <li>Dockerfile</li>
 <li>docker-compose.yml</li>
 <li>nginx 文件夹</li>
-<li>frps 文件夹</li>
-</ul>
-<pre><code>touch Dockerfile docker-compose.yml
+<li>frps 文件夹<pre><code>touch Dockerfile docker-compose.yml
 mkdir nginx frps
 </code></pre>
 </li>
-<li>在 /var/html/www/docker/vm/Dockerfile 文件里写入以下内容<pre><code>FROM php:7.3-fpm-buster
+</ul>
+</li>
+<li><p>在 /var/html/www/docker/vm/Dockerfile 文件里写入以下内容</p>
+<pre><code> FROM php:7.3-fpm-buster
 
-RUN curl -sS -o composer.phar https://getcomposer.org/composer-1.phar &amp;&amp; \
-    chmod 0755 composer.phar &amp;&amp; \
-    mv composer.phar /usr/local/bin/composer
+ RUN curl -sS -o composer.phar https://getcomposer.org/composer-1.phar &amp;&amp; \
+     chmod 0755 composer.phar &amp;&amp; \
+     mv composer.phar /usr/local/bin/composer
 
-RUN apt-get update &amp;&amp; \
-    requirements="git cron rsync vim libpng-dev libmcrypt-dev libmcrypt4 libcurl3-dev libfreetype6 libjpeg62-turbo libjpeg62-turbo-dev libpng-dev libfreetype6-dev libicu-dev libxslt1-dev libzip-dev  unzip libc-client-dev libkrb5-dev" &amp;&amp; \
-    apt-get install -y $requirements &amp;&amp; \
-    rm -rf /var/lib/apt/lists/*
+ RUN apt-get update &amp;&amp; \
+     requirements="git cron rsync vim libpng-dev libmcrypt-dev libmcrypt4 libcurl3-dev libfreetype6 libjpeg62-turbo libjpeg62-turbo-dev libpng-dev libfreetype6-dev libicu-dev libxslt1-dev libzip-dev  unzip libc-client-dev libkrb5-dev" &amp;&amp; \
+     apt-get install -y $requirements &amp;&amp; \
+     rm -rf /var/lib/apt/lists/*
 
-RUN docker-php-ext-install -j$(nproc) pdo_mysql &amp;&amp; \
-    docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ &amp;&amp; \
-    docker-php-ext-install -j$(nproc) gd &amp;&amp; \
-    docker-php-ext-install -j$(nproc) mbstring &amp;&amp; \
-    docker-php-ext-install -j$(nproc) zip &amp;&amp; \
-    docker-php-ext-install -j$(nproc) intl &amp;&amp; \
-    docker-php-ext-install -j$(nproc) xsl &amp;&amp; \
-    docker-php-ext-install -j$(nproc) soap &amp;&amp; \
-    docker-php-ext-install -j$(nproc) bcmath &amp;&amp; \
-    docker-php-ext-install -j$(nproc) opcache &amp;&amp; \
-    docker-php-ext-configure imap --with-kerberos --with-imap-ssl &amp;&amp; \
-    docker-php-ext-install -j$(nproc) imap &amp;&amp; \
-    docker-php-ext-install -j$(nproc) sockets &amp;&amp; \
-    requirementsToRemove="libpng-dev libmcrypt-dev libcurl3-dev libpng-dev libfreetype6-dev libjpeg62-turbo-dev" &amp;&amp; \
-    apt-get purge --auto-remove -y $requirementsToRemove &amp;&amp; \
-    printf "\n\n\n" | pecl install redis-4.0.0 &amp;&amp; \
-    docker-php-ext-enable redis
+ RUN docker-php-ext-install -j$(nproc) pdo_mysql &amp;&amp; \
+     docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ &amp;&amp; \
+     docker-php-ext-install -j$(nproc) gd &amp;&amp; \
+     docker-php-ext-install -j$(nproc) mbstring &amp;&amp; \
+     docker-php-ext-install -j$(nproc) zip &amp;&amp; \
+     docker-php-ext-install -j$(nproc) intl &amp;&amp; \
+     docker-php-ext-install -j$(nproc) xsl &amp;&amp; \
+     docker-php-ext-install -j$(nproc) soap &amp;&amp; \
+     docker-php-ext-install -j$(nproc) bcmath &amp;&amp; \
+     docker-php-ext-install -j$(nproc) opcache &amp;&amp; \
+     docker-php-ext-configure imap --with-kerberos --with-imap-ssl &amp;&amp; \
+     docker-php-ext-install -j$(nproc) imap &amp;&amp; \
+     docker-php-ext-install -j$(nproc) sockets &amp;&amp; \
+     requirementsToRemove="libpng-dev libmcrypt-dev libcurl3-dev libpng-dev libfreetype6-dev libjpeg62-turbo-dev" &amp;&amp; \
+     apt-get purge --auto-remove -y $requirementsToRemove &amp;&amp; \
+     printf "\n\n\n" | pecl install redis-4.0.0 &amp;&amp; \
+     docker-php-ext-enable redis
 
-RUN pecl install xdebug-2.9.8 &amp;&amp; \
-    docker-php-ext-enable xdebug &amp;&amp; \
-    echo "xdebug.remote_enable=on" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
-    echo "xdebug.remote_host=frps" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
-    echo "xdebug.remote_port=9003" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
-    echo "xdebug.show_local_vars=on" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
-    echo "xdebug.default_enable=on" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
-    echo "xdebug.idekey=vscode" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+ RUN pecl install xdebug-2.9.8 &amp;&amp; \
+     docker-php-ext-enable xdebug &amp;&amp; \
+     echo "xdebug.remote_enable=on" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
+     echo "xdebug.remote_host=frps" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
+     echo "xdebug.remote_port=9003" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
+     echo "xdebug.show_local_vars=on" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
+     echo "xdebug.default_enable=on" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini &amp;&amp; \
+     echo "xdebug.idekey=vscode" &gt;&gt; /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
 
-RUN cp /usr/local/etc/php/php.ini-development /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/short_open_tag = Off/short_open_tag = On/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/memory_limit = 128M/memory_limit = 4G/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/;max_input_vars = 1000/max_input_vars = 10000/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/;date.timezone=/date.timezone = "Asia\/Hong_Kong"/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/;opcache.enable=1/opcache.enable=1/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/;opcache.enable_cli=0/opcache.enable_cli=1/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/max_execution_time = 30/max_execution_time = 900/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/upload_max_filesize = 2M/upload_max_filesize = 64M/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/post_max_size = 8M/post_max_size = 128M/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/max_input_time = 60/max_input_time = 300/g' /usr/local/etc/php/php.ini &amp;&amp; \
-    sed -i 's/pm = dynamic/pm = static/g' /usr/local/etc/php-fpm.d/www.conf &amp;&amp; \
-    sed -i 's/pm.max_children = 5/pm.max_children = 32/g' /usr/local/etc/php-fpm.d/www.conf &amp;&amp; \
-    sed -i 's/;pm.max_requests = 500/pm.max_requests = 500/g' /usr/local/etc/php-fpm.d/www.conf
+ RUN cp /usr/local/etc/php/php.ini-development /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/short_open_tag = Off/short_open_tag = On/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/memory_limit = 128M/memory_limit = 4G/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/;max_input_vars = 1000/max_input_vars = 10000/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/;date.timezone=/date.timezone = "Asia\/Hong_Kong"/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/;opcache.enable=1/opcache.enable=1/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/;opcache.enable_cli=0/opcache.enable_cli=1/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/max_execution_time = 30/max_execution_time = 900/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/upload_max_filesize = 2M/upload_max_filesize = 64M/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/post_max_size = 8M/post_max_size = 128M/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/max_input_time = 60/max_input_time = 300/g' /usr/local/etc/php/php.ini &amp;&amp; \
+     sed -i 's/pm = dynamic/pm = static/g' /usr/local/etc/php-fpm.d/www.conf &amp;&amp; \
+     sed -i 's/pm.max_children = 5/pm.max_children = 32/g' /usr/local/etc/php-fpm.d/www.conf &amp;&amp; \
+     sed -i 's/;pm.max_requests = 500/pm.max_requests = 500/g' /usr/local/etc/php-fpm.d/www.conf
 
-WORKDIR /var/www/html
-RUN chown root:root -R /var/www &amp;&amp; \
-    chmod 777 -R /var/www
+ WORKDIR /var/www/html
+ RUN chown root:root -R /var/www &amp;&amp; \
+     chmod 777 -R /var/www
 </code></pre>
 </li>
-<li>在 /var/html/www/docker/vm/nginx 文件夹执行这条命令，主要是用于生成 https 的证书<pre><code>openssl req -newkey rsa:4096 -nodes -keyout rsa_private_key.pem -x509 -days 365 -out domain.crt -subj "/C=CN/ST=State/L=City/O=Ltd/OU=Section/CN=test.magento2.com"
+<li>在 /var/html/www/docker/vm/nginx 文件夹执行这条命令，主要是用于生成 https 的证书<pre><code> openssl req -newkey rsa:4096 -nodes -keyout rsa_private_key.pem -x509 -days 365 -out domain.crt -subj "/C=CN/ST=State/L=City/O=Ltd/OU=Section/CN=test.magento2.com"
 </code></pre>
 </li>
-<li>在 /var/html/www/docker/vm/nginx 文件夹里新建一个名为 nginx.conf 的文件并写入以下内容<pre><code>user  root;
-worker_processes  auto;
-
-error_log  /var/log/nginx/error.log notice;
-pid        /var/run/nginx.pid;
-
-
-events {
+<li><p>在 /var/html/www/docker/vm/nginx 文件夹里新建一个名为 nginx.conf 的文件并写入以下内容
+ ```
+ user  root;
+ worker_processes  auto;</p>
+<p>error_log  /var/log/nginx/error.log notice;
+ pid        /var/run/nginx.pid;</p>
+</li>
+</ol>
+<pre><code>events {
     worker_connections  1024;
 }
 
@@ -158,128 +160,131 @@ http {
         proxy_busy_buffers_size 256k;
     }
 }
+```
+</code></pre>
+<ol>
+<li>在 /var/html/www/docker/vm/frps 文件夹里新建一个名为 frps.ini 的文件并写入以下内容<pre><code> [common]
+ bind_port=8999
+ token=sdfjsldfwqefwnjnvosadfp
 </code></pre>
 </li>
-<li>在 /var/html/www/docker/vm/frps 文件夹里新建一个名为 frps.ini 的文件并写入以下内容<pre><code>[common]
-bind_port=8999
-token=sdfjsldfwqefwnjnvosadfp
+<li><p>在 /var/html/www/docker/vm/frps 文件夹里新建一个名为 Dockerfile 的文件并写入以下内容</p>
+<pre><code> FROM debian:10-slim
+
+ ARG FRP_VERSION=0.38.0
+
+ RUN apt update \
+     &amp;&amp; apt install -y wget
+
+ WORKDIR /tmp
+ RUN set -x \
+     &amp;&amp; wget https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz \
+     &amp;&amp; tar -zxf frp_${FRP_VERSION}_linux_amd64.tar.gz \
+     &amp;&amp; mv frp_${FRP_VERSION}_linux_amd64 /var/frp \
+     &amp;&amp; mkdir -p /var/frp/conf \
+     &amp;&amp; apt remove -y wget \
+     &amp;&amp; apt autoremove -y \
+     &amp;&amp; rm -rf /var/lib/apt/lists/*
+
+ COPY frps.ini /var/frp/conf/frps.ini
+
+ WORKDIR /var/frp
+ ENTRYPOINT ./frps -c ./conf/frps.ini
 </code></pre>
 </li>
-<li>在 /var/html/www/docker/vm/frps 文件夹里新建一个名为 Dockerfile 的文件并写入以下内容<pre><code>FROM debian:10-slim
+<li><p>在 /var/html/www/docker/vm/docker-compose.yml 文件里写入以下内容</p>
+<pre><code> version: '3.2'
+ services:
+ php:
+     build:
+     context: . # 相对于 docker-compose.yml 的路径
+     dockerfile: Dockerfile # 相对于 context 的路径
+     restart: always
+     container_name: php
+     depends_on:
+         - mysqld
+         - redis
+         - frps
+     volumes:
+         - ./../../:/var/www/html # 相对于 docker-compose.yml 的路径
+     command: ["php-fpm"]
+     environment:
+         TZ: Asia/Shanghai
 
-ARG FRP_VERSION=0.38.0
+ nginx:
+     image: nginx:1.21
+     restart: always
+     container_name: nginx
+     ports:
+         - 80:80
+         - 443:443
+     depends_on:
+         - php
+     volumes:
+         - ./../../:/var/www/html:ro
+         - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+         - ./nginx/domain.crt:/etc/nginx/cert/domain.crt:ro
+         - ./nginx/rsa_private_key.pem:/etc/nginx/cert/rsa_private_key.pem:ro
+     user: root
+     environment:
+         TZ: Asia/Shanghai
 
-RUN apt update \
-    &amp;&amp; apt install -y wget
+ mysqld:
+     image: mysql:5.7
+     restart: always
+     container_name: mysqld
+     ports:
+         - 3306:3306
+     volumes:
+         - ~/mysql-data:/var/lib/mysql
+     environment:
+     MYSQL_DATABASE: magento234
+     MYSQL_ROOT_PASSWORD: 123456
+         TZ: Asia/Shanghai
 
-WORKDIR /tmp
-RUN set -x \
-    &amp;&amp; wget https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_amd64.tar.gz \
-    &amp;&amp; tar -zxf frp_${FRP_VERSION}_linux_amd64.tar.gz \
-    &amp;&amp; mv frp_${FRP_VERSION}_linux_amd64 /var/frp \
-    &amp;&amp; mkdir -p /var/frp/conf \
-    &amp;&amp; apt remove -y wget \
-    &amp;&amp; apt autoremove -y \
-    &amp;&amp; rm -rf /var/lib/apt/lists/*
+ redis:
+     image: redis:6.2
+     restart: always
+     container_name: redis
+     ports:
+         - 6379:6379
+     environment:
+         TZ: Asia/Shanghai
 
-COPY frps.ini /var/frp/conf/frps.ini
+ frps:
+     build:
+     context: ./frps
+     dockerfile: Dockerfile
+     container_name: frps
+     ports:
+         - 8999:8999
+         - 9003:9003
 
-WORKDIR /var/frp
-ENTRYPOINT ./frps -c ./conf/frps.ini
-</code></pre>
-</li>
-<li>在 /var/html/www/docker/vm/docker-compose.yml 文件里写入以下内容<pre><code>version: '3.2'
-services:
-php:
-    build:
-    context: . # 相对于 docker-compose.yml 的路径
-    dockerfile: Dockerfile # 相对于 context 的路径
-    restart: always
-    container_name: php
-    depends_on:
-        - mysqld
-        - redis
-        - frps
-    volumes:
-        - ./../../:/var/www/html # 相对于 docker-compose.yml 的路径
-    command: ["php-fpm"]
-    environment:
-        TZ: Asia/Shanghai
-
-nginx:
-    image: nginx:1.21
-    restart: always
-    container_name: nginx
-    ports:
-        - 80:80
-        - 443:443
-    depends_on:
-        - php
-    volumes:
-        - ./../../:/var/www/html:ro
-        - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-        - ./nginx/domain.crt:/etc/nginx/cert/domain.crt:ro
-        - ./nginx/rsa_private_key.pem:/etc/nginx/cert/rsa_private_key.pem:ro
-    user: root
-    environment:
-        TZ: Asia/Shanghai
-
-mysqld:
-    image: mysql:5.7
-    restart: always
-    container_name: mysqld
-    ports:
-        - 3306:3306
-    volumes:
-        - ~/mysql-data:/var/lib/mysql
-    environment:
-    MYSQL_DATABASE: magento234
-    MYSQL_ROOT_PASSWORD: 123456
-        TZ: Asia/Shanghai
-
-redis:
-    image: redis:6.2
-    restart: always
-    container_name: redis
-    ports:
-        - 6379:6379
-    environment:
-        TZ: Asia/Shanghai
-
-frps:
-    build:
-    context: ./frps
-    dockerfile: Dockerfile
-    container_name: frps
-    ports:
-        - 8999:8999
-        - 9003:9003
-
-elasticsearch:
-    image: elasticsearch:7.9.3
-    restart: always
-    ports:
-        - 9200:9200
-        - 9300:9300
-    environment:
-        discovery.type: single-node
+ elasticsearch:
+     image: elasticsearch:7.9.3
+     restart: always
+     ports:
+         - 9200:9200
+         - 9300:9300
+     environment:
+         discovery.type: single-node
 </code></pre>
 </li>
 </ol>
 <h2>构建和运行</h2>
 <ol>
-<li>构建镜像，在 magento 的根目录运行这条命令<pre><code>docker-compose -f ./docker/vm/docker-compose.yml build
+<li>构建镜像，在 magento 的根目录运行这条命令<pre><code> docker-compose -f ./docker/vm/docker-compose.yml build
 </code></pre>
 </li>
-<li>运行容器，在 magento 的根目录运行这条命令<pre><code>docker-compose -f ./docker/vm/docker-compose.yml up -d
-或
-docker-compose -f ./docker/vm/docker-compose.yml up
+<li>运行容器，在 magento 的根目录运行这条命令<pre><code> docker-compose -f ./docker/vm/docker-compose.yml up -d
+ 或
+ docker-compose -f ./docker/vm/docker-compose.yml up
 </code></pre>
 </li>
-<li>停止容器，在 magento 的根目录运行这条命令，如果不是后台运行，直接 ctrl-c 就可以了<pre><code>docker-compose -f ./docker/vm/docker-compose.yml stop
+<li>停止容器，在 magento 的根目录运行这条命令，如果不是后台运行，直接 ctrl-c 就可以了<pre><code> docker-compose -f ./docker/vm/docker-compose.yml stop
 </code></pre>
 </li>
-<li>卸载容器，在 magento 的根目录运行这条命令<pre><code>docker-compose -f ./docker/vm/docker-compose.yml down
+<li>卸载容器，在 magento 的根目录运行这条命令<pre><code> docker-compose -f ./docker/vm/docker-compose.yml down
 </code></pre>
 </li>
 </ol>
@@ -300,7 +305,7 @@ docker exec -it php /bin/bash
 <ul>
 <li>2.3</li>
 </ul>
-<pre><code class="language-bash">#!/bin/bash
+<pre><code class="lang-bash">#!/bin/bash
 
 # 假设已经安装好 docker 和 docker-compose
 
@@ -628,12 +633,11 @@ docker exec php /var/www/html/init.sh
 # docker-compose -f ./magento234/docker/vm/docker-compose.yml stop
 # rm magento2.tar.gz &amp;&amp; rm -r magento234 &amp;&amp; rm -r mysql-data
 # docker rm `docker ps -a | grep Exited | awk '{print $1}'`
-
 </code></pre>
 <ul>
 <li>2.4</li>
 </ul>
-<pre><code class="language-bash">#!/bin/bash
+<pre><code class="lang-bash">#!/bin/bash
 
 # 假设已经安装好 docker 和 docker-compose
 
@@ -966,5 +970,4 @@ docker exec php /var/www/html/init.sh
 # docker-compose -f ./magento242/docker/vm/docker-compose.yml stop
 # rm magento2.tar.gz &amp;&amp; rm -r magento242 &amp;&amp; rm -r mysql-data
 # docker rm `docker ps -a | grep Exited | awk '{print $1}'`
-
 </code></pre>

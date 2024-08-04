@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux%E4%B8%BB%E7%BA%BF%E5%86%85%E6%A0%B8%E8%B7%9F%E8%B8%AA/6.8.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux主线内核跟踪/6.8.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2024</p>
 <p>:Authors: Kenneth Lee
 :Version: 0.1
@@ -38,44 +38,45 @@ Deadline Class的任务，用它来卡那5%的时间。</p>
 <p>这个文档：
 <code>Large folios for anonymous memory &lt;https://lwn.net/Articles/937239/&gt;</code>_
 ，定性folios的优势在于</p>
-<pre><code>    | 让页的基础大小变得不那么重要。</code></pre>
+<pre><code>    | 让页的基础大小变得不那么重要。
+</code></pre>
 <p>对我来说，这个信息是最重要的。其他的算法问题，都是细节问题（很重要，但对不是写
 这个代码的人来说不重要），得个“知”字吧。</p>
 <p>补丁的作者是ARM的Ryan Roberts。</p>
 <h2>Mount增加了两个系统调用</h2>
 <p>这个也是得个知字，我们就把接口列出来看一下就好了：</p>
 <p>.. code-block:: c</p>
-<p>struct __mount_arg {
-__u64 mnt_id;
-__u64 request_mask;
-};</p>
-<p>int listmount(const struct __mount_arg *req, u64 *buf, size_t bufsize,
-unsigned int flags);</p>
+<p>struct <strong>mount_arg {
+      </strong>u64 mnt_id;
+      __u64 request_mask;
+  };</p>
+<p>int listmount(const struct __mount_arg <em>req, u64 </em>buf, size_t bufsize,
+          unsigned int flags);</p>
 <p>struct statmnt {
-__u32 size;		/* Total size, including strings <em>/
-__u32 __spare1;
-__u64 mask;		/</em> What results were written <em>/
-__u32 sb_dev_major;	/</em> Device ID <em>/
-__u32 sb_dev_minor;
-__u64 sb_magic;		/</em> ...<em>SUPER_MAGIC */
-__u32 sb_flags;		/* MS</em>{RDONLY,SYNCHRONOUS,DIRSYNC,LAZYTIME} <em>/
-__u32 fs_type;		/</em> [str] Filesystem type <em>/
-__u64 mnt_id;		/</em> Unique ID of mount <em>/
-__u64 mnt_parent_id;	/</em> Unique ID of parent (for root == mnt_id) <em>/
-__u32 mnt_id_old;	/</em> Reused IDs used in proc/.../mountinfo <em>/
-__u32 mnt_parent_id_old;
-__u64 mnt_attr;		/</em> MOUNT_ATTR_... <em>/
-__u64 mnt_propagation;	/</em> MS_{SHARED,SLAVE,PRIVATE,UNBINDABLE} <em>/
-__u64 mnt_peer_group;	/</em> ID of shared peer group <em>/
-__u64 mnt_master;	/</em> Mount receives propagation from this ID <em>/
-__u64 propagate_from;	/</em> Propagation from in current namespace <em>/
-__u32 mnt_root;		/</em> [str] Root of mount relative to root of fs <em>/
-__u32 mnt_point;	/</em> [str] Mountpoint relative to current root <em>/
-__u64 __spare2[50];
-char str[];		/</em> Variable size part containing strings */
-};
-int statmount(const struct __mount_arg *req, struct statmnt *buf,
-size_t bufsize, unsigned int flags);</p>
+      <strong>u32 size;       /<em> Total size, including strings </em>/
+      </strong>u32 <strong>spare1;
+      </strong>u64 mask;       /<em> What results were written </em>/
+      <strong>u32 sb_dev_major;   /<em> Device ID </em>/
+      </strong>u32 sb_dev_minor;
+      <strong>u64 sb_magic;       /<em> ..._SUPER_MAGIC </em>/
+      </strong>u32 sb<em>flags;       /* MS</em>{RDONLY,SYNCHRONOUS,DIRSYNC,LAZYTIME} <em>/
+      __u32 fs_type;        /</em> [str] Filesystem type <em>/
+      __u64 mnt_id;     /</em> Unique ID of mount <em>/
+      __u64 mnt_parent_id;  /</em> Unique ID of parent (for root == mnt_id) <em>/
+      __u32 mnt_id_old; /</em> Reused IDs used in proc/.../mountinfo <em>/
+      <strong>u32 mnt_parent_id_old;
+      </strong>u64 mnt_attr;       /</em> MOUNT<em>ATTR</em>... <em>/
+      __u64 mnt_propagation;    /</em> MS_{SHARED,SLAVE,PRIVATE,UNBINDABLE} <em>/
+      __u64 mnt_peer_group; /</em> ID of shared peer group <em>/
+      __u64 mnt_master; /</em> Mount receives propagation from this ID <em>/
+      __u64 propagate_from; /</em> Propagation from in current namespace <em>/
+      __u32 mnt_root;       /</em> [str] Root of mount relative to root of fs <em>/
+      __u32 mnt_point;  /</em> [str] Mountpoint relative to current root <em>/
+      <strong>u64 </strong>spare2[50];
+      char str[];       /</em> Variable size part containing strings <em>/
+  };
+  int statmount(const struct __mount_arg </em>req, struct statmnt *buf,
+              size_t bufsize, unsigned int flags);</p>
 <p>两个调用是配合的，前者先查有哪些mount的，每个用一个id标识，然后再用id查每个
 mount的详细信息。</p>
 <p>就是把原来从sysfs或者procfs的信息换到系统调用上，我觉得这个东西很适合我们的系
@@ -100,7 +101,10 @@ lsm_get_self_attr(), lsm_set_self_attr()。我不搞这个子系统，不细看�
 </li>
 <li><p>增加了一个Intel :math:<code>X^e</code>\ 驱动，这是个独显，中文好像叫锐炫，有针对台式机
 和笔记本的不同版本。显存（DDR6)从4GB到16GB不等，主频900M到1.6G不等。但这里：
-<code>Intel Core Ultra7 &lt;https://www.intel.cn/content/www/cn/zh/products/sku/236847/ intel-core-ultra-7-processor-155h-24m-cache-up-to-4-80-ghz/ specifications.html&gt;</code>_
+<code>Intel Core Ultra7
+&lt;https://www.intel.cn/content/www/cn/zh/products/sku/236847/
+intel-core-ultra-7-processor-155h-24m-cache-up-to-4-80-ghz/
+specifications.html&gt;</code>_
 显示我的Thinkpad Gen12上也集成了这个东西（有8个\ :math:<code>X^e</code>\ 核）。所以这
 个应该是个架构的品牌。而且，它的主频是2.25G，和集成的NPU的1.4GHz是不同的。
 这些厂家就是不把你的思路搞乱不罢休。</p>

@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/node-http-stream-proxy.md">仓库源文</a>，<a href="https://claude-ray.github.io/node-http-stream-proxy">站点原文</a></h2>
 <hr/>
-<h2>title: 记录 Got(Node.js) 代理 HTTP 请求的坑
-date: 2021-01-27 19:05:25
-tags: [Node.js,Stream,HTTP,proxy]</h2>
+<p>title: 记录 Got(Node.js) 代理 HTTP 请求的坑
+date: 2021-01-27 19:05:25</p>
+<h2>tags: [Node.js,Stream,HTTP,proxy]</h2>
 <p>在过去，request 模块几乎是 Node.js 端的不二选择，可惜已被放弃维护。如今流行的模块虽然变多，但不意味着它们足够成熟，我还是倾向于专注 Node.js 端的那几个。</p>
 <p>需求越简单，选择越不重要。不过相较而言，Got 的接口设计看起来更友好，并且它是做到支持 Connection Timeout 和 Read Timeout 的少数。</p>
-<blockquote>
-<p>见 https://github.com/sindresorhus/got/#comparison 的 Advanced timeouts</p>
+<blockquote><p>见 <a href="https://github.com/sindresorhus/got/#comparison">https://github.com/sindresorhus/got/#comparison</a> 的 Advanced timeouts</p>
 </blockquote>
 <p>实际用下来，还是遇到了坑，顺便扒了一眼 Got 的代码。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>native http?</h2>
 <p>先解释一下为什么不用原生 http 模块吧。</p>
 <p>毕竟在 Node.js 提供代理服务是非常容易的事儿，普遍的优化无非是：</p>
@@ -21,7 +21,7 @@ tags: [Node.js,Stream,HTTP,proxy]</h2>
 <p>但如果代理需求变得复杂，使用现成的轮子才能利于队友们（也包括自己）维护。</p>
 <h2>decompress</h2>
 <p>Got 默认对响应执行 decompress，对于代理而言毫无意义，需要关掉。</p>
-<pre><code class="language-js">async _onResponseBase(response: IncomingMessageWithTimings): Promise&lt;void&gt; {
+<pre><code class="lang-js">async _onResponseBase(response: IncomingMessageWithTimings): Promise&lt;void&gt; {
   const {options} = this;
 
   if (options.decompress) {
@@ -30,14 +30,13 @@ tags: [Node.js,Stream,HTTP,proxy]</h2>
 }
 </code></pre>
 <p>这在 decompress 的文档上有说明，但是一点儿都不醒目。</p>
-<blockquote>
-<p>If this is disabled, a compressed response is returned as a Buffer. This may be useful if you want to handle decompression yourself or stream the raw compressed data.</p>
+<blockquote><p>If this is disabled, a compressed response is returned as a Buffer. This may be useful if you want to handle decompression yourself or stream the raw compressed data.</p>
 </blockquote>
 <p>最坑的是，我是因为遇到了 stream 的 bug (<a href="https://github.com/sindresorhus/got/issues/1279">#issues/1279</a>) 才注意到这个选项。在开启 decompress 的情况下，使响应值的 content-length 是错误的，该 bug 会导致返回的结果不完整。</p>
 <h2>accept-encoding</h2>
 <p>关闭 decompress 之后，响应开始变慢到肉眼可见得慢。</p>
 <p>原因如下：</p>
-<pre><code class="language-js">async _makeRequest(): Promise&lt;void&gt; {
+<pre><code class="lang-js">async _makeRequest(): Promise&lt;void&gt; {
   const {options} = this;
   const {headers} = options;
 
@@ -48,7 +47,7 @@ tags: [Node.js,Stream,HTTP,proxy]</h2>
 </code></pre>
 <p>accept-encoding 只在 decompress 为 true 的时候设置，否则无法享用 gzip 等压缩带来的优化。</p>
 <h2>solution</h2>
-<pre><code class="language-js">const got = require('got');
+<pre><code class="lang-js">const got = require('got');
 const HttpAgent = require('agentkeepalive');
 const HttpsAgent = HttpAgent.HttpsAgent;
 

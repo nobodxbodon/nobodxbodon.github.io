@@ -1,9 +1,9 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/node-gbk-sum.md">仓库源文</a>，<a href="https://claude-ray.github.io/node-gbk-sum">站点原文</a></h2>
 <hr/>
-<h2>title: 总结node处理GBK编码
+<p>title: 总结node处理GBK编码
 date: 2018-12-12 22:49:00
-tags: [Node.js,String,GBK编码]
-categories: Node.js</h2>
+tags: [Node.js,String,GBK编码]</p>
+<h2>categories: Node.js</h2>
 <h1>概述</h1>
 <p>Node内部不支持直接操作GBK字符串，而实际也并不需要如此。</p>
 <p>总的原则是，gbk的逻辑仅保留在输入和输出，内部处理一律使用utf8。编码转换主要基于<code>iconv-lite</code>库。</p>
@@ -11,32 +11,31 @@ categories: Node.js</h2>
 <h1>常见场景</h1>
 <h2>请求返回值</h2>
 <p>最常用且容易处理，通常我们使用<code>request</code>发起http请求，options中设置<code>encoding: null</code>，这样返回的res.body为buffer，再对buffer进行解码<code>iconv.decode(res.body, encoding)</code>。</p>
-<blockquote>
-<p>引用：<a href="http://claude-ray.com/2018/02/26/request%E4%B8%AD%E6%96%87%E4%B9%B1%E7%A0%81%E9%97%AE%E9%A2%98/#%E7%BC%96%E7%A0%81">request返回值中文乱码问题</a></p>
+<blockquote><p>引用：<a href="http://claude-ray.com/2018/02/26/request%E4%B8%AD%E6%96%87%E4%B9%B1%E7%A0%81%E9%97%AE%E9%A2%98/#%E7%BC%96%E7%A0%81">request返回值中文乱码问题</a></p>
 </blockquote>
 <h2>请求参数</h2>
 <p>这里直接用<code>iconv-lite</code>处理略显复杂，建议上<a href="https://github.com/node-modules/urlencode">urlencode</a>。</p>
 <p>post请求时stringify整个body对象，用options.form提交。</p>
-<pre><code class="language-js">urlencode.stringify(body, {charset: 'gbk'});
+<pre><code class="lang-js">urlencode.stringify(body, {charset: 'gbk'});
 </code></pre>
 <p>querystring则stringify后再拼到url中。</p>
-<pre><code class="language-js">urlencode.stringify(qs, {charset: 'gbk'}); 
+<pre><code class="lang-js">urlencode.stringify(qs, {charset: 'gbk'});
 </code></pre>
 <h2>接口返回值</h2>
 <p>以koa举例，返回值先使用<code>iconv-lite</code>转为gbk Buffer，随后设置响应头的content-type。</p>
-<pre><code class="language-js">ctx.body = iconv.encode('你好', 'gbk');
+<pre><code class="lang-js">ctx.body = iconv.encode('你好', 'gbk');
 ctx.type = 'text/plain; charset=gbk';
 </code></pre>
 <h2>接口参数</h2>
 <p>同样以koa举例，结合<code>koa-bodyparser</code>，一般http method的原始参数分布在ctx.request.rawBody和ctx.request.querystring中，使用<code>urlencode.parse</code>解析。</p>
-<pre><code class="language-js">urlencode.parse(ctx.request.rawBody, {charset: 'gbk'});
+<pre><code class="lang-js">urlencode.parse(ctx.request.rawBody, {charset: 'gbk'});
 urlencode.parse(ctx.request.querystring, {charset: 'gbk'});
 </code></pre>
 <p>特别地，当请求格式为multipart或json时需要结合具体情况具体分析。</p>
 <p>例如，使用<code>busboy</code>等multipart解析库会将请求body挂在<code>ctx.request.body</code>上，规范的请求方式是会对字符进行url encode的，这时可以按gbk编码对字段decode（由于不能直接url decode，实际处理方法为转hex后再经buffer解码）。</p>
 <p>如果请求参数是经过binary处理的，则binary decode。</p>
 <p>综上，处理姿势大致如下。</p>
-<pre><code class="language-js">lodash.mapValues(ctx.request.body, value =&gt; {
+<pre><code class="lang-js">lodash.mapValues(ctx.request.body, value =&gt; {
   if (!value) return value;
 
   const buff = /^(%\w{2})+$/.test(value)
@@ -51,10 +50,10 @@ urlencode.parse(ctx.request.querystring, {charset: 'gbk'});
 <h2>读写文件</h2>
 <p>默认方式（<code>encoding: null</code>）就是操作buffer，iconv转换无压力。</p>
 <p>读：</p>
-<pre><code class="language-js">const buff = fs.readFileSync('test.txt');
+<pre><code class="lang-js">const buff = fs.readFileSync('test.txt');
 console.log(iconv.decode(buff, 'gbk'));
 </code></pre>
 <p>写：</p>
-<pre><code class="language-js">const buff = iconv.encode('你好', 'gbk');
+<pre><code class="lang-js">const buff = iconv.encode('你好', 'gbk');
 fs.writeFileSync('test.txt', buff);
 </code></pre>

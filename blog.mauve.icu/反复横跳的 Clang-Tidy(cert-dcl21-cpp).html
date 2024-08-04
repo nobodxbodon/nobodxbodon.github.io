@@ -11,7 +11,7 @@ description: Clang-Tidy 在 operator++(int) 方法的返回值是否要加 const
 </ul>
 <hr/>
 <p>今天早上有些发烧，就没去上班，下午稍微好点了之后就爬起来折腾会代码，写着写着就发现了一个奇怪的东西。把代码抽出核心部分类似如下的代码</p>
-<pre><code class="language-cpp">struct A {
+<pre><code class="lang-cpp">struct A {
     int v;
 
     A operator++(int) noexcept { return A(v++); }
@@ -21,7 +21,7 @@ description: Clang-Tidy 在 operator++(int) 方法的返回值是否要加 const
 <p>但是这段代码，Clang-Tidy 却给我报了 Warning: <code>Clang-Tidy: Overloaded 'operator++' returns a non-constant object instead of a constant object type</code></p>
 <p>大致意思是说，<code>operator++</code> 方法返回了一个非 <code>const</code> 的变量。看了下样例，大概意思是说，因为返回值是一个"临时"的类型（毕竟是一个右值，用完应该就要丢掉的）故需要 <code>const</code> 一下，避免会出现 <code>(i++)++;</code> 这种离谱的代码（后者的 <code>++</code> 是作用在返回的右值上的，实际上不会对原来的值生效）</p>
 <p>一听，好像有点道理，自动修复一下</p>
-<pre><code class="language-cpp">struct A {
+<pre><code class="lang-cpp">struct A {
     int v;
 
     const A operator++(int) noexcept { return A(v++); }
@@ -36,7 +36,6 @@ description: Clang-Tidy 在 operator++(int) 方法的返回值是否要加 const
 <li><a href="https://clang.llvm.org/extra/clang-tidy/checks/readability/const-return-type.html">readability-const-return-type</a></li>
 </ul>
 <p>其中，在前者有这样一句：</p>
-<blockquote>
-<p>It will be removed in clang-tidy version 19.</p>
+<blockquote><p>It will be removed in clang-tidy version 19.</p>
 </blockquote>
 <p>嗯，再一看自己的 clang-tidy，恰好是 <code>18.0.0</code></p>

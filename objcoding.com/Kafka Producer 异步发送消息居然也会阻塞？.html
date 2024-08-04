@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-09-12-kafka async send block.md)，<a href="https://objcoding.com/2020/09/12/kafka-async-send-block">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-09-12-kafka async send block.md">仓库源文</a>，<a href="https://objcoding.com/2020/09/12/kafka-async-send-block">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "Kafka Producer 异步发送消息居然也会阻塞？"
 categories: Kafka
-tags: 异步发送
-author: 张乘辉</h2>
+tags: 异步发送</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -16,14 +16,13 @@ Kafka 一直以来都以高吞吐量的特性而家喻户晓，就在上周，�
 <p>这么看来，Kafka 的所有发送，都可以看作是异步发送了，因此在新版的 Kafka Producer 中废弃掉异步发送的方法了，仅保留了一个 send 方法，同时返回一个 Futrue 对象，需要同步等待发送结果，就使用 Futrue#get 方法阻塞获取发送结果。而我在项目中直接调用 send 方法，为何还会发送阻塞呢？</p>
 <p>我们在构建 Kafka Producer 时，会有一个自定义缓冲池大小的参数 <code>buffer.memory</code>，默认大小为 32M，因此缓冲池的大小是有限制的，我们不妨想一下，缓冲池内存资源耗尽了会怎么样？</p>
 <p>Kafka 源码的注释是非常详细的，RecordAccumulator 类是 Kafka Producer 缓冲池的核心类，而 RecordAccumulator 类就有那么一段注释：</p>
-<blockquote>
-<p>The accumulator uses a bounded amount of memory and append calls will block when that memory is exhausted, unless this behavior is explicitly disabled.</p>
+<blockquote><p>The accumulator uses a bounded amount of memory and append calls will block when that memory is exhausted, unless this behavior is explicitly disabled.</p>
 </blockquote>
 <p>大概的意思是：</p>
 <p>当缓冲池的内存块用完后，消息追加调用将会被阻塞，直到有空闲的内存块。</p>
 <p>由于性能监控项目每分钟需要发送几百万条消息，只要 Kafka 集群负载很高或者网络稍有波动，Sender 线程从缓冲池捞取消息的速度赶不上客户端发送的速度，就会造成客户端发送被阻塞。</p>
 <p>我写个例子让大家直观感受一下被阻塞的现象：</p>
-<pre><code class="language-java">public static void main(String[] args) {
+<pre><code class="lang-java">public static void main(String[] args) {
   Properties properties = new Properties();
   properties.put(ProducerConfig.ACKS_CONFIG, "0");
   properties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer");

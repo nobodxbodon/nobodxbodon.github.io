@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-03-31-rocketmq topic.md)，<a href="https://objcoding.com/2019/03/31/rocketmq-topic">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-03-31-rocketmq topic.md">仓库源文</a>，<a href="https://objcoding.com/2019/03/31/rocketmq-topic">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "深度解析RocketMQ Topic的创建机制"
 categories: RocketMQ
-tags: topic
-author: 张乘辉</h2>
+tags: topic</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -16,17 +16,17 @@ author: 张乘辉</h2>
 <h2>自动创建</h2>
 <p>默认情况下，topic不用手动创建，当producer进行消息发送时，会从nameserver拉取topic的路由信息，如果topic的路由信息不存在，那么会默认拉取broker启动时默认创建好名为“TBW102”的Topic：</p>
 <p>org.apache.rocketmq.common.MixAll：</p>
-<pre><code class="language-java">// Will be created at broker when isAutoCreateTopicEnable
+<pre><code class="lang-java">// Will be created at broker when isAutoCreateTopicEnable
 public static final String AUTO_CREATE_TOPIC_KEY_TOPIC = "TBW102";
 </code></pre>
 <p>自动创建的开关配置在BrokerConfig中，通过autoCreateTopicEnable字段进行控制，</p>
 <p>org.apache.rocketmq.common.BrokerConfig：</p>
-<pre><code class="language-java">@ImportantField
+<pre><code class="lang-java">@ImportantField
 private boolean autoCreateTopicEnable = true;
 </code></pre>
 <p>在broker启动时，会调用TopicConfigManager的构造方法，autoCreateTopicEnable打开后，会将“TBW102”保存到topicConfigTable中：</p>
 <p>org.apache.rocketmq.broker.topic.TopicConfigManager#TopicConfigManager：</p>
-<pre><code class="language-java">// MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC
+<pre><code class="lang-java">// MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC
 if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
     String topic = MixAll.AUTO_CREATE_TOPIC_KEY_TOPIC;
     TopicConfig topicConfig = new TopicConfig(topic);
@@ -43,7 +43,7 @@ if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
 <p>broker会通过发送心跳包将topicConfigTable的topic信息发送给nameserver，nameserver将topic信息注册到RouteInfoManager中。</p>
 <p>继续看消息发送时是如何从nameserver获取topic的路由信息：</p>
 <p>org.apache.rocketmq.client.impl.producer.DefaultMQProducerImpl#tryToFindTopicPublishInfo：</p>
-<pre><code class="language-java">private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
+<pre><code class="lang-java">private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
   TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
   if (null == topicPublishInfo || !topicPublishInfo.ok()) {
     this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
@@ -64,7 +64,7 @@ if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
 </code></pre>
 <p>如上方法，topic首次发送消息，此时并不能从namserver获取topic的路由信息，那么接下来会进行第二次请求namserver，这时会将isDefault=true，开启默认“TBW102”从namerserver获取路由信息，此时的“TBW102”topic已经被broker默认注册到nameserver了：</p>
 <p>org.apache.rocketmq.client.impl.factory.MQClientInstance#updateTopicRouteInfoFromNameServer：</p>
-<pre><code class="language-java">if (isDefault &amp;&amp; defaultMQProducer != null) {
+<pre><code class="lang-java">if (isDefault &amp;&amp; defaultMQProducer != null) {
   // 使用默认的“TBW102”topic获取路由信息
   topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),1000 * 3);
   if (topicRouteData != null) {
@@ -78,7 +78,7 @@ if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
 </code></pre>
 <p>如果isDefault=true并且defaultMQProducer不为空，从nameserver中获取默认路由信息，此时会获取所有已开启自动创建开关的broker的默认“TBW102”topic路由信息，并保存默认的topic消息队列数量。</p>
 <p>org.apache.rocketmq.client.impl.factory.MQClientInstance#updateTopicRouteInfoFromNameServer：</p>
-<pre><code class="language-java">TopicRouteData old = this.topicRouteTable.get(topic);
+<pre><code class="lang-java">TopicRouteData old = this.topicRouteTable.get(topic);
 boolean changed = topicRouteDataIsChange(old, topicRouteData);
 if (!changed) {
   changed = this.isNeedUpdateTopicRouteInfo(topic);
@@ -88,7 +88,7 @@ if (!changed) {
 </code></pre>
 <p>从本地缓存中取出topic的路由信息，由于topic是第一次发送消息，这时本地并没有该topic的路由信息，所以对比该topic路由信息对比“TBW102”时changed为true，即有变化，进入以下逻辑：</p>
 <p>org.apache.rocketmq.client.impl.factory.MQClientInstance#updateTopicRouteInfoFromNameServer：</p>
-<pre><code class="language-java">// Update sub info
+<pre><code class="lang-java">// Update sub info
 {
   Set&lt;MessageQueue&gt; subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData);
   Iterator&lt;Entry&lt;String, MQConsumerInner&gt;&gt; it = this.consumerTable.entrySet().iterator();
@@ -108,10 +108,10 @@ if (!changed) {
 <h2>预先创建</h2>
 <p>其实这个叫预先创建似乎更加适合，即预先在broker中创建好topic的相关信息并注册到nameserver中，然后client端发送消息时直接从nameserver中获取topic的路由信息，但是手动创建从动作上来将更加形象通俗易懂，直接告诉你，你的topic信息需要在控制台上自己手动创建。</p>
 <p>预先创建需要通过mqadmin提供的topic相关命令进行创建，执行：</p>
-<pre><code class="language-bash">./mqadmin updateTopic
+<pre><code class="lang-bash">./mqadmin updateTopic
 </code></pre>
 <p>官方给出的各项参数如下：</p>
-<pre><code class="language-bash">usage: mqadmin updateTopic [-b &lt;arg&gt;] [-c &lt;arg&gt;] [-h] [-n &lt;arg&gt;] [-o &lt;arg&gt;] [-p &lt;arg&gt;] [-r &lt;arg&gt;] [-s &lt;arg&gt;]
+<pre><code class="lang-bash">usage: mqadmin updateTopic [-b &lt;arg&gt;] [-c &lt;arg&gt;] [-h] [-n &lt;arg&gt;] [-o &lt;arg&gt;] [-p &lt;arg&gt;] [-r &lt;arg&gt;] [-s &lt;arg&gt;]
 -t &lt;arg&gt; [-u &lt;arg&gt;] [-w &lt;arg&gt;]
 -b,--brokerAddr &lt;arg&gt;       create topic to which broker
 -c,--clusterName &lt;arg&gt;      create topic to which cluster
@@ -128,7 +128,7 @@ if (!changed) {
 <p>我们直接定位到其实现类执行命令的方法：</p>
 <p>通过broker模式创建：</p>
 <p>org.apache.rocketmq.tools.command.topic.UpdateTopicSubCommand#execute：</p>
-<pre><code class="language-java">// -b,--brokerAddr &lt;arg&gt;   create topic to which broker
+<pre><code class="lang-java">// -b,--brokerAddr &lt;arg&gt;   create topic to which broker
 if (commandLine.hasOption('b')) {
   String addr = commandLine.getOptionValue('b').trim();
   defaultMQAdminExt.start();
@@ -139,7 +139,7 @@ if (commandLine.hasOption('b')) {
 <p>从commandLine命令行工具获取运行时-b参数重的broker的地址，defaultMQAdminExt是默认的rocketmq控制台执行的API，此时调用start方法，该方法创建了一个mqClientInstance，它封装了netty通信的细节，接着就是最重要的一步，调用createAndUpdateTopicConfig将topic配置信息发送到指定的broker上，完成topic的创建。</p>
 <p>通过集群模式创建：</p>
 <p>org.apache.rocketmq.tools.command.topic.UpdateTopicSubCommand#execute：</p>
-<pre><code class="language-java">// -c,--clusterName &lt;arg&gt;   create topic to which cluster
+<pre><code class="lang-java">// -c,--clusterName &lt;arg&gt;   create topic to which cluster
 else if (commandLine.hasOption('c')) {
   String clusterName = commandLine.getOptionValue('c').trim();
   defaultMQAdminExt.start();

@@ -1,13 +1,14 @@
 <h2><a href="https://github.com/iphyer/iphyer.github.io/blob/master/_posts/2015-06-16-pipe.markdown">仓库源文</a>，<a href="https://iphyer.github.io/blog/2015/06/16/pipe.markdown">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "Bash脚本的批量作业"
 date: 2015-06-16 17:09
-comments: true
-categories: 科研  Linux</h2>
+comments: true</p>
+<h2>categories: 科研  Linux</h2>
 <h2>前言</h2>
 <p>其实这个博文很短，就是记录下今天下午写的bash代码。所有完成的工作的目的就是实现对于研究做服务器集群的使用。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>需求说明</h2>
 <ol>
 <li>首先实验室的服务器不同于前面的深圳超算中心代码，深圳超算是可以疯狂提交，因为后台的作业调度系统自动帮助你进行调度。一次一个核的安排。我的任务就是只使用一个核，但是需要同时计算很多任务，比如50个。</li>
@@ -17,7 +18,7 @@ categories: 科研  Linux</h2>
 <h2>bash脚本</h2>
 <p>网上发现一个非常好的脚本，<a href="http://jerkwin.github.io/2013/12/14/Bash%E8%84%9A%E6%9C%AC%E5%AE%9E%E7%8E%B0%E6%89%B9%E9%87%8F%E4%BD%9C%E4%B8%9A%E5%B9%B6%E8%A1%8C%E5%8C%96/">Bash脚本实现批量作业并行化</a></p>
 <p>基本上，整体的代码都是参考的作者的实现只是修改了CMD这个函数部分。</p>
-<pre><code class="language-bash">
+<pre><code class="lang-bash">
 #!/bin/sh
 Possibility="step10"
 date="20150602"
@@ -32,7 +33,7 @@ function CMD {        # 测试命令, 随机等待几秒钟
     mkdir ~/run/${date}/${Possibility}/no$1
     cd ~/run/${date}/${Possibility}/no$1
     cp ~/run/${date}/${prog} .
-	./${prog}&gt;record    
+    ./${prog}&gt;record    
 }
 
 Pfifo="/tmp/$$.fifo"   # 以PID为名, 防止创建命名管道时与已有文件重名，从而失败
@@ -43,32 +44,31 @@ rm -f $Pfifo           # 删除文件, 也可不删除, 不影响后面操作
 
 # 在fd6中放置$Nproc个空行作为令牌
 for((i=1; i&lt;=$Nproc; i++)); do
-	echo
+    echo
 done &gt;&amp;6
 
 for((i=1; i&lt;=$Njob; i++)); do  # 依次提交作业
-	read -u6                   # 领取令牌, 即从fd6中读取行, 每次一行
+    read -u6                   # 领取令牌, 即从fd6中读取行, 每次一行
                                # 对管道，读一行便少一行，每次只能读取一行
                                # 所有行读取完毕, 执行挂起, 直到管道再次有可读行
                                # 因此实现了进程数量控制
-	{                          # 要批量执行的命令放在大括号内, 后台运行
-		CMD $i &amp;&amp; {            # 可使用判断子进程成功与否的语句
-			echo "Job $i finished"
-		} || {
-			echo "Job $i error"
-		}
-		sleep 1     # 暂停1秒，可根据需要适当延长,
+    {                          # 要批量执行的命令放在大括号内, 后台运行
+        CMD $i &amp;&amp; {            # 可使用判断子进程成功与否的语句
+            echo "Job $i finished"
+        } || {
+            echo "Job $i error"
+        }
+        sleep 1     # 暂停1秒，可根据需要适当延长,
                     # 关键点，给系统缓冲时间，达到限制并行进程数量的作用
-		echo &gt;&amp;6    # 归还令牌, 即进程结束后，再写入一行，使挂起的循环继续执行
-	} &amp;
+        echo &gt;&amp;6    # 归还令牌, 即进程结束后，再写入一行，使挂起的循环继续执行
+    } &amp;
 
 done
 
 wait                # 等待所有的后台子进程结束
 exec 6&gt;&amp;-           # 删除文件标识符
-
 </code></pre>
 <p>然后用这个方式运行，<code>bash test3.sh &gt; log &amp;</code></p>
 <p>后面的"&amp;"号一定要加上，这样这个脚本就转入后台运行，可以更加方便。</p>
 <p>然后<code>top</code>查看下运行的进程，确保脚本启动成功。</p>
-<p><img alt="top" src="/media/wwww/share/study/聚聚/源数据/博客聚合/iphyer.github.io/images/bash/bashpipe.png"/></p>
+<p><img alt="top" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/iphyer.github.io/images/bash/bashpipe.png"/></p>

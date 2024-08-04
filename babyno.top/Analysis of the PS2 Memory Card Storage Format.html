@@ -15,7 +15,7 @@ categories:</li>
 <li>Tutorial</li>
 </ul>
 <hr/>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/Playstation_2_Memory_Card-3.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/Playstation_2_Memory_Card-3.jpg"/></p>
 <h2>01 Preface</h2>
 <p>As an 80s gamer, the PS2 game console has always held a special place in my heart. Over 20 years have passed, yet recently, due to the emulator, I rediscovered it. After revisiting games for a while, I had a sudden idea: could I recall my younger self with my current knowledge? So, I began creating this series of articles, starting with analyzing the file system of the PS2 memory card and gradually delving into its file storage mechanism and the save files of each game. My goal is to ultimately simulate the classic 3D character rotation effect from game saves using Python and OpenGL, commemorating the classic game console that once accompanied me through my youth.</p>
 <p>This is the first piece in the series, analyzing the file system of the PS2 memory card.</p>
@@ -47,32 +47,138 @@ The minimum erasure unit of the file system, the size of the block, is defined i
 <p><em><strong>Note: Here, a standard 8MB memory card is used as an example.</strong></em></p>
 <h3>3.1 Data Structures</h3>
 <p>From the <code>superblock</code>, we can determine that the size of a <code>page</code> is 512 bytes, and the size of a <code>cluster</code> is 2 <code>pages</code>. The size of the <code>spare area</code> can be obtained from the formula <code>(page_len / 128) * 4</code>, which is 16 bytes. Therefore, the basic data structure of the file system is as shown in the figure:</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-%E6%96%87%E4%BB%B6%E7%B3%BB%E7%BB%9F.jpg"/></p>
 <h3>3.2 Logical Structure</h3>
 <p>Having understood the most basic data structures, let's now divide the logical structure of the memory card. As shown in the figure below, a memory card can be roughly divided into several logical blocks. (The black and white parts are not relevant to this article and can be ignored.) Note: The minimum unit composing logical blocks is a cluster.</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-%E6%96%87%E4%BB%B6%E7%BB%93%E6%9E%84.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-%E6%96%87%E4%BB%B6%E7%BB%93%E6%9E%84.jpg"/></p>
 <h4>Superblock</h4>
 <p>Located at the beginning of the entire file system (the first cluster), the first <strong>340</strong> bytes. This is the only part of the file system with a fixed position. The figure below illustrates a superblock of a memory card file.</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/image.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/image.png"/></p>
 <p><em><strong>Note: The byte order of PS2 memory card is little-endian.</strong></em></p>
-<p>| Offset | Name              | Length    | Default | Description  |
-|--------|-------------------|-----------|---------|--------------------------------------------------------   |
-| 0      | magic             | byte[28]  | -       | Fixed string "Sony PS2 Memory Card Format", indicating successful initialization of the card  |
-| 28     | version           | byte[12]  | 1.X.0.0 | Version number     |
-| 40     | page_len          | uint16    | 512     | Size of a <code>page</code> in bytes    |
-| 42     | pages_per_cluster | uint16    | 2       | Number of <code>pages</code> in a cluster    |
-| 44     | pages_per_block   | uint16    | 16      | Number of <code>pages</code> in a block  |
-| 46     | -                 | uint16    | 0xFF00  | Unknown  |
-| 48     | clusters_per_card | uint32    | 8192    | Total size of the card in clusters  |
-| 52     | alloc_offset      | uint32    | 41      | First allocatable cluster  |
-| 56     | alloc_end         | uint32    | 8135    | Last allocatable cluster  |
-| 60     | rootdir_cluster   | uint32    | 0       | First cluster of the root directory, relative to alloc_offset  |
-| 64     | backup_block1     | uint32    | 1023    | Not used in this article   |
-| 68     | backup_block2     | uint32    | 1022    | Not used in this article  |
-| 80     | ifc_list          | uint32[32]| 8       | Indirect FAT cluster list, only one indirect FAT cluster on a standard 8MB card  |
-| 208    | bad_block_list    | uint32[32]| -1      | Not used in this article  |
-| 336    | card_type         | byte      | 2       | Must be 2, indicating a PS2 memory card  |
-| 337    | card_flags        | byte      | 0x52    | Physical characteristics of the memory card   |</p>
+<table>
+<thead><tr>
+<th>Offset</th>
+<th>Name</th>
+<th>Length</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>magic</td>
+<td>byte[28]</td>
+<td>-</td>
+<td>Fixed string "Sony PS2 Memory Card Format", indicating successful initialization of the card</td>
+</tr>
+<tr>
+<td>28</td>
+<td>version</td>
+<td>byte[12]</td>
+<td>1.X.0.0</td>
+<td>Version number</td>
+</tr>
+<tr>
+<td>40</td>
+<td>page_len</td>
+<td>uint16</td>
+<td>512</td>
+<td>Size of a <code>page</code> in bytes</td>
+</tr>
+<tr>
+<td>42</td>
+<td>pages_per_cluster</td>
+<td>uint16</td>
+<td>2</td>
+<td>Number of <code>pages</code> in a cluster</td>
+</tr>
+<tr>
+<td>44</td>
+<td>pages_per_block</td>
+<td>uint16</td>
+<td>16</td>
+<td>Number of <code>pages</code> in a block</td>
+</tr>
+<tr>
+<td>46</td>
+<td>-</td>
+<td>uint16</td>
+<td>0xFF00</td>
+<td>Unknown</td>
+</tr>
+<tr>
+<td>48</td>
+<td>clusters_per_card</td>
+<td>uint32</td>
+<td>8192</td>
+<td>Total size of the card in clusters</td>
+</tr>
+<tr>
+<td>52</td>
+<td>alloc_offset</td>
+<td>uint32</td>
+<td>41</td>
+<td>First allocatable cluster</td>
+</tr>
+<tr>
+<td>56</td>
+<td>alloc_end</td>
+<td>uint32</td>
+<td>8135</td>
+<td>Last allocatable cluster</td>
+</tr>
+<tr>
+<td>60</td>
+<td>rootdir_cluster</td>
+<td>uint32</td>
+<td>0</td>
+<td>First cluster of the root directory, relative to alloc_offset</td>
+</tr>
+<tr>
+<td>64</td>
+<td>backup_block1</td>
+<td>uint32</td>
+<td>1023</td>
+<td>Not used in this article</td>
+</tr>
+<tr>
+<td>68</td>
+<td>backup_block2</td>
+<td>uint32</td>
+<td>1022</td>
+<td>Not used in this article</td>
+</tr>
+<tr>
+<td>80</td>
+<td>ifc_list</td>
+<td>uint32[32]</td>
+<td>8</td>
+<td>Indirect FAT cluster list, only one indirect FAT cluster on a standard 8MB card</td>
+</tr>
+<tr>
+<td>208</td>
+<td>bad_block_list</td>
+<td>uint32[32]</td>
+<td>-1</td>
+<td>Not used in this article</td>
+</tr>
+<tr>
+<td>336</td>
+<td>card_type</td>
+<td>byte</td>
+<td>2</td>
+<td>Must be 2, indicating a PS2 memory card</td>
+</tr>
+<tr>
+<td>337</td>
+<td>card_flags</td>
+<td>byte</td>
+<td>0x52</td>
+<td>Physical characteristics of the memory card</td>
+</tr>
+</tbody>
+</table>
 <p>The fields <code>page_len</code>, <code>pages_per_cluster</code>, <code>pages_per_block</code>, and <code>clusters_per_card</code> define the basic geometric structure of the file system. The <code>ifc_list</code> can be used to access the <code>FAT</code>, and <code>rootdir_cluster</code> gives the first cluster of the root directory. Both the <code>FAT</code> and cluster offsets in directory entries are related to <code>alloc_offset</code>.</p>
 <h4>FAT</h4>
 <p>The file allocation table is a linked list. When you find the starting cluster of a file, imagine there are two threads: thread X reads the content (i.e., data) of this cluster, while thread Y searches the FAT for the next cluster to be read by thread X, and this process continues in a loop. Of course, two threads are not necessary. Here's a diagram illustrating this working mechanism:</p>
@@ -84,14 +190,14 @@ The minimum erasure unit of the file system, the size of the block, is defined i
 <li>Thread Y searches the FAT again and finds that the next cluster after 13 is 7.</li>
 <li>This process continues indefinitely.</li>
 </ul>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/file-allocation-table-fat1-l.jpg"/></p>
-<p>Source：https://www.slideserve.com/yahto/file-system-implementation</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/file-allocation-table-fat1-l.jpg"/></p>
+<p>Source：<a href="https://www.slideserve.com/yahto/file-system-implementation">https://www.slideserve.com/yahto/file-system-implementation</a></p>
 <h4>Direct FAT</h4>
 <p>As mentioned earlier, both direct FAT and indirect FAT are stored in clusters. The data within clusters must have a well-defined structure to allow us to easily parse it into FAT chains. The structure of FAT within a cluster can be imagined as follows:</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-FAT1.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-FAT1.jpg"/></p>
 <p>This is a matrix M, where rows represent the clusters where FAT resides, and columns represent the data within each FAT cluster. Each FAT cluster contains an array of 4-byte 32-bit integers, with a total of <code>1024 / 4 = 256</code> elements, resulting in 256 columns in the matrix. How many clusters are there in total for FAT? This can be parsed from the clusters of the indirect FAT, which we'll discuss later. Here, FAT occupies a total of 32 clusters, so the matrix has 32 rows.</p>
 <p>The size of matrix M is <code>32 * 256 = 8192</code>, meaning this FAT can manage 8192 clusters. Suppose we want to find the position <code>row</code> and <code>column</code> of cluster <code>n</code> in the matrix, this can be calculated simply as:</p>
-<pre><code class="language-python">row = (n // 256) % 256
+<pre><code class="lang-python">row = (n // 256) % 256
 column = n % 256
 </code></pre>
 <p>Now that the position has been calculated, we can obtain the corresponding value. Yes, this value <code>?</code> represents the next cluster. By continuously looping until the retrieved value is <code>0xFFFFFFFF</code>, it indicates the end of the cluster chain, and no further search is needed.</p>
@@ -99,7 +205,7 @@ column = n % 256
 <h4>Indirect FAT</h4>
 <p>An earlier question was left unanswered: why does FAT occupy 32 clusters?</p>
 <p>In the superblock, there's a field called <code>ifc_list</code>, which is a 4-byte 32-bit integer array. Imagine the matrix mentioned earlier. <code>ifc_list</code> is a matrix with only one row, although it has 32 elements, only the first one has a value, which is 8 representing the indirect FAT cluster <code>ifc</code>. Parse the contents of cluster 8 as described earlier, forming another matrix. The rows of this matrix are determined by the number of elements in <code>ifc_list</code>, theoretically 32, but since there's only one element, the rows of this matrix are also 1. The columns of the matrix remain 256. By parsing the values, it can be determined that the clusters where FAT resides are from 9 to 40, which is 32 clusters in total.</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-FAT.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2023-09-26-parsing-ps2-memcard-file-system/%E5%AD%98%E5%82%A8%E5%8D%A1-FAT.jpg"/></p>
 <h4>Allocatable Clusters</h4>
 <p>This is a range from <code>alloc_offset</code> to <code>alloc_end</code>. Excluding the positions of the superblock, FAT, reserved clusters, etc., all game saves are located within the allocatable clusters.</p>
 <h2>04 Files and Directories</h2>
@@ -107,16 +213,65 @@ column = n % 256
 <h3>4.1 Entries</h3>
 <p>Each directory or file has an "entry", which can be considered as metadata containing attributes such as file name, size, creation and modification time, etc. Each "entry" has a length of 512 bytes, so each 1024 clusters can only accommodate two "entries". "Entry clusters" do not store file data, even if there is only one "entry" in the "entry cluster".</p>
 <p>Except for the root directory which doesn't have a "root" entry, each directory has an "entry" named after its directory name, and each file also has an "entry" named after its file name. The structure of an "entry" is as follows:</p>
-<p>| Offset | Name      | Length   | Description    |
-|--------|-----------|----------|----------------|
-| 0      | mode      | uint16   | Identifies the attributes of the file. |
-| 4      | length    | uint32   | If it's a file, it's in bytes; if it's a directory, it's in entries. |
-| 8      | created   | byte[8]  | Creation time. |
-| 16     | cluster   | uint32   | The first cluster corresponding to the entry, relative to alloc_offset. |
-| 20     | dir_entry | uint32   | Unused. |
-| 24     | modified  | byte[8]  | Modification time. |
-| 32     | attr      | uint32   | User attributes. |
-| 36     | name      | byte[32] | File name, truncated after <code>x00</code>. |</p>
+<table>
+<thead><tr>
+<th>Offset</th>
+<th>Name</th>
+<th>Length</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>mode</td>
+<td>uint16</td>
+<td>Identifies the attributes of the file.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>length</td>
+<td>uint32</td>
+<td>If it's a file, it's in bytes; if it's a directory, it's in entries.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>created</td>
+<td>byte[8]</td>
+<td>Creation time.</td>
+</tr>
+<tr>
+<td>16</td>
+<td>cluster</td>
+<td>uint32</td>
+<td>The first cluster corresponding to the entry, relative to alloc_offset.</td>
+</tr>
+<tr>
+<td>20</td>
+<td>dir_entry</td>
+<td>uint32</td>
+<td>Unused.</td>
+</tr>
+<tr>
+<td>24</td>
+<td>modified</td>
+<td>byte[8]</td>
+<td>Modification time.</td>
+</tr>
+<tr>
+<td>32</td>
+<td>attr</td>
+<td>uint32</td>
+<td>User attributes.</td>
+</tr>
+<tr>
+<td>36</td>
+<td>name</td>
+<td>byte[32]</td>
+<td>File name, truncated after <code>x00</code>.</td>
+</tr>
+</tbody>
+</table>
 <ul>
 <li>The <code>mode</code> field refers to: <a href="https://www.ps2savetools.com/ps2memcardformat.html">https://www.ps2savetools.com/ps2memcardformat.html</a>. It is a 4-byte integer. By comparing each byte with the corresponding mask, you can identify the file type corresponding to the "entry". For example, <code>0x8427</code> represents a directory, and <code>0x8497</code> represents a file.</li>
 <li>The <code>cluster</code> field represents the first cluster of the "entry". If this entry is a directory, this cluster points to the next "entry cluster" of the current directory. If this entry is a file, this cluster points to the first "data cluster" of the file.</li>

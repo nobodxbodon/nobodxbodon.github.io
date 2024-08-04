@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2017-07-12-cache-design.md">仓库源文</a>，<a href="https://qingbob.com/cache-design">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 无懈可击的浏览器缓存方案：关于思路，细节，ServiceWorker，以及HTTP/2
 modified: 2017-07-12
 tags: [javascript, browser, cache]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>本文分为四个部分，文章的递进思路是由整体到局部，由业务概念到技术细节，由主线到分支，由现在到未来：</p>
 <ul>
 <li>浏览器缓存设计的思路和策略</li>
@@ -23,7 +23,7 @@ share: true</h2>
 <p>首先我们从最简单的一个用例开始。</p>
 <p>假设你的站点有引用一个脚本文件，你非常确认这个脚本文件内容五十年不变。那么自然希望浏览器把这个脚本缓存起来，不用每一次都请求服务器，然后服务器再返回相同的内容。这样能够节省带宽开销并且提升性能。</p>
 <p>此时你只需要设置文件返回的HTTP头中的<code>Cache-Control</code>设置为：</p>
-<pre><code class="language-http">Cache-Control: max-age=31536000
+<pre><code class="lang-http">Cache-Control: max-age=31536000
 </code></pre>
 <p>虽然是五十年不变，但是标准中规定<code>max-age</code>值最大不能超过一年，又因为是以秒为单位，所以值为<code>31536000</code></p>
 <p>例如这个五十年不变的脚本地址是<code>http://example.com/never-expire.js</code>。那么接下来每次用户请求这个地址时，浏览器都不会再向服务器发出请求，而是直接从本地的浏览器缓存中取。直到一年以后或者用户手动的清除了缓存。</p>
@@ -34,7 +34,7 @@ share: true</h2>
 <p>然而如何执行“验证”这个过程呢？在服务器第一次返回给浏览器的响应http头中，有一个名为<code>Etag</code>字段，这个字段代表这个请求的token（你可以理解为这次请求返回的id）。token的生成并没有一个统一的规则，是由你的服务器返回逻辑决定，可以是md5值也可以是版本号，总之是用于辨别这个请求返回的唯一性。</p>
 <p>当资源过期之后，浏览器再次请求该资源时，会添加一个名为<code>If-None-Match</code>的http头信息，值即是这个过期资源的<code>Etag</code>，用于告诉服务器当前浏览器拥有的资源版本。服务器也就是通过对比<code>Etag</code>版本信息，来判断资源是否进行了更新。</p>
 <p>而头信息<code>If-None-Match</code>被称为<code>Conditional headers</code>，包含这样信息的请求则称为<code>Conditional Request</code>。</p>
-<p><img alt="http-cache-control" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/cache-design/http-cache-control.png"/></p>
+<p><img alt="http-cache-control" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/cache-design/http-cache-control.png"/></p>
 <p>以上就是缓存设计的基本思路，围绕着资源何时过期，以及过期后如何更新展开。接下来我们看一看技术细节，如何通过配置缓存相关的头信息能够更好的为这些策略服务。</p>
 <h2>技术细节</h2>
 <p><strong>"no-cache", "no-store", "must-revalidate"</strong></p>
@@ -59,13 +59,13 @@ share: true</h2>
 <p><strong>public VS. private</strong></p>
 <p>要知道从服务器到浏览器之间并非只有浏览器能够对资源进行缓存，服务器的返回可能会经过一些中间（intermediate）服务器甚至甚至专业的中间缓存服务器，还有CDN。而有些请求返回是用户级别、是私人的，所以你可能不希望这些中间服务器缓存返回。此时你需要将<code>Cache-Control</code>设置为<code>private</code>以避免暴露。</p>
 <p>所以综上，关于如何设计缓存机制，还是要依据你的需求而定，可以通过下面的这棵决策树决定：</p>
-<p><img alt="http-cache-decision-tree" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/cache-design/http-cache-decision-tree.png"/></p>
+<p><img alt="http-cache-decision-tree" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/cache-design/http-cache-decision-tree.png"/></p>
 <h3>不要对变化的资源添加较短的max-age</h3>
 <p>如果对缓存使用恰当，能够为你的网站提升不少性能。但如果使用错误，也同样会给你的网站带来灾难。</p>
 <p>通常页面的功能修改意味着对应的脚本和样式也要发生更改，也就是说页面和脚本和样式某种意义上是相互依赖的。例如今天页面上的功能A上线，我们需要的脚本和样式版本只能是<code>sctipt-v2.js</code>和<code>style-v2.css</code>, v1和v3版本都不适用。如果使用错误了则页面上的功能都无法正常使用。但是这种关系是不会在HTTP请求中得以体现的。</p>
 <p>举一个例子，我们想维护上面所说的依赖关系，但因为历史原因采用了一个“蹩脚”的缓存方案：让页面还有样式以及脚本都有相同的缓存生命周期，这样同时诞生同时销毁，理论上就不会出现不匹配的问题了。</p>
 <p>例如我们给页面、脚本和样式资源设置缓存配置是：</p>
-<pre><code class="language-http">Cache-Control: must-revalidate, max-age=600
+<pre><code class="lang-http">Cache-Control: must-revalidate, max-age=600
 </code></pre>
 <p>这样的配置理论上没有问题：10分钟之内使用缓存，10分钟之后向服务器重新验证。但在实际的运行过程中可能会出现以下两个场景的问题：</p>
 <ul>
@@ -77,7 +77,7 @@ share: true</h2>
 <p>随着Service Worker（以下简称SW）的普及和规范，我们可以使用SW提供的缓存接口替代HTTP缓存。当然SW的功能是强大的，除了缓存功能，还能够使用它来实现离线、数据同步、后台编译等等。更多功能可以参考<a href="serviceworke.rs">serviceworke.rs</a>。</p>
 <p>更完整的SW关于缓存功能的实现可以参考Google的这篇官方文章<a href="https://developers.google.com/web/fundamentals/getting-started/primers/service-workers">service-workers</a>。如果对SW不是很熟悉的同学可以先阅读完这篇文章后再继续。</p>
 <p>一个标配版的sw缓存工代代码应该有以下的片段：</p>
-<pre><code class="language-javascript">const version = '2';
+<pre><code class="lang-javascript">const version = '2';
 
 self.addEventListener('install', event =&gt; {
   event.waitUntil(
@@ -100,7 +100,7 @@ self.addEventListener('fetch', event =&gt; {
 <p>这段代码的意思是，在SW的<code>install</code>阶段我们将<code>script.js</code>和<code>styles.css</code>放入缓存中；而在请求发起的<code>fetch</code>阶段，通过资源的URL去缓存内查找匹配，成功后立刻返回，否则走正常的网络请求流程。</p>
 <p>但你有没有考虑过，在<code>install</code>阶段的资源内容是哪里来的？仍然是从HTTP缓存中。这样SW缓存机制又有可能随着HTTP缓存陷入了之前所说的版本不一致的困境中。</p>
 <p>既然我们借助SW重写了缓存机制，所以也不想再受牵制于旧的HTTP缓存。解决办法是让SW中的请求必须向服务端验证：</p>
-<pre><code class="language-javascript">self.addEventListener('install', event =&gt; {
+<pre><code class="lang-javascript">self.addEventListener('install', event =&gt; {
   event.waitUntil(
     caches.open(`static-${version}`)
       .then(cache =&gt; cache.addAll([
@@ -111,7 +111,7 @@ self.addEventListener('fetch', event =&gt; {
 });
 </code></pre>
 <p>目前并非所有的浏览器都支持<code>cache</code>选项的配置。但这个不是太大问题，我们可以通过添加随机数来保证每次请求的URL都不相同，间接的使得缓存失效：</p>
-<pre><code class="language-javascript">self.addEventListener('install', event =&gt; {
+<pre><code class="lang-javascript">self.addEventListener('install', event =&gt; {
   event.waitUntil(
     caches.open(`static-${version}`)
       .then(cache =&gt; Promise.all(
@@ -134,7 +134,7 @@ self.addEventListener('fetch', event =&gt; {
 <h3>sw-precache</h3>
 <p>想象一下现在我们需要实施上述绕过http缓存的解决方案。首先我们需要知道究竟站点中有多少静态资源，然后设定版本号的生成规则，接着根据静态资源再具体的编写我们的SW脚本。</p>
 <p>不难看出，上面描述的过程可以是机械化自动化的，包括识别静态资源，生成SW脚本等。而类库<code>sw-precache</code>则可以帮我们完成这些工作。尤其是在构建阶段配合Gulp或者Grunt使用，具体用法我们可以摘录它官网的一段DEMO：</p>
-<pre><code class="language-javascript">gulp.task('generate-service-worker', function(callback) {
+<pre><code class="lang-javascript">gulp.task('generate-service-worker', function(callback) {
   var swPrecache = require('sw-precache');
   var rootDir = 'app';
 

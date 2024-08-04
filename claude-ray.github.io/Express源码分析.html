@@ -1,23 +1,21 @@
-<h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/Express%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90.md">仓库源文</a>，<a href="https://claude-ray.github.io/Express%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90">站点原文</a></h2>
+<h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/Express源码分析.md">仓库源文</a>，<a href="https://claude-ray.github.io/Express源码分析">站点原文</a></h2>
 <hr/>
-<h2>title: Express源码分析
+<p>title: Express源码分析
 date: 2017-07-24 22:54:05
 tags: [Node.js,Express]
-categories: Node.js
-description: 新坑，基于 Express@4.15.3 的源码分析，慢慢填</h2>
+categories: Node.js</p>
+<h2>description: 新坑，基于 Express@4.15.3 的源码分析，慢慢填</h2>
 <h1>Express源码分析</h1>
 <h2>项目整体结构</h2>
 <p>相较于 <code>4.15.2</code> ， <code>4.15.3</code> 又一次移除了所有内部<code>node_modules</code>，目录结构恢复整洁。</p>
-<blockquote>
-<p><code>4.15.2</code> 中的内置的 <code>node_modules</code> 是 <code>debug</code>。</p>
+<blockquote><p><code>4.15.2</code> 中的内置的 <code>node_modules</code> 是 <code>debug</code>。</p>
 </blockquote>
 <h2>Express 内部文件</h2>
 <h3>1 程序入口 <code>index.js</code></h3>
 <p>只是一个简单的入口，导出了<code>lib/express</code>。</p>
 <h3>2 应用创建 <code>express.js</code></h3>
 <ol>
-<li>从入口程序进入这里，第一句就是</li>
-</ol>
+<li><p>从入口程序进入这里，第一句就是</p>
 <pre><code>exports = module.exports = createApplication;
 </code></pre>
 <p>对这个写法进行总结：</p>
@@ -31,22 +29,23 @@ require加载模块时使用的是 <code>module.exports</code> 而不是 <code>e
 而API上的说法不然， <code>When the module.exports property is being completely replaced by a new object, it is common to also reassign exports</code> 。
 起初我从直观上理解，认为两者说辞是相反的，且经过验证，exports 确实会断开引用。因此是对API说明的理解有偏差。</li>
 </ul>
-<pre><code class="language-javascript">// 上面写法等价于
-
-// module.exports 指向新的对象时，exports 断开了与 module.exports 的引用
+<p>```javascript
+// 上面写法等价于</p>
+</li>
+</ol>
+<p>// module.exports 指向新的对象时，exports 断开了与 module.exports 的引用
 module.exports = createApplication;
 // 若还想使用exports添加属性，让 exports 重新指向 module.exports 即可
-exports = module.exports;
-</code></pre>
-<ol start="2">
-<li><code>express.js</code> 返回一个 app 作为 <code>createApplication</code> 的回调函数每个http请求都可以触发执行 <code>app.handle</code> 来执行中间件。
-<code>app.handle</code> 调用了router组件的 <code>handle(req, res, out)</code> 函数链式执行中间件。
-通过 <a href="#merge-descriptors"><code>merge-descriptors</code></a> 中间件将 <code>application</code> 和 <code>events.EventEmitter</code> 合并(类似于继承)到 app 中。
-而 <code>app.request</code> 和 <code>app.response</code> 通过 <code>Object.create</code> 方式继承request和response得到。完成以上操作后，调用 <code>application.init()</code> 进行初始化。</li>
-<li>通过 <code>exports</code> 暴露出 express 内主要的构造器、原型。</li>
-<li>末尾处遍历的数组内是已经移除的 <code>Express 3.x</code> 内置模块，当使用者不知情而直接使用时，提醒他们需要额外安装，提供了更友好的报错信息。</li>
-</ol>
-<pre><code class="language-javascript">[
+exports = module.exports;</p>
+<pre><code>
+2. ``express.js`` 返回一个 app 作为 ``createApplication`` 的回调函数每个http请求都可以触发执行 ``app.handle`` 来执行中间件。
+``app.handle`` 调用了router组件的 ``handle(req, res, out)`` 函数链式执行中间件。
+通过 [``merge-descriptors``](#merge-descriptors) 中间件将 ``application`` 和 ``events.EventEmitter`` 合并(类似于继承)到 app 中。
+而 ``app.request`` 和 ``app.response`` 通过 ``Object.create`` 方式继承request和response得到。完成以上操作后，调用 ``application.init()`` 进行初始化。
+3. 通过 ``exports`` 暴露出 express 内主要的构造器、原型。
+4. 末尾处遍历的数组内是已经移除的 ``Express 3.x`` 内置模块，当使用者不知情而直接使用时，提醒他们需要额外安装，提供了更友好的报错信息。
+```javascript
+[
   'json',
   'urlencoded',
   'bodyParser',
@@ -78,96 +77,94 @@ exports = module.exports;
 <h3>3 应用 <code>application.js</code></h3>
 <h4>初始化 <code>app.defaultConfiguration</code></h4>
 <ol>
-<li>虽然在 <code>createApplication</code> 中调用的是app.init()，但查看 <code>application.js</code> 的init就会发现，init只是在初始化应用之前为一些属性赋了空值。</li>
-</ol>
-<pre><code class="language-javascript">/**
- * Initialize the server.
- *
- *   - setup default configuration
- *   - setup default middleware
- *   - setup route reflection methods
- */
+<li>虽然在 <code>createApplication</code> 中调用的是app.init()，但查看 <code>application.js</code> 的init就会发现，init只是在初始化应用之前为一些属性赋了空值。<pre><code class="lang-javascript">/**
+* Initialize the server.
+*
+*   - setup default configuration
+*   - setup default middleware
+*   - setup route reflection methods
+*/
 app.init = () =&gt; {
-  this.cache = {};
-  this.engines = {};
-  this.settings = {};
-  // 调用真正的初始化方法
-  this.defaultConfiguration();
+this.cache = {};
+this.engines = {};
+this.settings = {};
+// 调用真正的初始化方法
+this.defaultConfiguration();
 };
 </code></pre>
-<ol start="2">
-<li>defaultConfiguration解析。</li>
-</ol>
-<blockquote>
-<p>在这里单步执行，可以直观查看所有默认默认信息。</p>
+</li>
+<li><p>defaultConfiguration解析。</p>
+<blockquote><p>在这里单步执行，可以直观查看所有默认默认信息。</p>
 </blockquote>
-<pre><code class="language-javascript">/**
+<pre><code class="lang-javascript">/**
 * initialize application configuration.
 */
 app.defaultConfiguration = () =&gt; {
- // 初始化app的默认配置
- let env = process.env.NODE_ENV || 'development';
+// 初始化app的默认配置
+let env = process.env.NODE_ENV || 'development';
 
- // default settings
- this.enable('x-powered-by');
- this.set('etag', 'weak');
- this.set('env', env);
- this.set('query parser', 'extended');
- this.set('subdomain offset', 2);
- this.set('trust proxy', false);
+// default settings
+this.enable('x-powered-by');
+this.set('etag', 'weak');
+this.set('env', env);
+this.set('query parser', 'extended');
+this.set('subdomain offset', 2);
+this.set('trust proxy', false);
 
- Object.defineProperty(this.settings, trustProxyDefaultSymbol, {
-   configurable: true,
-   value       : true
- });
+Object.defineProperty(this.settings, trustProxyDefaultSymbol, {
+ configurable: true,
+ value       : true
+});
 
- debug('booting in %s mode', env);
+debug('booting in %s mode', env);
 
- // 监听 mount 事件：当向express添加中间件时就会触发
- this.on('mount', function onmount(parent) {
-   // inherit trust proxy
-   if (this.settings[trustProxyDefaultSymbol] === true
-     &amp;&amp; typeof parent.settings['trust proxy fn'] === 'function') {
-     delete this.settings['trust proxy'];
-     delete this.settings['trust proxy fn'];
-   }
-
-   // inherit protos
-   // 将每个中间件的request, response, engine, settings对象的__proto__形成原型链
-   // 最顶层的request, response对象是Node原生的request和response对象，在createApplication中定义
-   // 源码是: setPrototypeOf(this.request, parent.request); ...
-   // 等价于
-   this.request.__proto__ = parent.request.__proto__;
-   this.response.__proto__ = parent.response.__proto__;
-   this.engine.__proto__ = parent.engine.__proto__;
-   this.settings.__proto__ = parent.settings.__proto__;
- });
-
- // setup locals
- this.locals = Object.create(null);
-
- // top-most app is mounted at /
- this.mountpath = '/';
-
- // default locals
- this.locals.settings = this.settings;
-
- //default configuration
- this.set('view', View);
- this.set('views', resolve('views'));
- this.set('jsonp callback name', 'callback');
-
- if (env === 'production') {
-   this.enable('view cache');
+// 监听 mount 事件：当向express添加中间件时就会触发
+this.on('mount', function onmount(parent) {
+ // inherit trust proxy
+ if (this.settings[trustProxyDefaultSymbol] === true
+   &amp;&amp; typeof parent.settings['trust proxy fn'] === 'function') {
+   delete this.settings['trust proxy'];
+   delete this.settings['trust proxy fn'];
  }
- Object.defineProperty(this, 'router', {
-   get: () =&gt; {
-     throw new Error('\'app.router\' is deprecated!\nPlease update your app.');
-   }
- });
+
+ // inherit protos
+ // 将每个中间件的request, response, engine, settings对象的__proto__形成原型链
+ // 最顶层的request, response对象是Node原生的request和response对象，在createApplication中定义
+ // 源码是: setPrototypeOf(this.request, parent.request); ...
+ // 等价于
+ this.request.__proto__ = parent.request.__proto__;
+ this.response.__proto__ = parent.response.__proto__;
+ this.engine.__proto__ = parent.engine.__proto__;
+ this.settings.__proto__ = parent.settings.__proto__;
+});
+
+// setup locals
+this.locals = Object.create(null);
+
+// top-most app is mounted at /
+this.mountpath = '/';
+
+// default locals
+this.locals.settings = this.settings;
+
+//default configuration
+this.set('view', View);
+this.set('views', resolve('views'));
+this.set('jsonp callback name', 'callback');
+
+if (env === 'production') {
+ this.enable('view cache');
+}
+Object.defineProperty(this, 'router', {
+ get: () =&gt; {
+   throw new Error('\'app.router\' is deprecated!\nPlease update your app.');
+ }
+});
 };
 </code></pre>
-<h4>添加中间件 <code>app.use</code></h4>
+<p>#### 添加中间件 <code>app.use</code></p>
+</li>
+</ol>
 <h4>渲染视图 <code>app.render</code></h4>
 <h3>请求扩展 <code>request.js</code></h3>
 <h3>响应扩展 <code>response.js</code></h3>
@@ -175,11 +172,11 @@ app.defaultConfiguration = () =&gt; {
 <h3>merge-descriptors</h3>
 <ul>
 <li>源码很简单，通过foreach循环，依次将源对象的元素合并给目标对象。没有用到<code>Object.defineProperties</code> ，而是对每个操作符进行判断。
-如果 <code>redefine</code> (undefined则赋值为true)设置为false并且某一属性目标对象已经包含，则不再进行处理。</li>
+如果 <code>redefine</code> (undefined则赋值为true)设置为false并且某一属性目标对象已经包含，则不再进行处理。
+```javascript
+// merge-descriptors 的简化实现</li>
 </ul>
-<pre><code class="language-javascript">// merge-descriptors 的简化实现
-
-let hasOwnProperty = Object.prototype.hasOwnProperty;
+<p>let hasOwnProperty = Object.prototype.hasOwnProperty;
 module.exports = (dest, src, redefine) =&gt; {
   // check
   if (!dest || !src) throw new TypeError('dest or src is required');
@@ -193,4 +190,4 @@ module.exports = (dest, src, redefine) =&gt; {
   });
   return dest;
 }
-</code></pre>
+```</p>

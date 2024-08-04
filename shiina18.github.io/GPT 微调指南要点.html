@@ -12,7 +12,8 @@ mathjax: false</li>
 <hr/>
 <p>主要参考 <a href="https://platform.openai.com/docs/guides/fine-tuning">Fine-tuning - OpenAI API</a>, 其他补充放在文末.</p>
 <p>这个指南大概也能当成其他 LLM 的微调指南.</p>
-<p>&lt;!-- more --&gt;</p>
+&lt;!-- more --&gt;
+
 <h2>什么时候微调</h2>
 <p>在决定微调前推荐先尝试其他操作: prompt engineering, prompt chaining (breaking complex tasks into multiple prompts), and <a href="https://platform.openai.com/docs/guides/gpt/function-calling">function calling</a>.</p>
 <ul>
@@ -22,13 +23,12 @@ mathjax: false</li>
 </ul>
 <p>关于 prompt engineering 可以参考 <a href="https://platform.openai.com/docs/guides/gpt-best-practices">GPT best practices</a>.</p>
 <p>除了优化结果之外, 另一种微调的使用场景是降低成本 (替换 GPT-4) 或者降低延迟 (每次调用只需要更短的 prompt).</p>
-<blockquote>
-<p>If you can achieve good results with GPT-4, you can often reach similar quality with a fine-tuned <code>gpt-3.5-turbo</code> model by fine-tuning on the GPT-4 completions, possibly with a shortened instruction prompt.</p>
+<blockquote><p>If you can achieve good results with GPT-4, you can often reach similar quality with a fine-tuned <code>gpt-3.5-turbo</code> model by fine-tuning on the GPT-4 completions, possibly with a shortened instruction prompt.</p>
 </blockquote>
 <h2>准备训练数据</h2>
 <p>You should create a diverse set of demonstration conversations that are similar to the conversations you will ask the model to respond to at inference time in production.</p>
 <h3>样例格式</h3>
-<pre><code class="language-json">{"messages": [{"role": "system", "content": "Marv is a factual chatbot that is also sarcastic."}, {"role": "user", "content": "What's the capital of France?"}, {"role": "assistant", "content": "Paris, as if everyone doesn't know that already."}]}
+<pre><code class="lang-json">{"messages": [{"role": "system", "content": "Marv is a factual chatbot that is also sarcastic."}, {"role": "user", "content": "What's the capital of France?"}, {"role": "assistant", "content": "Paris, as if everyone doesn't know that already."}]}
 {"messages": [{"role": "system", "content": "Marv is a factual chatbot that is also sarcastic."}, {"role": "user", "content": "Who wrote 'Romeo and Juliet'?"}, {"role": "assistant", "content": "Oh, just some guy named William Shakespeare. Ever heard of him?"}]}
 {"messages": [{"role": "system", "content": "Marv is a factual chatbot that is also sarcastic."}, {"role": "user", "content": "How far is the Moon from Earth?"}, {"role": "assistant", "content": "Around 384,400 kilometers. Give or take a few, like that really matters."}]}
 </code></pre>
@@ -43,7 +43,7 @@ mathjax: false</li>
 <p><strong>目前不支持在微调的模型上继续微调.</strong> 计划之后支持.</p>
 <h3>Metrics</h3>
 <p>We provide the following training metrics computed over the course of training: training loss, training token accuracy, test loss, and test token accuracy. These statistics are meant to provide a sanity check that training went smoothly (loss should decrease, token accuracy should increase).</p>
-<pre><code class="language-json">{
+<pre><code class="lang-json">{
     "object": "fine_tuning.job.event",
     "id": "ftevent-abc-123",
     "created_at": 1693582679,
@@ -99,19 +99,42 @@ mathjax: false</li>
 <p><strong>Token limits</strong>: Each training example is limited to 4096 tokens. The maximum number of total tokens trained per job is 50 million tokens (<code>tokens_in_dataset * n_epochs</code>).</p>
 <p><strong>Estimate costs</strong></p>
 <p><a href="https://openai.com/pricing">Pricing</a>, 1K tokens 价格</p>
-<p>|            Model            | 	Training |  Input   | Output  |
-| --------------------------- | ------------ | -------- | ------- |
-| GPT-4 (8K context)          |              | $0.03    | 	$0.06 |
-| GPT-3.5 Turbo (4K context)  |              | $0.0015  | $0.0020 |
-| GPT-3.5 Turbo (fine-tuning) | $0.0080      | 	$0.0120 | $0.0160 |</p>
+<table>
+<thead><tr>
+<th>Model</th>
+<th>Training</th>
+<th>Input</th>
+<th>Output</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPT-4 (8K context)</td>
+<td></td>
+<td>$0.03</td>
+<td>$0.06</td>
+</tr>
+<tr>
+<td>GPT-3.5 Turbo (4K context)</td>
+<td></td>
+<td>$0.0015</td>
+<td>$0.0020</td>
+</tr>
+<tr>
+<td>GPT-3.5 Turbo (fine-tuning)</td>
+<td>$0.0080</td>
+<td>$0.0120</td>
+<td>$0.0160</td>
+</tr>
+</tbody>
+</table>
 <p>训练之后调用价格是 8 倍.</p>
 <pre><code>base cost per 1k tokens * number of tokens in the input file * number of epochs trained
 </code></pre>
 <h2>实际案例</h2>
 <h3>正面案例</h3>
 <p><a href="https://twitter.com/morgymcg/status/1694828375490039963">原推</a></p>
-<blockquote>
-<p>Finetuning ChatGPT-3.5 brought it up from 22% -&gt; 47% on the Gorilla hugging face api evaluation dataset, cool!</p>
+<blockquote><p>Finetuning ChatGPT-3.5 brought it up from 22% -&gt; 47% on the Gorilla hugging face api evaluation dataset, cool!</p>
 <p>Full details and code here: <a href="https://wandb.ai/prompt-eng/gorilla-api/reports/Does-Finetuning-ChatGPT-3-5-on-Gorilla-improve-api-and-tool-performance---Vmlldzo1MjI3MTQw">Does Finetuning ChatGPT-3.5 on Gorilla improve api and tool performance?</a> (里面看图, 微调后在这个数据集上效果比 GPT-4 好)</p>
 <p>Still not indicative that finetuning can make it as useful as GPT-4's `funcs` for tool use, but its promising!</p>
 </blockquote>
@@ -129,11 +152,10 @@ mathjax: false</li>
 <p><strong>个人想法.</strong> 我觉得失败案例的问题在于数据构造. 正面案例用的数据集是训练 Gorilla LLM 时用的. 上面两个负面案例都差不多, 想通过 QA pairs 教会 GPT 未知的知识. 但是他们构造数据集的时候只有单纯的 QA pairs, 而没有原始来源 (第一个案例的原 wiki 文章, 第二个案例的架空运动的定义). 直接拿未知知识问 GPT 本来就不会带来好结果, 这样构造没有给模型足够信息, 也违反了微调指南所说的先 prompt engineering, 之后再用最好的 prompt 训练. 会不会在训练集中加入完整的来源文档会更好? 比如 Q: XX 运动规则是什么? A: 完整的虚构规则. Q: 先贴上规则, 再问 XX 运动如何如何.</p>
 <h3>其他负面案例</h3>
 <ul>
-<li><a href="https://community.openai.com/t/fine-tuning-very-very-poor-results/286284">Fine tuning very very poor results</a>.</li>
+<li><a href="https://community.openai.com/t/fine-tuning-very-very-poor-results/286284">Fine tuning very very poor results</a>. </li>
 </ul>
-<blockquote>
-<p>I have a JSONL file with 3974 records containing 3974 short stories from 212 different notorious English-speaking authors, anonymized (several records for each author):</p>
-<pre><code class="language-json">{"prompt": "Write a text in the style of author_207", "completion": "A complete short story by this author"}  
+<blockquote><p>I have a JSONL file with 3974 records containing 3974 short stories from 212 different notorious English-speaking authors, anonymized (several records for each author):</p>
+<pre><code class="lang-json">{"prompt": "Write a text in the style of author_207", "completion": "A complete short story by this author"}
 </code></pre>
 <p>I submitted it to the fine-tuning process at OpenAI. I used two models as a basis: first Curie and then Ada. Then, using the new models generated, I asked questions like: “Write a text in the style of author_207”. With both the results were <strong>terrible</strong>.</p>
 </blockquote>
@@ -146,7 +168,7 @@ mathjax: false</li>
 <h3>其他</h3>
 <ul>
 <li>kaggle LLM science大模型比赛金牌方案总结 - 包包大人的文章 - 知乎
-https://zhuanlan.zhihu.com/p/660666269</li>
+<a href="https://zhuanlan.zhihu.com/p/660666269">https://zhuanlan.zhihu.com/p/660666269</a></li>
 <li><a href="https://yale-lily.github.io/spider">Spider: Yale Semantic Parsing and Text-to-SQL Challenge</a></li>
 <li><a href="https://scale.com/blog/text2sql-fine-tuning">We Fine-Tuned GPT-4 to Beat the Industry Standard for Text2SQL</a></li>
 </ul>

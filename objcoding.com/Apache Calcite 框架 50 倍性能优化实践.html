@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2021-01-17-calcite.md">仓库源文</a>，<a href="https://objcoding.com/2021/01/17/calcite">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "Apache Calcite 框架 50 倍性能优化实践"
 categories: Calcite
-tags: 性能优化 Calcite Apache
-author: 张乘辉</h2>
+tags: 性能优化 Calcite Apache</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -13,8 +13,7 @@ author: 张乘辉</h2>
 <h2>初步认识 Calcite</h2>
 <p>项目使用 Calcite 框架作为查询引擎，之前一直没停过这玩意是啥，而且网上资料特别少，又是体现我学习能力的时候了，在着手排查性能问题前，我花了非常多时间在了解 Calcite 实现原理上面。</p>
 <p>1、Calcite 简介</p>
-<blockquote>
-<p>Apache Calcite是一款开源的动态数据管理框架，它提供了标准的 SQL 语言、多种查询优化和连接各种数据源的能力，但不包括数据存储、处理数据的算法和存储元数据的存储库。</p>
+<blockquote><p>Apache Calcite是一款开源的动态数据管理框架，它提供了标准的 SQL 语言、多种查询优化和连接各种数据源的能力，但不包括数据存储、处理数据的算法和存储元数据的存储库。</p>
 <p>Calcite 之前的名称叫做optiq，optiq 起初在 Hive 项目中，为 Hive 提供基于成本模型的优化，即CBO（Cost Based Optimizatio）。2014 年 5 月 optiq 独立出来，成为 Apache 社区的孵化项目，2014 年 9 月正式更名为 Calcite。</p>
 <p>Calcite 的目标是“one size fits all（一种方案适应所有需求场景）”，希望能为不同计算平台和数据源提供统一的查询引擎。</p>
 </blockquote>
@@ -35,34 +34,31 @@ author: 张乘辉</h2>
 <li>RexNode：</li>
 </ul>
 <p>行表达式， 如 RexLiteral(常量), RexCall(函数)， RexInputRef (输入引用) 等，举个例子：</p>
-<pre><code class="language-sql">SELECT LOCATION as LOCATION,MERGE2(VALUE2) as VALUE2 
+<pre><code class="lang-sql">SELECT LOCATION as LOCATION,MERGE2(VALUE2) as VALUE2 
 FROM transaction 
 WHERE REPORTTIME &gt;=1594887720000 AND REPORTTIME &lt;=1594891320000 AND APPID = 'test-api'  AND GROUP2 IN ('DubboService','URL') AND METRICKEY IN ('$$TOTAL') GROUP BY LOCATION
 </code></pre>
 <p>RexCall</p>
-<pre><code class="language-sql">&lt;=($1, 1595496539000)
+<pre><code class="lang-sql">&lt;=($1, 1595496539000)
 </code></pre>
 <p>RexInputRef</p>
-<pre><code class="language-java">$1
+<pre><code class="lang-java">$1
 </code></pre>
 <p>RexLiteral</p>
-<pre><code class="language-sql">1595496539000:BIGINT
+<pre><code class="lang-sql">1595496539000:BIGINT
 </code></pre>
 <p>下面根据官方资料的描述，总结 Calcite 的三种查询模式：</p>
 <p>1）ScannableTable</p>
-<blockquote>
-<p>这种方式基本不会用，原因是查询数据库的时候没有任何条件限制，默认会先把全部数据拉到内存，然后再根据filter条件在内存中过滤。</p>
+<blockquote><p>这种方式基本不会用，原因是查询数据库的时候没有任何条件限制，默认会先把全部数据拉到内存，然后再根据filter条件在内存中过滤。</p>
 <p>使用方式：实现<code>Enumerable scan(DataContext root);</code>，该函数返回Enumerable对象，通过该对象可以一行行的获取这个Table的全部数据。</p>
 </blockquote>
 <p>2）FilterableTable</p>
-<blockquote>
-<p>初级用法，我们能拿到filter条件，即能再查询底层DB时进行一部分的数据过滤，一般开始介入calcite可以用这种方式（translatable方式学习成本较高）。</p>
+<blockquote><p>初级用法，我们能拿到filter条件，即能再查询底层DB时进行一部分的数据过滤，一般开始介入calcite可以用这种方式（translatable方式学习成本较高）。</p>
 <p>使用方式：实现<code>Enumerable scan(DataContext root, List filters )</code>。</p>
 <p>如果当前类型的“表”能够支持我们自己写代码优化这个过滤器，那么执行完自定义优化器，可以把该过滤条件从集合中移除，否则，就让calcite来过滤，简言之就是，如果我们不处理<code>List filters</code> ，Calcite也会根据自己的规则在内存中过滤，无非就是对于查询引擎来说查的数据多了，但如果我们可以写查询引擎支持的过滤器（比如写一些hbase、es的filter），这样在查的时候引擎本身就能先过滤掉多余数据，更加优化。提示，即使走了我们的查询过滤条件，可以再让calcite帮我们过滤一次，比较灵活。</p>
 </blockquote>
 <p>3）TranslatableTable</p>
-<blockquote>
-<p>高阶用法，有些查询用上面的方式都支持不了或支持的不好，比如join、聚合、或对于select的字段筛选等，需要用这种方式来支持，好处是可以支持更全的功能，代价是所有的解析都要自己写，“承上启下”，上面解析sql的各个部件，下面要根据不同的DB（esmysqldrudi..）来写不同的语法查询。</p>
+<blockquote><p>高阶用法，有些查询用上面的方式都支持不了或支持的不好，比如join、聚合、或对于select的字段筛选等，需要用这种方式来支持，好处是可以支持更全的功能，代价是所有的解析都要自己写，“承上启下”，上面解析sql的各个部件，下面要根据不同的DB（esmysqldrudi..）来写不同的语法查询。</p>
 <p>当使用ScannableTable的时候，我们只需要实现函数<code>Enumerable scan(DataContext root);</code>，该函数返回Enumerable对象，通过该对象可以一行行的获取这个Table的全部数据（也就意味着每次的查询都是扫描这个表的数据，我们干涉不了任何执行过程）；当使用FilterableTable的时候，我们需要实现函数<code>Enumerable scan(DataContext root, List filters );</code>参数中多了filters数组，这个数据包含了针对这个表的过滤条件，这样我们根据过滤条件只返回过滤之后的行，减少上层进行其它运算的数据集；当使用TranslatableTable的时候，我们需要实现<code>RelNode toRel( RelOptTable.ToRelContext context, RelOptTable relOptTable);</code>，该函数可以让我们根据上下文自己定义表扫描的物理执行计划，至于为什么不在返回一个Enumerable对象了，因为上面两种其实使用的是默认的执行计划，转换成EnumerableTableAccessRel算子，通过TranslatableTable我们可以实现自定义的算子，以及执行一些其他的rule，Kylin就是使用这个类型的Table实现查询。</p>
 </blockquote>
 <p>由于我对 Calcite 还没有一个更加深入的了解（但是并不阻碍我排查问题，而且 Calcite 这玩意对我来说太复杂了），因此 Calcite 更加复杂的概念我在这里就不继续啰嗦了，比如关系代数的基本知识、查询优化器等等，排查问题并不需要了解那么深入，而且项目中只是使用了 Calcite 一小部分功能。</p>
@@ -75,7 +71,7 @@ WHERE REPORTTIME &gt;=1594887720000 AND REPORTTIME &lt;=1594891320000 AND APPID 
 <li>自定义Table</li>
 <li>自定义 Enumerator</li>
 </ol>
-<p>demo url: https://github.com/objcoding/calcite-demo</p>
+<p>demo url: <a href="https://github.com/objcoding/calcite-demo">https://github.com/objcoding/calcite-demo</a></p>
 <h2>耗时排查</h2>
 <p>我在项目中使用了 FilterableTable 模式，Cacite 在解析 Sql 时耗时非常大，然后通过调试，我发现每个请求都占据了两个位置：</p>
 <p>org.apache.calcite.adapter.enumerable.EnumerableInterpretable#getBindable</p>
@@ -102,7 +98,7 @@ WHERE REPORTTIME &gt;=1594887720000 AND REPORTTIME &lt;=1594891320000 AND APPID 
 <p>org.apache.calcite.avatica.AvaticaResultSet#next</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200724095110.png"/></p>
 <p>以下是根据 SQL 动态生成的 linq4j 表达式：</p>
-<pre><code class="language-java">public static class Record2_0 implements java.io.Serializable {
+<pre><code class="lang-java">public static class Record2_0 implements java.io.Serializable {
   public Object f0;
   public boolean f1;
   public Record2_0() {}
@@ -216,7 +212,7 @@ public Class getElementType() {
 <p>以上排查结果可知，在 Calcite 内容会频繁使用 JaninoRexCompiler 使用反射动态生成表达式，由于项目中的 sql 格式相对固定，因此我们是否可以自定义一个  Compiler，然后替换 JaninoRexCompiler ？</p>
 <p>我将使用 JaninoRexCompiler 的相关类复制出来，实现一个自定义的 Interpreter.ScalarCompiler，然后在这个地方 <code>org.apache.calcite.interpreter.Interpreter.CompilerImpl#CompilerImpl</code>替换 JaninoRexCompiler。</p>
 <p>关于自定义 Interpreter.ScalarCompiler 的具体思路过程，我记录在这里了：</p>
-<p>https://issues.apache.org/jira/browse/CALCITE-4144</p>
+<p><a href="https://issues.apache.org/jira/browse/CALCITE-4144">https://issues.apache.org/jira/browse/CALCITE-4144</a></p>
 <p>经过反复调试，发现性能提上了 50 倍以上！</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20210117151052.png"/></p>
 <p>再次使用 JProfiler 查看，发现 Calcite 查询过程耗时已经大大降低了。</p>

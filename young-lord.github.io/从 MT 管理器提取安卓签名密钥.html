@@ -1,16 +1,16 @@
-<h2><a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/_posts/2023-12-23-%E4%BB%8EMT%E7%AE%A1%E7%90%86%E5%99%A8%E6%8F%90%E5%8F%96%E5%AE%89%E5%8D%93%E7%AD%BE%E5%90%8D%E5%AF%86%E9%92%A5.md">仓库源文</a>，<a href="https://young-lord.github.io/posts/mt-key-extract">站点原文</a></h2>
+<h2><a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/_posts/2023-12-23-从MT管理器提取安卓签名密钥.md">仓库源文</a>，<a href="https://young-lord.github.io/posts/mt-key-extract">站点原文</a></h2>
 <hr/>
-<h2>tags: [Android, 网络安全]
+<p>tags: [Android, 网络安全]
 title: 从 MT 管理器提取安卓签名密钥
-slug: mt-key-extract
-last_modified_at: 2023-12-24</h2>
+slug: mt-key-extract</p>
+<h2>last_modified_at: 2023-12-24</h2>
 <h2>前言</h2>
 <p>一言以概之，有个人硬盘爆了，刚好他的密钥几乎没有备份，于是只能从MT管理器里提取一个出来，就当是某种forensics吧。</p>
 <h2>正文</h2>
 <p>注意，以下内容仅适用于在MT管理器导入时<strong>没有</strong>开启<strong>“使用密码保护”</strong>或<strong>“使用 MT 账号保护”</strong>的密钥。</p>
 <p>首先找到这个文件，一般是在<code>/sdcard/MT2/keys/</code>或<code>/sdcard/Android/data/bin.mt.plus/MT2/keys/</code>下，名字是<code>xxx.key</code>。</p>
 <p>binwalk跑一遍，并提取文件：</p>
-<pre><code class="language-console">$ binwalk -D='.*' xxx.key
+<pre><code class="lang-console">$ binwalk -D='.*' xxx.key
 DECIMAL       HEXADECIMAL     DESCRIPTION
 --------------------------------------------------------------------------------
 8             0x8             PEM certificate
@@ -20,20 +20,20 @@ $ ls _xxx.key.extracted/
 8  47E  498
 </code></pre>
 <p>然后猜一下文件类型，并用openssl转换一下：</p>
-<pre><code class="language-shell">openssl rsa -in 47E &gt; main.pem
+<pre><code class="lang-shell">openssl rsa -in 47E &gt; main.pem
 openssl x509 -in ../xxx.key  &gt;&gt; main.pem
 openssl pkcs12 -export -in main.pem -out main.p12 -name myname
 # myname 即为密钥别名
 # 这里会要求输入密码，这个密码将同时是 密钥库密码 和 密钥密码
 </code></pre>
 <p>完成后的<code>main.p12</code>就是密钥库了，可以用keytool查看（此程序位于<code>Android Studio/jbr/bin/</code>）：</p>
-<pre><code class="language-shell">keytool -list -v -keystore main.p12
+<pre><code class="lang-shell">keytool -list -v -keystore main.p12
 </code></pre>
 <p>转换成<code>keystore</code>：</p>
-<pre><code class="language-shell">keytool -v -importkeystore -srckeystore main.p12 -srcstoretype PKCS12 -destkeystore main.jks -deststoretype JKS
+<pre><code class="lang-shell">keytool -v -importkeystore -srckeystore main.p12 -srcstoretype PKCS12 -destkeystore main.jks -deststoretype JKS
 </code></pre>
 <p>命令行签名：</p>
-<pre><code class="language-shell"># check
+<pre><code class="lang-shell"># check
 zipalign -c -v 4 app-release.apk
 # align &amp; sign
 zipalign -p -f -v 4 app-release.apk aligned.apk  # 一般只需在 build.gradle 的 buildTypes-&gt;release 中添加 `zipAlignEnabled true` 即可，不用像这样手动 align

@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/%E8%BD%AF%E4%BB%B6%E6%9E%84%E6%9E%B6%E8%AE%BE%E8%AE%A1/%E6%8A%BD%E8%B1%A1%E7%9A%84%E4%B8%80%E4%B8%AA%E5%85%B7%E5%83%8F.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/软件构架设计/抽象的一个具像.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2022</p>
 <p>:Authors: Kenneth Lee
 :Version: 1.0
@@ -26,18 +26,19 @@ CPU状态的更新不一定是及时的，比如PC（指令地址寄存器），
 <p>cpu_restore_state()这个函数主要就是解决这个问题的，它的核心逻辑就是找到pc在什么
 地方：</p>
 <p>.. code-block:: C</p>
-<p>static int cpu_restore_state_from_tb(CPUState *cpu, TranslationBlock *tb,
-uintptr_t searched_pc, bool reset_icount)
-{
-target_ulong data[TARGET_INSN_START_WORDS] = { tb-&gt;pc };
-uintptr_t host_pc = (uintptr_t)tb-&gt;tc.ptr;
-CPUArchState *env = cpu-&gt;env_ptr;
-const uint8_t *p = tb-&gt;tc.ptr + tb-&gt;tc.size;
-int i, j, num_insns = tb-&gt;icount;
-#ifdef CONFIG_PROFILER
-TCGProfile *prof = &amp;tcg_ctx-&gt;prof;
-int64_t ti = profile_getclock();
-#endif</p>
+<p>static int cpu_restore_state_from_tb(CPUState <em>cpu, TranslationBlock </em>tb,
+                                        uintptr_t searched_pc, bool reset_icount)
+   {
+       target_ulong data[TARGET_INSN_START_WORDS] = { tb-&gt;pc };
+       uintptr_t host_pc = (uintptr_t)tb-&gt;tc.ptr;
+       CPUArchState <em>env = cpu-&gt;env_ptr;
+       const uint8_t </em>p = tb-&gt;tc.ptr + tb-&gt;tc.size;
+       int i, j, num_insns = tb-&gt;icount;</p>
+<h1>ifdef CONFIG_PROFILER</h1>
+<pre><code>   TCGProfile *prof = &amp;tcg_ctx-&gt;prof;
+   int64_t ti = profile_getclock();
+</code></pre>
+<h1>endif</h1>
 <pre><code>   searched_pc -= GETPC_ADJ;
 
    if (searched_pc &lt; host_pc) {
@@ -64,14 +65,17 @@ found:
           and shift if to the number of actually executed instructions */
        cpu_neg(cpu)-&gt;icount_decr.u16.low += num_insns - i;
    }
-   restore_state_to_opc(env, tb, data);</code></pre>
-<p>#ifdef CONFIG_PROFILER
-qatomic_set(&amp;prof-&gt;restore_time,
-prof-&gt;restore_time + profile_getclock() - ti);
-qatomic_set(&amp;prof-&gt;restore_count, prof-&gt;restore_count + 1);
-#endif
-return 0;
-}</p>
+   restore_state_to_opc(env, tb, data);
+</code></pre>
+<h1>ifdef CONFIG_PROFILER</h1>
+<pre><code>   qatomic_set(&amp;prof-&gt;restore_time,
+               prof-&gt;restore_time + profile_getclock() - ti);
+   qatomic_set(&amp;prof-&gt;restore_count, prof-&gt;restore_count + 1);
+</code></pre>
+<h1>endif</h1>
+<pre><code>   return 0;
+</code></pre>
+<p>}</p>
 <p>这段代码的主要逻辑看起来和恢复Guest PC的状态相去甚远。它最显眼的逻辑其实是中间
 那个两层循环，但这看起来在查表，和PC什么的没有什么关系。</p>
 <p>要理解这段代码，你首先得知道sleb128是个什么东西：它其实就是一个压缩的数组。一般

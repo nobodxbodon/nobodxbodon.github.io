@@ -1,6 +1,6 @@
 <h2><a href="https://github.com/hijiangtao/hijiangtao.github.io/blob/master/_posts/2021-04-13-Service-Worker-Practical-Notes.md">仓库源文</a>，<a href="https://hijiangtao.github.io/2021/04/13/Service-Worker-Practical-Notes">站点原文</a></h2>
 <hr/>
-<h2>title: Service Worker 实践指南
+<p>title: Service Worker 实践指南
 layout: post
 thread: 262
 date: 2021-04-13
@@ -9,10 +9,9 @@ categories: Document
 tags: [2021, JavaScript, 前端监控, chrome, iframe, ServiceWorker, postMessage, MessageChannel, IndexedDB, Web, 前端]
 excerpt: 本文就利用 Service Worker 解决问题的过程中遇到的不少问题加以总结，进行记录，主要关注点在 Service Worker 的注册注销、运行时判断、线程间通信及调试几方面，涉及的内容从技术细节上包含 postMessage、MessageChannel、IndexedDB 及开发者调试工具等。
 header:
-image: ../assets/in-post/2021-04-13-Service-Worker-Practical-Notes-Teaser.png
-caption: "©️hijiangtao"</h2>
-<blockquote>
-<p>本文亦有分享 Slides，详见 <a href="https://hijiangtao.github.io/slides/s-YFD/Service-Worker-Practical-Notes.pdf">https://hijiangtao.github.io/slides/s-YFD/Service-Worker-Practical-Notes.pdf</a>.</p>
+  image: ../assets/in-post/2021-04-13-Service-Worker-Practical-Notes-Teaser.png</p>
+<h2>  caption: "©️hijiangtao"</h2>
+<blockquote><p>本文亦有分享 Slides，详见 <a href="https://hijiangtao.github.io/slides/s-YFD/Service-Worker-Practical-Notes.pdf">https://hijiangtao.github.io/slides/s-YFD/Service-Worker-Practical-Notes.pdf</a>.</p>
 </blockquote>
 <p>当我们谈到 Service Worker 的时候，往往是和 PWA 绑在一起说出来的，但即便不用来做渐进式增强 Web 应用，我们也可以利用 Service Worker 的全局拦截能力，来自定义一个满足我们需要的全局代理。</p>
 <p>本文就利用 Service Worker 解决问题的过程中遇到的不少问题加以总结，进行记录，主要关注点在 Service Worker 的注册注销、运行时判断、线程间通信及调试几方面，涉及的内容从技术细节上包含 postMessage、MessageChannel、IndexedDB 及开发者调试工具等。</p>
@@ -30,7 +29,7 @@ caption: "©️hijiangtao"</h2>
 <p>首先作为入门，Google Developers 博客给出的几篇文章讲的还挺详细，如果对 Service Worker 生命周期以及工作机制不熟悉的话，可以提前过一遍了解一下 <a href="https://developers.google.com/web/fundamentals/primers/service-workers">https://developers.google.com/web/fundamentals/primers/service-workers</a></p>
 <h3>1 / Service Worker 的注册与注销</h3>
 <p>注册 Service Worker，你需要指定文件路径、生效范围等，这个正常调用 API 就好，一个异步操作，没有特殊需要处理的地方：</p>
-<pre><code class="language-jsx">navigator.serviceWorker
+<pre><code class="lang-jsx">navigator.serviceWorker
   .register(swFilePath as string)
   .then((reg) =&gt; {
     console.info('Registration succeeded. Scope is ' + reg.scope)
@@ -40,7 +39,7 @@ caption: "©️hijiangtao"</h2>
   })
 </code></pre>
 <p>注销 Service Worker 之前，首先要获取到所有注册的实例，然后再遍历 <code>ServiceWorkerRegistration</code> 来决定对哪些实例执行注销操作，需要注意的是 unregister() 方法也是异步的。</p>
-<pre><code class="language-jsx">navigator.serviceWorker.getRegistrations().then((registrations) =&gt; {
+<pre><code class="lang-jsx">navigator.serviceWorker.getRegistrations().then((registrations) =&gt; {
   for (let registration of registrations) {
     if (
       registration.active?.scriptURL ===
@@ -54,7 +53,7 @@ caption: "©️hijiangtao"</h2>
 <h3>2 / 页面内 Service Worker 的受控状态检测</h3>
 <p>通过 <code>navigator.serviceWorker.controller</code> 可以获得当前控制页面的 Service Worker 实例，这个实例是一个 <a href="https://developer.mozilla.org/zh-CN/docs/Web/API/ServiceWorker">ServiceWorker</a> 对象，通过这个对象，你可以读取 <code>scriptURL</code> 获得序列化脚本的实际 URL，也可以读取 state 获取 Service Worker 当前的运行状态等等。如果当前页面内没有控制的 Service Worker 实例，那么其取值为 null。</p>
 <p>由于注册是一个异步的过程，除了在回调中继续操作外（此时可以保证 Service Worker 处于可用状态），如果我们想单独在别处调用，假设存在一个场景，比如在用户点击某个按钮时需要主动从主线程向 Service Worker 线程发送一条消息，这时该怎么办呢？为了达到目的，我们需要在执行发送消息前检测当前页面内 Service Worker 是否已经准备就绪。通过 ECMAScript 的可选参数语言特性我们可以很好的规避一些 NPE 写法问题，如下所示：</p>
-<pre><code class="language-jsx">navigator.serviceWorker?.ready
+<pre><code class="lang-jsx">navigator.serviceWorker?.ready
       .then(() =&gt; {
         navigator.serviceWorker.controller?.postMessage(
           {
@@ -65,7 +64,7 @@ caption: "©️hijiangtao"</h2>
 </code></pre>
 <p>需要注意的是，这样操作虽然可以保证应用状态安全，但却存在无法向 Service Worker 传递消息的风险。由于 <code>.ready</code> 的 Promise 可能会在 <code>navigator.serviceWorker.controller</code> 可用前就被 resolve，于是在 <code>.ready</code> resolve 之后调用并不能确保消息一定被发出。</p>
 <p>利用三方库 workbox，可以将 active 以及 controlling 加入 await 队列，从而解决如上所述问题。此外，我们也可以自己实现一个 Promise，来安排触发页面已经被 Service Worker 控制的通知，代码如下所示：</p>
-<pre><code class="language-javascript">window._controlledPromise = new Promise(function(resolve) {
+<pre><code class="lang-javascript">window._controlledPromise = new Promise(function(resolve) {
   // Resolve with the registration, to match the .ready promise's behavior.
   var resolveWithRegistration = function() {
     navigator.serviceWorker.getRegistration().then(function(registration) {
@@ -91,15 +90,15 @@ caption: "©️hijiangtao"</h2>
 <p>我们按照实现手段，再逐一来说如何实现通信。</p>
 <p>首先第一种情况，即客户端向 Service Worker 发送消息。客户端主动发送的消息，在 Service Worker 中可以通过监听 message 事件来捕获处理。</p>
 <p>发送方如下调用：</p>
-<pre><code class="language-javascript">worker.postMessage(data)
+<pre><code class="lang-javascript">worker.postMessage(data)
 </code></pre>
 <p>而接收方如下监听即可：</p>
-<pre><code class="language-javascript">self.addEventListener('message', function handler(event: MessageEvent&lt;any&gt;) {
+<pre><code class="lang-javascript">self.addEventListener('message', function handler(event: MessageEvent&lt;any&gt;) {
   console.log(event.data)
 })
 </code></pre>
 <p>第二种情况，Service Worker 接收到客户端消息后还希望传回一些消息给客户端。利用 MessageChannel 可以达到这一点。在客户端这一侧，可以这么写：</p>
-<pre><code class="language-javascript">const messageChannel = new MessageChannel();
+<pre><code class="lang-javascript">const messageChannel = new MessageChannel();
 
 messageChannel.port1.addEventListener('message', replyHandler);
 navigator.serviceWorker.controller.postMessage(data, [messageChannel.port2]);
@@ -109,7 +108,7 @@ function replyHandler (event) {
 }
 </code></pre>
 <p>Service Worker 侧收到消息依旧是监听 message 事件，而返回消息的逻辑需要借助 传入的 message port，具体代码可以这么写：</p>
-<pre><code class="language-javascript">// 监听事件
+<pre><code class="lang-javascript">// 监听事件
 self.addEventListener('message', function handler(event) {
   self.messagePort = event.ports[0]
 
@@ -135,7 +134,7 @@ export const postMessageToClientViaMessagePort = async (
 </code></pre>
 <p>使用 postMessage 传递消息，需要注意 postMessage 的执行对象可以是 MessagePort 也可以是 ServiceWorker。</p>
 <p>所以，建立好 MessageChannel 后，客户端可以依旧按照之前所述实现向 Service Worker 传递消息，也可以通过 MessagePort 定向传递消息。当然，后者的成本是需要在 Service Worker 中建立对 MessagePort 的 <code>onmessage</code> 事件监听器，实现上如下所示。</p>
-<pre><code class="language-javascript">self.addEventListener('message', function handler(event) {
+<pre><code class="lang-javascript">self.addEventListener('message', function handler(event) {
   if (!self.messagePort) {
     self.messagePort = event.ports[0]
 
@@ -149,7 +148,7 @@ export const postMessageToClientViaMessagePort = async (
 </code></pre>
 <p>从客户端向 Service Worker 发送消息后，如果存在需要反复通信的场景，需要在 Service Worker 中将收到的 MessagePort 给存储下来，以便之后需要与主线程通信时使用（ <code>messageChannel.port2</code>  在第一次通过 postMessage 调用后会被销毁），即如上 <code>self.messagePort</code> 变量的定义。</p>
 <p>第三种情况，广播消息。在 Service Worker 中，你既可以对等的向请求发起方发送消息，也可以向所有 Service Worker 控制下的每一个客户端广播消息：</p>
-<pre><code class="language-javascript">// 广播消息
+<pre><code class="lang-javascript">// 广播消息
 self.clients.matchAll()
   .then(all =&gt; 
     all.map(
@@ -159,7 +158,7 @@ self.clients.matchAll()
 </code></pre>
 <p>第四种情况，即向发起网络请求的客户端发送消息。这是一个一对一场景，我们可以利用如上所述的 MessageChannel 方案，在 fetch 监听事件回调里执行发送，也可以从 FetchEvent 上获取目标客户端 ID 实现发送。</p>
 <p>我们来说说后者，首先通过如下代码我们可以实现在 Service Worker 中向指定 clientId 客户端发送消息，这里我们从 <code>self.clients</code> 中匹配出与请求客户端一致 id 的实例，然后调用 <code>postMessage</code>：</p>
-<pre><code class="language-javascript">self.on('fetch', function handler (event: FetchEvent) {
+<pre><code class="lang-javascript">self.on('fetch', function handler (event: FetchEvent) {
   fetch(event.request)
     .then(response =&gt; response.json())
     .then(function (data) {
@@ -170,7 +169,7 @@ self.clients.matchAll()
 });
 </code></pre>
 <p>在客户端中，监听事件这么写就好了：</p>
-<pre><code class="language-javascript">window.navigator.serviceWorker.onmessage = (event) =&gt; {
+<pre><code class="lang-javascript">window.navigator.serviceWorker.onmessage = (event) =&gt; {
   // ...
 }
 </code></pre>
@@ -181,7 +180,7 @@ self.clients.matchAll()
 <p>实现上，结合页面内的 <code>load</code> 和 <code>unload</code> 事件，你可以在页面的这两个生命周期中通过向 Service Worker 发送消息来主动执行全局变量的清理工作。原理较简单，此处不贴实现代码了。</p>
 <h3>5 / Service Worker 中客户端环境判断</h3>
 <p>我们直接先来看实现代码，关注针对 frameType 的判断即可：</p>
-<pre><code class="language-javascript">export const postMessageToClient = async (
+<pre><code class="lang-javascript">export const postMessageToClient = async (
   event: FetchEvent
 ) =&gt; {
   if (!event.clientId) {
@@ -213,14 +212,14 @@ self.clients.matchAll()
 <p>在数据存储方面，Service Worker 与主线程可以共用的存储是 IndexedDB，所以要读取 IndexedDB 的话写上逻辑即可，需要注意的是 IndexedDB 的读取是异步操作。</p>
 <p>此外，利用 cache API 也可以存储数据。假设你有一个场景，需要拦截请求进行本地加工，而后重新执行一次所有请求并保证所有回放响应匹配，利用 cache API 可以很好的完成这点，这也是 PWA 相关教程中一定会提到的一个用法。但在涉及到与网络请求、外部数据存取相关的场景，cache 的操作会有些不太方便。</p>
 <p>另外，Service Worker 内部也可以建立一些全局变量用来存储，记得提前定义好你的 self 结构，以配合 TypeScript 一起使用：</p>
-<pre><code class="language-typescript">declare var self: ServiceWorkerScope
+<pre><code class="lang-typescript">declare var self: ServiceWorkerScope
 </code></pre>
 <p>此外，还需要注意下 Service Worker 内的全局变量的生命周期，做必要的清理逻辑，关于这一部分在全局变量一节也已经提过。</p>
 <h3>7 / Service Worker 的运行与调试</h3>
 <p>通过 chrome 开发者调试工具中的 application tab 可以查看当前页面的 Service Worker 的安装状态，并对网络、强制刷新以及绕过请求等能力做单独开关控制，当然，你也可以在这里手动触发 Service Worker 的注销等操作。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2021-04-13-Service-Worker-Practical-Notes-1.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2021-04-13-Service-Worker-Practical-Notes-1.png"/></p>
 <p>通过 <code>chrome://inspect/#service-workers</code> 可以查看已安装过的 Service Worker 并选择其中一个进行检查调试或者销毁。当你点击 inspect 时，会弹出独立的开发者调试面板，允许你对 Service Worker 进行调试，但这里可以留意一点，如果你发现页面发出的网络请求没有经过 Service Worker，首先可以确认下是否为首次加载 Service Worker，其次，要看下 disable cache 是不是被你勾上了，最后检查下 Bypass for network 是不是被你勾上了。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2021-04-13-Service-Worker-Practical-Notes-2.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2021-04-13-Service-Worker-Practical-Notes-2.png"/></p>
 <h3>8 / 几则参考</h3>
 <p>MDN 以及 W3C 的文档介绍已经非常详细了，可以直接网上搜索。此处列一些个人在实践过程中参考的一些用法信息，算作一些非常规问题的参考吧。</p>
 <ol>

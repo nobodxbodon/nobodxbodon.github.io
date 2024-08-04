@@ -1,6 +1,6 @@
 <h2><a href="https://github.com/hijiangtao/hijiangtao.github.io/blob/master/_posts/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins.md">仓库源文</a>，<a href="https://hijiangtao.github.io/2023/11/30/Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins">站点原文</a></h2>
 <hr/>
-<h2>title: 结合 React Fiber 结构与 chrome 插件，谈谈无侵入自动化表单的技术尝试
+<p>title: 结合 React Fiber 结构与 chrome 插件，谈谈无侵入自动化表单的技术尝试
 layout: post
 thread: 292
 date: 2023-11-30
@@ -10,21 +10,20 @@ tags: [前端, 表单, chrome, fiber, react, mock, DOM, 事件, 工具]
 excerpt: 作为一名前端工程师，不论你处于什么业务方向，肯定都与表单打过交道，当然如果你是服务端、产品、测试同学，想必也早已接触过表单这类场景。让我们试想一下，如果研发需求的功能测试依赖一个复杂表单的填写而得以继续，那么频繁的表单填写在研发自测和 QA 验证过程中就会占用过多碎片化的时间，此类需要频繁执行以生成测试数据或推进执行流程的事情，简单一想貌似规则可循、可以被工具替代。既然可以自动化来实现，那为什么还要我们一个个手动点呢？
 toc: true
 header:
-image: ../assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-Teaser.png
-caption: "©️hijiangtao"</h2>
-<blockquote>
-<p>本文亦有分享 Slides，详见 <a href="https://hijiangtao.github.io/slides/s-Common/Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-chrome-plugins.pdf">https://hijiangtao.github.io/slides/s-Common/Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-chrome-plugins.pdf</a> 或扫二维码查看。</p>
+  image: ../assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-Teaser.png</p>
+<h2>  caption: "©️hijiangtao"</h2>
+<blockquote><p>本文亦有分享 Slides，详见 <a href="https://hijiangtao.github.io/slides/s-Common/Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-chrome-plugins.pdf">https://hijiangtao.github.io/slides/s-Common/Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-chrome-plugins.pdf</a> 或扫二维码查看。</p>
 </blockquote>
-<p><img alt="二维码" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-Slides.png"/></p>
+<p><img alt="二维码" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-Slides.png"/></p>
 <h2>前言</h2>
 <p>作为一名前端工程师，不论你处于什么业务方向，肯定都与表单打过交道，当然如果你是服务端、产品、测试同学，想必也早已接触过表单这类场景。让我们试想一下，如果研发需求的功能测试依赖一个复杂表单的填写而得以继续，那么频繁的表单填写在研发自测和 QA 验证过程中就会占用过多碎片化的时间，此类需要频繁执行以生成测试数据或推进执行流程的事情，简单一想貌似规则可循、可以被工具替代。既然可以自动化来实现，那为什么还要我们一个个手动点呢？</p>
 <p>不要着急，这篇文章的目的，就是想与大家分享一下这样一个自驱型技术产品的诞生故事。这其中既包括技术与实现细节，同时也涵盖这个产品的设计过程。</p>
 <h2>问题初探：表单场景究竟麻烦在哪</h2>
 <p>首先，让我们来看看表单，到底麻烦在哪了。</p>
 <p>从前端开发者视角看去，表单是由一个表单组件包裹多个表单控件组成，用 JSX 语法层层嵌套实现，当需求开发完成后需要自测时，最直接且简便的用法当属用 initialValue 属性或者 form 实例上提供的 API 方法（比如 <code>setFieldsValue</code> API）来赋值；但是等代码部署到开发/测试环境，想要这么灵活的变更初始数据就不太可能了，频繁的发布部署流程会让变更测试成本直线上升。</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-0.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-0.png"/></p>
 <p>另一方面，在产品测试等同学的眼中，表单并不涉及到代码形态，只是一个有很多输入项的丰富 UI 页面，通过点击、输入、选择等操作，来完成数据的输入，是一个需要消耗一定时间的流程。而当表单项很多时，花费的时间也直线上升。</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-1.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-1.png"/></p>
 <p>通过抽象，我们可以列举几个从前端角度观察到的例子，以方便我们更熟悉填写表单时涉及到的各类复杂场景：</p>
 <ol>
 <li>对接完产品需求，终于把字段与各类逻辑组装进表单，想自测看看交互效果，简单来做，可以代码写一些 mock 拦截来实现</li>
@@ -41,7 +40,7 @@ caption: "©️hijiangtao"</h2>
 </ol>
 <h2>技术调研：开源社区与插件是市场的已有技术实现</h2>
 <p>在明确了需求之后，在是否需要动手之前，我们需要先调研看看有没有现有技术或者工具可以帮助我们达到目的，毕竟，反复造轮子在哪里都是被抵触的。开发工具的目的是为了解决问题，如果问题已经有了解决方案，我们就不需要自己去实现了。</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-2.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-2.png"/></p>
 <p>回顾一下表单需求，仔细想想，可能存在几种解决思路呢？首先是辅助工具，比如浏览器插件这种，作为业务开发无感知，无接入成本（无侵入式）的技术方案，其特征也显而易见：</p>
 <ol>
 <li>不依赖 UI 框架，通用性强</li>
@@ -57,7 +56,7 @@ caption: "©️hijiangtao"</h2>
 <li>不支持页面上表单与事件连续操作</li>
 <li>填充数据变更时需重新打包，成本高昂</li>
 </ol>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-3.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-3.png"/></p>
 <p>由于辅助工具和侵入式改造都或多或少有些缺陷，熟悉自动化测试的同学肯定会说，这些要做的事情，自动化测试方案不是早就覆盖了吗？是的，自动化测试方案是一个完美的解决方案，基于 puppeteer 或者 e2e 框架，不仅方案通用性强，填充也很准确，但是从开发者以及使用者的便利性角度来看，基于这类方案用户在上手使用时存在成本，研发要实现对应功能成本也相对较高。还记得初衷么，我们是希望有一个可以解决表单场景的工具，我们既希望他能解决一些复杂场景的问题，同时也希望他简单易用成本低。</p>
 <p>回顾一下，我们调研过的几个实现思路，能不能把无侵入式改造与高识别率结合？即“取其精华，取其糟粕”。</p>
 <h2>需求拆解：我们究竟需要一个怎样的工具</h2>
@@ -78,18 +77,17 @@ caption: "©️hijiangtao"</h2>
 <h3>Fiber 树的组织与遍历</h3>
 <p>我们先整体来看一下遍历过程。Fiber 树的遍历需要一个指针指向当前遍历到的节点，workInProgress 就是这个指针，进一步是 performUnitOfWork 的 next 指针，遍历在指针为 null 的时候结束。</p>
 <p>next 先从 beginWork 获取，如果有则直接将当前遍历的指针 workInProgress 指向 next；如果没有，就到 completeUnitOfWork 中进一步处理。这里 beginWork 是“递”，即不停向下找到当前分支最深叶子节点的过程；completeUnitOfWork 是“归”，即结束这个分支，向右或向上的过程。</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-4.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-4.png"/></p>
 <p><em>关于 performUnitOfWork 的更完整代码详见 <a href="https://github.com/facebook/react/blob/c1d414d75851aee7f25f69c1b6fda6a14198ba24/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L2051-L2077">https://github.com/facebook/react/blob/c1d414d75851aee7f25f69c1b6fda6a14198ba24/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L2051-L2077</a></em></p>
 <p>在递归过程中，beginWork 过程比较简单，大体上是在深度优先搜索中，对遍历到的节点进行 component 更新处理，然后返回第一个字节点，这里就不介绍，我们看看 performUnitOfWork 的具体逻辑。</p>
 <p>在“归”的过程中，我们需要避免遍历造成死循环，即若我们向下遍历时遇到的节点，在向上过程中出现时，我们不应该让其再次进入 beginWork。</p>
 <p>completeUnitOfWork 内部又创建了一层循环，搭配一个向上的新指针 completeWork，然后循环该指针节点，如果有兄弟节点就更新当前遍历到的节点指针，返回交还给外层循环；没有就向上到父节点继续循环，直到新指针为空（即已经到达根节点）；最后再处理标记最顶层的根节点处理状态。</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-5.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-5.png"/></p>
 <p><em>关于 completeUnitOfWork 的更完整代码详见 <a href="https://github.com/facebook/react/blob/c1d414d75851aee7f25f69c1b6fda6a14198ba24/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L2173-L2271">https://github.com/facebook/react/blob/c1d414d75851aee7f25f69c1b6fda6a14198ba24/packages/react-reconciler/src/ReactFiberWorkLoop.new.js#L2173-L2271</a></em></p>
 <p>整个遍历流程示意图可以参考<a href="https://www.zhihu.com/question/49496872/answer/2517859568">《如何理解 React Fiber 架构？ - 几木的回答》</a>中的贴图</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-6.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-6.png"/></p>
 <h3><strong>Fiber 树的构建与 Diffing</strong></h3>
-<blockquote>
-<p>Fiber 树是边创建边遍历的，每个节点都经历了「创建、Diffing、收集副作用（要改哪些节点）」的过程。其中，创建、Diffing要自上而下，因为有父才有子；收集副作用要自下而上最终收集到根节点。—— <a href="https://www.zhihu.com/question/49496872/answer/2517859568">https://www.zhihu.com/question/49496872/answer/2517859568</a></p>
+<blockquote><p>Fiber 树是边创建边遍历的，每个节点都经历了「创建、Diffing、收集副作用（要改哪些节点）」的过程。其中，创建、Diffing要自上而下，因为有父才有子；收集副作用要自下而上最终收集到根节点。—— <a href="https://www.zhihu.com/question/49496872/answer/2517859568">https://www.zhihu.com/question/49496872/answer/2517859568</a></p>
 </blockquote>
 <p>在 React 中，同时最多会存在两颗树，一个是当前被渲染出来的 Fiber 树，称为 current，另一个是正在构建的 Fiber 树，称为 workInProgress，上文中提到的遍历均在后者身上进行。</p>
 <p>找到两棵任意的树之间的最小的差异是一个复杂度为 O(n3) 的问题，React Diff 算法通过一些假设，最终达到了接近 O(n) 的复杂度。</p>
@@ -115,7 +113,7 @@ caption: "©️hijiangtao"</h2>
 <li>读取目标属性值，解析表单结构</li>
 </ol>
 <p>下方代码解释了我们如果从指定 form 元素中提取 Fiber 实例的过程。</p>
-<pre><code class="language-jsx">/**
+<pre><code class="lang-jsx">/**
  * 获取 Fiber 实例
  * @param dom
  * @param traverseUp
@@ -178,10 +176,10 @@ function getFiberInstance(dom: HTMLElement, traverseUp = 0) {
 <li>填充与事件组合：表单填充完下一步可能就是点击事件</li>
 </ol>
 <p>关于这一部分，更多是在产品功能完善上的思考，而非技术调研上的难点，下面贴一张流程图来解释工具的工作流程：</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-7.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-7.png"/></p>
 <h2>工程开发：功能集成与插件开发</h2>
 <p>在完成了需求收集、技术调研以及分步骤拆解实现后，貌似大部分难题我们都获得了答案，接下来要做的便是另一方面，在一个单独的工具中将这些功能集成，当下最合适的方式应该是通过浏览器插件来实现它，插件形式上小巧，但借助 chrome API 以及共享 DOM，我们又能拥有强大的能力。</p>
-<p><img alt="Untitled" src="/media/wwww/share/study/聚聚/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-8.png"/></p>
+<p><img alt="Untitled" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/hijiangtao.github.io/assets/in-post/2023-11-30-Technical-Attempt-of-Non-intrusive-Automated-Forms-with-React-Fiber-and-Chrome-Plugins-8.png"/></p>
 <h3>现代化的插件开发体验</h3>
 <p>开发过浏览器插件的同学，想必都感受过 chrome 开发文档与当下现代开发方式格格不入的开发体验，手写 JavaScript、HTML 以及 manifest 声明文件，貌似开发流程还停留在刀耕火种的时代，作为一名开发者，我不仅希望我的产品体验良好，也希望开发流程更加现代化，具体来说，对于插件开发，开发工作流至少得满足如下几个方面吧：</p>
 <ol>

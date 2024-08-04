@@ -1,16 +1,16 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2013-12-25-built-cache-management-module-in-nodejs.md">仓库源文</a>，<a href="https://qingbob.com/built-cache-management-module-in-nodejs">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 在Node.js中搭建缓存管理模块
 description: "Just about everything you'll need to style in the theme: headings, paragraphs, blockquotes, tables, code blocks, and more."
 modified: 2013-12-25
 tags: [javascript, back-end, node.js]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <h2>为什么要搭建自己的缓存管理模块？</h2>
 <p>这个问题其实也是在问，为什么不使用现有的Cache存储系统，比如Redis，比如Memcached。不是说Redis不够好，只是在处理某些场景中使用的Redis会显的太“笨重”了——Redis的优势之一在于能够供多进程共享，有完善的备份和恢复机制。但反过来想，如果你的缓存仅供单个进程，单个Node实例使用，并且可以容忍缓存的丢失，承受冷启动。那么是值得用不到500行的代码来搭建一个速度更快的缓存模块。</p>
 <p>在Node中做缓存最简单的作法莫过于使用一个Object对象，将缓存以key-value的形式存入这个对象中，并且这么做的理由只有一个，就是更快的存取速度。相比Redis通过TCP连接的形式与客户端进行通信，在程序中直接使用对象进行存储的效率会是Redis的40倍。在文章的最后给出的完整的源代码中，有一个Redis与这个500行代码的性能对比测试：10000次的set操作，Redis使用的时间为12.5秒左右，平均运算次数为(operations per second)为8013 o/s，而如果使用原生的Object对象，10000次操作只需要0.3秒，平均运算次数为322581 o/s</p>
@@ -44,17 +44,17 @@ Recently used unshift in                                  Cold cache pop
 <p>每一项的数据结构如下：
 {% highlight javascript %}
 var cache = [
-{
-key: key,
-value: value,
-expire: 1000 * 3
-},
-{
-key: key,
-value: value,
-expire: 1000 * 3
-}
-...<br/>
+    {
+        key: key,
+        value: value,
+        expire: 1000 <em> 3
+    },
+    {
+        key: key,
+        value: value,
+        expire: 1000 </em> 3
+    } 
+    ...<br/>
 ]
 {% endhighlight %}
 那么在每一次取缓存时(get操作)，就不得不对这个数组进行遍历。因为遍历的时间复杂度会是O(n)，如果当n较大时，遍历花费的时间（包括遍历判断是否过期，以及过期之后的连锁操作）是相当可观的。</p>
@@ -62,20 +62,20 @@ expire: 1000 * 3
 <p>仅仅考虑优化get操作的话，最理想的状态是把所有的key-value缓存都存入一个Object中，这样以来每次get操作都无需遍历，直接通过key就可以取得相应的value值：</p>
 <p>{% highlight javascript %}
 var cache = {
-key1: {
-value: "value1",
-expire: 2000,
-...
-},
-key2: {
-value: "value2",
-expire: 2000,
-...
-}<br/>
+    key1: {
+        value: "value1",
+        expire: 2000,
+        ...
+    },
+    key2: {
+        value: "value2",
+        expire: 2000,
+        ...
+    }<br/>
 }</p>
 <p>// Get 方法
 var get = function (key) {
-return cache[key];
+    return cache[key];
 }
 {% endhighlight %}</p>
 <p>那么的队列如何体现？我的解决方案是另提供一个索引链表，仅将所以的key存入链表中：</p>
@@ -86,20 +86,20 @@ head =&gt; key1 &lt;=&gt; key2 &lt;=&gt; key3 &lt;=&gt; ...&lt;=&gt; keyn &lt;= 
 <p>众所周知，链表是通过无数个节点以前后指针的形式连接起来的，考虑到避免遍历，便于插入，删除等操作，该链表应该是双向链表，每一个key在链表中对应一个节点结构为：</p>
 <p>{% highlight javascript %}
 var node = {
-key: "key",
-count: 0 //访问次数，供LFU算法使用
-prev: null,
-next: null
+    key: "key",
+    count: 0 //访问次数，供LFU算法使用
+    prev: null,
+    next: null
 }
 {% endhighlight %}
 每当有新的缓存插入时，链表应该返回被插入的节点的引用，缓存除了记录value，expire参数外，还应该记录自己节点在链表中的引用</p>
 <p>{% highlight javascript %}
 var cache = {
-key1: {
-value: "value1",
-expire: 2000,
-node: node //在链表中对应位置的引用
-}<br/>
+    key1: {
+        value: "value1",
+        expire: 2000,
+        node: node //在链表中对应位置的引用
+    }<br/>
 }
 {% endhighlight %}</p>
 <p>这样以来，当我们尝试get某个缓存时，我们能通过节点的引用（以上代码中的node字段）很快的得到该缓存在队列中的位置，并且跳过遍历，仅通过修改相关节点的指针，来对队列的顺序进行调整，以便能即使反馈数据的冷热程度。</p>
@@ -132,10 +132,10 @@ node: node //在链表中对应位置的引用
 <h3>Cache.set</h3>
 <p>{% highlight javascript %}
 var set = function (key, value, expire) {
-// 缓存对象
-var _cache = this.cache;
-// 索引链表
-var _queue = this.queue;</p>
+    // 缓存对象
+    var _cache = this.cache;
+    // 索引链表
+    var _queue = this.queue;</p>
 <pre><code>// 如果已经存在该值，则重新赋值，更新过期时间
 if (_cache[key]) {
 
@@ -179,15 +179,16 @@ if (_cache[key]) {
     returnNode.delArr.forEach(function (key) {
         _cache[key] = null;
     });
-}</code></pre>
+}
+</code></pre>
 <p>}
 {% endhighlight %}
 有一点需要注意，为什么在最后我会用置为null <code>_cache[key] = null</code>来删除缓存，而不用更明显的<code>delete _cache[key]</code>？要知道delete并非强制将<code>_cache[key]</code>引用的对象的内存释放，因为在V8中我们是无法强制进行Garbage Collection（在其他引擎中应该也不行）。所以置为null与delete，两者的原理其实相同，删除的都是<code>_cache[key]</code>的引用（详细原理可以参考文章最后给出的参考文献）。</p>
 <p>使用null的原因只有一个，那就是更高的效率，你可以在Node环境或者浏览器中执行下面这段代码</p>
 <p>{% highlight javascript %}
-var maxRound = 100 * 100 * 20;
+var maxRound = 100 <em> 100 </em> 20;
 (function () {
-var obj = {};</p>
+    var obj = {};</p>
 <pre><code>for (var i = 0; i &lt; maxRound; i++) {
     obj["key_" + i] = "value_"+ i;
 }
@@ -201,15 +202,16 @@ for (var key in obj) {
 
 var end = +new Date();
 
-console.log("Delete | Total cost:", end - start, "ms");</code></pre>
+console.log("Delete | Total cost:", end - start, "ms");
+</code></pre>
 <p>})()
 {% endhighlight %}
 你可以把代码中注释的<code>obj[key] = null;</code>与<code>delete obj[key];</code>互换，来对比执行效率，很明显置为null会比delete节约一半时间。</p>
 <h3>Cache.get</h3>
 <p>{% highlight javascript %}
 var get = function (key) {
-var _cache = this.cache;
-var _queue = this.queue;</p>
+    var _cache = this.cache;
+    var _queue = this.queue;</p>
 <pre><code>// 如果存在该值
 if (_cache[key]) {
     var insertTime = _cache[key].insertTime;
@@ -236,14 +238,15 @@ if (_cache[key]) {
 
 } else {
     return null;
-}</code></pre>
+}
+</code></pre>
 <p>}
 {% endhighlight %}</p>
 <h3>LFU算法中更新索引:</h3>
 <p>{% highlight javascript %}
 var update = function (node) {
-// 访问次数+1
-node.count++;</p>
+    // 访问次数+1
+    node.count++;</p>
 <pre><code>var prevNode = node.prev;
 var nextNode = node.next;
 var queue = this.queue;
@@ -267,51 +270,53 @@ if (prevNode &amp;&amp; prevNode.count &lt; node.count) {
         queue.backward(node);
         nextNode = node.next;
     }
-}</code></pre>
+}
+</code></pre>
 <p>}
 {% endhighlight %}</p>
 <h2>根据命中率选择适合的算法</h2>
 <p>如果你不确定你的业务适合哪一种的，我们可以加入机器学习的机制，根据前三万次访问的命中率来选择哪一种算法：</p>
 <p>{% highlight javascript %}
-var Cache_LRU = null,
-Cache_LFU = null,
-// Cache_FIN用来指向最终选择的算法
-Cache_FIN = null;</p>
+var Cache_LRU = null, 
+    Cache_LFU = null,
+    // Cache_FIN用来指向最终选择的算法
+    Cache_FIN = null;</p>
 <p>// 统计前3万次
-var round = 100 * 100 * 3;</p>
+var round = 100 <em> 100 </em> 3;</p>
 <p>var Manage = {
-// 独立统计每个算法的成功次数
-// total表示该算法get方法被调用次数
-// suc表示成功次数
-"lru": {
-cache: Cache.createCache("LRU", 100 * 100 * 5),
-suc: 0,
-total: 0
-},
-"lfu": {
-cache: Cache.createCache("LFU", 100 * 100 * 5),
-suc: 0,
-total: 0
-}
+    // 独立统计每个算法的成功次数
+    // total表示该算法get方法被调用次数
+    // suc表示成功次数
+    "lru": {
+        cache: Cache.createCache("LRU", 100 <em> 100 </em> 5),
+        suc: 0,
+        total: 0
+    },
+    "lfu": {
+        cache: Cache.createCache("LFU", 100 <em> 100 </em> 5),
+        suc: 0,
+        total: 0
+    }
 }</p>
 <p>exports.set = function (key, value, expire) {
-// 如果已经结束了统计命中率的前三万轮
-// 表示已经找到了合适的算法
-if (!round) {
-return Cache_FIN.set(key, value, expire);
-}</p>
+    // 如果已经结束了统计命中率的前三万轮
+    // 表示已经找到了合适的算法
+    if (!round) {
+        return Cache_FIN.set(key, value, expire);
+    }</p>
 <pre><code>// 用户的每次get与set实际上同时在对所有的算法同时做
 // 同时有两份Cache在工作
 for (var name in Manage) {
     Manage[name].cache.set(key, value, expire);
-}</code></pre>
+}
+</code></pre>
 <p>}</p>
 <p>exports.get = function (key) {
-// 如果已经结束了统计命中率的前三万轮
-// 表示已经找到了合适的算法
-if (!round) {
-return Cache_FIN.get(key);
-}</p>
+    // 如果已经结束了统计命中率的前三万轮
+    // 表示已经找到了合适的算法
+    if (!round) {
+        return Cache_FIN.get(key);
+    }</p>
 <pre><code>var value = null;
 
 // 测试每一个算法是否能获得请求的cache
@@ -345,7 +350,8 @@ if (!--round) {
     Cache_FIN = Manage[max.key].cache;
 }
 
-return value;</code></pre>
+return value;
+</code></pre>
 <p>}</p>
 <p>{% endhighlight %}</p>
 <h2>结束</h2>

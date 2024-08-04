@@ -1,12 +1,12 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2021-09-05-application-layer-protocol.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2021/09/05/application-layer-protocol">站点原文</a></h2>
 <hr/>
-<h2>key: 57
-title: 基于 TCP 的应用层协议设计
-tag: [experience, network]</h2>
+<p>key: 57
+title: 基于 TCP 的应用层协议设计</p>
+<h2>tag: [experience, network]</h2>
 <p>一直以来, 包括我在内的很多人都认为, 基于 TCP 的应用层协议很简单, 只需要加个包头就行了. 因为 TCP 是可靠的协议, 能保证数据有序无误地送达对端; 只是它面向流, 不保留消息边界, 因此我们只需要定义协议包头, 能区分各个数据报即可. 然而这个看法是错误的: 传输层协议所做的工作是有限的, 应用层协议的工作远不止封装一个包头. 我们来看个例子.</p>
 <h3>TCP 连接并不是那么可靠</h3>
 <p>我们用 C 写一个简单的客户端. 它用 TCP 连接上服务器, 然后 sleep 一段时间, 然后调用 <code>send(2)</code> 发送一段数据.</p>
-<pre><code class="language-c">int main() {
+<pre><code class="lang-c">int main() {
     int fd = socket(PF_INET, SOCK_STREAM, 0);
 
     struct sockaddr_in addr = {0};
@@ -42,14 +42,14 @@ try send
 sent
 </code></pre>
 <p>为什么会出现这种情况? 我们知道, 在 TCP 中, 数据发送给对端后, 必须收到相应的 ACK 才能保证数据送达对端.</p>
-<p><img alt="psh-ack" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/unreliable-tcp-connections_1.svg"/></p>
+<p><img alt="psh-ack" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/unreliable-tcp-connections_1.svg"/></p>
 <p>然而当 <code>send(2)</code> 返回时, 并不能保证发送的数据被确认, 甚至不能保证数据发出去了. 它所做的只是将数据放入内核缓冲区, 只要这个操作成功了, 它就会返回成功. send 完成后, 并没有正常关闭连接, 而是直接退出. 由于程序没有关闭连接, 在程序退出后, 操作系统仍然会维持这个连接状态. 在重传多次无果后, 连接会被放弃, 且程序感知不到异常.</p>
 <p>这个问题相当严重, 尤其是在移动网络中. 移动设备的无线网络并不稳定, "拔网线" 这样的事情经常发生. 有可能发生在 <code>send</code> 调用前; 有可能发生在 <code>send</code> 调用后, 但数据尚未发送时; 有可能发生在数据已送达, 等待接收 ACK 时. 如何解决这个问题?</p>
 <h3>正常关闭连接</h3>
 <p>上面程序的一个问题是, 在程序结束前没有关闭连接. 回忆一下, 关闭 TCP 连接会向对端发送一个 FIN, 告诉对端: "小于 FIN 序列号的报文段都已发送完毕, 如果你已确认接收包括 FIN 在内的所有报文段, 请给我回复一个 ACK". 因此如果连接能够正常关闭, 就能够保证所有数据送达对端.</p>
-<p><img alt="close-connection" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/unreliable-tcp-connections_2.svg"/></p>
+<p><img alt="close-connection" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/unreliable-tcp-connections_2.svg"/></p>
 <p>现在修改我们的代码, 在程序退出前调用 <code>close(2)</code>, 看看效果怎样.</p>
-<pre><code class="language-c">int main() {
+<pre><code class="lang-c">int main() {
     ...
 
     if (close(fd) &lt; 0) {
@@ -71,7 +71,7 @@ closed
 <p>原因是 <code>close(2)</code> 和 <code>send(2)</code> 一样, 并不会等待 ACK, 它只是将 FIN 放入发送队列. 问题是, 就算我们能够确认连接正常关闭 (实际上确实有办法), 也是无济于事的, 因为对于长连接应用, 不可能通过关闭连接来确保数据送达.</p>
 <h3>获取发送队列大小</h3>
 <p>那么有没有办法确定数据对应的 ACK 已收到呢? 实际上是有的. Linux 支持 <code>SIOCOUTQ</code> 请求, 可以获取发送队列大小. 这也就是 TCP 尚未确认送达的数据大小. 我们在发送数据后 sleep 2 秒, 然后调用 <code>ioctl(2)</code> 传入 <code>SIOCOUTQ</code> 获取发送队列大小.</p>
-<pre><code class="language-c">...
+<pre><code class="lang-c">...
 
 sleep(2);
 

@@ -1,12 +1,12 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2022-10-30-lock-free-queue.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2022/10/30/lock-free-queue">站点原文</a></h2>
 <hr/>
-<h2>key: 69
-title: C++ 实现无锁队列
-tag: c/c++</h2>
+<p>key: 69
+title: C++ 实现无锁队列</p>
+<h2>tag: c/c++</h2>
 <p>前一篇文章中我们讨论了 C++ 中原子变量的内存顺序, 现在我们来看看原子变量和内存顺序的应用 -- 无锁队列. 本文介绍单写单读和多写多读的无锁队列的简单实现, 从中可以看到无锁数据结构设计的一些基本思路.</p>
 <h2>何谓无锁</h2>
 <p>为了实现一个线程安全的数据结构, 最简单的方法就是加锁. 对于队列来说, 应该对入队和出队操作加锁.</p>
-<pre><code class="language-c++">template &lt;typename T&gt;
+<pre><code class="lang-c++">template &lt;typename T&gt;
 void queue::push(const T &amp;val) {
     std::lock_guard&lt;std::mutex&gt; guard(m_lock);
     auto node = new node(val);
@@ -40,13 +40,13 @@ T queue::pop() {
 <p>下面我们介绍几种简单的无锁队列的实现.</p>
 <h2>单写单读的队列</h2>
 <p>单写单读的队列比较简单, 这里我们使用循环队列实现. 如下图所示, 队列维护两个指针 <code>head</code> 和 <code>tail</code>, 分别指向队首和队尾. <code>tail</code> 始终指向 dummy 节点, 这样 <code>tail == head</code> 表示队列为空, <code>(tail + 1) % Cap == head</code> 表示队列已满, 不用维护 <code>size</code> 成员.</p>
-<p><img alt="ring-buffer" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_1.svg"/></p>
+<p><img alt="ring-buffer" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_1.svg"/></p>
 <p>入队的时候移动 <code>tail</code> 指针, 而出队的时候移动 <code>head</code> 指针, 两个操作并无冲突. 不过, 出队前需要读取 <code>tail</code> 指针, 判断 <code>tail != head</code> 确认队列不为空; 同理入队时也要判断 <code>(tail + 1) % Cap != head</code> 以确认队列不满. 由于存在多个线程读写这两个指针, 因此它们都应该是原子变量.</p>
 <p>此外, 由于两个操作在不同线程中执行, 我们还需考虑内存顺序. 如果初始队列为空, 线程 a 先执行入队操作, 线程 b 后执行出队操作, 则线程 a 入队操作的内容要对线程 b 可见.</p>
-<p><img alt="push-pop" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_2.svg"/></p>
+<p><img alt="push-pop" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_2.svg"/></p>
 <p>为了做到这一点, 需要有 a(2) "happens-before" b(3). 而 a(3) 和 b(2) 分别修改了读取了 <code>tail</code>, 所以应该利用原子变量同步, 使得 a(3) "synchronizes-with" b(2). 可以在 a(3) 写入 <code>tail</code> 的操作中使用 release, b(2) 读取 <code>tail</code> 的操作中使用 acquire 实现同步. 不熟悉内存顺序的同学可以参考<a href="/2022/06/25/cpp-memory-order.html">上一篇文章</a>.</p>
 <p>同理, 如果初始队列满, 线程 a 先执行出队操作, 线程 b 后执行入队操作, 则线程 a 出队操作的结果要对线程 b 可见. 出队的时候需要调用出队元素的析构函数, 要保证出队元素正常销毁后才能在那个位置写入新元素, 否则会导致内存损坏. 可以在出队写入 <code>head</code> 的操作中使用 release, 入队读取 <code>head</code> 的操作中使用 acquire 实现出队 "synchronizes-with" 入队.</p>
-<pre><code class="language-c++">template &lt;typename T, size_t Cap&gt;
+<pre><code class="lang-c++">template &lt;typename T, size_t Cap&gt;
 class spsc : private allocator&lt;T&gt; {
     T *data;
     atomic&lt;size_t&gt; head{0}, tail{0};
@@ -89,11 +89,11 @@ public:
 <p>这种单写单读的无锁队列的两种操作可以同时执行, 且两种操作都只需要执行确定数量的指令, 因此数据 wait-free 结构, 性能很高.</p>
 <h2>CAS 操作</h2>
 <p><strong>CAS (compare and swap)</strong> 是一种原子操作, 在一个不可被中断的过程中执行比较和交换. C++ 的 <code>std::atomic</code> 中有两种 CAS 操作, <code>compare_exchange_weak</code> 和 <code>compare_exchange_strong</code></p>
-<pre><code class="language-c++">bool std::atomic&lt;T&gt;::compare_exchange_weak(T &amp;expected, T desired);
+<pre><code class="lang-c++">bool std::atomic&lt;T&gt;::compare_exchange_weak(T &amp;expected, T desired);
 bool std::atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired);
 </code></pre>
 <p>这两种 CAS 操作基本上是相同的: 如果原子变量与 <code>expected</code> 相等, 则将其赋值为 <code>desired</code> 并返回 <code>true</code>; 否则 <code>expected</code> 赋值成原子变量当前的值并返回 <code>false</code>. 下面是 <code>compare_exchange_strong</code> 的一个伪实现</p>
-<pre><code class="language-c++">template &lt;typename T&gt;
+<pre><code class="lang-c++">template &lt;typename T&gt;
 bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
     std::lock_guard&lt;std::mutex&gt; guard(m_lock);
     if (m_val == expected)
@@ -103,14 +103,14 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 }
 </code></pre>
 <p>当然实际的实现不可能是这样的. 在 x86 下 <code>compare_exchange_*</code> 会被编译成一条 <code>cmpxchgl</code> 指令, 因此操作是原子且无锁的.</p>
-<pre><code class="language-c++">int foo(std::atomic&lt;int&gt; &amp;a) {
+<pre><code class="lang-c++">int foo(std::atomic&lt;int&gt; &amp;a) {
     int e = 42;
     a.compare_exchange_strong(e, e + 1);
     return a.load();
 }
 </code></pre>
 <p>x86-64 下 -O2 编译成:</p>
-<pre><code class="language-nasm">foo(std::atomic&lt;int&gt;&amp;):
+<pre><code class="lang-nasm">foo(std::atomic&lt;int&gt;&amp;):
     movl $42, %eax
     movl $43, %edx
     lock cmpxchgl %edx, (%rdi) # %rdi 为函数的第一个参数
@@ -119,14 +119,14 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 </code></pre>
 <p><code>compare_exchange_weak</code> 和 <code>compare_exchange_strong</code> 的区别在于, <code>compare_exchange_weak</code> 有可能在当前值与 <code>expected</code> 相等时仍然不执行交换并返回 <code>false</code>; <code>compare_exchange_strong</code> 则不会有这个问题. weak 版本能让编译器在一些平台下生成一些更优的代码, 在 x86 下是没区别的.</p>
 <p><code>compare_exchange_*</code> 支持指定两个内存顺序: 成功时的内存顺序和失败时的内存顺序.</p>
-<pre><code class="language-c++">bool compare_exchange_weak(T&amp; expected, T desired,
+<pre><code class="lang-c++">bool compare_exchange_weak(T&amp; expected, T desired,
                            std::memory_order success,
                            std::memory_order failure);
 </code></pre>
 <p>我们可以利用 CAS 操作实现很多无锁数据结构. 下面我们来看如何实现多写多读的队列.</p>
 <h2>多写多读的队列</h2>
 <p>为了说明前面实现的单写单读队列无法执行多写多读, 我们来看一个例子.</p>
-<pre><code class="language-c++">bool spsc&lt;T, Cap&gt;::pop(T &amp;val) {
+<pre><code class="lang-c++">bool spsc&lt;T, Cap&gt;::pop(T &amp;val) {
     size_t h = head.load(); // (1)
     if (h == tail.load())
         return false;
@@ -139,7 +139,7 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 <p>假设有两个线程 a 和 b 同时调用 <code>pop</code>, 执行顺序是 a(1), b(1), b(2) a(2). 这种情况下, 线程 a 和线程 b 都读到相同的 <code>head</code> 指针, 存储在变量 <code>h</code> 中. 当 a(2) 尝试读取 <code>data[h]</code> 时, 其中的数据已经在 b(2) 中被 move 走了. 因此这样的队列不允许多个线程同时执行 pop 操作.</p>
 <h3>解决抢占问题</h3>
 <p>可以看到, 整个 <code>pop</code> 函数是一个非原子过程, 一旦这个过程别其他线程抢占, 就会出问题. 如何解决这个问题呢? 在无锁数据结构中, 一种常用的做法是<strong>不断重试</strong>. 具体的做法是, 在非原子过程的最后一步设计一个 CAS 操作, 如果过程被其他线程抢占, 则 CAS 操作失败, 并重新执行整个过程. 否则 CAS 操作成功, 完成整个过程的最后一步.</p>
-<pre><code class="language-c++">bool spsc&lt;T, Cap&gt;::pop(T &amp;val) {
+<pre><code class="lang-c++">bool spsc&lt;T, Cap&gt;::pop(T &amp;val) {
     size_t h;
     do {
         h = head.load(); // (1)
@@ -153,7 +153,7 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 <p>首先注意到我们不再使用 <code>std::move</code> 和 <code>allocator::destroy</code>, 而是直接复制, 使得循环体内的操作不会修改队列本身. (3) 是整个过程的最后一步, 也是唯一会修改队列的一步, 我们使用了一个 CAS 操作. 只有当 <code>head</code> 的值等于第 (1) 步获取的值的时候, 才会移动 <code>head</code> 指针, 并且返回 <code>true</code> 跳出循环; 否则就不断重试.</p>
 <p>这样如果多个线程并发执行 <code>pop</code>, 则只有成功执行 (3) 的线程被视为成功执行了整个过程, 其它的线程都会因为被抢占, 导致执行 (3) 的时候 <code>head</code> 被修改, 因而与局部变量 <code>h</code> 不相等, 导致 CAS 操作失败. 这样它们就要重试整个过程.</p>
 <p>类似的思路也可以用在 <code>push</code> 上. 看看如果我们用同样的方式修改 <code>push</code> 会怎样:</p>
-<pre><code class="language-c++">bool spsc&lt;T, Cap&gt;::push(const T &amp;val) {
+<pre><code class="lang-c++">bool spsc&lt;T, Cap&gt;::push(const T &amp;val) {
     size_t t;
     do {
         t = tail.load(); // (1)
@@ -166,7 +166,7 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 </code></pre>
 <p>与 <code>pop</code> 操作不同, <code>push</code> 操作的第 (2) 步需要对 <code>data[t]</code> 赋值, 导致循环体内的操作会修改队列. 假设 a, b 两个线程的执行顺序是 a(1), a(2), b(1), b(2), a(3). a 可以成功执行到 (3), 但是入队的值却被 b(2) 覆盖掉了.</p>
 <p>我们尝试将赋值操作 <code>data[t] = val</code> 移到循环的外面, 这样循环体内的操作就不会修改队列了. 当循环退出时, 能确保 <code>tail</code> 向后移动了一格, 且 <code>t</code> 指向 <code>tail</code> 移动前的位置. 这样并发的时候就不会有其他线程覆盖我们写入的值.</p>
-<pre><code class="language-c++">bool spsc&lt;T, Cap&gt;::push(const T &amp;val) {
+<pre><code class="lang-c++">bool spsc&lt;T, Cap&gt;::push(const T &amp;val) {
     size_t t;
     do {
         t = tail.load(); // (1)
@@ -178,7 +178,7 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 }
 </code></pre>
 <p>但是这样做的问题是, 我们先移动 <code>tail</code> 指针再对 <code>data[t]</code> 赋值, 会导致 <code>push</code> 与 <code>pop</code> 并发不正确. 回顾下 <code>pop</code> 的代码:</p>
-<pre><code class="language-c++">bool spsc&lt;T, Cap&gt;::pop(T &amp;val) {
+<pre><code class="lang-c++">bool spsc&lt;T, Cap&gt;::pop(T &amp;val) {
     size_t h;
     do {
         h = head.load();
@@ -195,10 +195,10 @@ bool atomic&lt;T&gt;::compare_exchange_strong(T &amp;expected, T desired) {
 <li>线程 b 调用 <code>pop</code> , 执行 b(4). 因为 <code>tail</code> 被更新, 因此判断队列不为空</li>
 <li>执行到 b(5), 会读取到无效的值</li>
 </ul>
-<p><img alt="empty-push" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_3.svg"/></p>
+<p><img alt="empty-push" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_3.svg"/></p>
 <p>为了实现 <code>push</code> 与 <code>pop</code> 的并发, <code>push</code> 对 <code>data[t]</code> 的写入必须 "happens-before" <code>pop</code> 对 <code>data[h]</code> 的读取. 因此这就要求 <code>push</code> 操作先对 <code>data[t]</code> 赋值, 再移动 <code>tail</code> 指针. 可是前面为了实现 <code>push</code> 与 <code>push</code> 的并发我们又让 <code>push</code> 操作先移动 <code>tail</code> 再对 <code>data[t]</code> 赋值. 如何解决这一矛盾呢?</p>
 <p>解决办法是引入一个新的指针 <code>write</code> , 用于 <code>push</code> 与 <code>pop</code> 同步. 它表示 <code>push</code> 操作<strong>写到了哪个位置</strong>.</p>
-<pre><code class="language-c++">template &lt;typename T, size_t Cap&gt;
+<pre><code class="lang-c++">template &lt;typename T, size_t Cap&gt;
 class ring_buffer {
     T data[Cap];
     atomic&lt;size_t&gt; head{0}, tail{0}, write{0};
@@ -247,7 +247,7 @@ public:
 <p>前面例子使用默认的内存顺序, 也就是 memory_order_seq_cst . 为了优化性能, 可以使用更宽松的内存顺序. 而要考虑内存顺序, 就要找出其中的 happens-before 的关系.</p>
 <p>前面分析了, <code>push</code> 中的赋值操作 <code>data[t] = val</code> 要 "happens-before" <code>pop</code> 中的读取操作 <code>val = data[h]</code>, 这是通过 <code>write</code> 原子变量实现的: <code>push</code> 中对 <code>write</code> 的修改要 "synchronizes-with" <code>pop</code> 中对 <code>write</code> 的读取. 因此 <code>push</code> 修改 <code>write</code> 的 CAS 操作应该使用 release, <code>pop</code> 读取 <code>write</code> 时则应使用 acquire.</p>
 <p>同理, 当队列初始为满的时候, 先运行 <code>pop</code> 在运行 <code>push</code>, 要保证 <code>pop</code> 中的读取操作 <code>val = data[h]</code> "happens-before" <code>push</code> 中的赋值操作 <code>data[t] = val</code>. 这是通过 <code>head</code> 原子变量实现的: <code>pop</code> 中对 <code>head</code> 的修改要 "synchronizes-with" <code>push</code> 中对 <code>head</code> 的读取. 因此 <code>pop</code> 修改 <code>head</code> 的 CAS 操作应该使用 release, <code>push</code> 读取 <code>head</code> 时则应使用 acquire.</p>
-<pre><code class="language-c++">bool ring_buffer&lt;T, Cap&gt;::push(const T &amp;val) {
+<pre><code class="lang-c++">bool ring_buffer&lt;T, Cap&gt;::push(const T &amp;val) {
     size_t t, w;
     do {
         t = tail.load(memory_order_relaxed); // (1)
@@ -275,7 +275,7 @@ bool ring_buffer&lt;T, Cap&gt;::pop(T &amp;val) {
 }
 </code></pre>
 <p><code>push</code> 与 <code>push</code> 并发移动 <code>tail</code> 指针的时候, 只影响到 <code>tail</code> 本身. 因此 (1) 和 (3) 对 <code>tail</code> 读写使用 relaxed 就可以了. 同样 <code>push</code> 与 <code>push</code> 并发移动 <code>write</code> 指针时, 也不需要利用它做同步, 因此 (5) 处的做法是</p>
-<pre><code class="language-c++">write.compare_exchange_weak(w, (w + 1) % Cap,
+<pre><code class="lang-c++">write.compare_exchange_weak(w, (w + 1) % Cap,
                             memory_order_release, memory_order_relaxed)
 </code></pre>
 <p>成功时使用 release, 为了与 <code>pop</code> 同步; 而失败时使用 relaxed 就可以了.</p>
@@ -299,7 +299,7 @@ bool ring_buffer&lt;T, Cap&gt;::pop(T &amp;val) {
 </ul>
 <h2>性能测试</h2>
 <p>设置不同的生产者和消费者线程数量, 每个生产者向依次队列里插入 10000 个元素. 下面是测试结果, "<strong>X</strong>p<strong>Y</strong>c" 表示 X 个生产者 Y 个消费者. 纵坐标为耗时.</p>
-<p><img alt="performance" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_4.png"/></p>
+<p><img alt="performance" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/lock-free-queue_4.png"/></p>
 <p>可以看到无锁队列并不总是最快, 当生产者数量增多时, 性能开始下降, 因为入队的时候需要抢占 <code>tail</code> 和 <code>write</code>. 实际应用中需要具体情况具体分析.</p>
 <hr/>
 <p><strong>参考资料:</strong></p>

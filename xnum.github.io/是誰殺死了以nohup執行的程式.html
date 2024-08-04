@@ -1,12 +1,9 @@
-<h2><a href="https://github.com/xnum/xnum.github.io/blob/master/_posts/2017-09-20-%E6%98%AF%E8%AA%B0%E6%AE%BA%E6%AD%BB%E4%BA%86%E4%BB%A5nohup%E5%9F%B7%E8%A1%8C%E7%9A%84%E7%A8%8B%E5%BC%8F.md">仓库源文</a>，<a href="https://xnum.github.io/2017/09/20/%E6%98%AF%E8%AA%B0%E6%AE%BA%E6%AD%BB%E4%BA%86%E4%BB%A5nohup%E5%9F%B7%E8%A1%8C%E7%9A%84%E7%A8%8B%E5%BC%8F">站点原文</a></h2>
+<h2><a href="https://github.com/xnum/xnum.github.io/blob/master/_posts/2017-09-20-是誰殺死了以nohup執行的程式.md">仓库源文</a>，<a href="https://xnum.github.io/2017/09/20/是誰殺死了以nohup執行的程式">站点原文</a></h2>
 <hr/>
 <p>layout: post
 title: 是誰殺死了以nohup執行的程式
 categories:</p>
-<ul>
-<li>UNIX</li>
-</ul>
-<hr/>
+<h2>- UNIX</h2>
 <p>最近在尋找一個程式被莫名殺死的BUG，在一年內只發生過兩次</p>
 <p>無法重現而且只有部分線索，在處理上變得更加困難</p>
 <p>我曾經把兇手懷疑到nohup上，但是後來發現應該是其他因素</p>
@@ -58,7 +55,7 @@ $ exit
 </ul>
 <h4>當user login後會開啟一個session，由shell作為session leader</h4>
 <pre><code>  PID  PPID  PGID   SID COMMAND  
-28621 28620 28621 28621 zsh              
+28621 28620 28621 28621 zsh
 </code></pre>
 <ul>
 <li>session 28621<ul>
@@ -71,7 +68,7 @@ $ exit
 28621 28620 28621 28621 zsh              
 28729 28621 28729 28621 vim              
 28800 28621 28800 28621 ps               
-28801 28621 28800 28621 egrep            
+28801 28621 28800 28621 egrep
 </code></pre>
 <p>由shell作為session leader，底下有多個process group
 同時只會有一個是foreground process group</p>
@@ -86,7 +83,7 @@ $ exit
 <h4>用tmux開啟多個工作</h4>
 <pre><code>  PID  PPID  PGID   SID COMMAND           
  2481     1  2481  2481 tmux             
- 
+
  2482  2481  2482  2482 zsh              
 23673  2482 23673  2482 Server      
 
@@ -104,12 +101,12 @@ $ exit
 
 28621 28620 28621 28621 zsh              
 28718 28621 28718 28621 ps               
-28719 28621 28718 28621 egrep            
+28719 28621 28718 28621 egrep
 </code></pre>
 <p>以tmux開啟時，每個window都代表了一個session</p>
 <ul>
 <li>session 2481<ul>
-<li>2481 tmux</li>
+<li>2481 tmux </li>
 </ul>
 </li>
 <li>session 2482<ul>
@@ -138,7 +135,7 @@ $ exit
 </ul>
 </li>
 <li>session 28621<ul>
-<li>28621 zsh</li>
+<li>28621 zsh </li>
 <li>28718 ps + egrep</li>
 </ul>
 </li>
@@ -168,19 +165,87 @@ $ exit
 <p>使用disown時，bash在內部有一個flag (J_NOHUP)來設定要不要發送SIGHUP訊息</p>
 <p>這些退出方式組合後 如下表</p>
 <p>case 1 + huponexit ON 或 case 2:</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  YES    | | | |
-|RUNNING |  NO     |o| | |
-| STOP   |  YES    | |o|o|
-| STOP   |  NO     |o|o|o|</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">o</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center">o</td>
+<td style="text-align:center">o</td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">o</td>
+<td style="text-align:center">o</td>
+<td style="text-align:center">o</td>
+</tr>
+</tbody>
+</table>
 <p>case 1 + huponexit OFF:</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  YES    | | | |
-|RUNNING |  NO     | | | |
-| STOP   |  YES    | |o|o|
-| STOP   |  NO     | |o|o|</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center">o</td>
+<td style="text-align:center">o</td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center"></td>
+<td style="text-align:center">o</td>
+<td style="text-align:center">o</td>
+</tr>
+</tbody>
+</table>
 <p>可以發現，之所以前面的範例程式會繼續執行，是因為case 1下程式在background執行，而kernel又不會發送SIGHUP給background。</p>
 <p>另外一個會被殺死的範例，則是在STOP狀態下(我們已經先用了Ctrl+Z來停止)，儘管阻止了SIGHUP訊號，仍然被SIGTERM殺死</p>
 <p>到這裡就皆大歡喜的結案了，而以下是我們做實驗的方式</p>
@@ -190,57 +255,258 @@ $ exit
 <p>case 1: 輸入exit
 case 2: 關閉視窗</p>
 <h4>執行方法</h4>
-<p>| state  | J_NOHUP | 指令 |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  YES    |./test &gt; test.out &amp;; disown|
-|RUNNING |  NO     |./test &gt; test.out &amp;|
-| STOP   |  YES    |./test &gt; test.out; ^Z; disown|
-| STOP   |  NO     |./test &gt; test.out; ^Z|</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">指令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center">./test &gt; test.out &amp;; disown</td>
+</tr>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">./test &gt; test.out &amp;</td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center">./test &gt; test.out; ^Z; disown</td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">./test &gt; test.out; ^Z</td>
+</tr>
+</tbody>
+</table>
 <p>1,2,3代表有收到該訊號及其傳達順序，o代表有收到該訊號，留空白表示未收到</p>
 <h3>實驗(zsh)</h3>
 <p>zsh --version
 zsh 5.0.5 (x86_64-suse-linux-gnu)</p>
 <p>case 1 (exit):</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  YES    | | | |
-|RUNNING |  NO     | | | |
-| STOP   |  YES    |2|1| |
-| STOP   |  NO     |2|1| |</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+</tr>
+</tbody>
+</table>
 <p>case 2 (X):</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  YES    | | | |
-|RUNNING |  NO     | | | |
-| STOP   |  YES    |2|1| |
-| STOP   |  NO     |2|1| |</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+</tr>
+</tbody>
+</table>
 <h3>實驗(ksh)</h3>
 <p>strings /bin/ksh | grep ersion
 @(#)Version M-11/16/88i</p>
 <p>case 1 (exit):</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  NO     |o| | |
-| STOP   |  NO     |3|1|2|</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">o</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">3</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">2</td>
+</tr>
+</tbody>
+</table>
 <p>case 2 (X):</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  NO     |o| | |
-| STOP   |  NO     |2|1| |</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">o</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+</tr>
+</tbody>
+</table>
 <h3>實驗(bash)</h3>
 <p>GNU bash, version 3.2.57(1)-release (sparc-sun-solaris2.10)
 Copyright (C) 2007 Free Software Foundation, Inc.</p>
 <p>case 1 (exit):</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  YES    | | | |
-|RUNNING |  NO     | | | |
-| STOP   |  YES    |2|1| |
-| STOP   |  NO     | |1|2|</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center"></td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">2</td>
+</tr>
+</tbody>
+</table>
 <p>case 2 (X):</p>
-<p>| state  | J_NOHUP | SIGHUP | SIGCONT | SIGTERM |
-|:------:|:-------:|:------:|:-------:|:-------:|
-|RUNNING |  YES    | | | |
-|RUNNING |  NO     |1| | |
-| STOP   |  YES    |2|1| |
-| STOP   |  NO     |3|1|2|</p>
+<table>
+<thead><tr>
+<th style="text-align:center">state</th>
+<th style="text-align:center">J_NOHUP</th>
+<th style="text-align:center">SIGHUP</th>
+<th style="text-align:center">SIGCONT</th>
+<th style="text-align:center">SIGTERM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">RUNNING</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center"></td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">YES</td>
+<td style="text-align:center">2</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center"></td>
+</tr>
+<tr>
+<td style="text-align:center">STOP</td>
+<td style="text-align:center">NO</td>
+<td style="text-align:center">3</td>
+<td style="text-align:center">1</td>
+<td style="text-align:center">2</td>
+</tr>
+</tbody>
+</table>

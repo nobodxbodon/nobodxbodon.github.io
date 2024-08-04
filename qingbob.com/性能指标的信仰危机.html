@@ -1,15 +1,15 @@
 <h2><a href="https://github.com/hh54188/jekyll-blog/blob/master/_posts/2021-04-14-performance-metric-crisis.md">仓库源文</a>，<a href="https://qingbob.com/performance-metric-crisis">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: 性能指标的信仰危机
 modified: 2021-04-14
 tags: [javascript, performance]
 image:
-feature: abstract-3.jpg
-credit: dargadgetz
-creditlink: http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/
-comments: true
-share: true</h2>
+  feature: abstract-3.jpg
+  credit: dargadgetz
+  creditlink: <a href="http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/">http://www.dargadgetz.com/ios-7-abstract-wallpaper-pack-for-iphone-5-and-ipod-touch-retina/</a>
+comments: true</p>
+<h2>share: true</h2>
 <p>正在阅读这篇文章的你，或多或者接触过前端性能优化，这样的接触可能是来自你的阅读体验也可能是来自工作经验。那我们不妨从一个非常简单的思想实验开始，请你借助你对这个领域的理解，来回答下面的几个问题：</p>
 <ul>
 <li>假设现在由你来主导一项优化公司站点性能的工作，你会选取哪些指标y用于衡量性能？</li>
@@ -28,10 +28,7 @@ share: true</h2>
 如果 APLT 变慢了？有哪些可能导致 APLT 变慢？这决定着我们排查问题的方向
 如果 APLT 不够准确，我们需要自定义指标重新衡量性能结果，我们能从中吸取什么经验？我们的指标可否与 APLT 产生联动产生一加一大于二的效应？</p>
 <p>然而<a href="https://support.google.com/analytics/answer/2383341?hl=en">官方文档</a>对于这个指标的解释是很暧昧的：</p>
-<blockquote>
-<p>Avg Page Load Time : The average amount of time (in seconds) it takes that page to load, from initiation of the pageview (e.g., click on a page link) to load completion in the browser.</p>
-</blockquote>
-<blockquote>
+<blockquote><p>Avg Page Load Time : The average amount of time (in seconds) it takes that page to load, from initiation of the pageview (e.g., click on a page link) to load completion in the browser.</p>
 <p>Avg. Page Load Time consists of two components: 1) network and server time, and 2) browser time. The Technical section of the Explorer tab provides details about the network and remaining time is the browser overhead for parsing and executing the JavaScript and rendering the page.</p>
 </blockquote>
 <p>对于它的解释，我们产生了几点疑问：</p>
@@ -41,12 +38,12 @@ share: true</h2>
 </ul>
 <h3>GA 的实现</h3>
 <p><strong>GA 底层是通过 Navigation Timing API 在采集性能数据</strong></p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/timing-overview.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/timing-overview.png"/></p>
 <p>GA 不会统计每一个阶段的数据，它将某些合并后重新命名成新的指标，而其中的某些指标比如 Document Interactive Loaded 其实是某些阶段的统计之和：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/ga_metric_break_down.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/ga_metric_break_down.png"/></p>
 <p>GA 统计的仅仅是与 DOM 文档有关的数据。APLT 定义里所说的 load completion 时刻指的就是 loadEventEnd 事件的发生时机，即 onLoad 事件触发完毕（load 事件触发时意味着所有的外部资源，包括 iframe、图片、脚本、样式都已经加载完毕）。所以 APLT 值是 GA 里所有指标里横跨时间范围最广的。</p>
 <h3>脚本对 Avg Page Load Time 的影响是什么</h3>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/dom_render_overview.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/dom_render_overview.png"/></p>
 <p>如上图所示，当浏览器自上而下解析 DOM 树时，它会遇见很多外联资源，比如图片、样式和脚本。于是它需要从缓存或者网络中请求这些资源。</p>
 <p>页面的解析是同步的，所以 脚本的加载会导致页面解析的暂停。浏览器需要在脚本加载、编译、执行完毕之后才会继续之后的解析工作，这么做是有道理的，因为 JavaScript 可能会使用诸如 document.write() 方法来改变 DOM 的结构。你可能听说过在 &lt;script&gt; 标签上添加 async 或者 defer 属性来异步的加载和执行脚本。但这则方案不一定适用于所有页面，因为 async 无法保证脚本的执行顺序，如果你的应用对脚本的执行顺序有严格要求，那么它对你爱莫能助。</p>
 <p>目前浏览器都配备preloader机制来提前扫面页面中的外联元素提前加载，但这个机制并无统一的标准也无法衡量效果，所以暂时不考虑它对我们的影响。</p>
@@ -54,7 +51,7 @@ share: true</h2>
 <p><strong>所以综上，我们可以得出脚本确实能够影响 APLT 。</strong></p>
 <p>但抛弃计量谈危害都是刷流氓，它的影响范围究竟有多大？也就是说如果 APLT  是 2 秒的话，其中多少时间耗费在了脚本上？</p>
 <p>这里没有一个具体的数字，但它不容小觑，以及足够影响到性能。<a href="https://medium.com/@addyosmani">Addy Osmani</a> 在 <a href="https://medium.com/reloading/javascript-start-up-performance-69200f43b201">2017 年的一篇文章</a>中指出 Chrome 的脚本引擎花费在编译时间上</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/parse_execute_cost.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/parse_execute_cost.png"/></p>
 <p><a href="https://v8.dev/blog/cost-of-javascript-2019">虽然此后 Chrome 对编译过程进行了优化，但执行脚本过长的困恼依然存在</a>。同时这只是 Chrome 下的情况，我们无法确认其他浏览器在编译脚本时也可以保证同样的效率</p>
 <p>如果说 APLT  是由不同的阶段组成，那么我们有没有可能计算出每一个阶段的具体时间？</p>
 <p>回顾上面关于 GA 指标的定义，至少我们现在能分离出 server time 和 browser time. 但是在 browser time 之下呢？比如说脚本的下载时间和执行时间，这些我们就无从得知了。这些是需要额外计算和采集的。</p>
@@ -73,57 +70,57 @@ share: true</h2>
 <p>总的来说，越来越多重要且耗时的工作都发生在资源加载之后，我们需要把这部分工作的性能也监控起来。</p>
 <p>好消息是浏览器原生的在提供给予我们这方面的支持，例如 Chrome 就在 Performace API 中提供了 Paint Timing API 诸如 first paint (FP) 、 first contentful paint (FCP)、time to interact(tti) 等指标数据。顾名思义的这些指标尝试站在用户体验的视角展现应用在浏览器中被呈现时的性能；坏消息是，这些指标依然在测量真实的用户体验方面依然存在误差。</p>
 <p>就以上面提到的 FP、FCP、TTI 这三个指标为例，我用一个简单的例子说明这三个指标是如何不够准确的：在单页面的初始化过程中，我们通常会提供类似于「加载中」视图，通常是一个 placeholder 或者 skeleton 样式，在数据请求完毕之后才会将实际的视图渲染出来：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/render-order.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/render-order.png"/></p>
 <p>如果加载时间过长，浏览器会以为「加载中」视图就是对用户可用的最终产品形态，并以它为基准计算那上述的三个指标</p>
 <p>下面这段代码模拟的就是包含上面所说情况的日常情况：在组件加载时模拟发出两个请求，其中一个需要5秒较长的等待时间，只有当两个请求都返回时才能开始渲染数据，否则一直提示用户加载中。</p>
-<pre><code class="language-javascript">function App() {
+<pre><code class="lang-javascript">function App() {
   const [data, setState] = useState([]);
   useEffect(() =&gt; {
-	const longRequest = new Promise((resolve, reject) =&gt; {
-  	setTimeout(() =&gt; {
-    	resolve([]);
-  	}, 1000 * 5)
-	});
-	const shortRequest = Promise.resolve([]);
- 
-	Promise.all([longRequest, shortRequest]).then(([longRequestResponse, shortRequestResponse]) =&gt; {
-  	setState([
-    	['', 'Tesla', 'Mercedes', 'Toyota', 'Volvo'],
-    	['2019', 10, 11, 12, 13],
-    	['2020', 20, 11, 14, 13],
-    	['2021', 30, 15, 12, 13]
-  	])
-	})
+    const longRequest = new Promise((resolve, reject) =&gt; {
+    setTimeout(() =&gt; {
+        resolve([]);
+    }, 1000 * 5)
+    });
+    const shortRequest = Promise.resolve([]);
+
+    Promise.all([longRequest, shortRequest]).then(([longRequestResponse, shortRequestResponse]) =&gt; {
+    setState([
+        ['', 'Tesla', 'Mercedes', 'Toyota', 'Volvo'],
+        ['2019', 10, 11, 12, 13],
+        ['2020', 20, 11, 14, 13],
+        ['2021', 30, 15, 12, 13]
+    ])
+    })
   }, []);
   return (
-	&lt;div className="App"&gt;
-  	{data &amp;&amp; data.length
-  	? &lt;HotTable data={data} /&gt;
-  	: &lt;Skeleton count={15}/&gt;}
-	&lt;/div&gt;
+    &lt;div className="App"&gt;
+    {data &amp;&amp; data.length
+    ? &lt;HotTable data={data} /&gt;
+    : &lt;Skeleton count={15}/&gt;}
+    &lt;/div&gt;
   )
 }
 </code></pre>
 <p>如果你尝试在浏览器中运行上述 App, 通过 Devtools 观测到的各个指标如下：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/metric-flaw.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/metric-flaw.png"/></p>
 <p>你能通过开发者工具够观测到各种指标比如 DCL (DOMContentLoaded Event), FP, FCP, FMP (first meaningful paint), L(Onload Event) 都发生在页面加载后一秒左右以内。然而从代码里我们非常肯定至少五秒后用户才能看到真实内容。所以上述指标并不能真的反馈用户感受到的性能问题</p>
 <p>我已经把这个应用部署到了 <a href="https://cheat-web-page-test.com/">https://cheat-web-page-test.com/</a> 站点上，可以在线访问。并且可以使用 <a href="https://www.webpagetest.org/">https://www.webpagetest.org/</a> 对它做更详细的性能检测，也会得出和 devtools 相同的结果。webpagetest 是一个开源免费对网站性能进行检测的工具。早在 2012 年还没有诸如 FP 一类的指标时，它独创的 Speed Index 指标就能够衡量用户体验。</p>
-<p>![](../images/performance-metric-crisis/flow (1).png)</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/flow (1"/>.png)</p>
 <p>总的来说如上图所示，目前浏览器提供的 API 能够测量的只是 D 阶段的性能，对 E 和 F 阶段爱莫能助。</p>
 <p>这只是其中一个说明原生指标不够准确的例子，可以归纳为后端接口延迟过长。然而还有一种情况是前端渲染时间过长。例如我们在使用 Handsontable 组件渲染上千行数据表格的时候，甚至导致了浏览器的假死，这种场景对 Paint Timing API 也是免疫的。</p>
 <p>那 tti 这个指标怎么样？它不是听上去能够检测页面是否可以交互吗？它是不是能够检测页面的假死？</p>
 <p>很遗憾依然不行。</p>
 <p>如果你有心去查看 tti 这个指标的<a href="https://docs.google.com/document/d/1GGiI9-7KeY3TPqS3YT271upUVimo-XiL5mwWorDUD4c/preview#">定义</a>的话， 你会发现 tti 本质上是一种算法：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/tti.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/tti.png"/></p>
 <ul>
 <li>首先找到一个接近 tti 的零界点，比如 FirstContentfulPaint 或者 DomContentLoadedEnd 时机</li>
 <li>从临界点向后查找不包含长任务 (long task) 的并且网络请求相对平静的 5 秒钟窗口期</li>
-<li>找到之后，再向前追溯到最后一个长任务的执行结束点，那就是我们的要找的 tti</li>
+<li>找到之后，再向前追溯到最后一个长任务的执行结束点，那就是我们的要找的 tti </li>
 </ul>
 <p>并且目前的原生 API 并不支持 tti 指标，需要通过 polyfill 实现，按照官方的说明，目前并不能适配所有的 web app。</p>
 <h3>双向指标</h3>
 <p>这是知乎创作者中心页面的一个截图</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/ps_neutral.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/ps_neutral.png"/></p>
 <p>在这个页面中，知乎每天都会为你更新过去七天内文章阅读数、赞同数、评论数等数据的汇总。上图中的折线就是阅读数。</p>
 <p>我知道它的用意是想给予创作者数据上的反馈帮助他们更好的输出内容，但至少对我来说一点用也没有。<strong>因为我更想知道的是究竟增长来自于哪里，这样我才能有针对性的输出带来点击量的内容。但它带给我的总是汇总数据。</strong></p>
 <p>这个需求对于性能监控也是同样的成立的，监控的目的主要是为了及时发现问题，解决问题。所以在审视数据的过程中，我们更关心的是异常波动值发生在何时何地，我们也希望数据能给予我这方面的帮助。</p>
@@ -157,23 +154,19 @@ share: true</h2>
 <p>如果说“资源加载完毕”这件事不靠谱，“浏览器开始绘制”也不靠谱的话，我想唯一靠谱的事情就是用户的所见所得了。不需要用各种数据来展示你的页面加载有多快，如果用户每次都要等待十秒才能看到他想看到的信息，那么这些数字无非是自欺欺人而已。所以我们不妨可以追踪用户关注信息所对应元素的出现的时机。</p>
 <p>这不是创新，从早些年的 Speed Index，“above the fold” 到如今的 <a href="https://web.dev/vitals/">web vitals</a>  都是这种思想的延续，<strong>指标的进化过程像一个不断收缩过程中圆圈，在不断的像用户本身靠拢</strong>。只不过出于技术手段的限制，它们只能走到那么远，而如今我们有了 MutationObserver 和 Perforamce API,  则可以精确的定位到元素，甚至元素上属性的改变，自然也就不会被上面例子中的 placeholder 所欺骗。</p>
 <p>抱歉我要在这里再次强调一下上下文：我们不能只关注“元素出现的时机”，更要从时间的范畴和从代码延展上看关注形成它的原因，这依然需要我们结合问题所处的环境和它的运转机制而定。举两个例子：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/001.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/001.png"/></p>
 <p>在上图中，如果 Component D 是向客户展示关键信息的关键元素，那么 request 到达 router 的时间，由 router 渲染出 Component C 的时间，都会对 D 元素产生影响；从另一个维度上看：</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/002.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/002.png"/></p>
 <p>脚本以及请求加载的快慢和执行的效率，同样也会对元素的出现产生影响。如果你需要对问题进行诊断，对这些背后工作机制的了解必不可少。</p>
 <p>但追踪元素也存在另一个问题就是它难以大规模的应用。因为它是侵入式的，因为它需要你识别不同页面上的不同关键元素，用近似于 hard code 的方式对它们一一追踪。这类工作产生的维护成本接近于维护前端的 E2E 测试。诚然我们可以以通过分配统一的 id 或者 class name 的方式来减少我们的维护成本，但是相比统一的 GA 代码这样的维护成本依然偏高。所以我建议使用最简单的方法去监控最直接的元素，不要 case by case 的去编写你的监控代码，不要让你的实现代码被监控代码束缚住。</p>
 <h3>让工具为你所用</h3>
 <p>你可以在市面上找到各类数不胜数号称能够协助你改善性能的工具。但首先你要小心，它们所宣扬的，并非是你真正需要的。</p>
 <p>例如 site24x7 是一家专业提供用户行为监控解决方案的公司。在它们有关 APM 的<a href="https://www.site24x7.com/help/apm/rum/rum-for-spa.html">帮助页面</a>上，开宗明义的指出了监控捕获 SAP（Single Page Application） 性能数据以目前的技术来说其实是一项颇具挑战的工作：</p>
-<blockquote>
-<p>In case of Single Page Applications, the time taken for page load completion cannot be obtained by page onload event since the data are dynamically obtained from the server using</p>
-</blockquote>
-<blockquote>
+<blockquote><p>In case of Single Page Applications, the time taken for page load completion cannot be obtained by page onload event since the data are dynamically obtained from the server using</p>
 <p>Hence, for each SPA framework, the page load metrics are calculated by listening to particular events specific to the framework.</p>
 </blockquote>
 <p>所以对于此种类型的页面，它们捕获指标也只有：</p>
-<blockquote>
-<p>For every dynamic page load, the corresponding URL, it's respective AJAX calls, response time of each AJAX call, response codes and errors (if any) are captured.</p>
+<blockquote><p>For every dynamic page load, the corresponding URL, it's respective AJAX calls, response time of each AJAX call, response codes and errors (if any) are captured.</p>
 </blockquote>
 <p>但要知道在如今 SPA 大行其道的今天，如此的收集功能略显的苍白无力了。</p>
 <p>同理如果你去看 Azure Application Insights 旗下 JavaScript SDK 默认<a href="https://docs.microsoft.com/en-us/azure/azure-monitor/app/javascript#sending-telemetry-to-the-azure-portal">收集的页面信息</a>：</p>
@@ -202,7 +195,7 @@ share: true</h2>
 <p>另一方面，不要让你的思维被工具限制住：不要“因为 xx 工具只能做到这些，所以我只能收集这些指标”；而要“我想收集这些指标，所以我需要 xx 工具”。在这里我列举一个我们在探索中的例子：用 OpenTracing 工具 Jaeger  去可视化前端性能图表。</p>
 <p>在这里我首先必须赞颂 Chrome 内置 Performance 工具给我们调教性能带来了极大的便利。但我们始终有一些额外的需求无法满足。例如我希望能够在结果呈现中做一些自定义的标记，又或者在 Performance Tab 下展示每一个请求从 connect 到 resposne 每个阶段的状态。</p>
 <p>如下图所示，于是我们跨界的使用了 Jaeger 开源工具来用于自定义指标的收集和展示，可以说是将不同纬度的指标以时间为线索将它们联系起来，这样一来页面加载阶段的状态并能一览无余的尽收眼底。便于定位问题的所在。</p>
-<p><img alt="" src="/media/wwww/share/study/聚聚/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/jaeger.png"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/qingbob.com/_posts/../images/performance-metric-crisis/jaeger.png"/></p>
 <h2>结束语</h2>
 <p>我观察到对于大部分前端工程师而言，又或者曾经的自己而言，在做性能监控时是一个被“喂”的过程，即会惯性的不假思索的收集已有指标和利用已有工具。又因为性能优化工作过程前置结果后置的关系，等到我们有需求发生时才会发现当下的结果并非是我们想要的。多一些思考才会让我们的工作少一分浪费。</p>
 <h2>性能</h2>

@@ -1,10 +1,10 @@
 <h2><a href="https://github.com/forecho/hugo-blog/blob/master/content/posts/octopress-migrate-to-hugo.md">仓库源文</a>，<a href="https://blog.forecho.com/octopress-migrate-to-hugo.html">站点原文</a></h2>
 <hr/>
-<h2>title: "Octopress 迁移到 Hugo"
+<p>title: "Octopress 迁移到 Hugo"
 date: 2020-01-02T18:48:00+08:00
-tags: ["Octopress"]
-draft: false
-toc: true</h2>
+tags: ["Octopress"] 
+draft: false</p>
+<h2>toc: true</h2>
 <h2>引言</h2>
 <p>终于还是受不了 Octopress 了，准备迁移到 <a href="https://gohugo.io/">Hugo</a>，受不了 Octopress 是因为：</p>
 <ul>
@@ -12,10 +12,11 @@ toc: true</h2>
 <li>生成速度太慢，目前生成一次要2分多钟了</li>
 <li>Octopress 项目已经没人维护了</li>
 </ul>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>安装 Hugo</h2>
 <p>如果是 Mac 的话直接：</p>
-<pre><code class="language-sh">brew install hugo
+<pre><code class="lang-sh">brew install hugo
 hugo new site blog
 cd blog
 git init
@@ -23,112 +24,112 @@ git submodule add https://github.com/budparr/gohugo-theme-ananke.git themes/anan
 echo 'theme = "ananke"' &gt;&gt; config.toml
 </code></pre>
 <p>然后就可以用下面命令生成文章了：</p>
-<pre><code class="language-sh">hugo new posts/my-first-post.md
+<pre><code class="lang-sh">hugo new posts/my-first-post.md
 </code></pre>
 <p>开启服务</p>
-<pre><code class="language-sh">hugo server -D
+<pre><code class="lang-sh">hugo server -D
 </code></pre>
 <p>然后访问 <a href="http://localhost:1313/">http://localhost:1313/</a> 就可以看到你的 Hugo 博客了。</p>
 <h2>迁移文章</h2>
 <p>官方有<a href="https://gohugo.io/tools/migrations/">迁移指南</a>，Octopress 迁移到 Hugo 官方推荐使用 <a href="https://github.com/codebrane/octohug">octohug</a>，但是我使用下来发现不好用，迁移完之后有小问题。于是我找了一篇文章，结合文章给的代码，自己完善了功能，终于达到我要的效果，参考代码如下：</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"flag"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"regexp"
-	"strings"
+    "flag"
+    "fmt"
+    "io/ioutil"
+    "os"
+    "regexp"
+    "strings"
 )
 
 func main() {
-	var src, dst string
-	flag.StringVar(&amp;src, "src", "", "source")
-	flag.StringVar(&amp;dst, "dst", "", "destination")
-	flag.Parse()
+    var src, dst string
+    flag.StringVar(&amp;src, "src", "", "source")
+    flag.StringVar(&amp;dst, "dst", "", "destination")
+    flag.Parse()
 
-	if _, err := os.Stat(src); os.IsNotExist(err) {
-		panic("source directory does not exist")
-	}
+    if _, err := os.Stat(src); os.IsNotExist(err) {
+        panic("source directory does not exist")
+    }
 
-	if _, err := os.Stat(dst); os.IsNotExist(err) {
-		if err := os.Mkdir(dst, os.ModePerm); err != nil {
-			panic(err)
-		}
-	}
+    if _, err := os.Stat(dst); os.IsNotExist(err) {
+        if err := os.Mkdir(dst, os.ModePerm); err != nil {
+            panic(err)
+        }
+    }
 
-	files, err := ioutil.ReadDir(src)
-	if err != nil {
-		panic(err)
-	}
+    files, err := ioutil.ReadDir(src)
+    if err != nil {
+        panic(err)
+    }
 
-	for _, file := range files {
-		filename := file.Name()
-		re := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-(.*).m(arkdown|d)`)
-		// Ignore non-matching filenames (i.e. do no dereference nil)
-		if matches := re.FindStringSubmatch(filename); matches == nil {
-			continue
-		}
+    for _, file := range files {
+        filename := file.Name()
+        re := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-(.*).m(arkdown|d)`)
+        // Ignore non-matching filenames (i.e. do no dereference nil)
+        if matches := re.FindStringSubmatch(filename); matches == nil {
+            continue
+        }
 
-		in := fmt.Sprintf("%s%s", src, filename)
-		data, err := ioutil.ReadFile(in)
-		if err != nil {
-			panic(err)
-		}
+        in := fmt.Sprintf("%s%s", src, filename)
+        data, err := ioutil.ReadFile(in)
+        if err != nil {
+            panic(err)
+        }
 
-		re = regexp.MustCompile(`(\d{4}-\d{2}-\d{2})-(.*)`)
-		newFilename := re.ReplaceAllString(filename, "$2")
+        re = regexp.MustCompile(`(\d{4}-\d{2}-\d{2})-(.*)`)
+        newFilename := re.ReplaceAllString(filename, "$2")
 
-		re = regexp.MustCompile(`---\n([\s\S]*)---\n([\s\S]*)`)
-		matches := re.FindSubmatch(data)
-		header := string(matches[1])
-		body := string(matches[2])
-		draftline := "draft: false\n"
+        re = regexp.MustCompile(`---\n([\s\S]*)---\n([\s\S]*)`)
+        matches := re.FindSubmatch(data)
+        header := string(matches[1])
+        body := string(matches[2])
+        draftline := "draft: false\n"
 
-		// date
-		re = regexp.MustCompile(`date: (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}).*\n`)
-		header = re.ReplaceAllString(header, `date: ${1}T$2:00+08:00`+"\n")
+        // date
+        re = regexp.MustCompile(`date: (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}).*\n`)
+        header = re.ReplaceAllString(header, `date: ${1}T$2:00+08:00`+"\n")
 
-		// layout
-		re = regexp.MustCompile(`layout: .*\n`)
-		header = re.ReplaceAllString(header, "")
+        // layout
+        re = regexp.MustCompile(`layout: .*\n`)
+        header = re.ReplaceAllString(header, "")
 
-		// comments
-		re = regexp.MustCompile(`comments: .*\n`)
-		header = re.ReplaceAllString(header, "")
+        // comments
+        re = regexp.MustCompile(`comments: .*\n`)
+        header = re.ReplaceAllString(header, "")
 
-		// categories
-		re = regexp.MustCompile(`categories: (.*)\n`)
-		matches = re.FindSubmatch([]byte(header))
-		if categories := string(matches[1]); categories != "" {
-			tags := strings.ReplaceAll(categories, " ", "\", \"")
-			header = re.ReplaceAllString(header, fmt.Sprintf("tags: [\"%s\"] \n", tags))
-		}
+        // categories
+        re = regexp.MustCompile(`categories: (.*)\n`)
+        matches = re.FindSubmatch([]byte(header))
+        if categories := string(matches[1]); categories != "" {
+            tags := strings.ReplaceAll(categories, " ", "\", \"")
+            header = re.ReplaceAllString(header, fmt.Sprintf("tags: [\"%s\"] \n", tags))
+        }
 
-		more := "toc: true\n"
-		header = fmt.Sprintf("%s%s%s", header, draftline, more)
+        more := "toc: true\n"
+        header = fmt.Sprintf("%s%s%s", header, draftline, more)
 
-		content := fmt.Sprintf("---\n%s---\n%s", header, body)
+        content := fmt.Sprintf("---\n%s---\n%s", header, body)
 
-		// toc
-		toc := "* list element with functor item\n{:toc}\n"
-		content = strings.ReplaceAll(content, toc, "")
+        // toc
+        toc := "* list element with functor item\n{:toc}\n"
+        content = strings.ReplaceAll(content, toc, "")
 
-		content = strings.ReplaceAll(content, "{{ .Site.BaseURL }}", "{{ .Site.BaseURL }}")
+        content = strings.ReplaceAll(content, "{{ .Site.BaseURL }}", "{{ .Site.BaseURL }}")
 
-		out := dst + newFilename
-		fmt.Printf("%s -&gt; %s\n", in, out)
+        out := dst + newFilename
+        fmt.Printf("%s -&gt; %s\n", in, out)
 
-		if err := ioutil.WriteFile(out, []byte(content), 0644); err != nil {
-			panic(err)
-		}
-	}
+        if err := ioutil.WriteFile(out, []byte(content), 0644); err != nil {
+            panic(err)
+        }
+    }
 }
 </code></pre>
 <h3>使用方式</h3>
 <p>在 Octopress 博客根目录下新建一个 <code>main.go</code> 文件，然后把上面代码拷贝进去，然后执行下面代码完成迁移：</p>
-<pre><code class="language-sh">go run main.go -src octopress-blog/blog/_posts/ -dst hugo-blog/content/posts/
+<pre><code class="lang-sh">go run main.go -src octopress-blog/blog/_posts/ -dst hugo-blog/content/posts/
 </code></pre>
 <h2>最后</h2>
 <p>这篇文章主要是分享 Octopress 迁移 Hugo 文章的经验，上面的迁移代码不复杂，有一点点 Golang 经验应该是看得懂的，你可以根据自己的需求修改代码。</p>

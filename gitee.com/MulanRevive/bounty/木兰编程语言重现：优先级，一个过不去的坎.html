@@ -1,5 +1,5 @@
-<h2><a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2020-09-03-%E6%9C%A8%E5%85%B0%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80%E9%87%8D%E7%8E%B0%EF%BC%9A%E4%BC%98%E5%85%88%E7%BA%A7%EF%BC%8C%E4%B8%80%E4%B8%AA%E8%BF%87%E4%B8%8D%E5%8E%BB%E7%9A%84%E5%9D%8E.markdown">仓库源文</a></h2>
-<p><em><strong>注：项目目标见<a href="https://gitee.com/MulanRevive/mulan-rework">码云代码库</a></strong></em></p>
+<h2><a href="https://gitee.com/MulanRevive/bounty/blob/master/进展小结/2020-09-03-木兰编程语言重现：优先级，一个过不去的坎.markdown">仓库源文</a></h2>
+<p><strong><em>注：项目目标见<a href="https://gitee.com/MulanRevive/mulan-rework">码云代码库</a></em></strong></p>
 <p>上周就复现了一个语法，支持了这样的乘法<code>6/2(1+2)</code>，结果为 1。</p>
 <p>实现中，用到了针对语法规则的优先级设置。虽然 rply 有<a href="https://rply.readthedocs.io/en/latest/users-guide/parsers.html#precedence-on-rules">文档说明</a>，但死磕过后仍然不明所以然。将调试过程记录在此，最后有问题请教各位。</p>
 <h2>演示</h2>
@@ -7,7 +7,7 @@
 <pre><code>10 + 3 * 6 / 5 =&gt; 13
 </code></pre>
 <p>相关的优先级（precedence）设置是开头针对词（token）的部分，从低到高排列：</p>
-<pre><code class="language-python">    分析器母机 = ParserGenerator(
+<pre><code class="lang-python">    分析器母机 = ParserGenerator(
         规则,
         precedence=[
           ...
@@ -21,13 +21,13 @@
 </code></pre>
 <p>注：上面的“除”代表的是原本支持的<code>/</code>除法符号。</p>
 <p>比方说，现在想扩展一个语法，支持<code>÷</code>这个除法符号，除了添加一个词“除法”——<code>分词器母机.add(除法, '÷')</code>、增加一个语法规则——<code>@分析器母机.production(语法.二元表达式.成分(语法.表达式, 除法, 语法.表达式))</code>之外，还需要照样把<code>除法</code>添加到优先级设置：</p>
-<pre><code class="language-python">('left', [星号, 除, 除法]),
+<pre><code class="lang-python">('left', [星号, 除, 除法]),
 </code></pre>
 <p>于是就可以支持：</p>
 <pre><code>10 + 3 * 6 ÷ 5 =&gt; 13
 </code></pre>
 <p>假如不慎将<code>除法</code>的优先级设置高了，比如和<code>乘方</code>一样：</p>
-<pre><code class="language-python">('right', [乘方, 除法])
+<pre><code class="lang-python">('right', [乘方, 除法])
 </code></pre>
 <p>那么像<code>10 + 3 * 4 ÷ 5</code>原本应该是 12，但现在会是 10，因为 4÷5 先执行后结果为 0。</p>
 <p>假如干脆不设置<code>除法</code>的优先级，那么<code>10 + 3 * 6 ÷ 5</code>就会输出这样的玩意：</p>
@@ -38,7 +38,7 @@
 <p>可以看到最后输出了 5，应该是解析为了<code>(10 + 3 * 6) ÷ 5</code>。</p>
 <p>但报警告有<code>shift/reduce</code>冲突，要是能提示冲突细节多好。</p>
 <p>那么如果在这个语法规则添加设置，使之优先级与“除”相同，是否能达到正确效果呢？</p>
-<pre><code class="language-python">@分析器母机.production(语法.二元表达式.成分(语法.表达式, 除法, 语法.表达式), precedence=除)
+<pre><code class="lang-python">@分析器母机.production(语法.二元表达式.成分(语法.表达式, 除法, 语法.表达式), precedence=除)
 </code></pre>
 <p>上面的<code>shift/reduce</code>冲突倒是没了，但结果仍为 5。而且，即使这里优先级设最低、最高，都是同样效果。</p>
 <p>恢复到<code>precedence=除</code>后作更多测试：</p>
@@ -61,12 +61,12 @@
 <p>尚未看 rply 实现，个人的推测是，由于这个优先级是针对的这条语法规则，而非“÷”这个词，因此，在“÷”左边所有部分会被解析为一个“表达式”，而右边高于设定优先级的运算部分会合在一个“表达式”。</p>
 <h2>正题</h2>
 <p>前不久支持的范围表达式，格式为：<code>-1..4 by 2</code>，范围表达式的三个规则如下：</p>
-<pre><code class="language-python">    @分析器母机.production(语法.范围表达式.成分(语法.表达式, 点点, 语法.表达式))
+<pre><code class="lang-python">    @分析器母机.production(语法.范围表达式.成分(语法.表达式, 点点, 语法.表达式))
     @分析器母机.production(语法.范围表达式.成分(语法.表达式, 点点小于, 语法.表达式))
     @分析器母机.production(语法.范围表达式.成分(语法.范围表达式, 连词_每隔, 语法.表达式))
 </code></pre>
 <p>需要在下面的表达式语法规则中设置优先级为“等于”，比“连词_每隔”（by）低一级。</p>
-<pre><code class="language-python">    @分析器母机.production(语法.表达式.成分(语法.范围表达式), precedence=等于)
+<pre><code class="lang-python">    @分析器母机.production(语法.表达式.成分(语法.范围表达式), precedence=等于)
 </code></pre>
 <p>否则会报错：</p>
 <pre><code>分析器.错误.语法错误: 文件 "测试/数据结构/范围.ul", 第4行, 第13列, 没认出这个词 "by"
@@ -74,17 +74,17 @@ print(-1..4 by 2)
             ^
 </code></pre>
 <p>看来只有比 by 低，才会将整个识别为“范围表达式”（下面规则），而不是将前半段识别为“表达式”</p>
-<pre><code class="language-python">    @分析器母机.production(语法.范围表达式.成分(语法.范围表达式, 连词_每隔, 语法.表达式))
+<pre><code class="lang-python">    @分析器母机.production(语法.范围表达式.成分(语法.范围表达式, 连词_每隔, 语法.表达式))
 </code></pre>
 <p>那么为何不设置为优先级更低呢？</p>
 <p>最近的这个省乘号乘法，除了下面三个语法规则：</p>
-<pre><code class="language-python">    @分析器母机.production(语法.表达式.成分(语法.多项式乘法))
+<pre><code class="lang-python">    @分析器母机.production(语法.表达式.成分(语法.多项式乘法))
 
     @分析器母机.production(语法.多项式乘法.成分(语法.数, 语法.表达式前缀))
     @分析器母机.production(语法.多项式乘法.成分(语法.数, 语法.首要表达式))
 </code></pre>
 <p>还需要在这条看似不搭嘎的规则添加优先级设置：</p>
-<pre><code class="language-python">@分析器母机.production(语法.表达式.成分(语法.数), precedence=等于)
+<pre><code class="lang-python">@分析器母机.production(语法.表达式.成分(语法.数), precedence=等于)
 </code></pre>
 <p>否则也会报警告<code>ParserGeneratorWarning: 1 shift/reduce conflict</code>。</p>
 <p>应该，也是为了不把<code>2a</code>中的<code>2</code>解析为“表达式”，而是将整体解析为“多项式乘法”。</p>

@@ -1,13 +1,13 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2022-06-25-cpp-memory-order.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2022/06/25/cpp-memory-order">站点原文</a></h2>
 <hr/>
-<h2>key: 68
-title: 谈谈 C++ 中的内存顺序 (Memory Order)
-tag: [c/c++, featured]</h2>
+<p>key: 68
+title: 谈谈 C++ 中的内存顺序 (Memory Order)</p>
+<h2>tag: [c/c++, featured]</h2>
 <p>C++11 将多线程纳入了标准. 一旦涉及到多线程, 就需要考虑<strong>并发</strong>, <strong>数据竞争 (date race)</strong>, <strong>线程同步</strong>等问题, 为此 C++ 提供了互斥锁 <code>std::mutex</code>, 原子变量 <code>std::atomic</code> 等标准库. 对于原子变量的操作, 有一个很重要的概念就是<strong>内存顺序 (memory order)</strong>, 其中涉及到的概念很多, 理解起来可能会有些困难. 本文我们来谈谈这个话题.</p>
 <p>本文可能有些长, 涉及到的概念有些多. 其中 3.4 节和 3.5 节标注了星号, 它们的实际应用较少, 不感兴趣的同学可以先跳过, 或者读完全文后再阅读.</p>
 <h2>1. 原子变量</h2>
 <p>我们不能在两个线程中同时访问修改一个变量, 这会导致数据竞争的问题. 程序的结果是未定义的. 从实现上来说, 我们不能保证读写操作是原子的, 例如 32 位机器上, 修改一个 64 位变量可能需要两条指令; 或者变量有可能只是在寄存器里, 对其的修改要在稍后才会写入内存. 解决数据竞争的方式除了使用 <code>std::mutex</code> 加锁, 还可以使用原子变量.</p>
-<pre><code class="language-c++">std::atomic&lt;int&gt; a{0};
+<pre><code class="lang-c++">std::atomic&lt;int&gt; a{0};
 
 void thread1() {
     a = 1;
@@ -26,7 +26,7 @@ void thread2() {
 <li>read-modify-write (RMW). 原子地执行读取, 修改和写入. 如自增操作 <code>fetch_add</code>, 交换操作 <code>exchange</code> (返回变量当前的值并写入指定值) 等.</li>
 </ol>
 <p>每个原子操作都需要指定一个<strong>内存顺序 (memory order)</strong>. 不同的内存顺序有不同的语义, 会实现不同的顺序模型 (order model), 性能也各不相同. C++ 中有六种内存顺序</p>
-<pre><code class="language-c++">enum memory_order {
+<pre><code class="lang-c++">enum memory_order {
     memory_order_relaxed,
     memory_order_consume,
     memory_order_acquire,
@@ -42,7 +42,7 @@ void thread2() {
 <li>Relaxed ordering. 不能实现同步, 只保证原子性的模型.</li>
 </ul>
 <p>稍后我们会详细讨论这六种内存顺序. <code>atomic::store</code> 和 <code>atomic::load</code> 函数都有一个内存顺序的参数, 默认为 <code>memory_order_seq_cst</code>. 它们的声明如下</p>
-<pre><code class="language-c++">void store(T desired, std::memory_order order = std::memory_order_seq_cst);
+<pre><code class="lang-c++">void store(T desired, std::memory_order order = std::memory_order_seq_cst);
 T load(std::memory_order order = std::memory_order_seq_cst) const;
 </code></pre>
 <p>此外 <code>std::atomic</code> 重载了运算符, 我们可以像使用普通变量一样读写原子变量. 例如上面代码中两个线程的读写操作分别调用的是 <code>std::atomic&lt;int&gt;::operator=(int)</code> 和 <code>std::atomic&lt;int&gt;::operator int()</code>. 此时会使用默认的内存顺序, 也就是 <code>memory_order_seq_cst</code>.</p>
@@ -55,7 +55,7 @@ T load(std::memory_order order = std::memory_order_seq_cst) const;
 <li>即使每次运行的修改顺序可能都不同, 但所有线程看到的修改顺序总是一致的. 如果线程 a 看到原子变量 x 由 1 变成 2, 那么线程 b 就不可能看到 x 由 2 变成 1.</li>
 </ul>
 <p>无论使用哪种内存顺序, 原子变量的操作总能满足修改顺序一致性, 即使是最松散的 <code>memory_order_relaxed</code>. 我们来看一个例子</p>
-<pre><code class="language-c++">std::atomic&lt;int&gt; a{0};
+<pre><code class="lang-c++">std::atomic&lt;int&gt; a{0};
 
 void thread1() {
     for (int i = 0; i &lt; 10; i += 2)
@@ -107,7 +107,7 @@ $ ./test-modification-order
 <li>如果操作 a "sequenced-before" 操作 k, 且操作 k "sequenced-before" 操作 b, 则操作 a "sequenced-before" 操作 b.</li>
 </ul>
 <p>Sequenced-before 可以直接构成 happens-before 的关系. 如果操作 a "sequenced-before" 操作 b, 则操作 a "happens-before" 操作 b. 例如</p>
-<pre><code class="language-c++">a = 42; // (1)
+<pre><code class="lang-c++">a = 42; // (1)
 cout &lt;&lt; a &lt;&lt; endl; // (2)
 </code></pre>
 <p>语句 (1) 在语句 (2) 的前面, 因此语句 (1) "sequenced-before" 语句 (2), 也就是 (1) "happens-before" 语句 (2). 所以 (2) 可以打印出 (1) 赋值的结果.</p>
@@ -123,10 +123,10 @@ cout &lt;&lt; a &lt;&lt; endl; // (2)
 <li>如果操作 a "inter-thread happens-before" 操作 k, 且操作 k "inter-thread happens-before" 操作 b, 则操作 a "inter-thread happens-before" 操作 b.</li>
 </ul>
 <p>正如它的名字暗示的, 如果操作 a "inter-thread happens-before" 操作 b, 则操作 a "happens-before" 操作 b. 下图展示了这几个概念之间的关系:</p>
-<p><img alt="happens-before" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/cpp-memory-order_1.svg"/></p>
+<p><img alt="happens-before" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/cpp-memory-order_1.svg"/></p>
 <p>注意, 虽然 sequenced-before 和 inter-thread happens-before 都有传递性, 但是 <strong>happens-before 没有传递性</strong>. 后面我们会在 3.5 节中看到这个性质的重要性, 以及 C++ 为什么要定义这么多概念.</p>
 <p>现在我们来看一个例子. 假设下面的代码中 <code>unlock()</code> 操作 "synchronizes-with" <code>lock()</code> 操作.</p>
-<pre><code class="language-c++">void thread1() {
+<pre><code class="lang-c++">void thread1() {
     a += 1 // (1)
     unlock(); // (2)
 }
@@ -145,7 +145,7 @@ void thread2() {
 <p>因此 (4) 可以读到 (1) 对变量 <code>a</code> 的修改.</p>
 <h3>2.3 Happens-before 不代表指令实际的执行顺序</h3>
 <p>需要说明的是, happens-before 是 C++ 语义层面的概念, 它并不代表指令在 CPU 中实际的执行顺序. 为了优化性能, 编译器会在不破坏语义的前提下对指令重排. 例如</p>
-<pre><code class="language-c++">extern int a, b;
+<pre><code class="lang-c++">extern int a, b;
 int add() {
     a++;
     b++;
@@ -153,7 +153,7 @@ int add() {
 }
 </code></pre>
 <p>虽然有 <code>a++;</code> "happens-before" <code>b++;</code>, 但编译器实际生成的指令可能是先加载 <code>a</code>, <code>b</code> 两个变量到寄存器, 接着分别执行 "加一" 操作, 然后再执行 <code>a + b</code>, 最后才将自增的结果写入内存.</p>
-<pre><code class="language-nasm">add():
+<pre><code class="lang-nasm">add():
     movl    a(%rip), %eax   # 将变量 a 加载到寄存器
     movl    b(%rip), %ecx   # 将变量 b 加载到寄存器
     addl    $1, %eax        # a 的值加一
@@ -168,7 +168,7 @@ int add() {
 <p>前面我们提到 C++ 的六种内存顺序相互组合可以实现三种顺序模型. 现在我们来具体看看如何使用这六种内存顺序, 以及怎样的组合可以实现 synchronizes-with 的关系.</p>
 <h3>3.1 memory_order_seq_cst</h3>
 <p><code>memory_order_seq_cst</code> 可以用于 store, load 和 read-modify-write 操作, 实现 sequencial consistent 的顺序模型. 在这个模型下, 所有线程看到的所有操作都有一个一致的顺序, 即使这些操作可能针对不同的变量, 运行在不同的线程. 2.1 节中我们介绍了修改顺序 (modification order), 即单一变量的修改顺序在所有线程看来都是一致的. Sequencial consistent 则将这种一致性扩展到了所有变量. 例如</p>
-<pre><code class="language-c++">std::atomic&lt;bool&gt; x{false}, y{false};
+<pre><code class="lang-c++">std::atomic&lt;bool&gt; x{false}, y{false};
 
 void thread1() {
     x.store(true, std::memory_order_seq_cst); // (1)
@@ -179,7 +179,7 @@ void thread2() {
 }
 </code></pre>
 <p><code>thread1</code> 和 <code>thread2</code> 分别修改原子变量 <code>x</code> 和 <code>y</code>. 运行过程中, 有可能先执行 (1) 再执行 (2), 也有可能先执行 (2) 后执行 (1). 但无论如何, 所有线程中看到的顺序都是一致的. 因此如果我们这样测试这段代码:</p>
-<pre><code class="language-c++">std::atomic&lt;int&gt; z{0};
+<pre><code class="lang-c++">std::atomic&lt;int&gt; z{0};
 
 void read_x_then_y() {
     while (!x.load(std::memory_order_seq_cst)); // (3)
@@ -202,7 +202,7 @@ int main() {
 <p>实现 sequencial consistent 模型有一定的开销. 现代 CPU 通常有多核, 每个核心还有自己的缓存. 为了做到全局顺序一致, 每次写入操作都必须同步给其他核心. 为了减少性能开销, 如果不需要全局顺序一致, 我们应该考虑使用更加宽松的顺序模型.</p>
 <h3>3.2 memory_order_relaxed</h3>
 <p><code>memory_order_relaxed</code> 可以用于 store, load 和 read-modify-write 操作, 实现 relaxed 的顺序模型. 这种模型下, 只能保证操作的原子性和修改顺序 (modification order) 一致性, 无法实现 synchronizes-with 的关系. 例如</p>
-<pre><code class="language-c++">std::atomic&lt;bool&gt; x{false}, y{false};
+<pre><code class="lang-c++">std::atomic&lt;bool&gt; x{false}, y{false};
 
 void thread1() {
     x.store(true, std::memory_order_relaxed); // (1)
@@ -210,7 +210,7 @@ void thread1() {
 }
 </code></pre>
 <p><code>thread1</code> 对不同的变量执行 store 操作. 那么在某些线程看来, 有可能是 <code>x</code> 先变为 <code>true</code>, y 后变为 <code>true</code>; 另一些线程看来, 又有可能是 <code>y</code> 先变为 <code>true</code>, <code>x</code> 后变为 <code>true</code>. 如果这样测试这段代码:</p>
-<pre><code class="language-c++">void thread2() {
+<pre><code class="lang-c++">void thread2() {
     while (!y.load(std::memory_order_relaxed)); // (3)
     assert(x.load()); // (4)
 }
@@ -230,7 +230,7 @@ void thread1() {
 </li>
 </ul>
 <p>Acquire-release 可以实现 synchronizes-with 的关系. 如果一个 acquire 操作在同一个原子变量上读取到了一个 release 操作写入的值, 则这个 release 操作 "synchronizes-with" 这个 acquire 操作. 我们来看一个例子:</p>
-<pre><code class="language-c++">std::atomic&lt;bool&gt; x{false}, y{false};
+<pre><code class="lang-c++">std::atomic&lt;bool&gt; x{false}, y{false};
 
 void thread1() {
     x.store(true, std::memory_order_relaxed); // (1)
@@ -251,7 +251,7 @@ void thread2() {
 <p>3.1 节我们提到 sequencial consistent 模型可以实现 synchronizes-with 关系. 事实上, 内存顺序为 <code>memory_order_seq_cst</code> 的 load 操作和 store 操作可以分别视为 acquire 操作和 release 操作. 因此对于两个指定了 <code>memory_order_seq_cst</code> 的 store 操作和 load 操作, 如果后者读到了前者写入的值, 则前者 "synchronizes-with" 后者.</p>
 <p>为了实现 synchronizes-with 关系, acquire 操作和 release 操作应该成对出现. 如果 <code>memory_order_acquire</code> 的 load 读到了 <code>memory_order_relaxed</code> 的 store 写入的值, 或者 <code>memory_order_relaxed</code> 的 load 读到了 <code>memory_order_release</code> 的 store 写入的值, 都不能实现 synchronizes-with 的关系.</p>
 <p>虽然 sequencial consistent 模型能够像 acquire-release 一样实现同步, 但是反过来 acquire-release 模型不能像 sequencial consistent 一样提供全局顺序一致性. 如果将 3.1 节的例子中的 <code>memory_order_seq_cst</code> 换成 <code>memory_order_acquire</code> 和 <code>memory_order_release</code></p>
-<pre><code class="language-c++">void thread1() {
+<pre><code class="lang-c++">void thread1() {
     x.store(true, std::memory_order_release); // (1)
 }
 
@@ -273,7 +273,7 @@ void read_y_then_x() {
 <p>Acquire-release 的开销比 sequencial consistent 小. 在 x86 架构下, <code>memory_order_acquire</code> 和 <code>memory_order_release</code> 的操作不会产生任何其他的指令, 只会影响编译器的优化: 任何指令都不能重排到 acquire 操作的前面, 且不能重排到 release 操作的后面; 否则会违反 acquire-release 的语义. 因此很多需要实现 synchronizes-with 关系的场景都会使用 acquire-release.</p>
 <h3>3.4* Release sequences</h3>
 <p>到目前为止我们看到的, 无论是 sequencial consistent 还是 acquire-release, 要想实现 synchronizes-with 的关系, acquire 操作必须在同一个原子变量上读到 release 操作的写入的值. 如果 acquire 操作没有读到 release 操作写入的值, 那么它俩之间通常没有 synchronizes-with 的关系. 例如</p>
-<pre><code class="language-c++">std::atomic&lt;int&gt; x{0}, y{0};
+<pre><code class="lang-c++">std::atomic&lt;int&gt; x{0}, y{0};
 
 void thread1() {
     x.store(1, std::memory_order_relaxed); // (1)
@@ -298,7 +298,7 @@ void thread3() {
 </ul>
 <p>这两种构成的, 则称这一连串的操作为<strong>以 release 操作 A 为首的 release sequence</strong>. 这里的写操作和 read-modify-write 操作可以使用任意内存顺序.</p>
 <p>如果一个 acquire 操作在同一个原子变量上读到了一个 release 操作写入的值, 或者读到了以这个 release 操作为首的 release sequence 写入的值, 那么这个 release 操作 "synchronizes-with" 这个 acquire 操作. 我们来看个例子</p>
-<pre><code class="language-c++">std::vector&lt;int&gt; data;
+<pre><code class="lang-c++">std::vector&lt;int&gt; data;
 std::atomic&lt;int&gt; flag{0};
 
 void thread1() {
@@ -322,7 +322,7 @@ void thread3() {
 <h3>3.5* memory_order_consume</h3>
 <p><code>memory_order_consume</code> 其实是 acquire-release 模型的一部分, 但是它比较特殊, 它涉及到数据间相互依赖的关系. 为此我们又要提出两个新概念: <strong>carries dependency</strong> 和 <strong>dependency-ordered before</strong>.</p>
 <p>如果操作 a "sequenced-before" b, 且 b 依赖 a 的数据, 则 a "carries a dependency into" b. 一般来说, 如果 a 的值用作 b 的一个操作数, 或者 b 读取到了 a 写入的值, 都可以称为 b 依赖于 a. 例如</p>
-<pre><code class="language-c++">p++;  // (1)
+<pre><code class="lang-c++">p++;  // (1)
 i++;  // (2)
 p[i]; // (3)
 </code></pre>
@@ -335,9 +335,9 @@ p[i]; // (3)
 <li>release 操作和 consume 操作构成的 dependency-ordered before 则只能后接 carries dependency 构成 inter-thread happens-before 的关系.</li>
 <li>无论 inter-thread happens-before 是怎么构成的, 都可以前接 sequenced-before 以延伸其范围.</li>
 </ul>
-<p><img alt="dependency-ordered before" src="/media/wwww/share/study/聚聚/源数据/博客聚合/luyuhuang.github.io/source/assets/images/cpp-memory-order_2.svg"/></p>
+<p><img alt="dependency-ordered before" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/luyuhuang.github.io/source/assets/images/cpp-memory-order_2.svg"/></p>
 <p>我们来看一个例子:</p>
-<pre><code class="language-c++">std::atomic&lt;std::string*&gt; ptr;
+<pre><code class="lang-c++">std::atomic&lt;std::string*&gt; ptr;
 int data;
 
 void thread1() {
@@ -365,7 +365,7 @@ void thread2() {
 <p>前面讲了很多概念和理论, 现在我们来看两个实际的例子来加深理解.</p>
 <h3>4.1 自旋锁</h3>
 <p>在一些场景下, 如果锁被占用的时间很短, 我们会选择自旋锁, 以减少上下文切换的开销. 锁一般用来保护临界数据的读写, 我们希望同一时间只有一个线程能获取到锁, 且获取到锁后, 被锁保护的数据总是最新的. 前者通过原子操作即可保证, 而后者就需要考虑内存顺序了.</p>
-<pre><code class="language-c++">std::deque&lt;int&gt; queue;
+<pre><code class="lang-c++">std::deque&lt;int&gt; queue;
 spinlock mu;
 
 void thread1() {
@@ -388,7 +388,7 @@ void thread2() {
 </code></pre>
 <p>两个线程并发运行, <code>thread1</code> 往队列里写入数据, <code>thread2</code> 从队列里读出数据. 入队操作 (2) 可能需要复制数据, 移动指针, 甚至 resize 队列, 因此我们要保证获取到锁时, 这些操作的结果完全可见. 出队操作也是同理. 所以自旋锁要保证 unlock 操作 "synchronizes-with" lock 操作, 保证锁保护的数据是完整的.</p>
 <p>我们可以用 acquire-release 模型实现自旋锁. 下面是一个简单的实现:</p>
-<pre><code class="language-c++">class spinlock {
+<pre><code class="lang-c++">class spinlock {
     std::atomic&lt;bool&gt; flag{false};
 public:
     void lock() {
@@ -402,7 +402,7 @@ public:
 <p>上面的实现中, (1) 处加锁用到的 <code>exchange</code> 是一种 read-modify-write 操作, 它将目标值 (第一个参数) 写入原子变量, 并返回写入前的值. 在这个实现中, 锁被占用时 <code>flag</code> 为 <code>true</code>. 如果锁被占用, (1) 处的 exchange 操作会一直返回 <code>true</code>, 线程阻塞在循环中; 直到锁被释放, <code>flag</code> 为 <code>false</code>, exchange 操作将 <code>flag</code> 重新置为 <code>true</code> 以抢占锁, 并且返回其原来的值 <code>false</code>, 循环退出, 加锁成功. 解锁则很简单, 将 <code>flag</code> 置为 <code>false</code> 即可.</p>
 <p>由于解锁操作使用 <code>memory_order_release</code> 且加锁操作使用 <code>memory_order_acquire</code>, 所以能保证加锁成功时与上一次解锁操作构成 "synchronizes-with" 的关系, 也就是 unlock 操作 "synchronizes-with" lock 操作.</p>
 <p>加锁时的 exchange 操作是一个 read-modify-write 操作, 它既读又写. 当它使用 <code>memory_order_acquire</code> 时, 只能保证它读的部分是一个 acquire 操作. 如果有两个线程抢占同一个锁</p>
-<pre><code class="language-c++">spinlock mu;
+<pre><code class="lang-c++">spinlock mu;
 
 void thread1() {
     // some operations
@@ -416,7 +416,7 @@ void thread2() {
 <p>(1) 和 (2) 之间没有任何同步关系, 假设先执行操作 (1) 后执行操作 (2), 那么 <code>thread1</code> 中 (1) 之前的操作结果不一定对 <code>thread2</code> 可见. 但能确定的是, 只会有一个线程得到锁, 这是由原子变量的修改顺序 (modification order) 所保证的. 要么 <code>thread1</code> 先将 <code>flag</code> 置为 <code>true</code>, 要么 <code>thread2</code> 先将 <code>flag</code> 置为 <code>true</code>, 这个顺序是全局一致的.</p>
 <h3>4.2 线程安全的单例模式</h3>
 <p>单例模式是一种很常用的设计模式. 我们通常用一个静态成员指针存储这个类的唯一实例, 然后用一个静态成员函数获取它, 如果指针为空则创建.</p>
-<pre><code class="language-c++">class App {
+<pre><code class="lang-c++">class App {
     static App *instance;
 public:
     static App *get_instance() {
@@ -427,7 +427,7 @@ public:
 };
 </code></pre>
 <p>但是这种做法在多线程下有并发的问题. 解决这个问题最简单的办法就是加锁. 但是给整个函数加锁是没有必要的, 因为只有在初始创建对象时才会有并发的问题, 后续则只需要返回指针, 此时的锁会造成不必要的性能负担. 更好的做法是仅在要创建对象的时候加锁, 我们可以这样实现:</p>
-<pre><code class="language-c++">class App {
+<pre><code class="lang-c++">class App {
     static App *instance;
     static std::mutex mu;
 public:
@@ -443,7 +443,7 @@ public:
 </code></pre>
 <p>在上面的实现中, 如果发现 <code>instance</code> 指针为空, 则加锁并创建对象. 获取到锁后, 还需要再判断一下 <code>instance</code> 是否为空, 以免在判断 (1) 之后, 锁获取到之前, 有其他线程创建了对象. 但是这种做法是有问题的: (1) 并没有在锁的保护下, 它有可能与 (2) 并发, 导致数据竞争.</p>
 <p>我们可以使用原子变量解决这个问题, 将 <code>instance</code> 指针改成原子类型 <code>std::atomic&lt;App*&gt;</code>. 那么在读取和写入 <code>instance</code> 时, 应该使用什么内存顺序呢, <code>memory_order_relaxed</code> 可以吗?</p>
-<pre><code class="language-c++">class App {
+<pre><code class="lang-c++">class App {
     static std::atomic&lt;App*&gt; instance;
     static std::mutex mu;
 public:
@@ -463,7 +463,7 @@ public:
 <p>假设线程 1 调用了 <code>get_instance</code>, 发现对象没有创建, 然后成功获取到锁并且创建对象, 接着执行 (3) 将新对象的指针写入 <code>instance</code> 中; 随后线程 2 也调用 <code>get_instance</code> 执行 (1) 读取到线程 1 在操作 (3) 中写入的值, 此时能保证得到的指针 <code>p</code> 是有效的吗?</p>
 <p>注意线程 1 执行 <code>p = new App</code> 时需要调用构造函数初始化 <code>App</code> 中的成员. 因为 (1) 和 (3) 都是 <code>memory_order_relaxed</code> 的内存顺序, 它们之间没有任何 synchronizes-with 的关系. 所以当线程 2 在操作 (1) 读取到线程 1 在操作 (3) 写入的指针时, 不能保证 <code>App</code> 成员的初始化结果对线程 2 可见. 这会导致线程 2 得到的对象数据不完整, 造成非常意外的结果.</p>
 <p>正确的做法是使用 acquire-release 模型:</p>
-<pre><code class="language-c++">class App {
+<pre><code class="lang-c++">class App {
     static std::atomic&lt;App*&gt; instance;
     static std::mutex mu;
 public:

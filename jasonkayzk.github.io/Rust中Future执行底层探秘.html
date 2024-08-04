@@ -1,24 +1,25 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Rust%E4%B8%ADFuture%E6%89%A7%E8%A1%8C%E5%BA%95%E5%B1%82%E6%8E%A2%E7%A7%98.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/11/29/Rust%E4%B8%ADFuture%E6%89%A7%E8%A1%8C%E5%BA%95%E5%B1%82%E6%8E%A2%E7%A7%98">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Rust中Future执行底层探秘.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/11/29/Rust中Future执行底层探秘">站点原文</a></h2>
 <hr/>
-<h2>title: Rust中Future执行底层探秘
+<p>title: Rust中Future执行底层探秘
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?7'
+cover: '<a href="https://img.paulzzh.com/touhou/random?7">https://img.paulzzh.com/touhou/random?7</a>'
 date: 2022-11-29 10:23:46
 categories: Rust
-tags: [Rust, Async, Future]
-description: 众所周知Rust中的异步<code>async/.await</code>代码在编译时会被转换为Future+Waker+Executor的事件状态机的执行，下面我们通过标准库和futures库提供的功能，手写Future的实现，加深对<code>async/.await</code>编译后Future执行的理解；</h2>
+tags: [Rust, Async, Future]</p>
+<h2>description: 众所周知Rust中的异步<code>async/.await</code>代码在编译时会被转换为Future+Waker+Executor的事件状态机的执行，下面我们通过标准库和futures库提供的功能，手写Future的实现，加深对<code>async/.await</code>编译后Future执行的理解；</h2>
 <p>众所周知Rust中的异步<code>async/.await</code>代码在编译时会被转换为Future+Waker+Executor的事件状态机的执行；</p>
 <p>下面我们通过标准库和futures库提供的功能，手写Future的实现，加深对<code>async/.await</code>编译后Future执行的理解；</p>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/rust-learn/tree/async/examples/1_future</li>
+<li><a href="https://github.com/JasonkayZK/rust-learn/tree/async/examples/1_future">https://github.com/JasonkayZK/rust-learn/tree/async/examples/1_future</a></li>
 </ul>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h1><strong>Rust中Future执行底层探秘</strong></h1>
 <p>关于Future Trait底层逻辑，Rust圣经中讲的已经非常到位了：</p>
 <ul>
-<li>https://course.rs/async-rust/async/future-excuting.html</li>
+<li><a href="https://course.rs/async-rust/async/future-excuting.html">https://course.rs/async-rust/async/future-excuting.html</a></li>
 </ul>
 <p>但是其中的例子举的是一个Sleep定时器的例子，基本上只会执行一次 <code>poll</code>，并且没有内部的逻辑；</p>
 <p>后面我会再写另外的一个例子，虽然也没什么意义，但是增加了一些逻辑；</p>
@@ -37,7 +38,7 @@ description: 众所周知Rust中的异步<code>async/.await</code>代码在编�
 <p>这里会从 Executor 调度开始，自顶向下执行；</p>
 <p>但是阅读下文之前，也希望你先阅读：</p>
 <ul>
-<li>https://course.rs/async-rust/async/future-excuting.html</li>
+<li><a href="https://course.rs/async-rust/async/future-excuting.html">https://course.rs/async-rust/async/future-excuting.html</a></li>
 </ul>
 <p>对 Rust 中的 Future 以及异步有一定的了解；</p>
 <p>&lt;br/&gt;</p>
@@ -48,7 +49,7 @@ description: 众所周知Rust中的异步<code>async/.await</code>代码在编�
 <p>但是那些最外层的 <code>async</code> 函数，谁来推动它们运行呢？答案就是：执行器 <code>executor</code> ！</p>
 <p><strong>任何一个异步系统，最终都需要一个统一的 Executor 来统一管理这些 Future 任务；</strong></p>
 <p>例如，futures 库中提供的 <code>block_on</code>：</p>
-<pre><code class="language-rust">use futures::executor::block_on;
+<pre><code class="lang-rust">use futures::executor::block_on;
 
 struct Song {
     author: String,
@@ -95,7 +96,7 @@ fn main() {
 }
 </code></pre>
 <p>或者 <code>tokio</code> 框架：</p>
-<pre><code class="language-rust">async fn say_world() {
+<pre><code class="lang-rust">async fn say_world() {
     println!("world")
 }
 
@@ -145,23 +146,22 @@ pub fn main() -&gt; () {
 </code></pre>
 <p><strong>其中 <code>tokio::runtime::Builder::new_multi_thread()</code> 就初始化了一个 Executor，只不过这个 Executor 是整个异步系统都在用，因此叫做 runtime 更为合适！</strong></p>
 <p>&lt;br/&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>Executor 会管理一批 <code>Future</code> (最外层的 <code>async</code> 函数)，然后通过不停地 <code>poll</code> 推动它们直到完成；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**Executor 会管理一批 `Future` (最外层的 `async` 函数)，然后通过不停地 `poll` 推动它们直到完成；**&lt;/font&gt;</p>
 <p>执行的逻辑如下：</p>
-<p>&lt;font color="#f00"&gt;<strong>最开始，Executor 会先 <code>poll</code> 一次 <code>Future</code> ，后面就不会主动去 <code>poll</code> 了，而是等待 <code>Future</code> 通过调用 <code>wake</code> 函数来通知它可以继续，它才会继续去 <code>poll</code>（类似于 Event-Loop）；</strong>&lt;/font&gt;</p>
-<p>&lt;font color="#f00"&gt;<strong>这种wake 通知然后 poll的方式会不断重复，直到 <code>Future</code> 完成；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**最开始，Executor 会先 `poll` 一次 `Future` ，后面就不会主动去 `poll` 了，而是等待 `Future` 通过调用 `wake` 函数来通知它可以继续，它才会继续去 `poll`（类似于 Event-Loop）；**&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**这种wake 通知然后 poll的方式会不断重复，直到 `Future` 完成；**&lt;/font&gt;</p>
 <p>&lt;br/&gt;</p>
 <h4><strong>构建Executor</strong></h4>
 <p><strong>在 Rust 圣经的例子中构建的 Executor 更像是一个类似于线程池的调度器，性能其实并不会特别高；</strong></p>
 <p>在实际生产环境下，tokio 实现的是类似于 Go 中 goroutine 调度器的方式，将大量的 Future 映射到为数不多的操作系统中，并且通过提供可插拔的多个类型的 runtime 供你使用；</p>
-<blockquote>
-<p><strong>你可理解为，Rust 中的 tokio 既可以通过类似于 Java 中线程池的方式使用，也可以通过类似于 Go 中协程调度器的方式使用；</strong></p>
+<blockquote><p><strong>你可理解为，Rust 中的 tokio 既可以通过类似于 Java 中线程池的方式使用，也可以通过类似于 Go 中协程调度器的方式使用；</strong></p>
 <p><strong>至于原因，当然是因为 <code>There is no silver bullet</code>，具体场景使用具体的模式；例如：嵌入式场景和服务器场景相差甚远！</strong></p>
 </blockquote>
 <h5><strong>Executor实现</strong></h5>
 <p>Executor 需要从一个消息通道( <code>channel</code> )中拉取事件，然后运行；</p>
 <p>当一个任务准备好后（可以继续执行），会将自己放入 Executor 的消息 Channel 中，然后等待执行器 <code>poll</code> ；</p>
 <p>下面是 Executor 的定义和实现：</p>
-<pre><code class="language-rust">/// 任务执行器，负责从通道中接收任务然后执行
+<pre><code class="lang-rust">/// 任务执行器，负责从通道中接收任务然后执行
 pub struct Executor {
     ready_queue: Receiver&lt;Arc&lt;Task&gt;&gt;,
 }
@@ -195,7 +195,7 @@ impl Executor {
 <p>&lt;br/&gt;</p>
 <h5><strong>实现Spawner</strong></h5>
 <p><code>Spawner</code>负责创建新的<code>Future</code>，然后将它发送到任务通道中；</p>
-<pre><code class="language-rust">/// `Spawner`负责创建新的`Future`然后将它发送到任务通道中
+<pre><code class="lang-rust">/// `Spawner`负责创建新的`Future`然后将它发送到任务通道中
 #[derive(Clone)]
 pub struct Spawner {
     task_sender: SyncSender&lt;Arc&lt;Task&gt;&gt;,
@@ -215,16 +215,16 @@ impl Spawner {
 <p>显然，Spawner 的内部是一个 <code>SyncSender</code>，负责将传入的 Future 进行包装，然后通过 Channel 传入 Executor 中调度；</p>
 <p>这正是 spawn 方法的逻辑：</p>
 <p>首先，将 future 转为 Pinned Box，随后使用 Arc 进行了封装，最后通过 send 将包装好的任务发给了 Executor 执行；</p>
-<blockquote>
-<p><strong>将 future 转为 Pinned Box 的原因见：</strong></p>
+<blockquote><p><strong>将 future 转为 Pinned Box 的原因见：</strong></p>
 <ul>
-<li>https://course.rs/async-rust/async/pin-unpin.html</li>
-</ul>
+<li><p><a href="https://course.rs/async-rust/async/pin-unpin.html">https://course.rs/async-rust/async/pin-unpin.html</a></p>
 <p>简单来说，对于存在自引用的类型，要求其内部指向的内存地址不可变！</p>
-<p>&lt;font color="#f00"&gt;<strong>注意：<code>!Unpin</code> Trait 只是一个 Marker，他帮助编译器在编译阶段对内部指向进行检查，而非真正固定了内存！</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**注意：`!Unpin` Trait 只是一个 Marker，他帮助编译器在编译阶段对内部指向进行检查，而非真正固定了内存！**&lt;/font&gt;</p>
+</li>
+</ul>
 </blockquote>
 <p>下面是 Executor 和 Spawner 的构造函数：</p>
-<pre><code class="language-rust">pub fn new_executor_and_spawner() -&gt; (Executor, Spawner) {
+<pre><code class="lang-rust">pub fn new_executor_and_spawner() -&gt; (Executor, Spawner) {
     // 任务通道允许的最大缓冲数(任务队列的最大长度)
     // 当前的实现仅仅是为了简单，在实际的执行中，并不会这么使用
     const MAX_QUEUED_TASKS: usize = 10_000;
@@ -235,7 +235,7 @@ impl Spawner {
 <p>&lt;br/&gt;</p>
 <h5><strong>抽象Task</strong></h5>
 <p>Future 本质上就是一个 Task 任务的封装，下面来看：</p>
-<pre><code class="language-rust">/// 一个Future，它可以调度自己(将自己放入任务通道中)，然后等待执行器去`poll`
+<pre><code class="lang-rust">/// 一个Future，它可以调度自己(将自己放入任务通道中)，然后等待执行器去`poll`
 struct Task {
     /// 进行中的Future，在未来的某个时间点会被完成
     ///
@@ -265,7 +265,7 @@ impl ArcWake for Task {
 <p>在异步场景下，Waker 是一个很重要的组件，因为我们不能让 Executor 不断的去轮询所有的 Future 来查看任务是否完成，而是应当在 Future 执行完成后主动的向 Executor 报告！</p>
 <p>并且通常情况下，对于 <code>Future</code> 来说，第一次被 <code>poll</code> 时无法完成任务是很正常的；因此它需要确保在未来一旦准备好时，可以通知 Executor 再次对其进行 <code>poll</code>，进而继续往下执行，该通知就是通过 <code>Waker</code> 类型完成的；</p>
 <p>下面是标准库中 Future Trait 和 Context 的定义：</p>
-<pre><code class="language-rust">pub trait Future {
+<pre><code class="lang-rust">pub trait Future {
     type Output;
 
     fn poll(self: Pin&lt;&amp;mut Self&gt;, cx: &amp;mut Context&lt;'_&gt;) -&gt; Poll&lt;Self::Output&gt;;
@@ -283,15 +283,15 @@ pub struct Context&lt;'a&gt; {
 <p>可以看到，poll 方法的参数 cx 中包含了 waker，这正是上面我们在实现 Executor 中放入的；</p>
 <p>当 Future 任务完成后，会调用 waker 的 wake 方法，注意到在前面我们为 Task 实现了 ArcWake Trait；</p>
 <p>因此调用 waker 的 wake 方法后，会执行 Task 对应的方法：</p>
-<pre><code class="language-rust">fn wake_by_ref(arc_self: &amp;Arc&lt;Self&gt;) {
+<pre><code class="lang-rust">fn wake_by_ref(arc_self: &amp;Arc&lt;Self&gt;) {
   // 通过发送任务到任务管道的方式来实现`wake`，这样`wake`后，任务就能被执行器`poll`
   let cloned = arc_self.clone();
   arc_self.task_sender.send(cloned).expect("任务队列已满");
 }
 </code></pre>
 <p>最后再次将任务发送给了 Executor，由 Executor 调用 poll 推动 Future 修改状态！</p>
-<p>&lt;font color="#f00"&gt;<strong>需要注意的是：waker 调用 wake 后会消耗掉自己：</strong>&lt;/font&gt;</p>
-<pre><code class="language-rust">pub fn wake(self) {
+<p>&lt;font color="#f00"&gt;**需要注意的是：waker 调用 wake 后会消耗掉自己：**&lt;/font&gt;</p>
+<pre><code class="lang-rust">pub fn wake(self) {
   // The actual wakeup call is delegated through a virtual function call
   // to the implementation which is defined by the executor.
   let wake = self.waker.vtable.wake;
@@ -311,7 +311,7 @@ pub struct Context&lt;'a&gt; {
 <h3><strong>具体任务封装 Future</strong></h3>
 <p>实际上，<strong>编写 Future 的任务是由编译器来做的：我们编写的每个 <code>async</code> 块在编译结束后都返回一个 Future 对象；</strong></p>
 <p>当然，这里为了学习，我们是手动创建的 Future：</p>
-<pre><code class="language-rust">pub struct TimerFuture {
+<pre><code class="lang-rust">pub struct TimerFuture {
     shared_state: Arc&lt;Mutex&lt;SharedState&gt;&gt;,
 }
 
@@ -327,10 +327,11 @@ struct SharedState {
 <p>TimerFuture 的结构非常简单，仅仅维护了一个 <code>completed</code> 状态和一个waker：</p>
 <ul>
 <li><strong>当睡眠结束后，可以修改 completed 的状态，标注任务结束；</strong></li>
-<li><strong>同时，通过 waker 来通知 Executor 推进任务状态；</strong></li>
-</ul>
+<li><p><strong>同时，通过 waker 来通知 Executor 推进任务状态；</strong></p>
 <p>下面是具体的实现：</p>
-<pre><code class="language-rust">impl Future for TimerFuture {
+</li>
+</ul>
+<pre><code class="lang-rust">impl Future for TimerFuture {
     type Output = ();
     fn poll(self: Pin&lt;&amp;mut Self&gt;, cx: &amp;mut Context&lt;'_&gt;) -&gt; Poll&lt;Self::Output&gt; {
         // 通过检查共享状态，来确定定时器是否已经完成
@@ -352,17 +353,16 @@ struct SharedState {
 <p>可以看到，poll 中判断了是否是已完成：</p>
 <ul>
 <li>如果已完成，标注当前 Future 已完成；</li>
-<li>否则标记 Pending，并放回 waker（这是因为前面说到的&lt;font color="#f00"&gt;<strong>waker 调用 wake 后会消耗掉自己：</strong>&lt;/font&gt;）</li>
+<li>否则标记 Pending，并放回 waker（这是因为前面说到的&lt;font color="#f00"&gt;**waker 调用 wake 后会消耗掉自己：**&lt;/font&gt;）</li>
 </ul>
-<blockquote>
-<p><strong>poll方法中只做具体 Future 状态的变化；</strong></p>
+<blockquote><p><strong>poll方法中只做具体 Future 状态的变化；</strong></p>
 <p><strong>这个例子不好的一点在于，我们的 Future 中只有单个任务， 因此只有 Ready、Pending 状态；</strong></p>
 <p><strong>如果存在多个顺序的协程，则会存在 Pending1、Pending2、…等等，多个状态切换；</strong></p>
 <p><strong>还有一个不好的地方在于，他的任务只是简单的Sleep，甚至看不出来异步函数的逻辑究竟是在哪执行的！</strong></p>
 </blockquote>
 <p>既然 poll 方法只是推动 Future 的状态，那具体的 async 函数的逻辑在哪里执行呢？</p>
 <p>答案是在 Future 本身被定义：</p>
-<pre><code class="language-rust">impl TimerFuture {
+<pre><code class="lang-rust">impl TimerFuture {
     /// 创建一个新的`TimerFuture`，在指定的时间结束后，该`Future`可以完成
     pub fn new(duration: Duration) -&gt; Self {
         let shared_state = Arc::new(Mutex::new(SharedState {
@@ -392,7 +392,7 @@ struct SharedState {
 <p>前面说到了，这里任务的提交是非常简单的，就是创建一个新的线程；</p>
 <p><strong>实际上，任务的提交后的调度是非常复杂的，很可能需要任务窃取、任务切换等一系列处理；</strong></p>
 <p>下面是 tokio 中 <code>spawn</code> 的实现，比我们这里复杂太多了：</p>
-<pre><code class="language-rust">pub(crate) fn spawn&lt;F&gt;(&amp;self, future: F, id: Id) -&gt; JoinHandle&lt;F::Output&gt;
+<pre><code class="lang-rust">pub(crate) fn spawn&lt;F&gt;(&amp;self, future: F, id: Id) -&gt; JoinHandle&lt;F::Output&gt;
 where
 F: Future + Send + 'static,
 F::Output: Send + 'static,
@@ -460,7 +460,7 @@ impl Handle {
 <p>&lt;br/&gt;</p>
 <h3><strong>使用Future</strong></h3>
 <p>让我们把视线收回来，既然手动写完了 Future 让我们来测试一下：</p>
-<pre><code class="language-rust">fn timer_demo() {
+<pre><code class="lang-rust">fn timer_demo() {
     let (executor, spawner) = new_executor_and_spawner();
 
     // 生成一个任务
@@ -483,15 +483,14 @@ fn main() {
 </code></pre>
 <p>首先创建了 executor 和 spawner，这和 tokio 中的初始化环境类似；</p>
 <p>随后，通过 <code>spawner.spawn</code> 传入了一个 Future 任务：回忆我们之前的代码，这里会直接向 Channel 中发送一个消息，但是还没有调用 <code>executor.run</code>，因此消息不会被消费！</p>
-<blockquote>
-<p>&lt;font color="#f00"&gt;<strong>这也是 Rust 中异步为是惰性的原因！</strong>&lt;/font&gt;</p>
+<blockquote><p>&lt;font color="#f00"&gt;**这也是 Rust 中异步为是惰性的原因！**&lt;/font&gt;</p>
 </blockquote>
 <p>随后，我们释放 spawner，因为所有的消息都已经发送完毕了；</p>
 <p>最后，调用 <code>executor.run()</code>，开始消费 spawner 发送的消息！</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>一个添加字符串的例子</strong></h2>
 <p>前面的例子只是 Sleep，并没有什么实际意义，下面我们来写一个稍微有那么点意义的 Future；</p>
-<pre><code class="language-rust">pub struct StringProcessFuture {
+<pre><code class="lang-rust">pub struct StringProcessFuture {
     task: Arc&lt;Mutex&lt;StringProcessTask&gt;&gt;,
 }
 
@@ -561,7 +560,7 @@ impl StringProcessFuture {
 <li><strong>以及一个校验字符串已经满足的条件：<code>complete_checker: fn(&amp;str) -&gt; bool</code>；</strong></li>
 </ul>
 <p>在实际的任务中，我们依然使用 Sleep 模拟了 IO 操作，但是和之前的例子不同，我们将 Future 操作提取到了 <code>process</code> 方法中，使得逻辑更加清晰：</p>
-<pre><code class="language-rust">pub fn process(&amp;mut self) {
+<pre><code class="lang-rust">pub fn process(&amp;mut self) {
   while !self.check_task() {
     (self.processor)(&amp;mut self.s);
     println!("cur len: {}", self.s.len());
@@ -570,7 +569,7 @@ impl StringProcessFuture {
 }
 </code></pre>
 <p>异步处理的 Task：</p>
-<pre><code class="language-rust">thread::spawn(move || {
+<pre><code class="lang-rust">thread::spawn(move || {
   // Do real "IO" cost task
   let mut shared_state = shared_task.lock().unwrap();
   shared_state.process();
@@ -581,7 +580,7 @@ impl StringProcessFuture {
 });
 </code></pre>
 <p>测试一下我们的代码：</p>
-<pre><code class="language-rust">fn string_process_demo() {
+<pre><code class="lang-rust">fn string_process_demo() {
     let (executor, spawner) = new_executor_and_spawner();
 
     // 生成一个任务
@@ -633,17 +632,17 @@ cur len: 14
 cur len: 14
 cur len: 21
 res:  hello  hello 
-res:  world  world  world 
+res:  world  world  world
 </code></pre>
 <p>可以看到，两个 Future 是并行被调度的（因为我们开了两个线程）；</p>
 <p>&lt;br/&gt;</p>
 <h1><strong>附录</strong></h1>
 <p>源代码：</p>
 <ul>
-<li>https://github.com/JasonkayZK/rust-learn/tree/async/examples/1_future</li>
+<li><a href="https://github.com/JasonkayZK/rust-learn/tree/async/examples/1_future">https://github.com/JasonkayZK/rust-learn/tree/async/examples/1_future</a></li>
 </ul>
 <p>文章参考：</p>
 <ul>
-<li>https://course.rs/async-rust/async/future-excuting.html</li>
+<li><a href="https://course.rs/async-rust/async/future-excuting.html">https://course.rs/async-rust/async/future-excuting.html</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

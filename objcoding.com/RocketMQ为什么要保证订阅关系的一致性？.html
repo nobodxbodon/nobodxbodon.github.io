@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-07-27-rocketmq consumer subscription.md)，<a href="https://objcoding.com/2019/07/27/rocketmq-consumer-subscription">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-07-27-rocketmq consumer subscription.md">仓库源文</a>，<a href="https://objcoding.com/2019/07/27/rocketmq-consumer-subscription">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "RocketMQ为什么要保证订阅关系的一致性？"
 categories: RocketMQ
-tags: consumer
-author: 张乘辉</h2>
+tags: consumer</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -17,7 +17,7 @@ author: 张乘辉</h2>
 </code></pre>
 <p>我第一时间在源码里找到了报错的位置：</p>
 <p>org.apache.rocketmq.broker.processor.PullMessageProcessor#processRequest：</p>
-<pre><code class="language-java">subscriptionData = consumerGroupInfo.findSubscriptionData(requestHeader.getTopic());
+<pre><code class="lang-java">subscriptionData = consumerGroupInfo.findSubscriptionData(requestHeader.getTopic());
 if (null == subscriptionData) {
   log.warn("the consumer's subscription not exist, group: {}, topic:{}", requestHeader.getConsumerGroup(), requestHeader.getTopic());
   response.setCode(ResponseCode.SUBSCRIPTION_NOT_EXIST);
@@ -29,7 +29,7 @@ if (null == subscriptionData) {
 <p>朋友还跟我讲了他的消费集群中，每个消费者订阅了自己的 Topic，他的消费组中 有 c1 和 c2 消费者，c1 订阅了 topicA，而 c2 订阅了 topicB。</p>
 <p>这时我已经知道什么原因了，我先说一下消费者的订阅信息在 broker 中是以 group 来分组的，数据结构如下：</p>
 <p>org.apache.rocketmq.broker.client.ConsumerManager：</p>
-<pre><code class="language-java">private final ConcurrentMap&lt;String/* Group */, ConsumerGroupInfo&gt; consumerTable =
+<pre><code class="lang-java">private final ConcurrentMap&lt;String/* Group */, ConsumerGroupInfo&gt; consumerTable =
   new ConcurrentHashMap&lt;String, ConsumerGroupInfo&gt;(1024);
 </code></pre>
 <p>这意味着集群中的每个消费者在向 broker 注册订阅信息的时候相互覆盖掉对方的订阅信息了，这也是为什么<strong>同一个消费组应该拥有完全一样的订阅关系</strong>的原因，而朋友在同一个消费组的每个消费者订阅关系都不一样，就出现了订阅信息相互覆盖的问题。</p>
@@ -37,7 +37,7 @@ if (null == subscriptionData) {
 <h2>消费者订阅信息注册</h2>
 <p>消费者在启动时会向所有 broker 注册订阅信息，并启动心跳机制，定时更新订阅信息，每个消费者都有一个 MQClientInstance，消费者启动时会启动这个类，启动方法中会启动一些列定时任务，其中：</p>
 <p>org.apache.rocketmq.client.impl.factory.MQClientInstance#startScheduledTask：</p>
-<pre><code class="language-java">this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
+<pre><code class="lang-java">this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
   @Override
   public void run() {
     try {
@@ -50,7 +50,7 @@ if (null == subscriptionData) {
 }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
 </code></pre>
 <p>上面是向集群内所有 broker 发送订阅心跳信息的定时任务，源码继续跟进去，发现会给集群中的每个 broker 都发送自己的 HeartbeatData，HeartbeatData 即是每个客户端的心跳数据，它包含了如下数据：</p>
-<pre><code class="language-java">// 客户端ID
+<pre><code class="lang-java">// 客户端ID
 private String clientID;
 // 生产者信息
 private Set&lt;ProducerData&gt; producerDataSet = new HashSet&lt;ProducerData&gt;();
@@ -60,7 +60,7 @@ private Set&lt;ConsumerData&gt; consumerDataSet = new HashSet&lt;ConsumerData&gt
 <p>其中消费者信息包含了客户端订阅的主题信息。</p>
 <p>我们继续看看 broker 如何处理 HeartbeatData 数据，客户端发送 HeartbeatData 时的请求类型为 HEART_BEAT，我们直接找到 broker 处理 HEART_BEAT 请求类型的逻辑：</p>
 <p>org.apache.rocketmq.broker.processor.ClientManageProcessor#heartBeat：</p>
-<pre><code class="language-java">public RemotingCommand heartBeat(ChannelHandlerContext ctx, RemotingCommand request) {
+<pre><code class="lang-java">public RemotingCommand heartBeat(ChannelHandlerContext ctx, RemotingCommand request) {
   RemotingCommand response = RemotingCommand.createResponseCommand(null);
   // 解码，获取 HeartbeatData
   HeartbeatData heartbeatData = HeartbeatData.decode(request.getBody(), HeartbeatData.class);
@@ -109,7 +109,7 @@ private Set&lt;ConsumerData&gt; consumerDataSet = new HashSet&lt;ConsumerData&gt
 </code></pre>
 <p>在这里我们可以看到，broker 收到 HEART_BEAT 请求后，将请求数据解压获取 HeartbeatData，根据 HeartbeatData 里面的消费订阅信息，循环进行注册：</p>
 <p>org.apache.rocketmq.broker.client.ConsumerManager#registerConsumer：</p>
-<pre><code class="language-java">public boolean registerConsumer(final String group, final ClientChannelInfo clientChannelInfo,
+<pre><code class="lang-java">public boolean registerConsumer(final String group, final ClientChannelInfo clientChannelInfo,
                                 ConsumeType consumeType, MessageModel messageModel, ConsumeFromWhere consumeFromWhere,
                                 final Set&lt;SubscriptionData&gt; subList, boolean isNotifyConsumerIdsChangedEnable) {
 
@@ -143,12 +143,12 @@ private Set&lt;ConsumerData&gt; consumerDataSet = new HashSet&lt;ConsumerData&gt
 <h2>消息拉取</h2>
 <p>在 MQClientInstance 启动时，会启动一条线程来处理消息拉取任务：</p>
 <p>org.apache.rocketmq.client.impl.factory.MQClientInstance#start：</p>
-<pre><code class="language-java">// Start pull service
+<pre><code class="lang-java">// Start pull service
 this.pullMessageService.start();
 </code></pre>
 <p>pullMessageService 继承了 ServiceThread，而 ServiceThread 实现了 Runnable 接口，它的 run 方法实现如下：</p>
 <p>org.apache.rocketmq.client.impl.consumer.PullMessageService#run：</p>
-<pre><code class="language-java">@Override
+<pre><code class="lang-java">@Override
 public void run() {
   while (!this.isStopped()) {
     try {
@@ -167,11 +167,11 @@ public void run() {
 <h2>消息队列负载与重新分布</h2>
 <p>从上面消息拉取源码分析可知，pullMessageService 启动时由于 pullRequestQueue 中没有 pullRequest 对象，会一直阻塞，而在 MQClientInstance 启动时，同样会启动一条线程来处理消息队列负载与重新分布任务：</p>
 <p>org.apache.rocketmq.client.impl.factory.MQClientInstance#start：</p>
-<pre><code class="language-java">// Start rebalance service
+<pre><code class="lang-java">// Start rebalance service
 this.rebalanceService.start();
 </code></pre>
 <p>rebalanceService 同样继承了 ServiceThread，它的 run 方法如下：</p>
-<pre><code class="language-java">@Override
+<pre><code class="lang-java">@Override
 public void run() {
   while (!this.isStopped()) {
     this.waitForRunning(waitInterval);
@@ -181,7 +181,7 @@ public void run() {
 </code></pre>
 <p>继续跟进去：</p>
 <p>org.apache.rocketmq.client.impl.consumer.RebalanceImpl#doRebalance：</p>
-<pre><code class="language-java">public void doRebalance(final boolean isOrder) {
+<pre><code class="lang-java">public void doRebalance(final boolean isOrder) {
   // 获取消费者所有订阅信息
   Map&lt;String, SubscriptionData&gt; subTable = this.getSubscriptionInner();
   if (subTable != null) {
@@ -202,12 +202,12 @@ public void run() {
 </code></pre>
 <p>这里主要是获取客户端订阅的主题，并根据主题进行消息队列负载与重新分布，subTable 存储了消费者的订阅信息，消费者进行消息订阅时会填充到里面，我们接着往下：</p>
 <p>org.apache.rocketmq.client.impl.consumer.RebalanceImpl#rebalanceByTopic：</p>
-<pre><code class="language-java">Set&lt;MessageQueue&gt; mqSet = this.topicSubscribeInfoTable.get(topic);
+<pre><code class="lang-java">Set&lt;MessageQueue&gt; mqSet = this.topicSubscribeInfoTable.get(topic);
 List&lt;String&gt; cidAll = this.mQClientFactory.findConsumerIdList(topic, consumerGroup);
 </code></pre>
 <p>rebalanceByTopic 方法是实现 Consumer 端负载均衡的核心，我们这里以集群模式的消息队列负载与重新分布，首先从 topicSubscribeInfoTable 中获取订阅主题的队列信息，接着随机从集群中的一个 broker 中获取消费组内某个 topic 的订阅客户端 ID 列表，这里需要注意的是，为什么从集群内任意一个 broker 就可以获取订阅客户端信息呢？前面的分析也说了，消费者客户端启动时会启动一个线程，向所有 broker 发送心跳包。</p>
 <p>org.apache.rocketmq.client.impl.consumer.RebalanceImpl#rebalanceByTopic：</p>
-<pre><code class="language-java">// 如果 主题订阅信息mqSet和主题订阅客户端不为空，就执行消息队列负载与重新分布
+<pre><code class="lang-java">// 如果 主题订阅信息mqSet和主题订阅客户端不为空，就执行消息队列负载与重新分布
 if (mqSet != null &amp;&amp; cidAll != null) {
   List&lt;MessageQueue&gt; mqAll = new ArrayList&lt;MessageQueue&gt;();
   mqAll.addAll(mqSet);
@@ -244,7 +244,7 @@ if (mqSet != null &amp;&amp; cidAll != null) {
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/rocketmq_11.png"/></p>
 <p>至于为什么会报 the consumer's subscription not exist，我们继续往下撸：</p>
 <p>org.apache.rocketmq.client.impl.consumer.RebalanceImpl#rebalanceByTopic：</p>
-<pre><code class="language-java">if (mqSet != null &amp;&amp; cidAll != null) {
+<pre><code class="lang-java">if (mqSet != null &amp;&amp; cidAll != null) {
   // ...
   Set&lt;MessageQueue&gt; allocateResultSet = new HashSet&lt;MessageQueue&gt;();
   if (allocateResult != null) {
@@ -263,7 +263,7 @@ if (mqSet != null &amp;&amp; cidAll != null) {
 </code></pre>
 <p>以上代码逻辑主要是拿 mqSet 和 cidAll 进行消息队列负载与重新分布，得到结果 allocateResult，它是一个 MessageQueue 列表，接着用 allocateResult 更新消费者负载的消息队列缓存表 processQueueTable，生成 pullRequestList 放入 pullRequestQueue 阻塞队列中：</p>
 <p>org.apache.rocketmq.client.impl.consumer.RebalanceImpl#updateProcessQueueTableInRebalance：</p>
-<pre><code class="language-java">List&lt;PullRequest&gt; pullRequestList = new ArrayList&lt;PullRequest&gt;();
+<pre><code class="lang-java">List&lt;PullRequest&gt; pullRequestList = new ArrayList&lt;PullRequest&gt;();
 // 循环执行，将mqSet订阅数据封装成PullRequest对象，并添加到pullRequestList中
 for (MessageQueue mq : mqSet) {
   // 如果缓存列表不存在该订阅信息，说明这次消息队列重新分配后新增加的消息队列

@@ -1,4 +1,4 @@
-<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux%E4%B8%BB%E7%BA%BF%E5%86%85%E6%A0%B8%E8%B7%9F%E8%B8%AA/6.1.rst">仓库源文</a></h2>
+<h2><a href="https://gitee.com/Kenneth-Lee-2012/MySummary/blob/master/Linux主线内核跟踪/6.1.rst">仓库源文</a></h2>
 <p>.. Kenneth Lee 版权所有 2022</p>
 <p>:Authors: Kenneth Lee
 :Version: 0.1
@@ -26,43 +26,43 @@ crate（相当于库，不过rust的应用程序也叫crate）。现在封装的
 Google的Zhao Yu。补丁上提到一些用户提到在高内存压力下这个性能比原来好很多。</p>
 <p>在我的双核虚拟机中这配置和调试文件默认呈现是这样的： ::</p>
 <p>root@debian:/sys/kernel/mm/lru_gen# cat enabled
-0x0007                                                 &lt;--- 三个配置选项都是enable
-root@debian:/sys/kernel/mm/lru_gen# cat min_ttl_ms
-0
-root@debian:/sys/kernel/debug# cat lru_gen
-memcg     0                                            &lt;--- control group
-node     0                                            &lt;--- NUMA node
-0     130465          0       10326          &lt;--- tie - age_in_ms - nr_anon_pages nr_file_pages
-1     130465        228           0
-2     130465          0           0
-3     130465       9997       22724</p>
+  0x0007                                                 &lt;--- 三个配置选项都是enable
+  root@debian:/sys/kernel/mm/lru_gen# cat min_ttl_ms
+  0
+  root@debian:/sys/kernel/debug# cat lru_gen
+  memcg     0                                            &lt;--- control group
+   node     0                                            &lt;--- NUMA node
+            0     130465          0       10326          &lt;--- tie - age_in_ms - nr_anon_pages nr_file_pages
+            1     130465        228           0
+            2     130465          0           0
+            3     130465       9997       22724</p>
 <p>root@debian:/sys/kernel/debug# cat lru_gen_full
-memcg     0
-node     0
-0     204104          0       10332
-0          0r          0e          0p          0r          0e          0p
-1          0r          0e          0p          0r          0e          0p
-2          0r          0e          0p          0r          0e          0p
-3          0r          0e          0p          0r          0e          0p
-0l          0o          0y          0n          0f          0a
-1     204104        228           0
-0          0r          0e          0p          0r          0e          0p
-1          0r          0e          0p          0r          0e          0p
-2          0r          0e          0p          0r          0e          0p
-3          0r          0e          0p          0r          0e          0p
-0l          0o          0y          0n          0f          0a
-2     204104          0           0
-0          0r          0e          0p          0r          0e          0p
-1          0r          0e          0p          0r          0e          0p
-2          0r          0e          0p          0r          0e          0p
-3          0r          0e          0p          0r          0e          0p
-0l          0o          0y          0n          0f          0a
-3     204104      10001       22724
-0          0R          0T          0           0R          0T          0
-1          0R          0T          0           0R          0T          0
-2          0R          0T          0           0R          0T          0
-3          0R          0T          0           0R          0T          0
-0           0           0           0           0           0</p>
+  memcg     0
+   node     0
+            0     204104          0       10332
+                       0          0r          0e          0p          0r          0e          0p
+                       1          0r          0e          0p          0r          0e          0p
+                       2          0r          0e          0p          0r          0e          0p
+                       3          0r          0e          0p          0r          0e          0p
+                                  0l          0o          0y          0n          0f          0a
+            1     204104        228           0
+                       0          0r          0e          0p          0r          0e          0p
+                       1          0r          0e          0p          0r          0e          0p
+                       2          0r          0e          0p          0r          0e          0p
+                       3          0r          0e          0p          0r          0e          0p
+                                  0l          0o          0y          0n          0f          0a
+            2     204104          0           0
+                       0          0r          0e          0p          0r          0e          0p
+                       1          0r          0e          0p          0r          0e          0p
+                       2          0r          0e          0p          0r          0e          0p
+                       3          0r          0e          0p          0r          0e          0p
+                                  0l          0o          0y          0n          0f          0a
+            3     204104      10001       22724
+                       0          0R          0T          0           0R          0T          0
+                       1          0R          0T          0           0R          0T          0
+                       2          0R          0T          0           0R          0T          0
+                       3          0R          0T          0           0R          0T          0
+                                  0           0           0           0           0           0</p>
 <p>算法的特征就是名字是说的Multi-Generational LRU。原来的LRU只有两层（tier），
 active和inactive，少用的页就慢慢退火成为Inactive的，然后清掉，多用的就继续保持
 在active里面。Multi-Gen LRU算法提供更多的层（上面这个例子是4层），给定独立的退
@@ -96,21 +96,21 @@ limit和hardlimit），硬的就必须预留，软一些的就可以一定程度
 的通道，来决定是否某个页面是否热。</p>
 <p>MG-LRU不是一个可选的算法，它对回收流程的修改是推翻式的，现在的扫描流程走的是这
 样一个过程：::</p>
-<p>__alloc_pages()
-+-&gt;__alloc_pages_slowpath() &lt;-- 在这之前会尝试走get_page_from_freelist()这个快速通道
-+-&gt;__alloc_pages_direct_reclaim()
-+-&gt;__perform_reclaim()
-+-&gt;try_to_free_pages()
-+-&gt;do_try_to_free_pages()
-+-&gt;shrink_zones()
-+-&gt;shrink_node()
-+-&gt;shrink_node_memcgs()
-+-&gt;shrink_lruvec()
-+-&gt;shrink_list()
-+-&gt;shrink_active_list()   &lt;-- folio_check_references()也会走后面的流程
-+-&gt;folio_referenced()
-+-&gt;folio_referenced_one()
-+-&gt;lru_gen_look_around()</p>
+<p><strong>alloc_pages()
+   +-&gt;</strong>alloc_pages_slowpath() &lt;-- 在这之前会尝试走get_page_from_freelist()这个快速通道
+       +-&gt;<strong>alloc_pages_direct_reclaim()
+           +-&gt;</strong>perform_reclaim()
+               +-&gt;try_to_free_pages()
+                   +-&gt;do_try_to_free_pages()
+                       +-&gt;shrink_zones()
+                           +-&gt;shrink_node()
+                               +-&gt;shrink_node_memcgs()
+                                   +-&gt;shrink_lruvec()
+                                       +-&gt;shrink_list()
+                                           +-&gt;shrink_active_list()   &lt;-- folio_check_references()也会走后面的流程
+                                               +-&gt;folio_referenced()
+                                                   +-&gt;folio_referenced_one()
+                                                       +-&gt;lru_gen_look_around()</p>
 <p>可以和看到，回收流程被控制在try_to_free_pages()流程内部了。算法独立根据收集的
 数据决定页的热度，在不同的冷热页链表上移动。</p>
 <p>算法在每个NUMA Node的memcg（mem_cgroup_per_node）上设置一个lruvec，然后分有名
@@ -125,29 +125,29 @@ limit和hardlimit），硬的就必须预留，软一些的就可以一定程度
 简单看看它的数据结构：</p>
 <p>.. code-block:: C</p>
 <p>struct lru_gen_folio {
-/* the aging increments the youngest generation number <em>/
-unsigned long max_seq;
-/</em> the eviction increments the oldest generation numbers <em>/
-unsigned long min_seq[ANON_AND_FILE];
-/</em> the birth time of each generation in jiffies <em>/
-unsigned long timestamps[MAX_NR_GENS];
-/</em> the multi-gen LRU lists, lazily sorted on eviction <em>/
-struct list_head folios[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
-/</em> the multi-gen LRU sizes, eventually consistent <em>/
-long nr_pages[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
-/</em> the exponential moving average of refaulted <em>/
-unsigned long avg_refaulted[ANON_AND_FILE][MAX_NR_TIERS];
-/</em> the exponential moving average of evicted+protected <em>/
-unsigned long avg_total[ANON_AND_FILE][MAX_NR_TIERS];
-/</em> the first tier doesn't need protection, hence the minus one <em>/
-unsigned long protected[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS - 1];
-/</em> can be modified without holding the LRU lock <em>/
-atomic_long_t evicted[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS];
-atomic_long_t refaulted[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS];
-/</em> whether the multi-gen LRU is enabled */
-bool enabled;
-...
-}</p>
+    /<em> the aging increments the youngest generation number </em>/
+    unsigned long max_seq;
+    /<em> the eviction increments the oldest generation numbers </em>/
+    unsigned long min_seq[ANON_AND_FILE];
+    /<em> the birth time of each generation in jiffies </em>/
+    unsigned long timestamps[MAX_NR_GENS];
+    /<em> the multi-gen LRU lists, lazily sorted on eviction </em>/
+    struct list_head folios[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
+    /<em> the multi-gen LRU sizes, eventually consistent </em>/
+    long nr_pages[MAX_NR_GENS][ANON_AND_FILE][MAX_NR_ZONES];
+    /<em> the exponential moving average of refaulted </em>/
+    unsigned long avg_refaulted[ANON_AND_FILE][MAX_NR_TIERS];
+    /<em> the exponential moving average of evicted+protected </em>/
+    unsigned long avg_total[ANON_AND_FILE][MAX_NR_TIERS];
+    /<em> the first tier doesn't need protection, hence the minus one </em>/
+    unsigned long protected[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS - 1];
+    /<em> can be modified without holding the LRU lock </em>/
+    atomic_long_t evicted[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS];
+    atomic_long_t refaulted[NR_HIST_GENS][ANON_AND_FILE][MAX_NR_TIERS];
+    /<em> whether the multi-gen LRU is enabled </em>/
+    bool enabled;
+        ...
+  }</p>
 <p>注意一下中间的几个三维数组，这个算法不是简单的逻辑模型，已经有ML的成分了。没到
 要改算法前，我就不深入进去看了，它跟踪的参数可不少，而且这显然不是局限在一个
 NUMA Node上的（虽然数据结构属于某个NUMA节点）。反正旧的页不是一次跳到inactive
@@ -156,8 +156,8 @@ NUMA Node上的（虽然数据结构属于某个NUMA节点）。反正旧的页�
 <h2>KMSAN</h2>
 <p>Kernel Memory SANitizer。用来查变量未初始化用的，成本比较高，只适合在测试环境里
 面用。配置项是CONFIG_KMSAN。使能后运行过程中发现有变量未初始化会在内核打印中直
-接用BUG打印打印出来。在函数前面加上__no_kmsan_checks可以关闭对这个函数的检查。
-也可以用__no_kmsam_memory直接要求编译器不产生检查代码（避免影响汇编逻辑）。
+接用BUG打印打印出来。在函数前面加上<strong>no_kmsan_checks可以关闭对这个函数的检查。
+也可以用</strong>no_kmsam_memory直接要求编译器不产生检查代码（避免影响汇编逻辑）。
 Makefile中还可以通过KMSAN_SANITIZE_xxxx:=n关掉对xxxx文件的检查。也可以用
 KMSAN_SANITIZE:=n关掉整个目录的检查。</p>
 <p>工作原理是给每个变量都分配一个影子变量，如果变量没有初始化就设置为一个特定的状
@@ -241,15 +241,15 @@ COW，只读，fixup或者其他的属性。这意味着，我软件要改什么
 Stall Information，配置项是CONFIG_PSI（默认不开）。接口在/proc/pressure目录中，
 就三个文件：::</p>
 <p>cpu  io  memory
-kenny@lklp02:/proc/pressure$ cat cpu
-some avg10=0.00 avg60=0.07 avg300=0.28 total=246159824
-full avg10=0.00 avg60=0.00 avg300=0.00 total=0
-kenny@lklp02:/proc/pressure$ cat io
-some avg10=0.00 avg60=1.46 avg300=5.10 total=77138440
-full avg10=0.00 avg60=1.44 avg300=5.02 total=74947845
-kenny@lklp02:/proc/pressure$ cat memory
-some avg10=0.00 avg60=0.00 avg300=0.00 total=1507395
-full avg10=0.00 avg60=0.00 avg300=0.00 total=1491067</p>
+  kenny@lklp02:/proc/pressure$ cat cpu
+  some avg10=0.00 avg60=0.07 avg300=0.28 total=246159824
+  full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+  kenny@lklp02:/proc/pressure$ cat io
+  some avg10=0.00 avg60=1.46 avg300=5.10 total=77138440
+  full avg10=0.00 avg60=1.44 avg300=5.02 total=74947845
+  kenny@lklp02:/proc/pressure$ cat memory
+  some avg10=0.00 avg60=0.00 avg300=0.00 total=1507395
+  full avg10=0.00 avg60=0.00 avg300=0.00 total=1491067</p>
 <p>应用程序通过写一个门限到文件中，然后poll里面的变动，查看什么当前的计算认为是被
 什么资源拦住了。some和full是两个不同的跟踪算法，前者跟踪等待资源的任务，后者加
 上等待资源但本身并没有停下的任务（调度去干其他工作了）。</p>
@@ -262,12 +262,12 @@ full avg10=0.00 avg60=0.00 avg300=0.00 total=1491067</p>
 概念。</p>
 <p>相关的抽象在mm/memory-tiers.c中实现，数据结构这样抽象的：::</p>
 <p>struct memory_tier {
-struct list_head list; // tier链表
-struct list_head memory_types; // 多个类型
-int adistance_start; //距离
-struct device dev; //支持设备
-nodemask_t lower_tier_mask; //下一层tier的node
-};</p>
+      struct list_head list; // tier链表
+      struct list_head memory_types; // 多个类型
+      int adistance_start; //距离
+      struct device dev; //支持设备
+      nodemask_t lower_tier_mask; //下一层tier的node
+  };</p>
 <p>这个模块有自己独立的subsys_initcall(memory_tier_init)，注册了一个
 memory_tie_subsys（可以从/sys/device/virtual/memory_tiering访问），然后把上面的
 数据结构加入到NUMA的node中。初始化的时候然后按每个内存节点的属性决定它和CPU的距
@@ -277,21 +277,21 @@ memory_tie_subsys（可以从/sys/device/virtual/memory_tiering访问），然�
 <p>具体算法我就不看了，反正遇到新的情形总是要变的。</p>
 <p>代码中举了三个例子做为场景的参考，我直接拷贝出来帮助理解：::</p>
 <p>例一：Node 0 &amp; 1 are CPU + DRAM nodes, node 2 &amp; 3 are PMEM nodes.
-node   0    1    2    3
-0  10   20   30   40
-1  20   10   40   30
-2  30   40   10   40
-3  40   30   40   10</p>
+ node   0    1    2    3
+    0  10   20   30   40
+    1  20   10   40   30
+    2  30   40   10   40
+    3  40   30   40   10</p>
 <p>例二：Node 0 &amp; 1 are CPU + DRAM nodes, node 2 is memory-only DRAM node.
-node   0    1    2
-0  10   20   30
-1  20   10   30
-2  30   30   10</p>
+ node   0    1    2
+    0  10   20   30
+    1  20   10   30
+    2  30   30   10</p>
 <p>例三：Node 0 is CPU + DRAM nodes, Node 1 is HBM node, node 2 is PMEM node.</p>
 <p>node   0    1    2
-0  10   20   30
-1  20   10   40
-2  30   40   10</p>
+    0  10   20   30
+    1  20   10   40
+    2  30   40   10</p>
 <h1>其他有趣的东西</h1>
 <ol>
 <li><p>KCFI支持。之前的CFI（Control-Flow Integrity，）支持是ARM加的，只有ARM平台支
@@ -319,7 +319,8 @@ node   0    1    2
  8    123077    36.64 MB/sec  execute  22 sec  latency 20.686 ms
  8    123937    37.55 MB/sec  execute  23 sec  latency 17.622 ms
  8    125054    37.77 MB/sec  execute  24 sec  latency 19.385 ms
- 8    125846    37.74 MB/sec  execute  25 sec  latency 18.987 ms</code></pre>
+ 8    125846    37.74 MB/sec  execute  25 sec  latency 18.987 ms
+</code></pre>
 </li>
 <li><p>最后一个a.out用户退出，Linux从此不再支持a.out。</p>
 </li>
@@ -355,4 +356,4 @@ drivers/hwtracing目录，功能注册给PMU子系统。这样一个特性，居
 </li>
 </ol>
 <h1>参考</h1>
-<p>.. [1] https://kernelnewbies.org/LinuxChanges</p>
+<p>.. [1] <a href="https://kernelnewbies.org/LinuxChanges">https://kernelnewbies.org/LinuxChanges</a></p>

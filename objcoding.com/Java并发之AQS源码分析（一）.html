@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-05-05-aqs exclusive lock.md)，<a href="https://objcoding.com/2019/05/05/aqs-exclusive-lock">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2019-05-05-aqs exclusive lock.md">仓库源文</a>，<a href="https://objcoding.com/2019/05/05/aqs-exclusive-lock">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "Java并发之AQS源码分析（一）"
 categories: Java
-tags: concurrent AQS CAS
-author: 张乘辉</h2>
+tags: concurrent AQS CAS</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -13,7 +13,7 @@ AQS 全称是 AbstractQueuedSynchronizer，顾名思义，是一个用来构建�
 <h2>AQS 结构剖析</h2>
 <p>AQS 就是建立在 CAS 的基础之上，增加了大量的实现细节，例如获取同步状态、FIFO 同步队列，独占式锁和共享式锁的获取和释放等等，这些都是 AQS 类对于同步操作抽离出来的一些通用方法，这么做也是为了对实现的一个同步类屏蔽了大量的细节，大大降低了实现同步工具的工作量，这也是为什么 AQS 是其它许多同步类的基类的原因。</p>
 <p>现在我们来直接定位到类 java.util.concurrent.locks.AbstractQueuedSynchronizer，下面是 AQS 类的几个重要字段与方法列出来：</p>
-<pre><code class="language-java">public abstract class AbstractQueuedSynchronizer
+<pre><code class="lang-java">public abstract class AbstractQueuedSynchronizer
   extends AbstractOwnableSynchronizer
     implements java.io.Serializable {
 
@@ -41,7 +41,7 @@ AQS 全称是 AbstractQueuedSynchronizer，顾名思义，是一个用来构建�
 <p>有没有发现，这几个字段都用 volatile 关键字进行修饰，以确保多线程间保证字段的可见性。</p>
 <p>AQS 提供了两种锁，分别是独占锁和共享锁，独占锁指的是操作被认作一种独占操作，比如 ReentrantLock，它实现了独占锁的方法，而共享锁则指的是一个非独占操作，比如一些同步工具 CountDownLatch 和 Semaphore 等同步工具，下面是 AQS 对这两种锁提供的抽象方法。</p>
 <p>独占锁：</p>
-<pre><code class="language-java">// 获取锁方法
+<pre><code class="lang-java">// 获取锁方法
 protected boolean tryAcquire(int arg) {
   throw new UnsupportedOperationException();
 }
@@ -49,10 +49,9 @@ protected boolean tryAcquire(int arg) {
 protected boolean tryRelease(int arg) {
   throw new UnsupportedOperationException();
 }
-    
 </code></pre>
 <p>共享锁：</p>
-<pre><code class="language-java">// 获取锁方法
+<pre><code class="lang-java">// 获取锁方法
 protected int tryAcquireShared(int arg) {
   throw new UnsupportedOperationException();
 }
@@ -65,7 +64,7 @@ protected boolean tryReleaseShared(int arg) {
 <p>下面是同步队列节点的结构：</p>
 <p><img alt="aqs node" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/aqs.png"/></p>
 <p>用大神的注释来形象地描述一下队列的模型：</p>
-<pre><code class="language-java">/**
+<pre><code class="lang-java">/**
   * &lt;pre&gt;
   *      +------+  prev +-----+       +-----+
   * head |      | &lt;---- |     | &lt;---- |     |  tail
@@ -91,7 +90,7 @@ protected boolean tryReleaseShared(int arg) {
 <p><strong>独占锁的原理是如果有线程获取到锁，那么其它线程只能是获取锁失败，然后进入等待队列中等待被唤醒。</strong></p>
 <h3>获取锁</h3>
 <p>获取独占锁方法：</p>
-<pre><code class="language-java">public final void acquire(int arg) {
+<pre><code class="lang-java">public final void acquire(int arg) {
   if (!tryAcquire(arg) &amp;&amp;
       acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
     selfInterrupt();
@@ -104,7 +103,7 @@ protected boolean tryReleaseShared(int arg) {
 <li><strong>把当前线程执行封装成 Node 节点后，继续执行 acquireQueued 的逻辑，该逻辑主要是判断当前节点的前置节点是否是头节点，来尝试获取锁，如果获取锁成功，则当前节点就会成为新的头节点，这也是获取锁的核心逻辑。</strong></li>
 </ol>
 <p>基于上面源码的步骤分析后，我们一步步往下看源码具体实现：</p>
-<pre><code class="language-java">private Node addWaiter(Node mode) {
+<pre><code class="lang-java">private Node addWaiter(Node mode) {
   // 创建一个基于当前线程的节点，该节点是 Node.EXCLUSIVE 独占式类型
   Node node = new Node(Thread.currentThread(), mode);
   // Try the fast path of enq; backup to full enq on failure
@@ -128,7 +127,7 @@ protected boolean tryReleaseShared(int arg) {
 <li>利用 CAS 原子操作，将节点加入队尾。</li>
 </ol>
 <p>我们继续看 enq(Node node) 方法：</p>
-<pre><code class="language-java">private Node enq(final Node node) {
+<pre><code class="lang-java">private Node enq(final Node node) {
   // 自旋操作
   for (;;) {
     Node t = tail;
@@ -158,7 +157,7 @@ protected boolean tryReleaseShared(int arg) {
 <p>完整的入队操作简单来说就是：<strong>如果队列为空，初始化队列，并将头节点设为空节点，表示当前正在运行的节点，然后再将当前线程的节点加入到队列尾部。</strong></p>
 <p>关于队列的初始化与入队，务必理解透彻。</p>
 <p>经过上面 CAS 不断尝试，这时当前节点已经成功加入到队尾了，接下来就到了acquireQueued 的逻辑，我们继续往下看源码：</p>
-<pre><code class="language-java">final boolean acquireQueued(final Node node, int arg) {
+<pre><code class="lang-java">final boolean acquireQueued(final Node node, int arg) {
   boolean failed = true;
   try {
     // 线程中断标记字段
@@ -193,7 +192,7 @@ protected boolean tryReleaseShared(int arg) {
 </ol>
 <p>提醒一点：<strong>我们上面也说过，head 节点代表当前持有锁的线程，那么如果当前节点的 pred 节点是 head 节点，很可能此时 head 节点已经释放锁了，所以此时需要再次尝试获取锁。</strong></p>
 <p>接下来继续看挂起逻辑源码：</p>
-<pre><code class="language-java">private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
+<pre><code class="lang-java">private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
   int ws = pred.waitStatus;
   if (ws == Node.SIGNAL)
     // 如果 pred 节点为 SIGNAL 状态，返回true，说明当前节点需要挂起
@@ -221,7 +220,7 @@ protected boolean tryReleaseShared(int arg) {
 <p><strong>通俗来说就是：根据 pred 节点状态来判断当前节点是否可以挂起，如果该方法返回 false，那么挂起条件还没准备好，就会重新进入 acquireQueued(final Node node, int arg) 的自旋体，重新进行判断。如果返回 true，那就说明当前线程可以进行挂起操作了，那么就会继续执行挂起。</strong></p>
 <p>这里需要注意的时候，节点的初始值为 0，因此如果获取锁失败，会尝试将节点设置为 SIGNAL。</p>
 <p>继续看挂起逻辑：</p>
-<pre><code class="language-java">private final boolean parkAndCheckInterrupt() {
+<pre><code class="lang-java">private final boolean parkAndCheckInterrupt() {
   LockSupport.park(this);
   return Thread.interrupted();
 }
@@ -231,7 +230,7 @@ protected boolean tryReleaseShared(int arg) {
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/aqs.jpg"/></p>
 <h3>释放锁</h3>
 <p>释放锁方法：</p>
-<pre><code class="language-java">public final boolean release(int arg) {
+<pre><code class="lang-java">public final boolean release(int arg) {
   if (tryRelease(arg)) {
     Node h = head;
     if (h != null &amp;&amp; h.waitStatus != 0)
@@ -243,13 +242,13 @@ protected boolean tryReleaseShared(int arg) {
 </code></pre>
 <p>释放锁的方法源码就很好理解，通过 tryRelease(arg) 方法尝试释放锁，这个方法需要实现类自己实现释放锁的逻辑，释放锁成功后则执行后面的唤醒后续节点的逻辑了，然后判断 head 节点不为空并且 head 节点状态不为 0，因为 addWaiter 方法默认的节点状态为 0，此时节点还没有进入就绪状态。</p>
 <p>继续往下看源码：</p>
-<pre><code class="language-java">private void unparkSuccessor(Node node) {
+<pre><code class="lang-java">private void unparkSuccessor(Node node) {
   int ws = node.waitStatus;
   if (ws &lt; 0)
     // 将头节点的状态设置为0
     // 这里会尝试清除头节点的状态，改为初始状态
     compareAndSetWaitStatus(node, ws, 0);
-  
+
   // 后继节点
   Node s = node.next;
   // 如果后继节点为null，或者已经被取消了

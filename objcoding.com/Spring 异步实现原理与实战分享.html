@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-05-30-spring async.md)，<a href="https://objcoding.com/2020/05/30/spring-async">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2020-05-30-spring async.md">仓库源文</a>，<a href="https://objcoding.com/2020/05/30/spring-async">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "Spring 异步实现原理与实战分享"
 categories: Spring
-tags: async 异步 多线程 JUC
-author: 张乘辉</h2>
+tags: async 异步 多线程 JUC</p>
+<h2>author: 张乘辉</h2>
 <ul>
 <li>content
 {:toc}
@@ -16,7 +16,7 @@ author: 张乘辉</h2>
 <p>过一遍源码分析，才能知道其中的一些细节原理，这也是不可避免的过程，虽然我也不想在文章中贴过多的源码，但如果不从源码中得出原因，很可能你会知其然不知其所以然。下面就尽量跟着源码走一遍它的运行机制是怎么样的，我把我自己的理解也会尽量详细地描述出来，在这里我会将其关联的源码贴出来分析，这些源码都有其相互关联性，可能你看到后面还会回来再看一遍。</p>
 <h3>注册通知器过程</h3>
 <p>开启 Spring 异步编程之需要一个注解即可：</p>
-<pre><code class="language-java">@EnableAsync
+<pre><code class="lang-java">@EnableAsync
 </code></pre>
 <p>Springboot 中有非常多 @Enable* 的注解，其目的是显式开启某一个功能特性，这也是一个非常典型的编程模型。</p>
 <p>@EnableAsync 注解注入了一个 AsyncConfigurationSelector 类，这个类目的就是为了注入 ProxyAsyncConfiguration 自动配置类，它的父类 AbstractAsyncConfiguration 做了件事情：</p>
@@ -36,8 +36,7 @@ author: 张乘辉</h2>
 <p>AsyncAnnotationAdvisor 实现了 PointcutAdvisor 接口，因此需要同时实现 getPointcut 和 getAdvice 方法，而这两个方法的实际内容有以上红框创建实现。</p>
 <p><strong>到这里我们已经知道，Spring 的异步实现原理，是利用 Spring AOP 切面编程实现的，通过 BeanPostProcessor 拦截处理符合条件的 bean，并将切面织入，实现切面增强处理。</strong></p>
 <p>Spring AOP 的编程核心概念：</p>
-<blockquote>
-<ol>
+<blockquote><ol>
 <li>Advice：通知，切面的一种实现，可以完成简单的织入功能。通知定义了增强代码切入到目标代码的时间点，是目标方法执行之前执行，还是执行之后执行等。切入点定义切入的位置，通知定义切入的时间；</li>
 <li>Pointcut：切点，切入点指切面具体织入的方法；</li>
 <li>Advisor：切面的另一种实现，能够将通知以更为复杂的方式织入到目标对象中，是将通知包装为更复杂切面的装配器。</li>
@@ -67,12 +66,12 @@ author: 张乘辉</h2>
 <p>org.springframework.aop.interceptor.AsyncExecutionAspectSupport#configure</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200614202430.png"/></p>
 <p>原来当 defaultExecutor 和 exceptionHandler 是当初从 ProxyAsyncConfiguration 中获取用户自定义的 AsyncConfigurer 实现类而来的，那么如果 defaultExecutor 不存在怎么办？从源码可看出，defaultExecutor 其实是一个 SingletonSupplier 类型，如果调用 get 方法不存在，则使用默认值，默认值为：</p>
-<pre><code class="language-java">() -&gt; getDefaultExecutor(this.beanFactory);
+<pre><code class="lang-java">() -&gt; getDefaultExecutor(this.beanFactory);
 </code></pre>
 <p>org.springframework.aop.interceptor.AsyncExecutionAspectSupport#getDefaultExecutor</p>
 <p><img alt="" src="https://raw.githubusercontent.com/objcoding/md-picture/master/img/20200614203436.png"/></p>
 <p>注意第一个红框的注释，此时 Spring 寻找默认的线程池 Bean 为指定 Spring 的 TaskExecutor 类型，并非 Executor 类型，如果 Bean 容器中没有找到  TaskExecutor 类型的 Bean，则继续寻找默认为以下名称的 Bean：</p>
-<pre><code class="language-java">public static final String DEFAULT_TASK_EXECUTOR_BEAN_NAME = "taskExecutor";
+<pre><code class="lang-java">public static final String DEFAULT_TASK_EXECUTOR_BEAN_NAME = "taskExecutor";
 </code></pre>
 <p>那么如果都没有找到怎么办呢？在这个方法直接返回 null 了，AsyncExecutionInterceptor 类覆写了 这个方法：</p>
 <p>org.springframework.aop.interceptor.AsyncExecutionInterceptor#getDefaultExecutor
@@ -95,7 +94,7 @@ author: 张乘辉</h2>
 <p>从以上源码可以看出，默认的线程池的参数还可以手动在 properties 中配置，这意味着不需要主动创建线程池的情况下，也可以通过 properties 配置文件更改线程池相关参数。</p>
 <h2>创建线程池 Bean 的几种方式</h2>
 <p>1、直接创建一个 Bean 的方式，这貌似是最多人使用的方式，可以创建多个线程池 Bean，使用时指定线程池 Bean 名称：</p>
-<pre><code class="language-java">@Bean("myTaskExecutor_1")
+<pre><code class="lang-java">@Bean("myTaskExecutor_1")
 public Executor getThreadPoolTaskExecutor1() {
   final ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
   // set ...
@@ -110,7 +109,7 @@ public Executor getThreadPoolTaskExecutor2() {
 }
 </code></pre>
 <p>2、实现 AsyncConfigurer 接口方式：</p>
-<pre><code class="language-java">@Component
+<pre><code class="lang-java">@Component
 public class AsyncConfigurerTest implements AsyncConfigurer {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AsyncConfigurerTest.class);

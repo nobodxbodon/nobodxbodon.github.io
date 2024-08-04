@@ -1,17 +1,18 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/elastic-apm-node-express.md">仓库源文</a>，<a href="https://claude-ray.github.io/elastic-apm-node-express">站点原文</a></h2>
 <hr/>
-<h2>title: elastic-apm-node 扩展篇 —— Express
+<p>title: elastic-apm-node 扩展篇 —— Express
 date: 2019-07-11 22:54:59
-tags: [Node.js,APM,Elastic-APM,Express]
-categories: Node.js</h2>
+tags: [Node.js,APM,Elastic-APM,Express]</p>
+<h2>categories: Node.js</h2>
 <h1>Introduction</h1>
 <p>elastic-apm-node 提供了非常友好的定制化支持，本篇将示范如何为 express 框架添加路由 patch，以满足信息上报的优化。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <p>许多开发者在定制开源依赖时，都选择了 fork 源码，在此基础上提交修改，作为新的模块来“维护”。这样做的稳定性极高，等于对依赖加上了版本锁，不用担心动态版本的安全问题。</p>
 <p>但弊端也非常大，最重要的是需要投入精力定时跟进官方包的更新。除了要小心 <code>breaking change</code>，任何你需要的 <code>fix</code> 或 <code>feature</code>，都要重新更新发布自己的模块。维护成本极高，甚至大部分情况是没人维护的。</p>
 <p>幸亏 elastic-apm-node 有不错的扩展性，我们不用 fork，只需要做一个包裹层二次封装。</p>
 <p>定制的出发点要立在合理的需求上，我们拿 vue-ssr 官网的 demo 举例：</p>
-<pre><code class="language-js">const createApp = require('/path/to/built-server-bundle.js')
+<pre><code class="lang-js">const createApp = require('/path/to/built-server-bundle.js')
 
 server.get('*', (req, res) =&gt; {
   const context = { url: req.url }
@@ -36,7 +37,7 @@ server.get('*', (req, res) =&gt; {
 <p>路由是 * 动态匹配的，要想获取到真实路由，比较容易的方案是读取 <code>req.path</code>，但最好的方案是直接拿到原始表达式，这样 <code>/user/:id</code> 形式的路由也能较好地折叠呈现。</p>
 <p>但 vue ssr 项目通常将页面路由规则存放在前端，这种情况也无法在 express 的 router 上做文章，只能回到原始的 url path 方案了。</p>
 <p>在 <code>node_modules/elastic-apm-node/lib/instrumentation/modules/express.js</code> 的 <code>patchLayer</code> 中加入如下代码</p>
-<pre><code class="language-js">// NOTE: add below this code block
+<pre><code class="lang-js">// NOTE: add below this code block
 if (!layer.route &amp;&amp; layerPath &amp;&amp; typeof next === 'function') { }
 
 // NOTE: patch route * up
@@ -47,7 +48,7 @@ if (layer.route &amp;&amp; layerPath === '*' &amp;&amp; layer.path) {
 </code></pre>
 <p>你也可以对 path 内部加上正则校验，遇到纯数值、32 位或 16 位定长 id，便将其当作 <code>:id</code>，将内容掩盖处理，以达成简易的路由还原效果。</p>
 <p>最后，由于这个已经修改了 express route 的 wrap，但 shimmer 的代码决定了一个函数只能有一个 wrapper。因此想替换掉原有的 wrapper，必须先 unwrap express 的 route，然后再执行 shimmer.wrap 。</p>
-<pre><code class="language-js">// NOTE: rewarp express router
+<pre><code class="lang-js">// NOTE: rewarp express router
 shimmer.unwrap(routerProto, 'route')
 
 shimmer.wrap(routerProto, 'route', orig =&gt; {
@@ -64,12 +65,12 @@ shimmer.wrap(routerProto, 'route', orig =&gt; {
 <p>上面介绍了完成需求的方法，但本篇主旨是扩展，而非在源码上直接修改。这就要使用 apm agent 暴露的 <a href="https://www.elastic.co/guide/en/apm/agent/nodejs/master/agent-api.html#apm-add-patch">addPatch</a> 接口。可在此基础上完成所有定制框架和路由的处理。</p>
 <p>特别提示，有别于上面的 wrapper，针对同一个 npm 模块，elastic-apm-node 支持添加多个 patch。因此不必要的时候，无需删除 elastic agent 已经添加的 patch，直接在引入 apm 的地方调用 addPatch 即可。</p>
 <p>还是以 express 为例，把 patch 的新方法写在另一个 <code>instrumentation/express.js</code> 文件中。</p>
-<pre><code class="language-js">const apm = require('elastic-apm-node').start()
+<pre><code class="lang-js">const apm = require('elastic-apm-node').start()
 
 apm.addPatch('express', require.resolve('./instrumentation/express'))
 </code></pre>
 <p>./instrumentation/express.js 的实现可以参考原 agent v2.12.1 版本中的 <a href="https://github.com/elastic/apm-agent-nodejs/blob/master/lib/instrumentation/modules/express.js">express</a>，需要修改的内容上文已经提到了，需要补充代码的位置参考如下：</p>
-<pre><code class="language-js">// Original file: https://github.com/elastic/apm-agent-nodejs/blob/master/lib/instrumentation/modules/express.js
+<pre><code class="lang-js">// Original file: https://github.com/elastic/apm-agent-nodejs/blob/master/lib/instrumentation/modules/express.js
 // License: https://github.com/elastic/apm-agent-nodejs/blob/master/LICENSE
 'use strict'
 

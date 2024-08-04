@@ -1,11 +1,12 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/optimize-verdaccio-cluster.md">仓库源文</a>，<a href="https://claude-ray.github.io/optimize-verdaccio-cluster">站点原文</a></h2>
 <hr/>
-<h2>title: Verdaccio 性能优化：单机 Cluster
+<p>title: Verdaccio 性能优化：单机 Cluster
 date: 2019-12-31 19:46:30
-tags: [Node.js,Verdaccio,private npm registry,npm]
-categories: Node.js</h2>
+tags: [Node.js,Verdaccio,private npm registry,npm]</p>
+<h2>categories: Node.js</h2>
 <p>本篇将讨论如何解决 <a href="https://github.com/verdaccio/verdaccio">Verdaccio</a> 官方本地存储方案不支持 Cluster 的问题。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h2>前言</h2>
 <p>标题为什么叫单机 Cluster 呢？</p>
 <p>因为多机 Cluster 已经无法使用默认的本地存储，必须配合一套新的存储方案，而官方只提供了 AWS 和 Google Cloud 的支持。这在国内已经是一道门槛，因此大概率是要用上其他云存储服务的，这意味着必须做一个 Verdaccio 插件实现必备的 add、search、remove、get 功能。</p>
@@ -36,7 +37,7 @@ categories: Node.js</h2>
 <p>由于手上的 Verdaccio 版本较老，整体还是 callback 风格，让改造多了一点工作量。我使用的 Redis 客户端为 ioredis，注意把涉及到的调用链路都改造为 async/await。</p>
 <h3>发布订阅</h3>
 <p>另一个坑点是我拿到的 Redis 其实是 Codis 集群，这套方案的一个缺点是无法使用 Redis 弱弱的发布订阅功能，也就不能直接拿来订阅更新内存缓存的消息。只好另辟蹊径，将 Redis 作为“缓存中心”，进程取缓存前先查询标志位，如果标志位存在，代表内存缓存需要更新。以进程号等信息做 key 前缀表示区分。</p>
-<pre><code class="language-js">const os = require('os');
+<pre><code class="lang-js">const os = require('os');
 
 class CacheCenter {
   constructor(prefixKey = 'updated') {
@@ -95,7 +96,7 @@ module.exports = new CacheCenter();
 <h3>页面搜索优化</h3>
 <p>顺便一提，Verdaccio web 页面的 /search 接口性能极差，实现也存在诸多问题。此处值得加一层内存缓存，等到新包发布时刷新。</p>
 <p>早期 Verdaccio 不支持使用 name 搜索名为 @scope/name 的包，可增加一条 name 专用的索引字段促成改进。根源是依赖的 lunr 引擎版本过低（0.7.0），但最新 lunr 的表现依然不太理想。</p>
-<pre><code class="language-js">class Search {
+<pre><code class="lang-js">class Search {
   /**
    * Constructor.
    */

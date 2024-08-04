@@ -1,4 +1,4 @@
-<h2><a href="https://github.com/yuanj82/yuanj.top/blob/master/content/posts/%E4%B8%80%E6%AC%A1%E5%A4%B1%E8%B4%A5%E7%9A%84%E8%AE%BA%E6%96%87%E5%A4%8D%E7%8E%B0.md">仓库源文</a>，<a href="https://yuanj.top/posts/v7x0u7t">站点原文</a></h2>
+<h2><a href="https://github.com/yuanj82/yuanj.top/blob/master/content/posts/一次失败的论文复现.md">仓库源文</a>，<a href="https://yuanj.top/posts/v7x0u7t">站点原文</a></h2>
 <hr/>
 <p>title: 一次失败的论文复现
 tags:</p>
@@ -10,12 +10,13 @@ date: 2024-03-09T17:21:37+08:00</li>
 </ul>
 <hr/>
 <p>最近在学习多组学分析，于是决定从论文复现入手，找了一篇感觉可以的文章 <a href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10057503/">《Integrated ATAC-Seq and RNA-Seq Data Analysis to Reveal OsbZIP14 Function in Rice in Response to Heat Stress》</a> 就直接开干了。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <p>这篇文章结合了 RNA-seq 和 ATAC-seq 两种组学分析方法，鉴定出了三个水稻中的热胁迫响应基因 OsHSF7、OsbZIP14 和 OsMYB2，通过一系列实验证实了 OsbZIP14 在热胁迫下植物生长发育中发挥作用，揭示了 OsbZIP14 基因与热应激诱导的叶片早衰之间的关联，此外，作者还找出并证实了 OsbZIP14 的一个相互作用蛋白 OsbZIP58。</p>
 <p>我主要对其中的 RNA-seq 和 ATAC-seq 两种分析进行复现。</p>
 <h2>RNA-seq</h2>
-<p>作者使用的测序数据来自 NCBI SRA 数据库，BioProject 编号为 PRJNA604026，此项目共有 12 个样本的数据，但是作者只用了 6 个，我使用所有的 12 个样本进行分析。RNA-seq 分析我已经是比较熟悉了，之前也写过 <a href="https://yuanj.top/tags/genomics/">相关的教程</a>，于是登录超算，按照作者材料与方法中的步骤（大体相同），fastqc 进行质量检测后使用 Trim Galore 去除接头连接子和低质量序列，使用 RAP DB 上的参考基因组构建 hisat2 索引后，将 reads 比对到参考基因组，然后 samtools 排序、压缩、转为 bam 格式，最后这里作者没有写用什么软件进行计量，只写了<code> Clean reads were then mapped to the reference genome using HISAT2 v2.2.1, sorted using samtools v1.9, and FPKM was calculated for each gene.</code> 所以我也就按照以前的套路用 subread，拿到基因计数表格之后用 R 语言进行 FPKM 标准化：</p>
-<pre><code class="language-r">rm(list = ls())
+<p>作者使用的测序数据来自 NCBI SRA 数据库，BioProject 编号为 PRJNA604026，此项目共有 12 个样本的数据，但是作者只用了 6 个，我使用所有的 12 个样本进行分析。RNA-seq 分析我已经是比较熟悉了，之前也写过 <a href="https://yuanj.top/tags/genomics/">相关的教程</a>，于是登录超算，按照作者材料与方法中的步骤（大体相同），fastqc 进行质量检测后使用 Trim Galore 去除接头连接子和低质量序列，使用 RAP DB 上的参考基因组构建 hisat2 索引后，将 reads 比对到参考基因组，然后 samtools 排序、压缩、转为 bam 格式，最后这里作者没有写用什么软件进行计量，只写了<code>Clean reads were then mapped to the reference genome using HISAT2 v2.2.1, sorted using samtools v1.9, and FPKM was calculated for each gene.</code> 所以我也就按照以前的套路用 subread，拿到基因计数表格之后用 R 语言进行 FPKM 标准化：</p>
+<pre><code class="lang-r">rm(list = ls())
 
 counts &lt;- read.csv(
     'rna-seq.counts',
@@ -40,7 +41,7 @@ counts[numeric_mask] &lt;- lapply(counts[numeric_mask], function(x) ifelse(x &lt
 write.table(counts, file = 'fpkm_output', sep = '\t', row.names = FALSE)
 </code></pre>
 <p>随后就是差异表达分析，还是 Deseq2 包：</p>
-<pre><code class="language-r">rm(list = ls())  
+<pre><code class="lang-r">rm(list = ls())  
 Sys.setenv(LANGUAGE = "en")
 
 library(DESeq2)
@@ -98,7 +99,7 @@ write.table(result2, 'sampl3_vs_sample3.DESeq4.txt', col.names = NA, sep = '\t',
 <h2>ATAC-seq</h2>
 <p>ATAC-seq 的数据也是来自 NCBI SRA 数据库，BioProject 编号为 PRJNA604028，我是第一次做，也是按照文章材料与方法部分写的<code>Using a similar approach to the RNA-seq analysis, data quality control, filtering, and comparison were performed.</code>拿到 bam 文件后使用 macs2 进行 Peak Calling，这里 macs2 需要指定基因组的大小，我指定为 3e8（水稻基因组为 389M），报错无法输出结果 ... 试了很多个数字都不行，也没有查到相关的资料，于是我取消指定基因组大小，倒是可以输出结果了</p>
 <p>然后使用 ChIPseeker 进行注释：</p>
-<pre><code class="language-r">rm(list = ls())  
+<pre><code class="lang-r">rm(list = ls())  
 
 library(GenomicFeatures)
 library(ChIPseeker)
@@ -111,6 +112,6 @@ peakAnno &lt;- annotatePeak(peak, tssRegion = c(-500, 500), TxDb = spompe)
 </code></pre>
 <p>annotatePeak 函数一直报错<code>Error: invalid subscript</code>，无论怎么改都不行 ... 于是我猜测应该是 macs2 输出结果的问题。</p>
 <p>再尝试使用 homer 进行 motif 注释与分析，也是一直报错 ...</p>
-<pre><code class="language-bash">findMotifsGenome.pl IR57.bed tair10 motif -len 8,10,12
+<pre><code class="lang-bash">findMotifsGenome.pl IR57.bed tair10 motif -len 8,10,12
 </code></pre>
 <p>看来应该是 macs2 这里出错了，暂时还没有找到解决办法，于是此次论文复现就被迫中止了😫</p>

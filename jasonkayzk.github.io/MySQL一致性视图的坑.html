@@ -1,27 +1,28 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/MySQL%E4%B8%80%E8%87%B4%E6%80%A7%E8%A7%86%E5%9B%BE%E7%9A%84%E5%9D%91.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/02/11/MySQL%E4%B8%80%E8%87%B4%E6%80%A7%E8%A7%86%E5%9B%BE%E7%9A%84%E5%9D%91">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/MySQL一致性视图的坑.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2022/02/11/MySQL一致性视图的坑">站点原文</a></h2>
 <hr/>
-<h2>title: MySQL一致性视图的坑
+<p>title: MySQL一致性视图的坑
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?18'
+cover: '<a href="https://img.paulzzh.com/touhou/random?18">https://img.paulzzh.com/touhou/random?18</a>'
 date: 2022-02-11 19:44:22
 categories: 数据库
-tags: [MySQL, 数据库]
-description: 我们都知道MySQL中的事务默认情况下隔离级别是可重复读，即别的事务对数据的操作不影响当前事务，但是这里有一个坑可能会打破你对可重复读的认知；</h2>
+tags: [MySQL, 数据库]</p>
+<h2>description: 我们都知道MySQL中的事务默认情况下隔离级别是可重复读，即别的事务对数据的操作不影响当前事务，但是这里有一个坑可能会打破你对可重复读的认知；</h2>
 <p>我们都知道MySQL中的事务默认情况下隔离级别是可重复读，即别的事务对数据的操作不影响当前事务；</p>
 <p>但是这里有一个坑可能会打破你对可重复读的认知；</p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h1><strong>MySQL一致性视图的坑</strong></h1>
 <h2><strong>TL;DR</strong></h2>
-<p>&lt;font color="#f00"&gt;<strong>MySQL的事务的一致性视图并非是在 BEGIN 执行后就真正建立的，而是在执行完 BEGIN 之后，在接下来执行的第一句 SQL后，事务才真正启动；</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**MySQL的事务的一致性视图并非是在 BEGIN 执行后就真正建立的，而是在执行完 BEGIN 之后，在接下来执行的第一句 SQL后，事务才真正启动；**&lt;/font&gt;</p>
 <p>可以使用下面的命令，将一致性视图的创建提前到 <code>BEGIN</code> 执行后立刻开启：</p>
-<pre><code class="language-sql">start transaction with consistent snapshot;
+<pre><code class="lang-sql">start transaction with consistent snapshot;
 </code></pre>
 <p>下面我们通过实例来展示一下；</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>数据准备</strong></h2>
 <p>实例中准备的数据如下：</p>
-<pre><code class="language-sql">CREATE TABLE `user` (
+<pre><code class="lang-sql">CREATE TABLE `user` (
   `id` bigint(32) NOT NULL AUTO_INCREMENT COMMENT 'Id',
   `name` varchar(255) DEFAULT '',
   `age` tinyint unsigned DEFAULT 0,
@@ -31,7 +32,7 @@ description: 我们都知道MySQL中的事务默认情况下隔离级别是可�
 INSERT INTO user (name, age) VALUES ('a', 12), ('b', 15);
 </code></pre>
 <p>执行完成后我们来测试一下：</p>
-<pre><code class="language-sql">mysql&gt; select * from user;
+<pre><code class="lang-sql">mysql&gt; select * from user;
 
 +----+------+------+
 | id | name | age  |
@@ -45,7 +46,7 @@ INSERT INTO user (name, age) VALUES ('a', 12), ('b', 15);
 <h2><strong>BEGIN后未执行命令</strong></h2>
 <p>打开两个MySQL终端；</p>
 <p>首先在A终端执行命令：</p>
-<pre><code class="language-sql">-- 执行事务前查询
+<pre><code class="lang-sql">-- 执行事务前查询
 mysql&gt; select * from user;
 +----+------+------+
 | id | name | age  |
@@ -61,7 +62,7 @@ Query OK, 0 rows affected (0.00 sec)
 </code></pre>
 <p>可以看到，在开启事务前，name b 对应的年龄为15；</p>
 <p>接下来在B终端不开启事务并执行UPDATE命令：</p>
-<pre><code class="language-sql">mysql&gt; update user set age=age-1 where id=2;
+<pre><code class="lang-sql">mysql&gt; update user set age=age-1 where id=2;
 Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
 
@@ -76,7 +77,7 @@ mysql&gt; select * from user;
 </code></pre>
 <p>可以看到，年龄被更新为了14；</p>
 <p>然后我们再回到A终端中查看（此时A会话已经执行了BEGIN）：</p>
-<pre><code class="language-sql">mysql&gt; select * from user;
+<pre><code class="lang-sql">mysql&gt; select * from user;
 +----+------+------+
 | id | name | age  |
 +----+------+------+
@@ -87,12 +88,30 @@ mysql&gt; select * from user;
 </code></pre>
 <p>可以看到，即使已经执行了<code>BEGIN</code>命令，A终端中的记录也发生了变化！</p>
 <p>执行的路径如下表所示：</p>
-<p>| A终端               | B终端                                 |
-| ------------------- | ------------------------------------- |
-| select * from user; |                                       |
-| begin;              |                                       |
-|                     | update user set age=age-1 where id=2; |
-| select * from user; |                                       |</p>
+<table>
+<thead><tr>
+<th>A终端</th>
+<th>B终端</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>select * from user;</td>
+<td></td>
+</tr>
+<tr>
+<td>begin;</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>update user set age=age-1 where id=2;</td>
+</tr>
+<tr>
+<td>select * from user;</td>
+</tr>
+</tbody>
+</table>
 <p>可以看到，A终端执行<code>BEGIN</code>命令后，并未执行SQL，因此此时事务还尚未开启，也就没有创建一致性视图；</p>
 <p>此时在B终端中执行UPDATE也会改变A终端查询的内容！</p>
 <p>这和我们上面的分析是一致的！</p>
@@ -101,15 +120,36 @@ mysql&gt; select * from user;
 <h2><strong>BEGIN后先执行查询命令</strong></h2>
 <p>这次，我们在A终端执行 <code>BEGIN</code> 后立刻执行一条SELECT语句，看一下效果；</p>
 <p>即执行路径如下：</p>
-<p>| A终端               | B终端                                 |
-| ------------------- | ------------------------------------- |
-| select * from user; |                                       |
-| begin;              |                                       |
-| select * from user; |                                       |
-|                     | update user set age=age-1 where id=2; |
-| select * from user; |                                       |</p>
+<table>
+<thead><tr>
+<th>A终端</th>
+<th>B终端</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>select * from user;</td>
+<td></td>
+</tr>
+<tr>
+<td>begin;</td>
+<td></td>
+</tr>
+<tr>
+<td>select * from user;</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>update user set age=age-1 where id=2;</td>
+</tr>
+<tr>
+<td>select * from user;</td>
+</tr>
+</tbody>
+</table>
 <p>首先在A终端执行：</p>
-<pre><code class="language-sql">mysql&gt; select * from user;
+<pre><code class="lang-sql">mysql&gt; select * from user;
 +----+------+------+
 | id | name | age  |
 +----+------+------+
@@ -132,7 +172,7 @@ mysql&gt; select * from user; -- 执行BEGIN后立即执行SELECT查询
 2 rows in set (0.00 sec)
 </code></pre>
 <p>在B终端中更新：</p>
-<pre><code class="language-sql">mysql&gt; update user set age=age-1 where id=2;
+<pre><code class="lang-sql">mysql&gt; update user set age=age-1 where id=2;
 Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
 
@@ -146,7 +186,7 @@ mysql&gt; select * from user;
 2 rows in set (0.00 sec)
 </code></pre>
 <p>在A终端中再次查询：</p>
-<pre><code class="language-sql">mysql&gt; select * from user;
+<pre><code class="lang-sql">mysql&gt; select * from user;
 +----+------+------+
 | id | name | age  |
 +----+------+------+
@@ -156,23 +196,41 @@ mysql&gt; select * from user;
 2 rows in set (0.00 sec)
 </code></pre>
 <p>可以看到，这次的确开启了事务，A终端中的结果还是更新之前的值！</p>
-<p>这也符合：&lt;font color="#f00"&gt;<strong>用户在另外一个事务中执行同条 SELECT 语句数次，结果总是相同的；</strong>&lt;/font&gt;</p>
+<p>这也符合：&lt;font color="#f00"&gt;**用户在另外一个事务中执行同条 SELECT 语句数次，结果总是相同的；**&lt;/font&gt;</p>
 <p>那么如何将一致性视图的创建提前到 <code>BEGIN</code> 执行后立刻开启，而非手动执行一条SELECT呢？</p>
 <p>答案是使用下面的命令：</p>
-<pre><code class="language-sql">start transaction with consistent snapshot;
+<pre><code class="lang-sql">start transaction with consistent snapshot;
 </code></pre>
 <p>下面我们来试一下；</p>
 <p>&lt;br/&gt;</p>
 <h2><strong>BEGIN后直接创建一致性视图</strong></h2>
 <p>执行路径如下所示：</p>
-<p>| A终端                                       | B终端                                 |
-| ------------------------------------------- | ------------------------------------- |
-| select * from user;                         |                                       |
-| start transaction with consistent snapshot; |                                       |
-|                                             | update user set age=age-1 where id=2; |
-| select * from user;                         |                                       |</p>
+<table>
+<thead><tr>
+<th>A终端</th>
+<th>B终端</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>select * from user;</td>
+<td></td>
+</tr>
+<tr>
+<td>start transaction with consistent snapshot;</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td>update user set age=age-1 where id=2;</td>
+</tr>
+<tr>
+<td>select * from user;</td>
+</tr>
+</tbody>
+</table>
 <p>首先在A终端执行：</p>
-<pre><code class="language-sql">mysql&gt; select * from user;
+<pre><code class="lang-sql">mysql&gt; select * from user;
 +----+------+------+
 | id | name | age  |
 +----+------+------+
@@ -186,7 +244,7 @@ mysql&gt; start transaction with consistent snapshot; -- BEGIN后立即开启事
 Query OK, 0 rows affected (0.00 sec)
 </code></pre>
 <p>B终端执行：</p>
-<pre><code class="language-sql">mysql&gt; update user set age=age-1 where id=2;
+<pre><code class="lang-sql">mysql&gt; update user set age=age-1 where id=2;
 Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
 
@@ -200,7 +258,7 @@ mysql&gt; select * from user;
 2 rows in set (0.00 sec)
 </code></pre>
 <p>在A终端中检验：</p>
-<pre><code class="language-sql">mysql&gt; select * from user;
+<pre><code class="lang-sql">mysql&gt; select * from user;
 +----+------+------+
 | id | name | age  |
 +----+------+------+
@@ -214,6 +272,6 @@ mysql&gt; select * from user;
 <h1><strong>附录</strong></h1>
 <p>文章参考：</p>
 <ul>
-<li>https://blog.csdn.net/u012702547/article/details/122107506</li>
+<li><a href="https://blog.csdn.net/u012702547/article/details/122107506">https://blog.csdn.net/u012702547/article/details/122107506</a></li>
 </ul>
 <p>&lt;br/&gt;</p>

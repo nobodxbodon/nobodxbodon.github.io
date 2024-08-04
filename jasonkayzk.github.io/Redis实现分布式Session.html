@@ -1,16 +1,17 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Redis%E5%AE%9E%E7%8E%B0%E5%88%86%E5%B8%83%E5%BC%8FSession.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/02/10/Redis%E5%AE%9E%E7%8E%B0%E5%88%86%E5%B8%83%E5%BC%8FSession">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Redis实现分布式Session.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/02/10/Redis实现分布式Session">站点原文</a></h2>
 <hr/>
-<h2>title: Redis实现分布式Session
+<p>title: Redis实现分布式Session
 toc: true
 date: 2020-02-10 12:15:05
-cover: https://img.paulzzh.com/touhou/random?10
+cover: <a href="https://img.paulzzh.com/touhou/random?10">https://img.paulzzh.com/touhou/random?10</a>
 categories: Redis
-tags: [Redis, 分布式]
-description: 传统的session由服务器端生成并存储，当应用进行分布式集群部署的时候，如何保证不同服务器上session信息能够共享呢？本篇通过实战讲述如何使用Redis实现分布式Session共享</h2>
+tags: [Redis, 分布式]</p>
+<h2>description: 传统的session由服务器端生成并存储，当应用进行分布式集群部署的时候，如何保证不同服务器上session信息能够共享呢？本篇通过实战讲述如何使用Redis实现分布式Session共享</h2>
 <p>传统的session由服务器端生成并存储，当应用进行分布式集群部署的时候，如何保证不同服务器上session信息能够共享呢？本篇通过实战讲述如何使用Redis实现分布式Session共享</p>
-<p>源代码: https://github.com/JasonkayZK/Java_Samples/tree/redis-session</p>
+<p>源代码: <a href="https://github.com/JasonkayZK/Java_Samples/tree/redis-session">https://github.com/JasonkayZK/Java_Samples/tree/redis-session</a></p>
 <p>&lt;br/&gt;</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <p>Cookie 保存在客户端浏览器中，而 Session 保存在服务器上。客户端浏览器访问服务器的时候，服务器把客户端信息以某种形式记录在服务器上，这就是 Session。客户端浏览器再次访问时只需要从该 Session 中查找该客户的状态就可以了</p>
 <p><strong>Session的实现原理：</strong></p>
 <ul>
@@ -20,34 +21,34 @@ description: 传统的session由服务器端生成并存储，当应用进行分
 </ul>
 <p>&lt;br/&gt;</p>
 <p>在实际工作中我们<strong>建议使用外部的缓存设备来共享 Session，避免单个服务器节点挂掉而影响服务，共享数据都会放到外部缓存容器中</strong></p>
-<blockquote>
-<p><strong>共享session原理：</strong></p>
+<blockquote><p><strong>共享session原理：</strong></p>
 <ul>
 <li>session集中存储（redis，memcached，hbase等）</li>
-<li>不同服务器上session数据进行复制</li>
-</ul>
+<li><p>不同服务器上session数据进行复制</p>
 <p><strong>利用Redis等session集中存储的实现方案：</strong></p>
-<ul>
-<li>新增Filter，拦截请求，包装HttpServletRequest</li>
+</li>
+<li><p>新增Filter，拦截请求，包装HttpServletRequest</p>
+</li>
 <li>改写getSession方法，从session存储中获取session数据，返回自定义的HttpSession实现</li>
-<li>在生成新Session后，写入sessionid到cookie中</li>
-</ul>
+<li><p>在生成新Session后，写入sessionid到cookie中</p>
 <p>所有服务器的session信息都存储到了同一个Redis集群中，即所有的服务都将 Session 的信息存储到 Redis 集群中，无论是对 Session 的注销、更新都会同步到集群中，达到了 Session 共享的目的</p>
 <p><strong>Redis存储session的需要考虑问题：</strong></p>
-<ul>
-<li>session数据如何在Redis中存储？</li>
-<li>session属性变更何时触发存储？</li>
-</ul>
+</li>
+<li><p>session数据如何在Redis中存储？</p>
+</li>
+<li><p>session属性变更何时触发存储？</p>
 <p>考虑到session中数据类似map的结构，采用redis中hash存储session数据比较合适，如果使用单个value存储session数据，不加锁的情况下，就会存在session覆盖的问题，因此<strong>使用hash存储session，每次只保存本次变更session属性的数据，避免了锁处理，性能更好</strong></p>
 <p>如果每改一个session的属性就触发存储，在<strong>变更较多session属性时会触发多次redis写操作，对性能也会有影响，我们是在每次请求处理完后，做一次session的写入，并且只写入变更过的属性</strong></p>
 <p>如果本次没有做session的更改， 是不会做redis写入的，仅当没有变更的session超过一个时间阀值（不变更session刷新过期时间的阀值），就会触发session保存，以便session能够延长有效期</p>
+</li>
+</ul>
 </blockquote>
 <p>此外, Spring 官方针对 Session 管理这个问题，提供了专门的组件 Spring Session，使用 Spring  Session 在项目中集成分布式 Session 非常方便。Spring 为 Spring Session 和 Redis  的集成提供了组件：spring-session-data-redis</p>
 <p>所以在这里我们直接使用这个组件实现</p>
 <p>&lt;br/&gt;</p>
 <h3>导入依赖并配置</h3>
 <p>pom.xml</p>
-<pre><code class="language-xml">&lt;parent&gt;
+<pre><code class="lang-xml">&lt;parent&gt;
     &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
     &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
     &lt;version&gt;2.2.4.RELEASE&lt;/version&gt;
@@ -83,7 +84,7 @@ description: 传统的session由服务器端生成并存储，当应用进行分
 </code></pre>
 <p>配置文件</p>
 <p>application.yml</p>
-<pre><code class="language-yaml">server:
+<pre><code class="lang-yaml">server:
   port: 8080
 
 spring:
@@ -103,7 +104,7 @@ spring:
         min-idle: 0
 </code></pre>
 <p>SessionConfig.java</p>
-<pre><code class="language-java">package top.jasonkayzk.redissession.config;
+<pre><code class="lang-java">package top.jasonkayzk.redissession.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.session.data.redis.config.annotation.web.http.EnableRedisHttpSession;
@@ -120,17 +121,16 @@ import org.springframework.session.data.redis.config.annotation.web.http.EnableR
 public class SessionConfig {
 }
 </code></pre>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>配置说明:</strong></p>
 <p><strong><code>maxInactiveIntervalInSeconds:</code> 设置 Session 失效时间，使用 Redis Session 之后，原 Spring Boot 中的 server.session.timeout 属性不再生效</strong></p>
 </blockquote>
 <p>仅仅需要这两步 Spring Boot 分布式 Session 就配置完成了</p>
 <p>&lt;br/&gt;</p>
 <h3>实体类</h3>
-<p>先创建一个User类，&lt;font color="#f00"&gt;<strong>一定要实现序列化接口，因为session将数据存放到了Redis集群中，所以存入的数据也需要能够被序列化</strong>&lt;/font&gt;</p>
+<p>先创建一个User类，&lt;font color="#f00"&gt;**一定要实现序列化接口，因为session将数据存放到了Redis集群中，所以存入的数据也需要能够被序列化**&lt;/font&gt;</p>
 <p>User.java</p>
-<pre><code class="language-java">package top.jasonkayzk.redissession.entity;
+<pre><code class="lang-java">package top.jasonkayzk.redissession.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -166,14 +166,13 @@ public class User implements Serializable {
 
 }
 </code></pre>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>说明:</strong> 为了简单演示, 没有从数据库中取数据, 而是直接通过defaultUser()直接返回了一个User实例</p>
 </blockquote>
 <p>&lt;br/&gt;</p>
 <h3>控制器</h3>
 <p>IndexController.java</p>
-<pre><code class="language-java">package top.jasonkayzk.redissession.controller;
+<pre><code class="lang-java">package top.jasonkayzk.redissession.controller;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -223,27 +222,25 @@ public class IndexController {
 
 }
 </code></pre>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>说明:</strong></p>
 <p>前端控制器IndexController包括三个方法:</p>
 <ul>
-<li><strong>index:</strong></li>
-</ul>
+<li><p><strong>index:</strong></p>
 <p>判断请求的Session中是否包括user属性(判断当前会话是否已经登录)</p>
-<ul>
-<li><strong>login:</strong></li>
-</ul>
+</li>
+<li><p><strong>login:</strong></p>
 <p>通过数据库取出User信息, 与请求发来的username和password对比, 如果密码匹配则将user属性加入当前Session(<strong>表示登录成功</strong>)</p>
-<ul>
-<li><strong>logout:</strong></li>
-</ul>
+</li>
+<li><p><strong>logout:</strong></p>
 <p>将user属性从当前Session中移除(<strong>表示退出登录</strong>)</p>
+</li>
+</ul>
 </blockquote>
 <h3>实现原理</h3>
 <p>在上面的IndexController中并没有与Redis的相关操作, 但是还是通过Redis完成了Session共享</p>
 <p><strong>① 查看Redis中存储的Session</strong></p>
-<pre><code class="language-mysql">localhost:0&gt;keys *
+<pre><code class="lang-mysql">localhost:0&gt;keys *
  # 执行 TTL key ，可以查看剩余生存时间
  # 定时Job程序触发Session 过期。(spring-session 功能)，数据类型：Set
  1)  "spring:session:sessions:expires:f63798bb-2593-4c8a-be89-e316c1005138"
@@ -251,7 +248,7 @@ public class IndexController {
  2)  "spring:session:sessions:f63798bb-2593-4c8a-be89-e316c1005138"
  # Redis TTL触发Session 过期，数据类型：String
  3)  "spring:session:expirations:1583905680000"
- 
+
 localhost:0&gt;type spring:session:sessions:f63798bb-2593-4c8a-be89-e316c1005138
 "hash"
 
@@ -276,7 +273,7 @@ localhost:0&gt;hkeys spring:session:sessions:f63798bb-2593-4c8a-be89-e316c100513
 <ul>
 <li><p>hash结构，spring-session存储的主要内容: spring:session:sessions:fc454e71-c540-4097-8df2-92f88447063f</p>
 <p>hash结构有key和field，如上面的例子：hash的key为"spring:session:sessions"前缀加上fc454e71-c540-4097-8df2-92f88447063f，该key下的field有：</p>
-<pre><code class="language-properties">field=sessionAttr:qwe,value=123                
+<pre><code class="lang-properties">field=sessionAttr:qwe,value=123                
 field=creationTime,value=                         //创建时间
 field=maxInactiveInterval，value=           
 field=lastAccessedTime，value=              //最后访问时间
@@ -288,17 +285,16 @@ field=lastAccessedTime，value=              //最后访问时间
 </li>
 <li><p>Set结构，过期时间记录: spring:session:expirations:1515135000000</p>
 <p>set的key固定为<code>spring:session:expirations:1515135000000</code>，set的集合values为：</p>
-<pre><code class="language-properties">expires:c7fc28d7-5ae2-4077-bff2-5b2df6de11d8  //（一个会话一条）
+<pre><code class="lang-properties">expires:c7fc28d7-5ae2-4077-bff2-5b2df6de11d8  //（一个会话一条）
 expires:fc454e71-c540-4097-8df2-92f88447063f  //（一个会话一条）
 </code></pre>
 </li>
 </ul>
 </li>
 </ul>
-<blockquote>
-<p>&lt;br/&gt;</p>
+<blockquote><p>&lt;br/&gt;</p>
 <p><strong>补充:</strong></p>
-<p>&lt;font color="#f00"&gt;<strong>Redis清除过期key的行为是一个异步行为且是一个低优先级的行为，用文档中的原话来说便是，可能会导致session不被清除</strong>&lt;/font&gt;</p>
+<p>&lt;font color="#f00"&gt;**Redis清除过期key的行为是一个异步行为且是一个低优先级的行为，用文档中的原话来说便是，可能会导致session不被清除**&lt;/font&gt;</p>
 <p>于是<strong>引入了专门的expiresKey，来专门负责session的清除</strong>，包括我们自己在使用redis时也需要关注这一点。在开发层面，我们仅仅需要关注第三个key就行了</p>
 </blockquote>
 <p><strong>③ spring-session-data-redis的实现原理</strong></p>
@@ -372,7 +368,7 @@ expires:fc454e71-c540-4097-8df2-92f88447063f  //（一个会话一条）
 <p><img alt="RedisSession.gif" src="http://www.luyixian.cn/upload/201901/07/201901071657172770.gif"/></p>
 <p>&lt;br/&gt;</p>
 <h3>附录</h3>
-<p>源代码: https://github.com/JasonkayZK/Java_Samples/tree/redis-session</p>
+<p>源代码: <a href="https://github.com/JasonkayZK/Java_Samples/tree/redis-session">https://github.com/JasonkayZK/Java_Samples/tree/redis-session</a></p>
 <p>文章参考:</p>
 <ul>
 <li><a href="http://www.luyixian.cn/news_show_9155.aspx">SpringBoot坚持学习第七天：Redis实现分布式session共享</a></li>

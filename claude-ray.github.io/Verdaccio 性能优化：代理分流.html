@@ -1,25 +1,26 @@
 <h2><a href="https://github.com/claude-ray/claude-ray.github.io/blob/master/source/_posts/optimize-verdaccio-proxy.md">仓库源文</a>，<a href="https://claude-ray.github.io/optimize-verdaccio-proxy">站点原文</a></h2>
 <hr/>
-<h2>title: Verdaccio 性能优化：代理分流
+<p>title: Verdaccio 性能优化：代理分流
 date: 2019-11-30 19:08:03
-tags: [Node.js,Verdaccio,private npm registry,npm]
-categories: Node.js</h2>
+tags: [Node.js,Verdaccio,private npm registry,npm]</p>
+<h2>categories: Node.js</h2>
 <h2>前言</h2>
 <p>这里的 <a href="https://github.com/verdaccio/verdaccio">Verdaccio</a> 是指用于搭建轻量级 npm 私有仓库的开源解决方案，以下简称 npm 私服。</p>
 <p>前段时间写了一点分流相关的<a href="http://claude-ray.com/2019/10/22/optimize-verdaccio-package-route/">优化思路</a>，但那是以节省资源开销为主、不冲破原有结构的微调，从结果上看，甚至不是合格的优化。</p>
 <p>随着用户（请求）数量的上升，服务响应速度和效率其实才是最要紧的问题，节省资源终究不能改善这一点。因此我决定实施上次浮现在脑中的想法，将内外网的 npm 包流量彻底分流。</p>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <h3>关于 Cluster 模式的说明</h3>
 <p>再次解释，Verdaccio 官方文档明确表示不能支持（PM2）Cluster 模式。另外，其云存储方案是可以支持多进程多节点部署的，但只提供了 google cloud、aws s3 storage 的插件。</p>
 <p>不过在此基础上，只要拥有自己的云存储服务，就能使用或设计一套新的存储插件，进而支持多进程架构。此方案一定可行，只是相比本篇的做法，需要的成本更高一些。</p>
 <p>俗话说得好，没有一个中间层解决不了的问题，而在 Verdaccio 的场景下，这种做法又是相当地迅速和高效。</p>
 <h2>原理</h2>
 <h3>npm 安装机制</h3>
-<p>如果不了解 npm 官方客户端的安装机制，稍后可以阅读阮一峰的博客[[http://www.ruanyifeng.com/blog/2016/01/npm-install.html][《npm 模块安装机制简介》]]，少部分知识已经不适用于当前版本了，不过最重要的是能理解 npm 下载流程。</p>
+<p>如果不了解 npm 官方客户端的安装机制，稍后可以阅读阮一峰的博客[[<a href="http://www.ruanyifeng.com/blog/2016/01/npm-install.html][《npm">http://www.ruanyifeng.com/blog/2016/01/npm-install.html][《npm</a> 模块安装机制简介》]]，少部分知识已经不适用于当前版本了，不过最重要的是能理解 npm 下载流程。</p>
 <p>其中我们需要知道，npm 包下载前，客户端会向上游服务器查询包信息，以及获取压缩包的下载地址 url，并将此 url 存放在 package-lock.json 文件中。以后每次执行下载，都会优先使用 package-lock.json 中的地址。</p>
 <h3>npm 下载最长请求路径</h3>
 <p>为了方便理解 Verdaccio 所处的位置，我来绘制一下 npm 包下载时从客户端到 Verdaccio 再到上游的最长请求路径简图，并忽略中间的安全验证环节，如下所示。</p>
-<p><img alt="npm 请求路径" src="/media/wwww/share/study/聚聚/源数据/博客聚合/claude-ray.github.io/source/image/optimize-verdaccio-proxy/verdaccio-fetch-path.png"/></p>
+<p><img alt="npm 请求路径" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/claude-ray.github.io/source/image/optimize-verdaccio-proxy/verdaccio-fetch-path.png"/></p>
 <h3>接口转发</h3>
 <p>有了代理层，就可以忽略 Verdaccio 内部的各种逻辑，不受技术栈的约束，编写少量的代码，便能完成主要接口的分流。</p>
 <p>首要的接口是 <code>/:package/:version?</code> ，释放私服最大的查询压力，原因可以看<a href="http://claude-ray.com/2019/10/22/optimize-verdaccio-package-route">这里的解释</a>。</p>
@@ -33,7 +34,7 @@ categories: Node.js</h2>
 <p>因此，可以改良 <code>/-/verdaccio/packages</code>，例如新增一个专门获取包名列表的接口，并增加内存缓存。</p>
 <p>Verdaccio 版本不同时，做法也有很大差异，相信这里的处理不是问题，只要认真阅读上述接口就能获取思路了。</p>
 <p>PS：还是补充一点代码吧，早期版本 Verdaccio 只需要这样改：</p>
-<pre><code class="language-js">/**
+<pre><code class="lang-js">/**
  * Get name list of all visible package
  * @route /-/verdaccio/names
  */
@@ -52,10 +53,9 @@ route.get('/names', async function(req, res, next) {
 })
 </code></pre>
 <p>最新的 names 要使用回调的方式取值，伪代码：</p>
-<pre><code class="language-ts">const names = await new Promise((resolve, reject) =&gt;
+<pre><code class="lang-ts">const names = await new Promise((resolve, reject) =&gt;
   storage.localStorage.storagePlugin.get((err, list) =&gt;
     err ? reject(err): resolve(list)))
-
 </code></pre>
 <h2>实现方式</h2>
 <h3>客户端</h3>
@@ -64,7 +64,7 @@ route.get('/names', async function(req, res, next) {
 <h3>服务端</h3>
 <p>到这一步，技术选型已经无所谓了，自然可以 nginx + lua，简单一点就继续使用 Node.js 实现。</p>
 <p>由于其他原因，我用 express 做了实现，贴一点转发逻辑，大家就自由发挥吧。</p>
-<pre><code class="language-js">const request = require('request');
+<pre><code class="lang-js">const request = require('request');
 const rp = require('request-promise-native');
 
 const publicRegistry = 'http://registry.npm.taobao.org';
@@ -130,6 +130,6 @@ function all(req, res, next) {
 <h2>结果</h2>
 <p>在同样的测试条件下，私服的 /:package/:version? 接口平均响应耗时从 4s 降至 400 ms，可以明显感觉到速度的提升，并且可以通过不断扩展代理层优化处理效率。作为轻量级的私服解决方案，已经可以续命很久了。</p>
 <h2>后续</h2>
-<p>这个系列就此结束了吗？~~当然没有，cluster 的坑还没填呢！~~也确实可能会鸽掉…</p>
+<p>这个系列就此结束了吗？<del>当然没有，cluster 的坑还没填呢！</del>也确实可能会鸽掉…</p>
 <p>因为支持 cluster 需要较深入的二次开发，也有新的中间件引入，相比目前的成本要高出不少。并且 Verdaccio 新旧版本的逻辑存在一定差异，我在老版本中已经解决了此问题，但新版可能又要另一套实现。</p>
 <p>所以，等我读完 Verdaccio 最新的代码再说吧~</p>

@@ -1,4 +1,4 @@
-<h2><a href="https://github.com/linonetwo/linonetwo.github.io/blob/master/_posts/2018-12-19-%E8%87%AA%E5%BB%BAStarbound%E7%BD%91%E6%B8%B8%E6%9C%8D%E5%8A%A1%E5%99%A8.md">仓库源文</a>，<a href="https://onetwo.ren/2018/12/19/%E8%87%AA%E5%BB%BAStarbound%E7%BD%91%E6%B8%B8%E6%9C%8D%E5%8A%A1%E5%99%A8">站点原文</a></h2>
+<h2><a href="https://github.com/linonetwo/linonetwo.github.io/blob/master/_posts/2018-12-19-自建Starbound网游服务器.md">仓库源文</a>，<a href="https://onetwo.ren/2018/12/19/自建Starbound网游服务器">站点原文</a></h2>
 <hr/>
 <p>layout: post
 title: '自建 Starbound 网游服务器'
@@ -36,11 +36,11 @@ introduction: '在阿里云上架设 Starbound 服务器踩过的一些坑，还
 <li>启动游戏</li>
 </ol>
 <p>注意官网教程中的依赖少了以下几项，需要自己额外安装上：</p>
-<pre><code class="language-shell">apt install libsdl2-2.0-0 libsdl2-2.0-0:i386 # 解决报错 SDL not found and Failed to set thread priority: per-thread setup failed
+<pre><code class="lang-shell">apt install libsdl2-2.0-0 libsdl2-2.0-0:i386 # 解决报错 SDL not found and Failed to set thread priority: per-thread setup failed
 apt install jq netcat lib32stdc++6 steamcmd # steamcmd 的依赖
 </code></pre>
 <p>由于众所周知的原因，我们需要用 root 账号输入 <code>vim /etc/hosts</code> 添加以下的域名解析（若 LinuxGSM 下载脚本失败说明第一个失效，若 steam 无法更新说明第二个失效，需自行更换为有效的）：</p>
-<pre><code class="language-hosts"># gfw
+<pre><code class="lang-hosts"># gfw
 199.232.4.133 raw.githubusercontent.com
 104.78.74.220 steamcommunity.com
 </code></pre>
@@ -49,7 +49,7 @@ apt install jq netcat lib32stdc++6 steamcmd # steamcmd 的依赖
 steampass='pswd'
 </code></pre>
 <p>安装过程中要注意自己的邮箱，如果收到了 Steam 发来的邮件，而且安装过程卡住如下，则需要黏贴上刚收到的验证码，然后按回车：</p>
-<pre><code class="language-shell">sbserver@starbound-game:~$ ./sbserver update
+<pre><code class="lang-shell">sbserver@starbound-game:~$ ./sbserver update
 [ ERROR ] Updating sbserver: No appmanifest_211820.acf found
 [ INFO ] Updating sbserver: Forcing update to correct issue
 [ START ] Updating sbserver: SteamCMD
@@ -68,13 +68,13 @@ Index 0 = "/home/sbserver/.local/share/Steam" 27.92 GB free disk space
 <p>这也就是我们要在下面的 <code>serverfiles/linux/sbinit.config</code> 里用 <code>../../.local/share/Steam/steamapps/workshop/content/211820</code> 的原因。</p>
 <p>安装 mod 得一个个输入 mod 在创意工坊的代码，然后用 steam 的命令行工具来安装，mod 的创意工坊代码就是其网址 <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=807695810"><code>https://steamcommunity.com/sharedfiles/filedetails/?id=807695810</code></a> 中 <code>id=</code> 后面的那串数字。</p>
 <p>好在我早就把自用的 mod <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=1267792017">放进了一个合集里</a>，以前是方便了联机的朋友一键订阅，现在就是可以从它直接生成自动操作 steam 命令行工具的脚本，不过因为我不是很熟悉 sed 和 tee 的用法，有时候脚本内容会被追加到 <code>moddownload.sh</code> 里面，有时候却不会，不是很稳定：</p>
-<pre><code class="language-shell">
+<pre><code class="lang-shell">
 echo login 账号填这 密码填这 &gt; moddownload.sh &amp;&amp; curl -s --data "collectioncount=1&amp;publishedfileids[0]=合集的ID填这" https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/ \
 | jq '.response.collectiondetails[] | .children[] | .publishedfileid' \
 | sed 's/^/workshop_download_item 211820 /' | tee -a moddownload.sh &amp;&amp; echo quit &gt;&gt; moddownload.sh &amp;&amp; steamcmd +runscript /home/sbserver/moddownload.sh
 </code></pre>
 <p>接着要用另一个脚本生成 <code>serverfiles/linux/sbinit.config</code> ，它就相当于你想启动的 mod 的列表，里面放了一大列 steam 命令行工具下载了的 mod 的存放路径：</p>
-<pre><code class="language-shell">echo -e "{\n  \"assetDirectories\": [\n    \"../assets/\",\n    \"../mods/\",\n    " &amp;&amp; \
+<pre><code class="lang-shell">echo -e "{\n  \"assetDirectories\": [\n    \"../assets/\",\n    \"../mods/\",\n    " &amp;&amp; \
 curl -s --data "collectioncount=1&amp;publishedfileids[0]=合集的ID填这" https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/ \
 | jq '.response.collectiondetails[] | .children[] | .publishedfileid' \
 | sed 's#^#"../../.local/share/Steam/steamapps/workshop/content/211820/#' | sed 's#/"#/#' | tr -t '\n' ',' &amp;&amp; \
@@ -90,7 +90,7 @@ echo -e "\b\b\n  ],\n  \"storageDirectory\": \"../storage/\"\n}\n"
 </ol>
 <p>即使服务端和客户端开启的 mod 列表是完全相同的，在登录服务器时还是会提示 <code>Assets mismatch between client and server, and the override option is not set</code> 。那解决办法当然就是让所有玩家都在客户端的设置里打开 <code>Allow Assets Mismatch</code> ，只要两边 mod 真的是对应的，打开之后就能正常登录服务器了。但是打开之后总感觉就失去了一个测试点，像之前客户端服务端 mod 数量真的不对应的时候，就没人来帮我们做检查了。</p>
 <p>之前在 vultr 上试着开服的时候，服务器总是卡在这三步中的某一步上：</p>
-<pre><code class="language-log">
+<pre><code class="lang-log">
 [22:35:02.148] [Info] Root: Loaded RadioMessageDatabase in 0.106177 seconds
 [22:35:10.984] [Info] Root: Loaded ItemDatabase in 14.4328 seconds
 [22:35:12.441] [Info] Root: Loaded CollectionDatabase in 10.2919 seconds

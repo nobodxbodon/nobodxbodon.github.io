@@ -1,49 +1,49 @@
-<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Golang%E4%B8%AD%E7%9A%84context.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/09/23/Golang%E4%B8%AD%E7%9A%84context">站点原文</a></h2>
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Golang中的context.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2020/09/23/Golang中的context">站点原文</a></h2>
 <hr/>
-<h2>title: Golang中的context
+<p>title: Golang中的context
 toc: true
-cover: 'https://img.paulzzh.com/touhou/random?58'
+cover: '<a href="https://img.paulzzh.com/touhou/random?58">https://img.paulzzh.com/touhou/random?58</a>'
 date: 2020-09-23 19:34:32
 categories: Golang
-tags: [Golang]
-description: Go语言提供了Context标准库可以解决并发控制的问题，Context的作用和它的名字很像，上下文，即子协程的下上文；本文就来讲解Golang中的context的用法；</h2>
+tags: [Golang]</p>
+<h2>description: Go语言提供了Context标准库可以解决并发控制的问题，Context的作用和它的名字很像，上下文，即子协程的下上文；本文就来讲解Golang中的context的用法；</h2>
 <p>Go语言提供了Context标准库可以解决并发控制的问题，Context的作用和它的名字很像，上下文，即子协程的下上文；</p>
 <p>本文就来讲解Golang中的context的用法；</p>
 <p>源代码:</p>
 <ul>
-<li>https://github.com/JasonkayZK/Go_Learn/tree/context</li>
+<li><a href="https://github.com/JasonkayZK/Go_Learn/tree/context">https://github.com/JasonkayZK/Go_Learn/tree/context</a></li>
 </ul>
-<p>&lt;!--more--&gt;</p>
+&lt;!--more--&gt;
+
 <p>&lt;br/&gt;</p>
 <h1>Golang中的context</h1>
 <h2>为什么需要 Context</h2>
 <p>在CSP并发模型中，WaitGroup 和信道(channel)是常见的 2 种并发控制的方式；</p>
 <p>如果并发启动了多个子协程，需要等待所有的子协程完成任务，WaitGroup 非常适合于这类场景，例如下面的例子：</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"fmt"
-	"sync"
-	"time"
+    "fmt"
+    "sync"
+    "time"
 )
 
 var wg sync.WaitGroup
 
 func doTask(n int) {
-	time.Sleep(time.Duration(n) * time.Second)
-	fmt.Printf("Task %d Done\n", n)
-	wg.Done()
+    time.Sleep(time.Duration(n) * time.Second)
+    fmt.Printf("Task %d Done\n", n)
+    wg.Done()
 }
 
 func main() {
-	for i := 0; i &lt; 3; i++ {
-		wg.Add(1)
-		go doTask(i + 1)
-	}
-	wg.Wait()
-	fmt.Println("All Task Done")
+    for i := 0; i &lt; 3; i++ {
+        wg.Add(1)
+        go doTask(i + 1)
+    }
+    wg.Wait()
+    fmt.Println("All Task Done")
 }
-
 </code></pre>
 <p><code>wg.Wait()</code> 会等待所有的子协程任务全部完成，所有子协程结束后，才会执行 <code>wg.Wait()</code> 后面的代码。</p>
 <pre><code>Task 3 Done
@@ -54,36 +54,35 @@ All Task Done
 <p>WaitGroup 只是傻傻地等待子协程结束，但是<strong>并不能主动通知子协程退出；</strong></p>
 <p>假如开启了一个定时轮询的子协程，有没有什么办法，通知该子协程退出呢？</p>
 <p>这种场景下，可以使用 <code>select+chan</code> 的机制：</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"fmt"
-	"time"
+    "fmt"
+    "time"
 )
 
 var stop chan interface{}
 
 func reqTask(name string) {
-	for {
-		select {
-		case &lt;-stop:
-			fmt.Println("stop", name)
-			return
-		default:
-			fmt.Println(name, "send request")
-			time.Sleep(1 * time.Second)
-		}
-	}
+    for {
+        select {
+        case &lt;-stop:
+            fmt.Println("stop", name)
+            return
+        default:
+            fmt.Println(name, "send request")
+            time.Sleep(1 * time.Second)
+        }
+    }
 }
 
 func main() {
-	stop = make(chan interface{})
-	go reqTask("worker1")
-	time.Sleep(3 * time.Second)
-	stop &lt;- struct{}{}
-	time.Sleep(3 * time.Second)
+    stop = make(chan interface{})
+    go reqTask("worker1")
+    time.Sleep(3 * time.Second)
+    stop &lt;- struct{}{}
+    time.Sleep(3 * time.Second)
 }
-
 </code></pre>
 <p>子协程使用 for 循环定时轮询，如果 <code>stop</code> 信道有值，则退出，否则继续轮询。</p>
 <pre><code>worker1 send request
@@ -107,35 +106,34 @@ stop worker1
 <p><code>context.WithCancel()</code> 创建可取消的 Context 对象，即可以主动通知子协程退出。</p>
 <h3>控制单个协程</h3>
 <p>使用 Context 改写上述的例子，效果与 <code>select+chan</code> 相同。</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"context"
-	"fmt"
-	"time"
+    "context"
+    "fmt"
+    "time"
 )
 
 func reqTask(ctx context.Context, name string) {
-	for {
-		select {
-		case &lt;-ctx.Done():
-			fmt.Println("stop", name)
-			return
-		default:
-			fmt.Println(name, "send request")
-			time.Sleep(1 * time.Second)
-		}
-	}
+    for {
+        select {
+        case &lt;-ctx.Done():
+            fmt.Println("stop", name)
+            return
+        default:
+            fmt.Println(name, "send request")
+            time.Sleep(1 * time.Second)
+        }
+    }
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	go reqTask(ctx, "worker1")
-	time.Sleep(3 * time.Second)
-	cancel()
-	time.Sleep(3 * time.Second)
+    ctx, cancel := context.WithCancel(context.Background())
+    go reqTask(ctx, "worker1")
+    time.Sleep(3 * time.Second)
+    cancel()
+    time.Sleep(3 * time.Second)
 }
-
 </code></pre>
 <ul>
 <li><code>context.Backgroud()</code> 创建根 Context，通常在 main 函数、初始化和测试代码中创建，作为顶层 Context。</li>
@@ -145,39 +143,38 @@ func main() {
 </ul>
 <p>&lt;br/&gt;</p>
 <h3>控制多个协程</h3>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"context"
-	"fmt"
-	"time"
+    "context"
+    "fmt"
+    "time"
 )
 
 func reqTask(ctx context.Context, name string) {
-	for {
-		select {
-		case &lt;-ctx.Done():
-			fmt.Println("stop", name)
-			return
-		default:
-			fmt.Println(name, "send request")
-			time.Sleep(1 * time.Second)
-		}
-	}
+    for {
+        select {
+        case &lt;-ctx.Done():
+            fmt.Println("stop", name)
+            return
+        default:
+            fmt.Println(name, "send request")
+            time.Sleep(1 * time.Second)
+        }
+    }
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
+    ctx, cancel := context.WithCancel(context.Background())
 
-	go reqTask(ctx, "worker1")
-	go reqTask(ctx, "worker2")
-	go reqTask(ctx, "worker3")
+    go reqTask(ctx, "worker1")
+    go reqTask(ctx, "worker2")
+    go reqTask(ctx, "worker3")
 
-	time.Sleep(3 * time.Second)
-	cancel()
-	time.Sleep(3 * time.Second)
+    time.Sleep(3 * time.Second)
+    cancel()
+    time.Sleep(3 * time.Second)
 }
-
 </code></pre>
 <p>为每个子协程传递相同的上下文 <code>ctx</code> 即可，调用 <code>cancel()</code> 函数后该 Context 控制的所有子协程都会退出。</p>
 <pre><code>worker3 send request
@@ -193,12 +190,11 @@ stop worker2
 stop worker3
 stop worker1
 </code></pre>
-<blockquote>
-<p>此次，可能有些人会有疑问：</p>
+<blockquote><p>此次，可能有些人会有疑问：</p>
 <p><strong>在reqTask中传递的是ctx而非&amp;ctx，为什么在cancel()的时候也会对复制的ctx产生作用？</strong></p>
 <p>点开 Context 的源码看一下就能明白了：</p>
 <p>首先，<strong>context.Context 是一个接口，并不是真正的结构体类型</strong>。定义如下：</p>
-<pre><code class="language-go">type Context interface {
+<pre><code class="lang-go">type Context interface {
   Deadline() (deadline time.Time, ok bool)
   Done() &lt;-chan struct{}
   Err() error
@@ -206,7 +202,7 @@ stop worker1
 }
 </code></pre>
 <p>WithCancel 返回的是 context.Context 接口，如果想知道返回的真正类型是什么，点开 WithCancel 源码，如下：</p>
-<pre><code class="language-go">func WithCancel(parent Context) (ctx Context, cancel CancelFunc) {
+<pre><code class="lang-go">func WithCancel(parent Context) (ctx Context, cancel CancelFunc) {
   if parent == nil {
       panic("cannot create context from nil parent")
   }
@@ -222,7 +218,7 @@ func newCancelCtx(parent Context) cancelCtx {
 </code></pre>
 <p>它返回的 context.Context 类型，但 <strong>ctx 本身的类型是 *cancelCtx</strong>，的确是地址传递，而非值传递；</p>
 <p>cancelCtx 的定义如下：</p>
-<pre><code class="language-go">type cancelCtx struct {
+<pre><code class="lang-go">type cancelCtx struct {
   Context
 
   mu       sync.Mutex            // protects following fields
@@ -236,44 +232,43 @@ func newCancelCtx(parent Context) cancelCtx {
 <p>&lt;br/&gt;</p>
 <h2>context.WithValue</h2>
 <p>如果需要往子协程中传递参数，可以使用 <code>context.WithValue()</code>。</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"context"
-	"fmt"
-	"time"
+    "context"
+    "fmt"
+    "time"
 )
 
 type Options struct{
-	Interval time.Duration
+    Interval time.Duration
 }
 
 func reqTask(ctx context.Context, name string) {
-	for {
-		select {
-			case &lt;- ctx.Done():
-				fmt.Println("stop", name)
-				return
-		default:
-			fmt.Println(name, "send request")
-			op := ctx.Value("options").(*Options)
-			time.Sleep(op.Interval * time.Second)
-		}
-	}
+    for {
+        select {
+            case &lt;- ctx.Done():
+                fmt.Println("stop", name)
+                return
+        default:
+            fmt.Println(name, "send request")
+            op := ctx.Value("options").(*Options)
+            time.Sleep(op.Interval * time.Second)
+        }
+    }
 }
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	vCtx := context.WithValue(ctx, "options", &amp;Options{1})
+    ctx, cancel := context.WithCancel(context.Background())
+    vCtx := context.WithValue(ctx, "options", &amp;Options{1})
 
-	go reqTask(vCtx, "worker1")
-	go reqTask(vCtx, "worker2")
+    go reqTask(vCtx, "worker1")
+    go reqTask(vCtx, "worker2")
 
-	time.Sleep(3 * time.Second)
-	cancel()
-	time.Sleep(3 * time.Second)
+    time.Sleep(3 * time.Second)
+    cancel()
+    time.Sleep(3 * time.Second)
 }
-
 </code></pre>
 <ul>
 <li><code>context.WithValue()</code> 创建了一个基于 <code>ctx</code> 的子 Context，并携带了值 <code>options</code>。</li>
@@ -282,39 +277,38 @@ func main() {
 <p>&lt;br/&gt;</p>
 <h2>context.WithTimeout</h2>
 <p>如果需要控制<strong>子协程的执行时间</strong>，可以使用 <code>context.WithTimeout</code> 创建具有超时通知机制的 Context 对象。</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"context"
-	"fmt"
-	"time"
+    "context"
+    "fmt"
+    "time"
 )
 
 func reqTask(ctx context.Context, name string) {
-	for {
-		select {
-		case &lt;-ctx.Done():
-			fmt.Println("stop", name)
-			return
-		default:
-			fmt.Println(name, "send request")
-			// 0.5s
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
+    for {
+        select {
+        case &lt;-ctx.Done():
+            fmt.Println("stop", name)
+            return
+        default:
+            fmt.Println(name, "send request")
+            // 0.5s
+            time.Sleep(500 * time.Millisecond)
+        }
+    }
 }
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	go reqTask(ctx, "worker1")
-	go reqTask(ctx, "worker2")
+    ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+    go reqTask(ctx, "worker1")
+    go reqTask(ctx, "worker2")
 
-	time.Sleep(3 * time.Second)
-	fmt.Println("before cancel")
-	cancel()
-	time.Sleep(3 * time.Second)
+    time.Sleep(3 * time.Second)
+    fmt.Println("before cancel")
+    cancel()
+    time.Sleep(3 * time.Second)
 }
-
 </code></pre>
 <p><code>WithTimeout()</code>的使用与 <code>WithCancel()</code> 类似，多了一个参数，用于设置超时时间。执行结果如下：</p>
 <pre><code>worker1 send request
@@ -331,36 +325,36 @@ before cancel
 <p>&lt;br/&gt;</p>
 <h2>context.WithDeadline</h2>
 <p>超时退出可以控制子协程的最长执行时间，那 <code>context.WithDeadline()</code> 则可以控制子协程最迟退出的时间点。</p>
-<pre><code class="language-go">package main
+<pre><code class="lang-go">package main
 
 import (
-	"context"
-	"fmt"
-	"time"
+    "context"
+    "fmt"
+    "time"
 )
 
 func reqTask(ctx context.Context, name string) {
-	for {
-		select {
-		case &lt;-ctx.Done():
-			fmt.Println("stop", name, ctx.Err())
-			return
-		default:
-			fmt.Println(name, "send request")
-			time.Sleep(1 * time.Second)
-		}
-	}
+    for {
+        select {
+        case &lt;-ctx.Done():
+            fmt.Println("stop", name, ctx.Err())
+            return
+        default:
+            fmt.Println(name, "send request")
+            time.Sleep(1 * time.Second)
+        }
+    }
 }
 
 func main() {
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(1*time.Second))
-	go reqTask(ctx, "worker1")
-	go reqTask(ctx, "worker2")
+    ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(1*time.Second))
+    go reqTask(ctx, "worker1")
+    go reqTask(ctx, "worker2")
 
-	time.Sleep(3 * time.Second)
-	fmt.Println("before cancel")
-	cancel()
-	time.Sleep(3 * time.Second)
+    time.Sleep(3 * time.Second)
+    fmt.Println("before cancel")
+    cancel()
+    time.Sleep(3 * time.Second)
 }
 </code></pre>
 <ul>
@@ -389,7 +383,7 @@ before cancel
 <h2>附录</h2>
 <p>源代码:</p>
 <ul>
-<li>https://github.com/JasonkayZK/Go_Learn/tree/context/</li>
+<li><a href="https://github.com/JasonkayZK/Go_Learn/tree/context/">https://github.com/JasonkayZK/Go_Learn/tree/context/</a></li>
 </ul>
 <p>参考文章：</p>
 <ul>

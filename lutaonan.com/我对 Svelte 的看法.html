@@ -10,12 +10,12 @@ categories:</p>
 <li>tech</li>
 </ul>
 <hr/>
-<p>我在很早前已经听说过 <a href="https://svelte.dev">Svelte</a>, 但是一直没有机会在新的项目真正地用上。最近在尝试模仿实现一个 <a href="https://roamresearch.com">Roam Research</a> 的编辑器，考虑到可能会有大量和 DOM 交互的逻辑，所以我趁这个机会选择了 Svelte, 目前这个编辑器的已经完成了大部分的功能，开源在 https://github.com/djyde/plastic-editor .</p>
+<p>我在很早前已经听说过 <a href="https://svelte.dev">Svelte</a>, 但是一直没有机会在新的项目真正地用上。最近在尝试模仿实现一个 <a href="https://roamresearch.com">Roam Research</a> 的编辑器，考虑到可能会有大量和 DOM 交互的逻辑，所以我趁这个机会选择了 Svelte, 目前这个编辑器的已经完成了大部分的功能，开源在 <a href="https://github.com/djyde/plastic-editor">https://github.com/djyde/plastic-editor</a> .</p>
 <p>在开发的过程中我对 Svelte 非常满意，这篇文章打算就我的体验来说说我对 Svelte 的一些看法。</p>
 <p>你需要有使用过任意一个前端框架的经验才能读懂本文。这篇文章<strong>不是</strong>一篇 Svelte 教程，如果你想学习 Svelte, 请浏览 <a href="https://svelte.dev/tutorial/basics">Svelte 的官方教程</a>，<strong>本文试图通过告诉读者 Svelte 在编译阶段做了什么，来让只听说过 Svelte 的读者，从浅层的原理和设计的角度，了解到 Svelte 是一个怎么样的框架、她和其它框架的区别是什么</strong>。</p>
 <h2>Svelte 是什么？</h2>
 <p>简单来说 Svelte 是一个在编译时实现了 Reactivity (反应式) 的框架，所以它既是一个框架，同时也是一个 Compiler. 如何理解「编译时实现了 Reactivity」？先说说什么是 Reactivity.</p>
-<pre><code class="language-js">let a = 1
+<pre><code class="lang-js">let a = 1
 let b = 2
 let c = a + b
 console.log(c) //=&gt; 3
@@ -25,17 +25,17 @@ console.log(c) //=&gt; 3, not 4
 <p>JavaScript 没有 Reactivity 的能力，所以即使 <code>let c = a + b</code>, 在改变了 <code>a</code> 或 <code>b</code> 的值之后，<code>c</code> 不会因此而改变。真正的 Reactive 与此相反。</p>
 <p>拿 Excel 举例，Excel 是天生 Reactive 的，一个 Excel 里面的单元格，可以编写简单的函数组合其它单元格的值，而组合的结果会随着依赖的单元格改变而自动改变。例如单元格 <code>C1</code> 如果是  <code>=SUM(A1:B1)</code> , 那么 <code>C1</code> 值会随着 <code>A1</code> 或 <code>B1</code> 的值而重新计算和改变。</p>
 <p>如果你用过 Vue 或者 MobX, 你应该知道它们实现 Reactivity 的原理：它们使用了 <code>defineProperty</code> 或者 <code>Proxy</code>, 在 setter 这一层做了一些手脚，当对象的某个成员被赋值的时候，执行更新逻辑。</p>
-<pre><code class="language-js">const reactive = {}
+<pre><code class="lang-js">const reactive = {}
 Object.defineProperty(reactive, 'a', {
   set(value) {
-		console.log('a was updated')
+        console.log('a was updated')
   }
 })
 
 reactive.a = 'changed' //=&gt; a was updated
 </code></pre>
 <p>这是一种「运行时」的手段，它需要在运行时改变了赋值行为，所以在用 Vue 的时候，你必需把需要 Reactivity 的对象包在 <code>data</code> 里，上文的例子用 Vue 需要这么写：</p>
-<pre><code class="language-js">const yourData = {
+<pre><code class="lang-js">const yourData = {
   data() {
     return {
       a: 1,
@@ -56,7 +56,7 @@ console.log(reactive.c) //=&gt; 4, not 3
 </code></pre>
 <p>但是我们可以想一想，如果不用 <code>defineProperty</code>, 可以实现类似的功能吗？</p>
 <p>当然可以：</p>
-<pre><code class="language-js">let a = 1
+<pre><code class="lang-js">let a = 1
 let b = 2
 let c = a + b
 
@@ -77,31 +77,31 @@ console.log(c) //=&gt; 6
 <p>这就是 Svelte 做的事情。当然实际上的实现要更加复杂一些（比如需要把更新放在同一个 microtask 里），但原理是一样的。</p>
 <p>Reactivity 是现代的前端框架的标配，因为从前 MVC 的开发模式对 UI 开发来说，要在 Controller 手动操作 DOM 这个步骤显得有点枯燥和多余，我们希望 UI 是自动随着数据的变化而自动更新的。因此<strong>不同的框架除了写法不尽相同外，最主要的区别还是在于框架在检测到数据更新后，如何处理 UI 的更新</strong>。</p>
 <p>以一个 Counter 为例，这是 React 的写法：</p>
-<pre><code class="language-jsx">function Counter () {
+<pre><code class="lang-jsx">function Counter () {
   const [ count, setCount ] = React.useState(0)
   return (
     &lt;&gt;
-    	&lt;div&gt;{count}&lt;/div&gt;
-	    &lt;button onClick={_ =&gt; setCount(count + 1) }&gt;+&lt;/button&gt;
+        &lt;div&gt;{count}&lt;/div&gt;
+        &lt;button onClick={_ =&gt; setCount(count + 1) }&gt;+&lt;/button&gt;
       &lt;button onClick={_ =&gt; setCount(count - 1) }&gt;-&lt;/button&gt;
     &lt;/&gt;
   )
 }
 </code></pre>
 <p>我在之前的文章已经谈过 React 的思想，在这里稍作重复。React 主张「视图」是「状态」的函数：</p>
-<pre><code class="language-bash">UI = f(state)
+<pre><code class="lang-bash">UI = f(state)
 </code></pre>
 <p>在 <code>setState</code> 的时候，这个函数会重新执行，因为是新的 <code>state</code>, 因此 UI 是变化的。在 React 里，UI 是 Virtual DOM, 用算法对比两个 DOM 树，来算出哪个真实的 DOM 需要被更新。</p>
 <p>React 的实现非常「粗暴」，因为它是真的会重新执行这个函数，在上面的例子中，<code>Counter</code> 会在每次状态变化的时候被重新执行。这使得写 React 组件要多留心性能问题，因为你要避免在函数内部进行不必要的计算：</p>
-<pre><code class="language-diff">function Counter () {
+<pre><code class="lang-diff">function Counter () {
   const [ count, setCount ] = React.useState(0)
 
 + doSomethingHeavy()
-  
+
   return (
     &lt;&gt;
-    	&lt;div&gt;{count}&lt;/div&gt;
-	    &lt;button onClick={_ =&gt; setCount(count + 1) }&gt;+&lt;/button&gt;
+        &lt;div&gt;{count}&lt;/div&gt;
+        &lt;button onClick={_ =&gt; setCount(count + 1) }&gt;+&lt;/button&gt;
       &lt;button onClick={_ =&gt; setCount(count - 1) }&gt;-&lt;/button&gt;
     &lt;/&gt;
   )
@@ -109,8 +109,7 @@ console.log(c) //=&gt; 6
 </code></pre>
 <p>在「古典」React 里，你不得不写 shouldComponentUpdate, 在现代 React, 你同样需要引入 <code>useCallback</code> 和  <code>useMemo</code>，手动地缓存函数，来避免性能问题。</p>
 <p>同样是使用 Virtual DOM 的 Vue 却没有这个问题，因为 Vue 的机制（依赖收集）决定了它不必重新执行整个 UI 函数来换取新的 Virutal DOM 树，当某个状态更新的时候，它明确地知道应该 diff 哪些节点。</p>
-<blockquote>
-<p>如果你是 Vue 用户，而不太清楚 React 的机制, 你可以把一个 React 组件函数想象成是一个 Vue 的 <code>computed</code> 里的成员函数, 你一定知道在 <code>computed</code> 的成员函数里做耗时计算的后果是什么。</p>
+<blockquote><p>如果你是 Vue 用户，而不太清楚 React 的机制, 你可以把一个 React 组件函数想象成是一个 Vue 的 <code>computed</code> 里的成员函数, 你一定知道在 <code>computed</code> 的成员函数里做耗时计算的后果是什么。</p>
 </blockquote>
 <p>现代前端框架倾向于使用 Virtual DOM, 我认为主要出于两点：</p>
 <ul>
@@ -118,39 +117,35 @@ console.log(c) //=&gt; 6
 <li>Virtual DOM diff 算法足够快，框架把 DOM diff 和 DOM 修改的工作交给了算法，可以把精力花在实现框架的其它功能上。</li>
 </ul>
 <p>Virtual DOM 的本质就是找出需要被修改的真实 DOM 节点，难道不用 Virtual DOM 就不能实现吗？当然不是。回到上面的 Counter 的例子，我们如何用 Vanilla JS (原生 JavaScript) 来实现：</p>
-<pre><code class="language-js">const target = document.querySelector('#app')
-
-// state
-let count = 0
-
-// view
+<p>```js 
+const target = document.querySelector('#app')</p>
+<p>// state
+let count = 0</p>
+<p>// view
 const div = document.createElement('div')
-const countText = document.createTextNode(`${count}`)
-div.appendChild(countText)
-
-const button1 = document.createElement('button')
-const button1Text = document.createTextNode(`+`)
-button1.appendChild(button1Text)
-
-const button2 = document.createElement('button')
-const button2Text = document.createTextNode(`-`)
-button2.appendChild(button2Text)
-
-target.appendChild(div)
+const countText = document.createTextNode(<code>${count}</code>)
+div.appendChild(countText)</p>
+<p>const button1 = document.createElement('button')
+const button1Text = document.createTextNode(<code>+</code>)
+button1.appendChild(button1Text)</p>
+<p>const button2 = document.createElement('button')
+const button2Text = document.createTextNode(<code>-</code>)
+button2.appendChild(button2Text)</p>
+<p>target.appendChild(div)
 target.appendChild(button1)
-target.appendChild(button2)
-
-// event
+target.appendChild(button2)</p>
+<p>// event
 button1.addEventListener('click', () =&gt; {
   count += 1
 })
 button2.addEventListener('click', () =&gt; {
   count -= 1
-})
+})</p>
+<pre><code>
+上面的程序生成了 UI, 绑定了点击事件，改变了状态 `count` 的值。但是显然 UI 是不会随之改变的，所以我们需要写一个 `update` 函数，让状态在变化的时候，触发特定的 UI 更新逻辑：
 
-</code></pre>
-<p>上面的程序生成了 UI, 绑定了点击事件，改变了状态 <code>count</code> 的值。但是显然 UI 是不会随之改变的，所以我们需要写一个 <code>update</code> 函数，让状态在变化的时候，触发特定的 UI 更新逻辑：</p>
-<pre><code class="language-js">const target = document.querySelector('#app')
+```js
+const target = document.querySelector('#app')
 
 // state
 let state = {
@@ -197,18 +192,17 @@ function update(key, value) {
 <li>每当有元素依赖一个状态值，就要手动在 <code>update</code> 函数中加上 UI 更新的逻辑。和传统的 MVC 没区别。</li>
 </ol>
 <p>Svelte 是一个 Compiler, 帮助你在编译时生成这些 Vanilla JS 的代码，同时收集依赖，生成 UI 更新的逻辑。</p>
-<pre><code class="language-html">&lt;div&gt;hello world&lt;/div&gt;
+<pre><code class="lang-html">&lt;div&gt;hello world&lt;/div&gt;
 </code></pre>
 <p>会被编译成：</p>
-<pre><code class="language-js">const div = document.createElement('div')
+<pre><code class="lang-js">const div = document.createElement('div')
 const text = document.createTextNode('hello world')
 div.appendChild(text)
 </code></pre>
-<blockquote>
-<p>这并不是 Svelte 编译出来的代码，真实的代码经过了封装。这里只是为了方便讲解，但本质上是一致的。</p>
+<blockquote><p>这并不是 Svelte 编译出来的代码，真实的代码经过了封装。这里只是为了方便讲解，但本质上是一致的。</p>
 </blockquote>
 <p>加一个变量：</p>
-<pre><code class="language-html">&lt;script&gt;
+<pre><code class="lang-html">&lt;script&gt;
   let count = 0
 &lt;/script&gt;
 &lt;div&gt;
@@ -216,7 +210,7 @@ div.appendChild(text)
 &lt;/div&gt;
 </code></pre>
 <p>会被编译成：</p>
-<pre><code class="language-js">let count = 0
+<pre><code class="lang-js">let count = 0
 const div = document.createElement('div')
 const text = document.createTextNode(`${count}`)
 div.appendChild(text)
@@ -225,12 +219,11 @@ update() {
   text.nodeValue = count
 }
 </code></pre>
-<blockquote>
-<p>再次强调，这并非 Svelte 编译出来的真实代码。如果你对 Svelte 真实编译出来的代码有兴趣，可以在官方的 REPL https://svelte.dev/repl 写一个简单的 Svelte 组件然后看 JS output. 然后推荐进一步阅读 https://lihautan.com/compile-svelte-in-your-head/</p>
+<blockquote><p>再次强调，这并非 Svelte 编译出来的真实代码。如果你对 Svelte 真实编译出来的代码有兴趣，可以在官方的 REPL <a href="https://svelte.dev/repl">https://svelte.dev/repl</a> 写一个简单的 Svelte 组件然后看 JS output. 然后推荐进一步阅读 <a href="https://lihautan.com/compile-svelte-in-your-head/">https://lihautan.com/compile-svelte-in-your-head/</a></p>
 </blockquote>
 <p>编译器在遇到 <code>{count}</code> 的时候，就可以收集到在 count 变化的时候需要更新哪些元素。也就是说，像 Vue 那样通过 getter 实现的依赖收集，Svelte 通过编译阶段实现了。</p>
 <p>一个完整的 Counter:</p>
-<pre><code class="language-html">&lt;script&gt;
+<pre><code class="lang-html">&lt;script&gt;
   let count = 0
 &lt;/script&gt;
 
@@ -240,20 +233,19 @@ update() {
 &lt;button on:click={_ =&gt; { count += 1 }}&gt;+&lt;/button&gt;
 &lt;button on:click={_ =&gt; { count -= 1 }}&gt;-&lt;/button&gt;
 </code></pre>
-<blockquote>
-<p>你可以在这里打开这个程序 https://svelte.dev/repl/cfd45cdafb8a48a88edab6921c69ac0c?version=3</p>
+<blockquote><p>你可以在这里打开这个程序 <a href="https://svelte.dev/repl/cfd45cdafb8a48a88edab6921c69ac0c?version=3">https://svelte.dev/repl/cfd45cdafb8a48a88edab6921c69ac0c?version=3</a></p>
 </blockquote>
 <p>在编译的阶段，只要遇到赋值语句，就可以插入一个语句来安排 UI update (schedule update). 就像本文最初提到的方法一样。</p>
 <p>到这里，已经解释了什么是「在编译时实现了 Reactivity」。</p>
 <h2>Svelte 的特殊语法</h2>
 <p>Svelte 里有一个比较特殊的语法，值得在这里介绍一下。</p>
 <p>回到最初的例子：</p>
-<pre><code class="language-js">let a = 1
+<pre><code class="lang-js">let a = 1
 let b = 2
 let c = a + b
 </code></pre>
 <p><code>c</code> 依赖了其它变量，如果其中的依赖发生了改变，它应该会被重新计算。在 Vue 里可以通过 <code>computed</code> 实现：</p>
-<pre><code class="language-js">const reactive = new Vue({
+<pre><code class="lang-js">const reactive = new Vue({
   data() {
     return {
       a: 1,
@@ -268,7 +260,7 @@ let c = a + b
 })
 </code></pre>
 <p>Svelte 用了一个特殊的语法实现了类似 computed 的功能：</p>
-<pre><code class="language-html">&lt;script&gt;
+<pre><code class="lang-html">&lt;script&gt;
   let a = 1
   let b = 2
   $: c = a + b
@@ -276,20 +268,19 @@ let c = a + b
 
 &lt;span&gt;{c}&lt;/span&gt;
 </code></pre>
-<blockquote>
-<p><code>:</code> 其实是一个合法的 JavaScript 语法，https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/label</p>
+<blockquote><p><code>:</code> 其实是一个合法的 JavaScript 语法，<a href="https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/label">https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Statements/label</a></p>
 </blockquote>
 <p>当然背后同样是在编译时实现的，它在更新视图的函数前会加入执行 <code>a + b</code> 并赋值给 c 的语句。</p>
 <h2>Svelte 的跨组件通讯</h2>
 <p>状态管理和组件通讯是前端框架设计比较重要的一块，通常的做法是 <a href="https://zh-hans.reactjs.org/docs/lifting-state-up.html">Lifting State Up</a>. 也就是两个同级组件如果想要共享状态，那就把这个状态上升到共同的父组件上面去。Svelte 也可以这么做。不过 Svelte 里有 <code>store</code> , 你可以定义一个 writable store, 然后在不同的组件之间进行读取和更新：</p>
-<pre><code class="language-html">// store.js
+<p>```html 
+// store.js
 import { wrtiable } from 'svelte/store'
-export let count = writable(0)
-
-// A.svelte
+export let count = writable(0)</p>
+<p>// A.svelte</p>
 &lt;script&gt;
 import { count } from './store.js'
-  
+
 let count_value
 const unsub = count.subscribe((newValue) =&gt; {
   count_value = newValue
@@ -303,17 +294,21 @@ import { count } from './store.js'
 &lt;/script&gt;
 &lt;button on:click={_ =&gt; count.set(2) }&gt;mutate&lt;/button&gt;
 
-</code></pre>
-<p>每个 writable store 其实是一个 object, 在需要用到这个值的组件里可以 <code>subscribe</code> 他的变化，然后更新到自己组件里的状态。在另一个组件里可以调用 <code>set</code> 更新这个状态的值。</p>
-<p>敏锐的读者可能已经发现，上面的代码没有处理组件销毁时 unsubscribe. 当然我可以在 <code>onDestroy()</code> 里调用 <code>unsub()</code>, 但是在 Svelte, 有个更便捷的语法：</p>
-<pre><code class="language-html">// store.js
+```
+
+每个 writable store 其实是一个 object, 在需要用到这个值的组件里可以 `subscribe` 他的变化，然后更新到自己组件里的状态。在另一个组件里可以调用 `set` 更新这个状态的值。
+
+敏锐的读者可能已经发现，上面的代码没有处理组件销毁时 unsubscribe. 当然我可以在 `onDestroy()` 里调用 `unsub()`, 但是在 Svelte, 有个更便捷的语法：
+
+```html 
+// store.js
 import { wrtiable } from 'svelte/store'
 export let count = writable(0)
 
 // A.svelte
 &lt;script&gt;
 import { count } from './store.js'
-  
+
 &lt;/script&gt;
 &lt;sapn&gt;{$count}&lt;/sapn&gt;
 
@@ -322,15 +317,22 @@ import { count } from './store.js'
 import { count } from './store.js'
 &lt;/script&gt;
 &lt;button on:click={_ =&gt; $count = 2 }&gt;mutate&lt;/button&gt;
-</code></pre>
-<p>Svelte 规定了在 store 前面加一个 <code>$</code>, 会自动 subscribe, 得到它的值，并且在组件被销毁的时候自动帮你 unsubscribe 它。对它进行赋值的时候，其实相当于执行了 <code>.set()</code> 的方法。</p>
-<p>不要以为 <code>svelte/store</code> 的 writable 返回的对象是一个黑魔法，其实他不过是一个普通的对象而已，只是 Svelte 在编译的时候对 <code>$</code> 为首的变量做了一些特殊处理。比如：</p>
-<pre><code class="language-html">&lt;script&gt;
+```
+
+Svelte 规定了在 store 前面加一个 `$`, 会自动 subscribe, 得到它的值，并且在组件被销毁的时候自动帮你 unsubscribe 它。对它进行赋值的时候，其实相当于执行了 `.set()` 的方法。
+
+不要以为 `svelte/store` 的 writable 返回的对象是一个黑魔法，其实他不过是一个普通的对象而已，只是 Svelte 在编译的时候对 `$` 为首的变量做了一些特殊处理。比如：
+
+```html
+&lt;script&gt;
   console.log($name)
 &lt;/script&gt;
-</code></pre>
-<p>会编译成：</p>
-<pre><code class="language-js">let name_value
+```
+
+会编译成：
+
+```js
+let name_value
 const unsub = name.subscribe((newValue) =&gt; {
   name_value = newValue
 })
@@ -338,46 +340,58 @@ console.log(name_value)
 onDestroy(() =&gt;{
   unsub()
 })
-</code></pre>
-<blockquote>
-<p>同样这不是 Svelte 实际生成的代码，这里是为了讲解，但本质和 Svelte 的逻辑一致</p>
-</blockquote>
-<p>对一个 store 赋值：</p>
-<pre><code class="language-html">&lt;script&gt;
-	$name = 'new'
+```
+
+&gt; 同样这不是 Svelte 实际生成的代码，这里是为了讲解，但本质和 Svelte 的逻辑一致
+
+对一个 store 赋值：
+
+```html
+&lt;script&gt;
+    $name = 'new'
 &lt;/script&gt;
-</code></pre>
-<p>会被编译成：</p>
-<pre><code class="language-js">name_value.set('name')
-</code></pre>
-<p>看到这里，你可能已经知道了，其实 store 只不过是一个普通的对象，只是如果你在 Svelte 里通过 $ 符号进行操作的时候，会调用它的一些方法。这些方法就是：</p>
-<ul>
-<li><code>subscribe</code>. 返回一个 unsubscribe 方法</li>
-<li><code>set</code></li>
-</ul>
-<p>只要任何对象有实现两个方法，就可以用 $ 进行这样的便捷使用。这是一种 Svelte 约定的 <a href="https://svelte.dev/docs#Store_contract">store 协议</a>. <code>writable</code> 是一个创建符合 store 协议的对象的捷径，不是什么黑魔法。</p>
-<blockquote>
-<p>如果你用 RxJS, 你会发现 RxJS 天生就兼容 store 协议</p>
-</blockquote>
-<h2>我对 Svelte 的看法</h2>
-<p>我用 React 太久了，在用回不需要关心 rerender 问题的框架，我觉得非常舒服😄。当然 Vue 也不需要，我觉得在某个程度上 Svelte 和 Vue 很像，它和 Vue  的区别是：</p>
-<ul>
-<li>实现 Reactivity 的原理都是依赖收集，但 Svelte 是在编译时完成了，Vue 在运行时收集。</li>
-<li>Vue 用了 Virtual DOM, Svelte 在编译时就知道它应该操作哪个 DOM</li>
-</ul>
-<p>因为所有的功能都是在编译时实现的，所以用 Svelte 写的代码非常直白 —— 像正常定义变量一样定义变量，在 HTML 里使用这个变量，修改这个变量（而且没有 <code>this</code>）。运行时的框架无论如何简单，至少需要你写一层 Wrapper，例如在 Vue 里你必须把状态包在 data 函数中返回。</p>
-<p>我认为 <a href="https://svelte.dev/blog/write-less-code">Write less code</a> 是重要的，在前端开发的领域，我们花了太多精力在处理像 immutable, reactivity 这些 UI 开发标配的特性上面， 我一直认为需要有一门天生带了这些特性的语言用来写 UI 应用，而不是引入第三方包、写一些 boilerplate code.</p>
-<p>Svelte 非常接近，而且它做到了不需要你学习新的语法，在 JavaScript 里面就实现了这样的效果（目前只是 Reactivity）。</p>
-<p>所以无论是对比哪个框架，我个人觉得 Svelte 对我来说最大的吸引力是可以写更少的代码，而且在写代码的时候感觉是符合直觉的，这一点非常重要，我认为 React 并没有做好这一点。我碰到过太多用 React 的朋友同样遇到过这样的问题：</p>
-<pre><code class="language-jsx">function Timer () {
+```
+
+会被编译成：
+
+```js
+name_value.set('name')
+```
+
+看到这里，你可能已经知道了，其实 store 只不过是一个普通的对象，只是如果你在 Svelte 里通过 $ 符号进行操作的时候，会调用它的一些方法。这些方法就是：
+
+- `subscribe`. 返回一个 unsubscribe 方法
+- `set`
+
+只要任何对象有实现两个方法，就可以用 $ 进行这样的便捷使用。这是一种 Svelte 约定的 [store 协议](https://svelte.dev/docs#Store_contract). `writable` 是一个创建符合 store 协议的对象的捷径，不是什么黑魔法。
+
+&gt; 如果你用 RxJS, 你会发现 RxJS 天生就兼容 store 协议
+
+## 我对 Svelte 的看法
+
+我用 React 太久了，在用回不需要关心 rerender 问题的框架，我觉得非常舒服😄。当然 Vue 也不需要，我觉得在某个程度上 Svelte 和 Vue 很像，它和 Vue  的区别是：
+
+- 实现 Reactivity 的原理都是依赖收集，但 Svelte 是在编译时完成了，Vue 在运行时收集。
+- Vue 用了 Virtual DOM, Svelte 在编译时就知道它应该操作哪个 DOM
+
+因为所有的功能都是在编译时实现的，所以用 Svelte 写的代码非常直白 —— 像正常定义变量一样定义变量，在 HTML 里使用这个变量，修改这个变量（而且没有 `this`）。运行时的框架无论如何简单，至少需要你写一层 Wrapper，例如在 Vue 里你必须把状态包在 data 函数中返回。
+
+我认为 [Write less code](https://svelte.dev/blog/write-less-code) 是重要的，在前端开发的领域，我们花了太多精力在处理像 immutable, reactivity 这些 UI 开发标配的特性上面， 我一直认为需要有一门天生带了这些特性的语言用来写 UI 应用，而不是引入第三方包、写一些 boilerplate code.
+
+Svelte 非常接近，而且它做到了不需要你学习新的语法，在 JavaScript 里面就实现了这样的效果（目前只是 Reactivity）。
+
+所以无论是对比哪个框架，我个人觉得 Svelte 对我来说最大的吸引力是可以写更少的代码，而且在写代码的时候感觉是符合直觉的，这一点非常重要，我认为 React 并没有做好这一点。我碰到过太多用 React 的朋友同样遇到过这样的问题：
+
+```jsx
+function Timer () {
 
   const [ time, setTime ] = React.useState(0)
-  
+
   React.useEffect(() =&gt; {
-   	const interval = setInterval(() =&gt; {
+    const interval = setInterval(() =&gt; {
       setTime(time + 1)
     }, 1000)
-    
+
     return () =&gt; clearInterval(interval)
   }, [])
 
@@ -385,32 +399,33 @@ onDestroy(() =&gt;{
     &lt;div&gt;{time}&lt;/div&gt;
   )
 }
-</code></pre>
-<p>这个 <code>time</code> 在视图里一直是 1，为什么？谁会在第一次写这样的逻辑的时候就能意识到问题出现在哪里呢？</p>
-<p>同样的逻辑在 Svelte 里，就不会有这样的问题（当然在 Vue 里也不会有）：</p>
-<pre><code class="language-html">&lt;script&gt;
+```
+
+这个 `time` 在视图里一直是 1，为什么？谁会在第一次写这样的逻辑的时候就能意识到问题出现在哪里呢？
+
+同样的逻辑在 Svelte 里，就不会有这样的问题（当然在 Vue 里也不会有）：
+
+```html
+&lt;script&gt;
   let time = 0
-	
-	const interval = setInterval(() =&gt; {
-		time = time + 1
-	}, 1000)
 
-	onDestroy(() =&gt; {
-		clearInterval(interval)
-	})
-&lt;/script&gt;
+    const interval = setInterval(() =&gt; {
+        time = time + 1
+    }, 1000)
 
-&lt;div&gt;
+    onDestroy(() =&gt; {
+        clearInterval(interval)
+    })
+&lt;/script&gt;<p>&lt;div&gt;
   {time}
 &lt;/div&gt;
-</code></pre>
+```</p>
 <p>当然可能有人会说，Randy, 你连在 hooks 里面怎么用 setInterval 都不知道，你一定是 JavaScript 基础不行，回去补补基础吧！对于这样的想法，我只能一笑了之😆。</p>
 <p>我没有办法提出一个杀手级的功能吸引没有用过 Svelte 的人来用 Svelte, 我只能说我喜欢 Svelte 是因为她是一个简单的框架，我在用她的时候不用想太多 Why.</p>
 <p>Vue 的缺点和优点基本就是 Svelte 的缺点和优点，但 Svelte 从用法上比 Vue 更简单。</p>
 <p>至于有人说，Svelte 生成的代码体积小，我认为这确实是一个优势，不过要注意的是用 Svelte 生成的代码，体积是线性增长的。这是我大概画的一个图，表示项目规模和代码体积的关系：</p>
 <p><img alt="" src="https://gbstatic.djyde.com/uPic/Z9fwZH.png?x-oss-process=style/80"/></p>
-<blockquote>
-<p>这只是一个大概的趋势，图中的斜率不是一个准确的值。详细在 Github 看相关的讨论 https://github.com/sveltejs/svelte/issues/2546</p>
+<blockquote><p>这只是一个大概的趋势，图中的斜率不是一个准确的值。详细在 Github 看相关的讨论 <a href="https://github.com/sveltejs/svelte/issues/2546">https://github.com/sveltejs/svelte/issues/2546</a></p>
 </blockquote>
 <h2>Svelte 的适用场景</h2>
 <p>生态是技术选型一个很重要的考虑因素，Svelte 显然不是数一数二的选择，基本不用期望 Svelte 有什么现成的组件库。</p>

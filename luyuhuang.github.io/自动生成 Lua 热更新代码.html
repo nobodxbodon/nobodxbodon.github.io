@@ -1,11 +1,11 @@
 <h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2021-02-05-hotfix-gen.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2021/02/05/hotfix-gen">站点原文</a></h2>
 <hr/>
-<h2>key: 49
+<p>key: 49
 title: 自动生成 Lua 热更新代码
-tag: lua
-aside: false</h2>
+tag: lua</p>
+<h2>aside: false</h2>
 <p>游戏服务器使用 Lua 的一个重要原因是 Lua 便于热更. 即使服务器正在运行, 只需让它执行一段代码, 即可重写其中的某些函数, 达到热更新的目的. 例如模块 <code>app</code> 有一个函数 <code>foo</code></p>
-<pre><code class="language-lua">local M = {}
+<pre><code class="lang-lua">local M = {}
 
 function M.foo(a, b)
     return a + b
@@ -14,13 +14,13 @@ end
 return M
 </code></pre>
 <p>如果我们要将 <code>foo</code> 热更成将 <code>a</code> 和 <code>b</code> 相乘, 只需要让服务器加载运行如下代码即可:</p>
-<pre><code class="language-lua">local M = require("app")
+<pre><code class="lang-lua">local M = require("app")
 function M.foo(a, b)
     return a * b
 end
 </code></pre>
 <p>不过很多时候, 函数并不是这么单纯. 函数常常会依赖许多上值 (upvalue), 举一个复杂点的例子:</p>
-<pre><code class="language-lua">local database = require('database')
+<pre><code class="lang-lua">local database = require('database')
 local M = {}
 M.n = 0
 
@@ -38,10 +38,10 @@ return M
 <p>这个例子中, 我们写热更代码时就得注意了, <code>foo</code> 有上值 <code>M</code>, <code>database</code> 和 <code>bar</code>. 有人说直接执行整个文件不就好了? 那可不行, Lua 很灵活, 执行整个文件很有可能出别的问题. 在这个例子中会导致 <code>M.n</code> 被重置 (虽然我个人不推荐在模块空间中存状态, 但是总是会有人这么做). 在一些复杂的情况下, 函数可能会有多重依赖, 比如 <code>foo</code> 的上值中有 <code>bar</code>, <code>bar</code> 还有它的上值等等. 这就会给热更代来很多困难.</p>
 <h3>hotfix-gen</h3>
 <p>为了解决这个问题, 我写了一个工具 <a href="https://github.com/luyuhuang/hotfix-gen">hotfix-gen</a>, 它能够分析代码, 提取出函数的相关依赖, 生成热更代码. 我们使用 <code>luarocks</code> 就能安装它:</p>
-<pre><code class="language-bash">luarocks install hotfix-gen
+<pre><code class="lang-bash">luarocks install hotfix-gen
 </code></pre>
 <p>我们要热更 <code>app</code> 模块的 <code>foo</code> 函数, 执行 <code>hotfix app foo</code> 即可:</p>
-<pre><code class="language-bash">$ hotfix app foo
+<pre><code class="lang-bash">$ hotfix app foo
 local database = require('database')
 
 local M = require("app")
@@ -55,7 +55,7 @@ function M.foo(a, b)
 end
 </code></pre>
 <p>这样它就能自动生成热更代码. 它会假设函数依赖的上值本身 (而非引用) 是不可变的, 例如如下的代码:</p>
-<pre><code class="language-lua">local n = 1
+<pre><code class="lang-lua">local n = 1
 
 function M.foo()
     print(n)
@@ -67,7 +67,7 @@ n = 2
 <h3>实现原理</h3>
 <p>hotfix-gen 的实现用的是笨办法, 也就是读取代码, 编译成语法树, 然后分析语法树. 虽然有 <code>debug.getupvalue</code> 可以用, 但是这必须将代码运行起来. 此外对于 <code>local a = b * 2</code> 这样的语句我们还需要知道 <code>a</code> 依赖于 <code>b</code>. 不过好消息是分析代码并没有那么复杂, 我们有现成的库可以用: <a href="https://github.com/andremm/lua-parser">lua-parser</a>. lua-parser 会利用 <a href="/2020/06/24/lpeg.html">lpeg</a>, 将 Lua 源码解析成语法树. 我们只需要分析语法树即可.</p>
 <p>主要工作就是识别变量的定义和引用, 这需要考虑作用域. 例如下面代码中, <code>foo</code> 依赖于 <code>a</code> 但不依赖于 <code>b</code>. 但如果 <code>print(b)</code> 在 <code>for</code> 语句块外, <code>foo</code> 就又依赖于 <code>b</code> 了.</p>
-<pre><code class="language-lua">local a, b
+<pre><code class="lang-lua">local a, b
 local function foo()
     for b = a, 10 do
         local b = 1
@@ -77,7 +77,7 @@ local function foo()
 end
 </code></pre>
 <p>此外还必须考虑一些微妙的语法. 例如 <code>local function f()</code> 和 <code>local f = function()</code> 是不一样的. 下面的例子中, <code>foo</code> 依赖于定义在它之上的 <code>local foo = 1</code>, 但 <code>bar</code> 不会, 函数 <code>bar</code> 中的 <code>bar</code> 就是它自己.</p>
-<pre><code class="language-lua">local foo = 1
+<pre><code class="lang-lua">local foo = 1
 local foo = function()
     print(foo) -- foo is 1
 end

@@ -1,10 +1,10 @@
-<h2>[仓库源文](https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2021-11-29-java-threadpool-bug .md)，<a href="https://objcoding.com/2021/11/29/java-threadpool-bug">站点原文</a></h2>
+<h2><a href="https://github.com/objcoding/objcoding.github.io/blob/master/_posts/2021-11-29-java-threadpool-bug .md">仓库源文</a>，<a href="https://objcoding.com/2021/11/29/java-threadpool-bug">站点原文</a></h2>
 <hr/>
-<h2>layout: post
+<p>layout: post
 title: "一个 JDK 线程池 BUG 引发的 GC 机制思考"
 categories: Java
-tags: 线程池 GC
-author: 空无</h2>
+tags: 线程池 GC</p>
+<h2>author: 空无</h2>
 <ul>
 <li>content
 {:toc}</li>
@@ -15,7 +15,7 @@ author: 空无</h2>
 </code></pre>
 <p>本文中的模拟代码已经问题都是在HotSpot java8 (1.8.0_221)版本下模拟&amp;出现的。</p>
 <p>下面是模拟代码，通过Executors.newSingleThreadExecutor创建一个单线程的线程池，然后在调用方获取Future的结果：</p>
-<pre><code class="language-java">public class ThreadPoolTest {
+<pre><code class="lang-java">public class ThreadPoolTest {
 
     public static void main(String[] args) {
         final ThreadPoolTest threadPoolTest = new ThreadPoolTest();
@@ -73,7 +73,7 @@ author: 空无</h2>
 </code></pre>
 <h2>分析&amp;疑问</h2>
 <p>第一个思考的问题是：线程池为什么关闭了，代码中并没有手动关闭的地方。看一下<code>Executors.newSingleThreadExecotor</code>的源码实现：</p>
-<pre><code class="language-java">public static ExecutorService newSingleThreadExecutor() {
+<pre><code class="lang-java">public static ExecutorService newSingleThreadExecutor() {
     return new FinalizableDelegatedExecutorService
         (new ThreadPoolExecutor(1, 1,
                                 0L, TimeUnit.MILLISECONDS,
@@ -85,14 +85,13 @@ author: 空无</h2>
 <p>对于此问题，先抛出结论：</p>
 <p><strong>当对象仍存在于作用域（stack frame）时，<code>finalize</code>也可能会被执行</strong></p>
 <p>oracle jdk文档中有一段关于finalize的介绍：</p>
-<blockquote>
-<p>A reachable object is any object that can be accessed in any potential continuing computation from any live thread.</p>
+<blockquote><p>A reachable object is any object that can be accessed in any potential continuing computation from any live thread.</p>
 <p>Optimizing transformations of a program can be designed that reduce the number of objects that are reachable to be less than those which would naively be considered reachable. For example, a Java compiler or code generator may choose to set a variable or parameter that will no longer be used to null to cause the storage for such an object to be potentially reclaimable sooner.</p>
 </blockquote>
 <p><strong>大概意思是：可达对象(reachable object)是可以从任何活动线程的任何潜在的持续访问中的任何对象；java编译器或代码生成器可能会对不再访问的对象提前置为null，使得对象可以被提前回收。</strong></p>
 <p>也就是说，在jvm的优化下，可能会出现对象不可达之后被提前置空并回收的情况。</p>
 <p>举个例子来验证一下（摘自<a href="https://link.segmentfault.com/?enc=mRCPxtURWwGq0b3ttFbsfA%3D%3D.wrRPzOsRCMDaAZjRfHTTJ17FW1LdVvEqn%2FEteXg5PJoGkQy78mzD2jOl4EskyJzWKs5Z4kpClBbq4uOPjQenFMfCcdFhl%2Bl%2BtSKa4%2B3LSiQH23E7GdzRAMUxCep9NdmsNDsEX8SrZ6wMWZX4MdVL7Q%3D%3D">https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope）</a>：</p>
-<pre><code class="language-java">class A {
+<pre><code class="lang-java">class A {
     @Override protected void finalize() {
         System.out.println(this + " was finalized!");
     }
@@ -125,7 +124,7 @@ A@1be6f5c3
 </code></pre>
 <p>从结果上看，finalize方法都没有执行（因为main方法执行完成后进程直接结束了），更不会出现提前finalize的问题了</p>
 <p>基于上面的测试结果，再测试一种情况，在循环之前先将对象a置为null，并且在最后打印保持对象a的引用</p>
-<pre><code class="language-java">A a = new A();
+<pre><code class="lang-java">A a = new A();
 System.out.println("Created " + a);
 a = null;//手动置null
 for (int i = 0; i &lt; 1_000_000_000; i++) {
@@ -147,7 +146,7 @@ null
 <p>猜测可能是由于在execute方法中，会调用threadPoolExecutor，会创建并启动一个新线程，这时会发生一次主动的线程切换，导致在活动线程中对象不可达</p>
 <p>结合上面Oracle Jdk文档中的描述“可达对象(reachable object)是可以从任何活动线程的任何潜在的持续访问中的任何对象”，可以认为可能是因为一次显示的线程切换，对象被认为不可达了，导致线程池被提前finalize了</p>
 <p>下面来验证一下猜想：</p>
-<pre><code class="language-java">//入口函数
+<pre><code class="lang-java">//入口函数
 public class FinalizedTest {
     public static void main(String[] args) {
         final FinalizedTest finalizedTest = new FinalizedTest();
@@ -192,7 +191,7 @@ public class Executors {
         FinalizableDelegatedTExecutorService(TExecutorService executor) {
             super(executor);
         }
-        
+
         /**
          * 析构函数中执行shutdown，修改线程池状态
          * @throws Throwable
@@ -260,7 +259,7 @@ public class TThreadPoolExecutor extends TExecutorService {
 </code></pre>
 <p>从错误上来看，“线程池”同样被提前shutdown了，那么一定是由于新建线程导致的吗？</p>
 <p>下面将新建线程修改为<code>Thread.sleep</code>测试一下：</p>
-<pre><code class="language-java">//TThreadPoolExecutor.java，修改后的execute方法
+<pre><code class="lang-java">//TThreadPoolExecutor.java，修改后的execute方法
 public void execute() {
     try {
         //显式的sleep 1 ns，主动切换线程
@@ -288,7 +287,7 @@ public void execute() {
 <p><strong>综上所述，这种回收机制并不是JDK的bug，而算是一个优化策略，提前回收而已；但<code>Executors.newSingleThreadExecutor</code>的实现里通过finalize来自动关闭线程池的做法是有Bug的，在经过优化后可能会导致线程池的提前shutdown，从而导致异常。</strong></p>
 <p>线程池的这个问题，在JDK的论坛里也是一个公开但未解决状态的问题<a href="https://link.segmentfault.com/?enc=jimTsDI3dBl%2BqApeEcIZoA%3D%3D.tEAYbWLKbbecEtKcfP6PguhikfRYRHQovt0Yy%2BWwefQ2ZRsVMF806j%2Beti6qEWKTBOSrE6%2BbnU4YaSwm7TVmSw%3D%3D">https://bugs.openjdk.java.net/browse/JDK-8145304</a>。</p>
 <p>不过在JDK11下，该问题已经被修复：</p>
-<pre><code class="language-java">JUC  Executors.FinalizableDelegatedExecutorService
+<pre><code class="lang-java">JUC  Executors.FinalizableDelegatedExecutorService
 public void execute(Runnable command) {
     try {
         e.execute(command);
