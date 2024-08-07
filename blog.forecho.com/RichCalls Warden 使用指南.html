@@ -1,0 +1,116 @@
+<h2><a href="https://github.com/forecho/hugo-blog/blob/master/content/posts/use-richcalls-warden.md">仓库源文</a>，<a href="https://blog.forecho.com/use-richcalls-warden.html">站点原文</a></h2>
+<hr/>
+<p>title: "RichCalls Warden 使用指南"
+date: 2024-08-06T12:58:00+08:00
+tags: ["RichCalls", "Warden", "美股"]
+draft: false</p>
+<h2>toc: true</h2>
+<h2>引言</h2>
+<p>Warden 是我开发的一套用于帮我们美股止盈/止损的工具，它可以帮助你在美股交易中更好的控制风险。帮助你守住利润，避免亏损。</p>
+<p>官网是 <a href="https://warden.richcalls.xyz/">https://warden.richcalls.xyz/</a>，使用 Google 账号登录即可使用。目前内测版本，内测期间免费使用。</p>
+<h2>配置账户</h2>
+<p>登录之后在菜单栏选择「账户管理」，然后添加账户就可以了。目前只支持长桥证券和富途证券。而且只支持美股。</p>
+&lt;!--more--&gt;
+
+<h3>长桥证券</h3>
+<p>长桥访问 <a href="https://open.longportapp.com/">https://open.longportapp.com/</a> 登录之后去个人中心获取 API Key 和 Secret 等信息，然后填写到 Warden 中即可使用了。</p>
+<p><img alt="" src="https://img.forecho.com/20qUdi.png"/></p>
+<h3>富途证券</h3>
+<p>由于富途证券的 API 的使用方式问题，这里想使用富途证券的用户配置好信息之后，需要联系我，我需要手动另外在配置一下才能使用。</p>
+<p>需要说明的是：</p>
+<ul>
+<li><p>配置的时候需要输入登录密码的 MD5 值，可以使用 <a href="https://www.cmd5.com/">https://www.cmd5.com/</a> 获取到密码 MD5 加密之后的值，复制过来就可以（如下图）。
+<img alt="" src="https://img.forecho.com/iR7yhd.png"/></p>
+</li>
+<li><p>解锁密码要输入明文密码，不需要 MD5 加密。</p>
+</li>
+</ul>
+<h3>账户使用说明</h3>
+<p>账户默认是开启状态，并且开启了 Test Mode（测试模式）。测试模式，开启之后会无视市价单，所有的订单买入的时候提交的是 0.01 ,卖出的时候是  999.00 的限价单。这样可以避免在测试的时候买入卖出真实的股票。</p>
+<p>测试之后可以关闭测试模式，这样就可以正常的买入卖出股票了。</p>
+<p>Webhook 请求只会处理 <code>Active</code> 状态的账户，如果你不想使用某个账户了，可以在账户管理中关闭这个账户。</p>
+<h2>系统使用说明</h2>
+<h3>结合 TradingView 实现自动交易</h3>
+<p>这是本系统的核心功能，你可以在 <a href="https://link.3li3.com/tradingview">TradingView</a> 上配置警报，然后在 Warden 中配置好账户之后，就可以实现自动交易了。</p>
+<p>具体步骤：</p>
+<p>先去 Warden 系统的个人设置中获取到你的 <code>WebHook Url</code>，这个 Url 是用来接收 TradingView 的警报的。不要泄露给别人。</p>
+<p>然后在 TradingView 中配置警报，在「通知」中填写你的 <code>WebHook Url</code>，然后就可以了。</p>
+<p><img alt="" src="https://img.forecho.com/ZBrmfw.png"/></p>
+<p>说明一下：</p>
+<ul>
+<li>图上的条件就是你的策略，这里可玩性非常多，你可以自己划线，然后创建报警；你也可以使用 MA、EMA、BOLL 等指标来创建报警。至于怎么玩，完全取决于你的策略。</li>
+<li>消息需要是 Warden 系统的一种固定格式，你需要做什么操作，完全取决于你的消息内容。</li>
+<li>WebHook Url 是你的 Warden 系统的 Url，不要泄露给别人。</li>
+</ul>
+<h3>WebHook 消息格式说明</h3>
+<pre><code>symbol: NVDA240823C115000
+pos: 1
+qty: 1
+side: BUY
+order_type: LO
+price: 0
+</code></pre>
+<ul>
+<li><code>symbol</code> 股票或者期权，必选参数；在卖出的时候，期权代码支持模糊匹配。示例：<ul>
+<li><code>NVDA240823C115000</code> 代表想操作 NVDA 2024 年 8 月 23 日到期的 115 美元的 Call 期权。</li>
+<li><code>NVDA*</code> 代表想卖出所有的持仓期权，只能搭配市价单和卖出使用。</li>
+<li><code>*</code> 代表清仓，需搭配市价单和卖出使用。</li>
+</ul>
+</li>
+<li><code>pos</code> 仓位占比，卖出的时候可选参数; 当有此参数的时候会忽略 <code>qty</code> 参数，示例：<ul>
+<li><code>1</code> 代表卖出全部持仓，</li>
+<li><code>1/2</code> 代表卖出一半持仓，</li>
+<li><code>1/3</code> 代表卖出三分之一仓位。</li>
+</ul>
+</li>
+<li><code>qty</code> 数量，必选参数，除卖出有 <code>pos</code> 参数外，其他都需要此参数</li>
+<li><code>side</code> 方向<ul>
+<li><code>buy</code> 买入</li>
+<li><code>sell</code> 卖出</li>
+</ul>
+</li>
+<li><code>order_type</code> 订单类型<ul>
+<li><code>lo</code> 限价单</li>
+<li><code>mo</code> 市价单</li>
+</ul>
+</li>
+<li><code>price</code> 价格，市价单会忽略此参数。</li>
+</ul>
+<p>另外说明：</p>
+<ul>
+<li>所有参数无视大小写</li>
+<li>所以订单都是当日有效</li>
+<li>目前只支持美股，不支持其他市场</li>
+</ul>
+<h3>期权计算器</h3>
+<p>为了方便大家获取到期权的标的代码，我在系统中加入了期权计算器，你可以输入你想要的期权的条件，然后就可以很方便的获取到期权的标的代码了，方便你在 TradingView 中配置警报的时候使用。</p>
+<p><img alt="" src="https://img.forecho.com/JEAEVD.png"/></p>
+<h3>一键清仓</h3>
+<p>除了给系统发消息实现一件清仓之外，我在账户管理中加入了一键清仓的功能，你可以直接在账户管理中点击一键清仓，就可以清仓所有的持仓了。</p>
+<p>当然清仓之前会有一个确认的弹窗，避免误操作。</p>
+<h3>定时交易</h3>
+<p>还在开发中，敬请期待。</p>
+<h2>最佳实践</h2>
+<p>这套系统最主要的目的是给大家做止盈止损的，有时候我们明明知道跌破了支撑，但是却缺乏执行力，怎么办？提前设置好止损，然后就可以放心的等待系统帮你卖出了。</p>
+<p>比如下面一些场景</p>
+<h3>一键清仓</h3>
+<p>QQQ 如果跌破 MA20，那么其实就是一个非常糟糕的信号，这个时候一般还会继续跌，有时候你可能会犹豫，下不去手清仓，这个时候我们需要在 TradingView 中提前设置好警报，然后 Warden 就会帮你卖出了。</p>
+<p>如果你想一键清仓，消息的格式就是：</p>
+<pre><code>symbol: *
+pos: 1
+side: sell
+order_type: mo
+</code></pre>
+<p>如果你想所有的持仓都卖出一半，那么消息的格式就是：</p>
+<pre><code>symbol: *
+pos: 1/2
+side: sell
+order_type: mo
+</code></pre>
+<p>除了使用 <code>*</code> 代表清仓，还可以使用 <code>NVDA*</code> 代表清仓 NVDA 的所有正股和期权。</p>
+<p>除了使用 QQQ 跌破 MA20 作为清仓信号，你还可以使用其他的指标，比如 SPX 跌破某个值等等。</p>
+<h3>Webhook 日志</h3>
+<p>在系统中有一个 Webhook 日志，你可以看到系统接收到的消息，以及处理的结果。这样你就可以知道系统是否正常的接收到了消息，以及是否正常的处理了消息。</p>
+<h2>最后</h2>
+<p>这套系统我目前只花了 2 个周末时间开发，还在不断的完善中。</p>
+<p>如果你有什么好的建议或者想法，欢迎加我微信 <code>ipzone</code> 加项目群交流，申请加好友请备注 <code>Warden</code>。</p>

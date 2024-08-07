@@ -4,8 +4,9 @@
 title: "JavaScript Observer APIs"
 slug: js-observer-apis
 description: ""
-added: "May 9 2024"</p>
-<h2>tags: [js]</h2>
+added: "May 9 2024"
+tags: [js]</p>
+<h2>updatedDate: "July 31 2024"</h2>
 <p>Observers can be helpful to watch certain activities happening in the browser and respond accordingly. For example, we can observe, if child element has been added or removed from the parent DOM element, if a video is displayed within the viewport and enable autoplay, if the size/dimensions of a box element has changed and so on. These are different types of observer APIs in JavaScript.</p>
 <h2>Mutation Observer API</h2>
 <p>The <code>MutationObserver</code> interface provides the ability to watch for changes being made to the DOM tree.</p>
@@ -16,10 +17,10 @@ added: "May 9 2024"</p>
 </ol>
 <p>DOM observation does not begin immediately; the <code>observe(target, options)</code> method must be called first to establish which portion of the DOM to watch (<code>target</code>) and what kinds of changes to watch for (<code>options</code>). To be more specific, the <code>options</code> object describe which DOM mutations should be reported to <code>mutationObserver</code>'s callback. At a minimum, one of <code>childList</code>, <code>attributes</code>, and <code>characterData</code> must be true. Otherwise, a TypeError exception will be thrown.</p>
 <ul>
-<li><code>subtree</code>: Set to true to extend monitoring to the entire subtree of nodes rooted at target. All of the other properties are then extended to all of the nodes in the subtree instead of applying solely to the target node.</li>
-<li><code>childList</code>: Set to true to monitor the target node for the addition of new child nodes or removal of existing child nodes.</li>
-<li><code>attributes</code>: Set to true to watch for changes to the value of attributes on the node being monitored.</li>
-<li><code>characterData</code>: Set to true to monitor the specified target node for changes to the character data contained within the node or nodes.</li>
+<li><code>subtree</code>: Set to true to extend monitoring to the entire subtree of nodes rooted at target. All of the other properties are then extended to all of the nodes in the subtree instead of applying solely to the target node. <em>(detect changes in all descendants of the node)</em></li>
+<li><code>childList</code>: Set to true to monitor the target node for the addition of new child nodes or removal of existing child nodes. <em>(detect changes in the direct children of node)</em></li>
+<li><code>attributes</code>: Set to true to watch for changes to the value of attributes on the node being monitored. <em>(detect attribute changes of node)</em></li>
+<li><code>characterData</code>: Set to true to monitor the specified target node for changes to the character data contained within the node. <em>(observe the changes of text content)</em></li>
 </ul>
 <pre><code class="lang-js">const targetNode = document.getElementById("some-id")
 
@@ -44,7 +45,7 @@ observer.disconnect()
 <h2>Intersection Observer API</h2>
 <p>The <code>IntersectionObserver</code> interface provides a way to asynchronously observe changes in the intersection of a target element with an ancestor element or with a top-level document's viewport. The ancestor element or viewport is referred to as the root.</p>
 <p>The <code>IntersectionObserver(callback, options)</code> constructor creates and returns a new <code>IntersectionObserver</code> object.</p>
-<p>The callback function which is called when the percentage of the target element is visible crosses a threshold. The callback receives two parameters:</p>
+<p>The callback function is called when the percentage of the target element is visible crosses a threshold. The callback receives two parameters:</p>
 <ol>
 <li>An array of objects, each describing the intersection between the target element and its root container at a specific moment of transition.</li>
 <li>The <code>IntersectionObserver</code> for which the callback is being invoked.</li>
@@ -60,6 +61,24 @@ observer.disconnect()
 
 observer.observe(document.getElementById("test"))
 </code></pre>
+<pre><code class="lang-js">const images = document.querySelectorAll('.lazyload')
+
+function handleIntersection(entries) {
+  entries.map((entry) =&gt; {
+    if (entry.isIntersecting) {
+      entry.target.src = entry.target.dataset.src
+      entry.target.classList.add('loaded')
+      // `unobserve()` instructs the IntersectionObserver to stop observing the specified target element.
+      // `disconnect()` stops watching all of its target elements for visibility changes.
+      observer.unobserve(entry.target)
+    }
+  })
+}
+
+const observer = new IntersectionObserver(handleIntersection)
+
+images.forEach(image =&gt; observer.observe(image))
+</code></pre>
 <p>The <code>thresholds</code>, if specified, accepts a value between 0 and 1 and represents the percentage of the element that must be visible before <code>isIntersecting</code> becomes true. By default this is set to 0 which means as soon as any part of the element is visible it will be considered intersecting. You can also pass an array to threshold which means that the <code>IntersectionObserver</code> will fire each time your element passes one of the thresholds passed to it.</p>
 <pre><code class="lang-js">const observer = new IntersectionObserver(
   entries =&gt; {
@@ -70,6 +89,26 @@ observer.observe(document.getElementById("test"))
   { threshold: [0, 0.25, 0.5, 0.75, 1] }
 )
 </code></pre>
+<p>With the help of <code>IntersectionObserver</code> (and tricky usage of <code>top: -1px</code>), we can detect when a sticky element gets pinned.</p>
+<pre><code class="lang-js">const el = document.querySelector(".myElement")
+const observer = new IntersectionObserver( 
+  ([e]) =&gt; e.target.classList.toggle("is-pinned", e.intersectionRatio &lt; 1),
+  { threshold: [1] }
+);
+
+observer.observe(el);
+</code></pre>
+<pre><code class="lang-css">.myElement {
+  position: sticky;
+  top: -1px;
+}
+</code></pre>
+<p>Initially, the element scrolls normally with the page content. When the element reaches the top of the viewport, the <code>position: sticky</code> and <code>top: -1px</code> CSS properties make it stick there. At the exact moment it starts to stick, the <code>IntersectionObserver</code> detects that it's no longer fully visible (because its top edge is now out of view), and adds the "is-pinned" class.</p>
+<ol>
+<li>The first argument is a callback function that runs when the observed element's visibility changes. It uses destructuring to get the first (and only) entry <code>e</code> from the entries array.</li>
+<li><code>classList.toggle()</code> adds the class "is-pinned" if the second argument is true, and removes it if false.</li>
+<li><code>e.intersectionRatio &lt; 1</code> checks if the element is fully visible. If it's not (ratio &lt; 1), it returns true.</li>
+</ol>
 <h2>Resize Observer API</h2>
 <p>The Resize Observer API provides a performant mechanism by which we can monitor an element for changes to its size, with notifications being delivered to the observer each time the size changes.</p>
 <p>Usage is simple <em>(All the APIs with the <code>Observer</code> suffix we mentioned above share a simple API design)</em>, you create a new <code>ResizeObserver</code> object using the <code>ResizeObserver()</code> constructor, then use <code>ResizeObserver.observe()</code> to make it look for changes to a specific element's size. A callback function set up inside the constructor then runs every time the size changes, providing access to the new dimensions and allowing you to do anything you like in response to those changes.</p>

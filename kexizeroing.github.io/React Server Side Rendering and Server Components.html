@@ -6,9 +6,9 @@ slug: react-server-side-rendering-and-server-components
 description: ""
 added: "July 8 2023"
 tags: [react]</p>
-<h2>updatedDate: "Mar 14 2024"</h2>
+<h2>updatedDate: "Aug 1 2024"</h2>
 <h2>Adding Server-Side Rendering</h2>
-<p>With SSR, you render your JS on the server into HTML. You serve that HTML to your client so it appears to have fast startup. But you still have to wait for your JS to reach the user before anything can be interactive (hydration). React will render your component tree in memory, but instead of generating DOM nodes for it, it will attach all the logic to the existing HTML. After hydration, SSR can't be used again - it's typically only used for initial loads.</p>
+<p>SSR focuses on initial page load, sending pre-rendered HTML to the client that must then be hydrated with downloaded JavaScript before it behaves as a typical React app. SSR also only happens one time: when directly navigating to a page.</p>
 <p>Let’s create a simple React component App. We will render this component on the server-side and hydrate it on the client-side.</p>
 <pre><code class="lang-js">// client/components/App/index.js
 
@@ -77,8 +77,8 @@ ReactDOM.hydrate(&lt;App /&gt;, document.getElementById('ssr-app'));
 </blockquote>
 <h3>React hydration error</h3>
 <p>While rendering your application, there was a difference between the React tree that was pre-rendered from the server and the React tree that was rendered during the first render in the browser (hydration).</p>
-<p>When the React app runs on the client for the first time, it builds up a mental picture of what the DOM should look like, by mounting all of your components. Then it squints at the DOM nodes already on the page, and tries to fit the two together. By rendering something different depending on whether we're within the server-side render or not, we're hacking the system. We're rendering one thing on the server, but then telling React to expect something else on the client.</p>
-<p>To avoid issues, we need to ensure that the hydrated app matches the original HTML. When the React app adopts the DOM during hydration, <code>useEffect</code> hasn't been called yet, and so we're meeting React's expectation. (And immediately after this comparison, we trigger a re-render, and this allows React to do a proper reconciliation. It'll notice that there's some new content to render here.)</p>
+<p>When the React app runs on the client for the first time, it builds up a mental picture of what the DOM should look like, by mounting all of your components. Then it squints at the DOM nodes already on the page, and tries to fit the two together. We're rendering one thing on the server, but then telling React to expect something else on the client.</p>
+<p>To avoid issues, we need to ensure that the hydrated app matches the original HTML. When the React app adopts the DOM during hydration, <code>useEffect</code> hasn't been called yet, and so we're meeting React's expectation. Immediately after this comparison, we trigger a re-render, and this allows React to do a proper reconciliation. It'll notice that there's some new content to render here.</p>
 <pre><code class="lang-tsx">'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -108,7 +108,6 @@ const ClientOnly: React.FC&lt;ClientOnlyProps&gt; = ({
 
 export default ClientOnly;
 </code></pre>
-<p>The above code also helps solve the error: "<code>window</code> is not defined" in the client component (i.e. render <code>{ window.navigator.platform }</code>). You can move the <code>window</code> to <code>useEffect</code> to access it.</p>
 <h3>Understand the "children pattern"</h3>
 <p>React components re-render themselves and all their children when the state is updated. In this case, on every mouse move the state of <code>MovingComponent</code> is updated, its re-render is triggered, and as a result, <code>ChildComponent</code> will re-render as well.</p>
 <pre><code class="lang-jsx">const MovingComponent = () =&gt; {
@@ -155,7 +154,7 @@ const Parent = () =&gt; {
   return &lt;div&gt;{child}&lt;/div&gt;;
 };
 </code></pre>
-<p><code>React.memo</code> is a higher order component that accepts another component as a prop. It will only render the component if there is any change in the props.</p>
+<p><code>React.memo</code> is a higher order component that accepts another component as a prop. It will only render the component if there is any change in the props. <em>(Hey React, I know that this component is pure. You don't need to re-render it unless its props change.)</em></p>
 <p><code>useMemo</code> is used to memoize a calculation result, which focuses on avoiding heavy calculation.</p>
 <p><code>useCallback</code> will return a memoized version of the callback that only changes if one of the inputs has changed. This is useful when passing callbacks to optimized child components that rely on reference equality to prevent unnecessary renders. Note that <code>useCallback(fn, deps)</code> is equivalent to <code>useMemo(() =&gt; fn, deps)</code>.</p>
 <pre><code class="lang-js">const PageMemoized = React.memo(Page);
@@ -234,8 +233,50 @@ app.listen(3000, () =&gt; {
   console.info("App is live on port 3000");
 });
 </code></pre>
+<pre><code class="lang-js">// function that turns your JSX to an HTML string written by Dan Abramov
+async function renderJSXToHTML(jsx) {
+  if (typeof jsx === "string" || typeof jsx === "number") {
+    // This is a string. Escape it and put it into HTML directly.
+    // https://github.com/component/escape-html
+    return escapeHtml(jsx);
+  } else if (jsx == null || typeof jsx === "boolean") {
+    // This is an empty node. Don't emit anything in HTML for it.
+    return "";
+  } else if (Array.isArray(jsx)) {
+    const childHtmls = await Promise.all(
+      jsx.map((child) =&gt; renderJSXToHTML(child))
+    );
+    return childHtmls.join("");
+  } else if (typeof jsx === "object") {
+    // Check if this object is a React JSX element (e.g. &lt;div /&gt;).
+    if (jsx.$$typeof === Symbol.for("react.element")) {
+      if (typeof jsx.type === "string") {
+        let html = "&lt;" + jsx.type;
+        for (const propName in jsx.props) {
+          if (jsx.props.hasOwnProperty(propName) &amp;&amp; propName !== "children") {
+            html += " ";
+            html += propName;
+            html += "=";
+            html += escapeHtml(jsx.props[propName]);
+          }
+        }
+        html += "&gt;";
+        html += await renderJSXToHTML(jsx.props.children);
+        html += "&lt;/" + jsx.type + "&gt;";
+        return html;
+      } else if (typeof jsx.type === "function") {
+        // Call the component with its props, and turn its returned JSX into HTML.
+        const Component = jsx.type;
+        const props = jsx.props;
+        const returnedJsx = await Component(props);
+        return renderJSXToHTML(returnedJsx);
+      }
+    }
+  };
+}
+</code></pre>
 <h2>Write React Server Components from Scratch</h2>
-<p>Before React Server Components, all React components are “client” components — they are all run in the browser. RSC makes it possible for some components to be rendered by the server, and some components to be rendered by the browser. Server Components are not a replacement for SSR. They render exclusively on the server. Their code isn't included in the JS bundle, and so they never hydrate or re-render. <em>With only SSR, we haven't been able to do server-exclusive work within our components (e.g. access database), because that same code would re-run in the browser.</em></p>
+<p>Before React Server Components, all React components are “client” components — they are all run in the browser. RSC makes it possible for some components to be rendered by the server, and some components to be rendered by the browser. Server Components are not a replacement for SSR. They render exclusively on the server. Their code isn't included in the JS bundle, and so they never hydrate or re-render. With only SSR, we haven't been able to do server-exclusive work within our components (e.g. access database), because that same code would re-run in the browser.</p>
 <ul>
 <li>Server Component: Fetch data; Access backend resources directly; Keep large dependencies on the server.</li>
 <li>Client Component: Add interactivity and event listeners (<code>onClick()</code>); Use State and Lifecycle Effects (<code>useState()</code>, <code>useEffect()</code>); Use browser-only APIs.</li>
@@ -244,8 +285,6 @@ app.listen(3000, () =&gt; {
 <blockquote><p>What is RSC wire format?<br/>
 The server sends a serialized tree (similar to JSON but with “holes”) to the browser, and the browser can do the work of deserializing it, filling the client placeholders with the actual client components, and rendering the end result.</p>
 <p>Essentially, we're telling React “Hey, I know you're missing the server component code, but don't worry: here's what it rendered”. We send along the rendered value, the virtual representation that was generated by the server. When React loads on the client, it re-uses that description instead of re-generating it.</p>
-<p>Why invent a whole new wire format?<br/>
-The goal on the client is to reconstruct the React element tree. It is much easier to accomplish this from this format than from html, where we’d have to parse the HTML to create the React elements. Note that the reconstruction of the React element tree is important, as this allows us to merge subsequent changes to the React tree with minimal commits to the DOM.</p>
 <p>How is the Next.js App Router related to Server Components?<br/>
 If a page uses server-side rendering, the page HTML is generated on each request. Next.js used to allow us to do so by using <code>getServerSideProps</code>, which will be called by the server on every request.</p>
 <p>Next.js 13.4 introduced the App Router with new features, conventions, and support for React Server Components. Components in the app directory are React Server Components by default. <code>"use client"</code> directive used to mark components as Client Components. Server and Client Components can be interleaved in the same component tree, with React handling the merging of both environments.</p>
@@ -254,8 +293,6 @@ If a page uses server-side rendering, the page HTML is generated on each request
 <ul>
 <li><a href="https://github.com/TejasQ/makeshift-next.js/tree/spoiled">https://github.com/TejasQ/makeshift-next.js/tree/spoiled</a></li>
 <li><a href="https://github.com/TejasQ/react-server-components-from-scratch/tree/spoild">https://github.com/TejasQ/react-server-components-from-scratch/tree/spoild</a></li>
-<li><a href="https://www.joshwcomeau.com/react/server-components">https://www.joshwcomeau.com/react/server-components</a></li>
-<li><a href="https://github.com/reactwg/server-components/discussions/5">https://github.com/reactwg/server-components/discussions/5</a></li>
 </ul>
 <pre><code class="lang-jsx">// React Components (used in server-side rendering)
 import React from "react";
@@ -289,7 +326,7 @@ const Breeds = ({ initialBreeds }) =&gt; {
 
 export default Breeds;
 
-// This code only runs on the server
+// This code only runs on the server (and only works at the route level)
 export const gSSP = async () =&gt; {
   const data = await getStuff();
   return {
@@ -298,6 +335,9 @@ export const gSSP = async () =&gt; {
 };
 </code></pre>
 <pre><code class="lang-jsx">// React Server Components, notice the difference from above
+
+// The big difference is that we've never before had a way 
+// to run server-exclusive code inside our components.
 import React from "react";
 
 const List = async () =&gt; {
@@ -318,6 +358,7 @@ const List = async () =&gt; {
 
 export default List;
 </code></pre>
+<p>Besides a <code>&lt;script&gt;</code> tag that loads up the JS bundle (client components used in our application), we also tells React “Hey, I know you're missing the server components code, but don't worry: here's what it rendered”.</p>
 <pre><code class="lang-jsx">app.get("/:path", async (req, res) =&gt; {
   const page = await import(
     join(process.cwd(), "dist", "pages", req.params.path)
@@ -326,13 +367,13 @@ export default List;
   // `createReactTree` is a method to turn jsx into "a big object" that React can recognize
   // {
   //   $$typeof: Symbol("react.element"),
-  //   type: "div",
+  //   type: "div",  // -&gt; typeof jsx.type === "string"
   //   props: { title: "oh my" },
   //   ...
   // }
   // {
   //   $$typeof: Symbol.for("react.element"),
-  //   type: MyComponent  // reference to the MyComponent function
+  //   type: MyComponent  // -&gt; typeof jsx.type === "function"
   //   props: { children: "oh my" },
   //   ...
   // }
@@ -351,17 +392,59 @@ export default List;
     &lt;script src="/client.js" type="module"&gt;&lt;/script&gt;`;
   res.end(html);
 });
-</code></pre>
-<p>Note that if we directly send <code>renderToString(&lt;Component&gt;)</code> to the client, React will complain <em>"Error: Objects are not valid as a React child (found: [object Promise])"</em>. The code doesn't support RSC yet. We need transform JSX into an object that client React can recognize, which the function <code>createReactTree</code> does.</p>
-<pre><code class="lang-js">const escapeJsx = (key, value) =&gt; {
+
+const escapeJsx = (key, value) =&gt; {
   // A Symbol value doesn't "survive" JSON serialization
   // We're going to substutute `Symbol.for('react.element')` with a special string like "$RE"
   if (value === Symbol.for("react.element")) {
     return "$RE";  // Could be arbitrary. I picked RE for React Element.
+  } else if (typeof value === "string" &amp;&amp; value.startsWith("$")) {
+    // To avoid clashes, prepend an extra $ to any string already starting with $.
+    return "$" + value;
+  } else {
+    return value;
   }
-  return value;
 }
 </code></pre>
+<p>Note that if we directly send <code>renderToString(&lt;Component&gt;)</code> to the client, React will complain <em>"Error: Objects are not valid as a React child (found: [object Promise])"</em>. The code doesn't support RSC yet. We need transform JSX into an object that client React can recognize, which the function <code>createReactTree</code> does.</p>
+<pre><code class="lang-js">async function createReactTree(jsx) {
+  if (
+    typeof jsx === "string" ||
+    typeof jsx === "number" ||
+    typeof jsx === "boolean" ||
+    jsx == null
+  ) {
+    return jsx;
+  } else if (Array.isArray(jsx)) {
+    return Promise.all(jsx.map((child) =&gt; renderJSXToClientJSX(child)));
+  } else if (jsx != null &amp;&amp; typeof jsx === "object") {
+    if (jsx.$$typeof === Symbol.for("react.element")) {
+      if (typeof jsx.type === "string") {
+        return {
+          ...jsx,
+          props: await renderJSXToClientJSX(jsx.props),
+        };
+      } else if (typeof jsx.type === "function") {
+        const Component = jsx.type;
+        const props = jsx.props;
+        const returnedJsx = await Component(props);
+        return renderJSXToClientJSX(returnedJsx);
+      } else throw new Error("Not implemented.");
+    } else {
+      return Object.fromEntries(
+        await Promise.all(
+          Object.entries(jsx).map(async ([propName, value]) =&gt; [
+            propName,
+            await renderJSXToClientJSX(value),
+          ])
+        )
+      );
+    }
+  } else throw new Error("Not implemented");
+}
+</code></pre>
+<blockquote><p>The goal on the client is to reconstruct the React element tree. It is much easier to accomplish this from this format than from html, where we’d have to parse the HTML to create the React elements. Note that the reconstruction of the React element tree is important, as this allows us to merge subsequent changes to the React tree with minimal commits to the DOM.</p>
+</blockquote>
 <pre><code class="lang-js">// We need to hydrate the root with the initial client JSX on the client.
 const root = hydrateRoot(document, getInitialClientJSX());
 
@@ -374,11 +457,19 @@ function getInitialClientJSX() {
 function reviveJSX(key, value) {
   if (value === "$RE") {
     return Symbol.for("react.element");
+  } else if (typeof value === "string" &amp;&amp; value.startsWith("$$")) {
+    // This is a string starting with $. Remove the extra $ added by the server.
+    return value.slice(1);
   } else {
     return value;
   }
 }
 </code></pre>
+<p>Must-read articles on React Server Components:</p>
+<ul>
+<li><a href="https://www.joshwcomeau.com/react/server-components">https://www.joshwcomeau.com/react/server-components</a></li>
+<li><a href="https://github.com/reactwg/server-components/discussions/5">https://github.com/reactwg/server-components/discussions/5</a></li>
+</ul>
 <h2>What are Server Actions</h2>
 <p>React Server Actions allow you to run asynchronous code directly on the server. They eliminate the need to create API endpoints to mutate your data. Instead, you write asynchronous functions that execute on the server and can be invoked from your Client or Server Components.</p>
 <p>An advantage of invoking a Server Action within a Server Component is progressive enhancement - forms work even if JavaScript is disabled on the client.</p>
