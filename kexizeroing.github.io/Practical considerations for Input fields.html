@@ -5,7 +5,7 @@ title: "Practical considerations for Input fields"
 slug: practical-considerations-for-input-fields
 description: ""
 added: "Jun 5 2024"
-updatedDate: "July 30 2024"</p>
+updatedDate: "Aug 12 2024"</p>
 <h2>tags: [web]</h2>
 <h2>Dealing with contenteditable elements in Vue</h2>
 <pre><code class="lang-vue">&lt;template&gt;
@@ -160,6 +160,59 @@ function TabButton({ children, isActive, onClick }) {
       {children}
     &lt;/button&gt;
   )
+}
+</code></pre>
+<h2>Next.js Input search</h2>
+<p>The search input has a 200ms debounce. After 200ms of inactivity, the form submits, updating the URL state with <code>?q={search}</code>. The Server Component reads <code>searchParams</code> and queries the database. On form submission, a React transition starts, allowing us to read the pending status with <code>useFormStatus</code> to display an inline loading state.</p>
+<pre><code class="lang-js">'use client';
+
+import Form from 'next/form';
+import { useFormStatus } from 'react-dom';
+import { useDebouncedCallback } from 'use-debounce';
+import { useEffect, useRef } from 'react';
+import { Input } from '@/components/ui/input';
+
+export function Search({ query }: { query: string }) {
+  let formRef = useRef&lt;HTMLFormElement | null&gt;(null);
+
+  let handleInputChange = useDebouncedCallback((e) =&gt; {
+    e.preventDefault();
+    formRef.current?.requestSubmit();
+  }, 200);
+
+  useEffect(() =&gt; {
+    formRef.current?.querySelector('input')?.focus();
+  }, []);
+
+  return (
+    &lt;Form
+      ref={formRef}
+      action="/"
+    &gt;
+      &lt;label htmlFor="search"&gt;
+        Search
+      &lt;/label&gt;
+      &lt;Input
+        onChange={handleInputChange}
+        type="text"
+        name="q"
+        id="search"
+        placeholder="Search..."
+        defaultValue={query}
+      /&gt;
+      &lt;LoadingIcon /&gt;
+    &lt;/Form&gt;
+  );
+}
+
+function LoadingIcon() {
+  let { pending } = useFormStatus();
+
+  return pending ? (
+    &lt;div&gt;
+      &lt;span&gt;Loading...&lt;/span&gt;
+    &lt;/div&gt;
+  ) : null;
 }
 </code></pre>
 <h2>Styling validation status</h2>

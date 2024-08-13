@@ -7,7 +7,7 @@ description: ""
 added: ""
 top: true
 order: 4</p>
-<h2>updatedDate: "Aug 10 2024"</h2>
+<h2>updatedDate: "Aug 12 2024"</h2>
 <h3>TOC</h3>
 <ul>
 <li><a href="#toc">TOC</a></li>
@@ -23,6 +23,7 @@ order: 4</p>
 <li><a href="#traverse-binary-tree">Traverse Binary Tree</a></li>
 <li><a href="#graph-dfs">Graph DFS</a></li>
 <li><a href="#graph-bfs">Graph BFS</a></li>
+<li><a href="#union-find">Union Find</a></li>
 <li><a href="#heap">Heap</a></li>
 <li><a href="#dp">DP</a></li>
 <li><a href="#lru">LRU</a></li>
@@ -265,6 +266,9 @@ function reverseList(head) {
     }
   }
 }
+
+// Oops.js: Add powerful undo/redo capabilities to your app
+// https://github.com/HeyPuter/Oops.js
 </code></pre>
 <h3>Shuffle an array</h3>
 <p>The Art of Computer Programming, Vol. 2, section 3.4.2 “Random sampling and shuffling” describes two solutions:</p>
@@ -458,6 +462,49 @@ var minDepth = function(root) {
   }
 }
 </code></pre>
+<h3>Union Find</h3>
+<pre><code class="lang-js">// Find: determine which subset a given element belongs to.
+// Union: merge two disjoint sets to a single disjoint set.
+class DisjointSet {
+  constructor(n) {
+    this.parent = new Array(n);
+    this.rank = new Array(n);
+    this.init();
+  }
+
+  init() {
+    for (let i = 0; i &lt; this.n; i++) {
+      this.parent[i] = i;
+      this.rank[i] = 0;
+    }
+  }
+
+  find(u) {
+    if (this.parent[u] !== u) {
+      this.parent[u] = this.find(this.parent[u]);
+    }
+    return this.parent[u];
+  }
+
+  union(u, v) {
+    let rootU = this.find(u);
+    let rootV = this.find(v);
+
+    if (rootU === rootV) return;
+
+    // Union by rank
+    // Ensure that smaller trees are always attached to larger trees.
+    if (this.rank[rootU] &lt; this.rank[rootV]) {
+      this.parent[rootU] = rootV;
+    } else if (this.rank[rootU] &gt; this.rank[rootV]) {
+      this.parent[rootV] = rootU;
+    } else {
+      this.parent[rootV] = rootU;
+      this.rank[rootU]++;
+    }
+  }
+}
+</code></pre>
 <h3>Heap</h3>
 <pre><code class="lang-js">function Heap () {
   this.items = [];
@@ -589,12 +636,12 @@ let rob2 = function(nums) {
   function robRange(nums, start, end) {
     const n = end - start;
 
-    const dp = new Array(n);
+    const dp = Array(n).fill(0);
     dp[0] = nums[start];
     dp[1] = Math.max(nums[start], nums[start + 1]);
 
     for (let i = 2; i &lt; n; i++) {
-      dp[i] = Math.max(dp[i - 1], dp[i - 2] + nums[start + i]);
+      dp[i] = Math.max(dp[i - 2] + nums[start + i], dp[i - 1]);
     }
 
     return dp[n - 1];
@@ -627,15 +674,9 @@ let longestCommonSubsequence = function(text1, text2) {
   let m = text1.length;
   let n = text2.length;
   // dp[i][j] means the LCS of first i characters in text1 and first j characters in text2
+  // 1. X[m-1] == Y[n-1] -&gt; LCS(Xm-1，Yn-1)
+  // 2. X[m-1] != Y[n-1] -&gt; max(LCS(Xm-1, Yn), LCS(Xm, Yn-1))
   let dp = Array.from(Array(m + 1), () =&gt; Array(n + 1).fill(0));
-
-  dp[0][0] = 0;
-  for (let i = 0; i &lt;= m; i++) {
-    dp[i][0] = 0;
-  }
-  for (let j = 0; j &lt;= n; j++) {
-    dp[0][j] = 0;
-  }
 
   for (let i = 1; i &lt;= m; i++) {
     for (let j = 1; j &lt;= n; j++) {
@@ -700,11 +741,11 @@ LRUCache.prototype.get = function(key) {
 }
 
 LRUCache.prototype.put = function(key, value) {
-  var node = this.map.get(key);
+  let node = this.map.get(key);
   if (node) {
     this.removeNode(node);
   }
-  var newNode = new DLLNode(key, value);
+  let newNode = new DLLNode(key, value);
   this.addNode(newNode);
   this.map.set(key, newNode);
 
@@ -716,6 +757,44 @@ LRUCache.prototype.put = function(key, value) {
 }
 </code></pre>
 <h3>Sample Problems</h3>
+<p>Given an integer array nums, return all the triplets <code>[nums[i], nums[j], nums[k]]</code> such that <code>i != j</code>, <code>i != k</code>, and <code>j != k</code>, and <code>nums[i] + nums[j] + nums[k] == 0</code>. Notice that the solution set must not contain duplicate triplets.</p>
+<pre><code class="lang-js">var threeSum = function(nums) {
+  let res = [];
+  nums.sort((a, b) =&gt; a - b);
+
+  for (let i = 0; i &lt; nums.length; i++) {
+    if (i &gt; 0 &amp;&amp; nums[i] === nums[i-1]) {
+      continue;
+    }
+
+    let j = i + 1;
+    let k = nums.length - 1;
+
+    while (j &lt; k) {
+      let total = nums[i] + nums[j] + nums[k];
+
+      if (total === 0) {
+        res.push([nums[i], nums[j], nums[k]]);
+        // remove the duplicate result
+        while (nums[j] === nums[j+1] &amp;&amp; j &lt; k) {
+          j++;
+        }
+        while (nums[k] === nums[k-1] &amp;&amp; j &lt; k) {
+          k--;
+        }
+        j++;
+        k--;
+      } else if (total &gt; 0) {
+        k--;
+      } else {
+        j++;
+      }
+    }
+  }
+
+  return res;
+};
+</code></pre>
 <p>Given a non-empty array of integers, return the <code>k</code> most frequent elements.</p>
 <pre><code class="lang-js">var topKFrequent = function(nums, k) {
   const res = [];
@@ -813,6 +892,23 @@ LRUCache.prototype.put = function(key, value) {
   return [...hashTable.values()];
 };
 </code></pre>
+<p>Given two strings <code>ransomNote</code> and <code>magazine</code>, return true if <code>ransomNote</code> can be constructed by using the letters from <code>magazine</code> and false otherwise.</p>
+<pre><code class="lang-js">var canConstruct = function(ransomNote, magazine) {
+  let cnt = Array(26).fill(0);
+  for (let c of magazine) {
+    cnt[c.charCodeAt(0) - 'a'.charCodeAt(0)]++;
+  }
+
+  for (let c of ransomNote) {
+    cnt[c.charCodeAt(0) - 'a'.charCodeAt(0)]--;
+
+    if (cnt[c.charCodeAt(0) - 'a'.charCodeAt(0)] &lt; 0) {
+      return false;
+    }
+  }
+  return true;
+};
+</code></pre>
 <p>Given a string, find the length of the longest substring without repeating characters.</p>
 <pre><code class="lang-js">// slide window
 var lengthOfLongestSubstring = function(s) {
@@ -892,6 +988,24 @@ function isSame(dict1, dict2) {
   return s.slice(left, right + 1);
 };
 </code></pre>
+<p>Given an array nums of size n, return the majority element. The majority element is the element that appears more than <code>⌊n / 2⌋</code> times. (assume it always exists)</p>
+<pre><code class="lang-js">var majorityElement = function(nums) {
+  let count = 0;
+  let candidate = 0;
+
+  for (let num of nums) {
+    if (count === 0) {
+      candidate = num;
+    }
+    if (num === candidate) {
+      count += 1;
+    } else {
+      count -= 1;
+    }
+  }
+  return candidate;
+};
+</code></pre>
 <p>Given an array of integers temperatures represents the daily temperatures, return an array answer such that <code>answer[i]</code> is the number of days you have to wait after the <code>ith</code> day to get a warmer temperature. If there is no future day for which this is possible, keep <code>answer[i] == 0</code> instead.</p>
 <pre><code class="lang-js">var dailyTemperatures = function(temperatures) {
   let stack = [];
@@ -931,6 +1045,47 @@ var subarraySum = function(nums, k) {
   return res;
 };
 </code></pre>
+<p>Given an array of positive integers arr, return the sum of all possible odd-length subarrays of arr.</p>
+<pre><code class="lang-js">var sumOddLengthSubarrays = function(arr) {
+  let ans = 0;
+  // preSum[i] stores the sum of elements from index 0 to i-1.
+  // if arr = [1, 2, 3], then preSum will be [0, 1, 3, 6].
+  let preSum = Array(arr.length + 1).fill(0);
+
+  for (let i = 0; i &lt; arr.length; i++) {
+    preSum[i + 1] = preSum[i] + arr[i];
+  }
+
+  for (let i = 0; i &lt; arr.length; i++) {
+    for (let j = 1; i + j &lt;= arr.length; j += 2) {
+      ans += preSum[i + j] - preSum[i];
+    }
+  }
+
+  return ans;
+};
+</code></pre>
+<p>Given an array of integers nums and an integer k. A continuous subarray is called nice if there are k odd numbers on it. Return the number of nice sub-arrays.</p>
+<pre><code class="lang-js">var numberOfSubarrays = function(nums, k) {
+  // `count[3] = 2` means there are 2 positions where we've encountered exactly 3 odd numbers.
+  let count = Array(nums.length + 1).fill(0);
+  count[0] = 1;
+  let oddCount = 0;
+  let result = 0;
+
+  for (const num of nums) {
+    if (num % 2 === 1) {
+      oddCount += 1;
+    }
+    if (oddCount &gt;= k) {
+      result += count[oddCount - k];
+    }
+
+    count[oddCount]++;
+  }
+  return result;
+};
+</code></pre>
 <p>Given an array of integers and an integer <code>k</code>, find out whether there are two distinct indices <code>i</code> and <code>j</code> in the array such that <code>nums[i] = nums[j]</code> and the absolute difference between <code>i</code> and <code>j</code> is at most <code>k</code>.</p>
 <pre><code class="lang-js">var containsNearbyDuplicate = function(nums, k) {
   const map = new Map();  // key is nums[i], value is its index
@@ -957,6 +1112,69 @@ var subarraySum = function(nums, k) {
   for(let i = index; i &lt; nums.length; i++) {
     nums[i] = 0;
   }
+};
+</code></pre>
+<p>Given a non-empty array of integers nums, the degree of this array is defined as the maximum frequency of any one of its elements. Your task is to find the smallest possible length of a subarray of nums, that has the same degree as nums.</p>
+<pre><code class="lang-js">var findShortestSubArray = function(nums) {
+  let firstOccurrence = new Map();
+  let lastOccurrence = new Map();
+  let frequencyMap = new Map();
+
+  nums.forEach((num, index) =&gt; {
+    if (firstOccurrence.get(num) === undefined) {
+      firstOccurrence.set(num, index);
+    }
+    lastOccurrence.set(num, index);
+    frequencyMap.set(num, (frequencyMap.get(num) || 0) + 1);
+  });
+
+  let ans = nums.length;
+  let degree = Math.max(...frequencyMap.values());
+
+  for (let [num, frequency] of frequencyMap) {
+    if (frequency === degree) {
+      ans = Math.min(ans, lastOccurrence.get(num) - firstOccurrence.get(num) + 1);
+    }
+  }
+  return ans;
+};
+</code></pre>
+<p>Given an integer array containing 0's and 1's, where 0 means empty and 1 means not empty, and an integer n, return true if n new flowers can be planted in the flowerbed. Flowers cannot be planted in adjacent plots.</p>
+<pre><code class="lang-js">var canPlaceFlowers = function(flowerbed, n) {
+  for (let i = 0; i &lt; flowerbed.length &amp;&amp; n &gt; 0;) {
+    if (flowerbed[i] === 1) {
+      i += 2;
+    }
+    // current position is empty
+    else if (i === flowerbed.length - 1 || flowerbed[i + 1] === 0) {
+      n--;
+      i += 2;
+    }
+    // current position is empty but the next position has a flower
+    else {
+      i += 3;
+    }
+  }
+
+  return n &lt;= 0;
+};
+</code></pre>
+<p>You are given an integer array nums. Each element in the array represents your maximum jump length at that position. Return true if you can reach the last index, or false otherwise.</p>
+<pre><code class="lang-js">var canJump = function(nums) {
+  // Greedy algorithm
+  if (nums.length === 0) return false;
+
+  let reachable = nums[0];
+  for (let i = 1; i &lt; nums.length; i++) {
+    if (i &gt; reachable) {
+      return false;
+    }
+    if (i + nums[i] &gt; reachable) {
+      reachable = i + nums[i];
+    }
+  }
+
+  return true;
 };
 </code></pre>
 <p>Suppose an array sorted in ascending order is rotated at some pivot unknown to you beforehand. (i.e., <code>[0,1,2,4,5,6,7]</code> might become <code>[4,5,6,7,0,1,2]</code>). You are given a target value to search. If found in the array return its index, otherwise return -1. You may assume no duplicate exists in the array.</p>
@@ -1206,3 +1424,83 @@ function dfs(grid, i, j, rows, cols) {
   dfs(grid, i, j - 1, rows, cols);
 }
 </code></pre>
+<p>You are given an <code>m x n</code> binary matrix grid. An island is a group of 1's connected 4-directionally. The area of an island is the number of cells with a value 1. Return the maximum area of an island in grid.</p>
+<pre><code class="lang-js">var maxAreaOfIsland = function(grid) {
+  let n = grid.length;
+  let m = grid[0].length;
+  let ans = 0;
+
+  function dfs(i, j) {
+    if (i &lt; 0 || j &lt; 0 || i &gt; n-1 || j &gt; m-1 || !grid[i][j]) {
+      return 0;
+    }
+    grid[i][j] = 0;
+
+    return 1 + dfs(i-1, j) + dfs(i, j-1) + dfs(i+1, j) + dfs(i, j+1);
+  }
+
+  for (let i = 0; i &lt; n; i++) {
+    for (let j = 0; j &lt; m; j++) {
+      if (grid[i][j]) {
+        ans = Math.max(ans, dfs(i, j));
+      }
+    }
+  }
+  return ans;
+};
+</code></pre>
+<p>Best Time to Buy and Sell Stock. You are given an array prices where <code>prices[i]</code> is the price of a given stock on the <code>ith</code> day.</p>
+<p>```js
+// only one transaction
+var maxProfit = function(prices) {
+  let min = prices[0];
+  let maxProfit = 0;</p>
+<p>for (let i = 0; i &lt; prices.length; i++) {
+    if (prices[i] &lt; min) {
+      min = prices[i];
+    } else if (prices[i] - min &gt; maxProfit) {
+      maxProfit = prices[i] - min;
+    }
+  }
+  return maxProfit;
+};</p>
+<p>// multiple transactions (greedy)
+var maxProfit = function(prices) {
+  let maxProfit = 0;</p>
+<p>for (let i = 1; i &lt; prices.length; i++) {
+    if (prices[i] &gt; prices[i - 1]) {
+      maxProfit += prices[i] - prices[i - 1];
+    }
+  }
+  return maxProfit;
+};</p>
+<p>// multiple transactions but with transaction fee for each one
+var maxProfit = function(prices, fee) {
+  // dp[i] represents two states
+  // 1. dp[i][0]: max profit on day i if you hold a stock.
+  // 2. dp[i][1]: max profit on day i if you do not hold a stock.
+  let dp = Array.from(Array(prices.length), () =&gt; Array(2).fill(0));
+  dp[0][0] = 0 - prices[0];
+  dp[0][1] = 0;</p>
+<p>for (let i = 1; i &lt; prices.length; i++) {
+    dp[i][0] = Math.max(dp[i - 1][0], dp[i - 1][1] - prices[i]);
+    dp[i][1] = Math.max(dp[i - 1][0] + prices[i] - fee, dp[i - 1][1]);
+  }</p>
+<p>return dp[prices.length - 1][1];
+};</p>
+<p>// After you sell your stock, you cannot buy stock on the next day
+var maxProfit = function(prices) {
+  // dp[i][0]: Holding a stock after day i.
+  // dp[i][1]: Not holding a stock after day i without entering a cooldown.
+  // dp[i][2]: Just sold a stock on day i.
+  // dp[i][3]: In a cooldown after selling stock.
+  let dp = Array.from(Array(prices.length), () =&gt; Array(4).fill(0));
+  dp[0][0] = -prices[0];</p>
+<p>for (let i = 1; i &lt; prices.length; ++i) {
+    dp[i][0] = Math.max(dp[i - 1][0], dp[i - 1][1] - prices[i], dp[i - 1][3] - prices[i]);
+    dp[i][1] = Math.max(dp[i - 1][1], dp[i - 1][3]);
+    dp[i][2] = dp[i - 1][0] + prices[i];
+    dp[i][3] = dp[i - 1][2];
+  }</p>
+<p>return Math.max(dp[prices.length - 1][1], dp[prices.length - 1][2], dp[prices.length - 1][3]);
+};</p>
