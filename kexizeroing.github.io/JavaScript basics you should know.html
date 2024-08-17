@@ -1135,6 +1135,37 @@ async function parallel() {
 </code></pre>
 <blockquote><p>Concurrency is when two or more tasks can start, run, and complete in overlapping time periods. It doesn't necessarily mean they'll ever be running at the same instant. For example, multitasking on a single-core machine. Parallelism is when tasks literally run at the same time, e.g., on a multicore processor.</p>
 </blockquote>
+<h3><code>for await...of</code></h3>
+<p>When a <code>for await...of</code> loop iterates over an iterable, it first gets the iterable's <code>[Symbol.asyncIterator]()</code> method and calls it, which returns an async iterator. If it does not exist, it then looks for an <code>[Symbol.iterator]()</code> method, which returns a sync iterator. The sync iterator returned is then wrapped into an async iterator by wrapping every object returned from the <code>next()</code> method into a resolved or rejected promise. The loop then repeatedly calls the final async iterator's <code>next()</code> method and awaits the returned promise, producing the sequence of values to be assigned to variable.</p>
+<ul>
+<li><code>for await...of</code> works on both sync and async iterables, while <code>for...of</code> only works on sync iterables.</li>
+<li>If the iterable is a sync iterable that yields promises, <code>for await...of</code> would produce a sequence of resolved values, while <code>for...of</code> would produce a sequence of promises.</li>
+</ul>
+<pre><code class="lang-js">const LIMIT = 3;
+
+const asyncIterable = {
+  [Symbol.asyncIterator]() {
+    let i = 0;
+    return {
+      next() {
+        const done = i === LIMIT;
+        const value = done ? undefined : i++;
+        return Promise.resolve({ value, done });
+      },
+      return() {
+        // This will be reached if the consumer called 'break' or 'return' early in the loop.
+        return { done: true };
+      },
+    };
+  },
+};
+
+(async () =&gt; {
+  for await (const num of asyncIterable) {
+    console.log(num); // 0, 1, 2
+  }
+})();
+</code></pre>
 <h2>What is a JavaScript test</h2>
 <pre><code class="lang-js">import { assert, describe, expect, it } from 'vitest'
 
