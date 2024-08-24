@@ -481,45 +481,37 @@ var minDepth = function(root) {
 }
 </code></pre>
 <h3>Union Find</h3>
-<pre><code class="lang-js">// Find: determine which subset a given element belongs to.
-// Union: merge two disjoint sets to a single disjoint set.
-class DisjointSet {
-  constructor(n) {
-    this.parent = new Array(n);
-    this.rank = new Array(n);
-    this.init();
+<pre><code class="lang-js">class DisjointSet {
+  constructor(size) {
+    this.parent = Array.from({ length: size }, (_, index) =&gt; index);
+    this.rank = Array(size).fill(1);
   }
 
-  init() {
-    for (let i = 0; i &lt; this.n; i++) {
-      this.parent[i] = i;
-      this.rank[i] = 0;
+  find(x) {
+    if (this.parent[x] !== x) {
+      this.parent[x] = this.find(this.parent[x]);
+    }
+    return this.parent[x];
+  }
+
+  union(x, y) {
+    const rootX = this.find(x);
+    const rootY = this.find(y);
+
+    if (rootX !== rootY) {
+      if (this.rank[rootX] &gt; this.rank[rootY]) {
+        this.parent[rootY] = rootX;
+      } else if (this.rank[rootX] &lt; this.rank[rootY]) {
+        this.parent[rootX] = rootY;
+      } else {
+        this.parent[rootY] = rootX;
+        this.rank[rootX] += 1;
+      }
     }
   }
 
-  find(u) {
-    if (this.parent[u] !== u) {
-      this.parent[u] = this.find(this.parent[u]);
-    }
-    return this.parent[u];
-  }
-
-  union(u, v) {
-    let rootU = this.find(u);
-    let rootV = this.find(v);
-
-    if (rootU === rootV) return;
-
-    // Union by rank
-    // Ensure that smaller trees are always attached to larger trees.
-    if (this.rank[rootU] &lt; this.rank[rootV]) {
-      this.parent[rootU] = rootV;
-    } else if (this.rank[rootU] &gt; this.rank[rootV]) {
-      this.parent[rootV] = rootU;
-    } else {
-      this.parent[rootV] = rootU;
-      this.rank[rootU]++;
-    }
+  connected(x, y) {
+    return this.find(x) === this.find(y);
   }
 }
 </code></pre>
@@ -647,19 +639,18 @@ let rob = function(nums) {
 let rob2 = function(nums) {
   const len = nums.length;
   if (len === 1) return nums[0];
-  if (len === 2) return Math.max(nums[0], nums[1]);
 
-  return Math.max(robRange(nums, 1, len), robRange(nums, 0, len - 1));
+  // the first house and the last house cannot be robbed together
+  return Math.max(robRange(nums.slice(0, -1)), robRange(nums.slice(1)));
 
-  function robRange(nums, start, end) {
-    const n = end - start;
-
+  function robRange(range) {
+    const n = range.length;
     const dp = Array(n).fill(0);
-    dp[0] = nums[start];
-    dp[1] = Math.max(nums[start], nums[start + 1]);
+    dp[0] = range[0];
+    dp[1] = Math.max(range[0], range[1]);
 
     for (let i = 2; i &lt; n; i++) {
-      dp[i] = Math.max(dp[i - 2] + nums[start + i], dp[i - 1]);
+      dp[i] = Math.max(dp[i - 2] + range[i], dp[i - 1]);
     }
 
     return dp[n - 1];
@@ -1066,6 +1057,19 @@ function isSame(dict1, dict2) {
   }
 };
 </code></pre>
+<p>Write a function to find the longest common prefix string amongst an array of strings. If there is no common prefix, return an empty string "".</p>
+<pre><code class="lang-js">var longestCommonPrefix = function(strs) {
+  strs.sort();
+
+  for (let i = 0; i &lt; strs[0].length; i++) {
+    if (strs[0][i] !== strs[strs.length - 1][i]){
+      return strs[0].slice(0, i);
+    } 
+  }
+
+  return strs[0];
+};
+</code></pre>
 <p>Given an unsorted array of integers nums, return the length of the longest consecutive elements sequence. Take <code>[10, 4, 20, 1, 3, 2]</code> as an example, the longest consecutive elements sequence is <code>[1, 2, 3, 4]</code>.</p>
 <pre><code class="lang-js">var longestConsecutive = function(nums) {
   let numSet = new Set(nums);
@@ -1304,9 +1308,8 @@ var subarraySum = function(nums, k) {
 <p>You are given an integer array nums. Each element in the array represents your maximum jump length at that position. Return true if you can reach the last index, or false otherwise.</p>
 <pre><code class="lang-js">var canJump = function(nums) {
   // Greedy algorithm
-  if (nums.length === 0) return false;
-
   let reachable = nums[0];
+
   for (let i = 1; i &lt; nums.length; i++) {
     if (i &gt; reachable) {
       return false;
@@ -1401,7 +1404,6 @@ var subarraySum = function(nums, k) {
 <pre><code class="lang-js">function getSquareRoot(num) {
   let i = 0;
   let j = num;
-  let ans = -1;
 
   while (i &lt;= j) {
     let mid = Math.floor((i + j) / 2);
@@ -1414,7 +1416,7 @@ var subarraySum = function(nums, k) {
     }
   }
 
-  return ans;
+  return -1;
 }
 
 function checkPerfectSquare(num) {
@@ -1439,6 +1441,7 @@ function checkPerfectSquare(num) {
 <p>Given a collection of intervals, merge all overlapping intervals. i.e. Input: <code>[[1,3],[2,6],[8,10],[15,18]]</code>; Output: <code>[[1,6],[8,10],[15,18]]</code>.</p>
 <pre><code class="lang-js">var merge = function(intervals) {
   intervals.sort((a, b) =&gt; a[0] - b[0]);
+
   for (let i = 0; i &lt; intervals.length - 1; i++) {
     const cur = intervals[i];
     const next = intervals[i + 1];
@@ -1507,7 +1510,7 @@ function checkPerfectSquare(num) {
       const num = nums[i];
       if (path.includes(num)) continue;
       path.push(num);
-      backtrack(path);
+      backtrack(path);  // console.log(`backtrack(${path});`)
       path.pop();
     }
   }
@@ -1538,6 +1541,46 @@ function checkPerfectSquare(num) {
   return result;
 };
 </code></pre>
+<p>Given a string s, partition s such that every substring of the partition is a palindrome. Return all possible palindrome partitioning of s. Input: <code>s = "aab"</code>. Output: <code>[["a","a","b"],["aa","b"]]</code></p>
+<pre><code class="lang-js">var partition = function(s) {
+  const res = [];
+  const part = [];
+
+  function backtrack(i) {
+    if (i === s.length) {
+      res.push([...part]);
+      return;
+    }
+
+    for (let j = i; j &lt; s.length; j++) {
+      // print i, j, part here: 
+      // 0 0 []
+      // 1 1 ['a']
+      // 2 2 ['a', 'a']
+      // 1 2 ['a']
+      // 0 1 []
+      // 2 2 ['aa']
+      // 0 2 []
+      if (isPalindrome(s, i, j)) {
+        part.push(s.slice(i, j + 1));
+        backtrack(j + 1);
+        part.pop();
+      }
+    }
+  }
+  backtrack(0);
+  return res;
+};
+
+function isPalindrome(s, l, r) {
+  while (l &lt; r) {
+    if (s[l] !== s[r]) return false;
+    l++;
+    r--;
+  }
+  return true;
+}
+</code></pre>
 <p>Given a binary search tree (BST), find the lowest common ancestor node of two given nodes in the BST.</p>
 <pre><code class="lang-js">var lowestCommonAncestor = function(root, p, q) {
   // If root is the LCA node, p and q should be at different side
@@ -1566,8 +1609,21 @@ function checkPerfectSquare(num) {
   return root;
 };
 </code></pre>
+<p>Given the root of a binary tree and an integer targetSum, return true if the tree has a root-to-leaf path such that adding up all the values along the path equals targetSum.</p>
+<pre><code class="lang-js">var hasPathSum = function(root, targetSum) {
+    if (root === null) {
+    return false;
+  }
+    if (root.val == targetSum &amp;&amp; (root.left === null &amp;&amp; root.right === null)) {
+    return true;
+  }
+
+    return hasPathSum(root.left, targetSum - root.val) || hasPathSum(root.right, targetSum - root.val);
+};
+</code></pre>
 <p>Given the root of a binary tree, determine if it is a valid binary search tree.</p>
 <pre><code class="lang-js">var isValidBST = function(root) {
+  // Check range of each node
   const helper = (root, min, max) =&gt; {
     if (!root) return true;
 
@@ -1647,9 +1703,9 @@ function checkPerfectSquare(num) {
 <p>Given a 2d grid map of '1's (land) and '0's (water), count the number of islands. An island is surrounded by water and is formed by connecting adjacent lands horizontally or vertically. You may assume all four edges are all surrounded by water.</p>
 <pre><code class="lang-js">var numIslands = function(grid) {
   let count = 0;
-  const rows = grid.length;
+  let rows = grid.length;
   if (rows === 0) return 0;
-  const cols = grid[0].length;
+  let cols = grid[0].length;
 
   for (let i = 0; i &lt; rows; i++) {
     for (let j = 0; j &lt; cols; j++) {
@@ -1663,8 +1719,9 @@ function checkPerfectSquare(num) {
 };
 
 function dfs(grid, i, j, rows, cols) {
-  if (i &lt; 0 || j &lt; 0 || i &gt; rows - 1 || j &gt; cols - 1 || grid[i][j] === '0')
+  if (i &lt; 0 || j &lt; 0 || i &gt; rows - 1 || j &gt; cols - 1 || grid[i][j] === '0') {
     return;
+  }
 
   grid[i][j] = '0';
 

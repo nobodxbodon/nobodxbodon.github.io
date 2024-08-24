@@ -1,0 +1,72 @@
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/Zerotier配置内网流量转发.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2024/08/21/Zerotier配置内网流量转发">站点原文</a></h2>
+<hr/>
+<p>title: Zerotier配置内网流量转发
+toc: true
+cover: '<a href="https://img.paulzzh.com/touhou/random?8">https://img.paulzzh.com/touhou/random?8</a>'
+date: 2024-08-21 09:51:01
+categories: 技术杂谈
+tags: [技术杂谈]</p>
+<h2>description: 在上一篇文章《简单易用的内网穿透组网工具ZeroTier》中，简单介绍了组网工具Zerotier；实际上，我们可以通过Ip Forward的方式来访问组网设备内网下的其他设备！</h2>
+<p>在上一篇文章<a href="/2024/07/28/%E7%AE%80%E5%8D%95%E6%98%93%E7%94%A8%E7%9A%84%E5%86%85%E7%BD%91%E7%A9%BF%E9%80%8F%E7%BB%84%E7%BD%91%E5%B7%A5%E5%85%B7ZeroTier/">《简单易用的内网穿透组网工具ZeroTier》</a>中，简单介绍了组网工具Zerotier；</p>
+<p>实际上，我们可以通过Ip Forward的方式来访问组网设备内网下的其他设备！</p>
+<p>&lt;br/&gt;</p>
+&lt;!--more--&gt;
+
+<h1><strong>Zerotier配置内网流量转发</strong></h1>
+<p>首先，在这台机器上配置 IP 转发：</p>
+<pre><code class="lang-shell">sudo sysctl -w net.ipv4.ip_forward=1
+
+sudo sysctl -p
+</code></pre>
+<p>查看网卡配置：</p>
+<pre><code class="lang-bash">ip a
+
+ens33: 192.168.117.0/24
+
+ztnfanm5kw: 192.168.196.220
+</code></pre>
+<p>在zerotier网站设置转发规则：</p>
+<p><img alt="alipay" src="https://raw.gitmirror.com/JasonkayZK/blog_static/master/images/zerotier.jpg"/></p>
+<p>在这台流量转发机器上设置环境变量：</p>
+<pre><code class="lang-bash">export PHY_IFACE=ens33 # 物理网卡
+
+export ZT_IFACE=ztnfanm5kw # Zerotier虚拟网卡
+</code></pre>
+<p>添加规则到iptables：</p>
+<pre><code class="lang-bash">sudo iptables -t nat -A POSTROUTING -o $PHY_IFACE -j MASQUERADE
+
+sudo iptables -A FORWARD -i $PHY_IFACE -o $ZT_IFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+sudo iptables -A FORWARD -i $ZT_IFACE -o $PHY_IFACE -j ACCEPT
+</code></pre>
+<blockquote><p>这三条 <code>iptables</code> 规则用于配置网络地址转换（NAT）和数据包转发；</p>
+<p>含义如下：</p>
+<ol>
+<li><p><strong>规则 1：</strong> <code>sudo iptables -t nat -A POSTROUTING -o $PHY_IFACE -j MASQUERADE</code></p>
+<p>这条规则在 <code>nat</code> 表的 <code>POSTROUTING</code> 链中添加了一条规则。<code>-o $PHY_IFACE</code> 表示这条规则适用于所有通过 <code>$PHY_IFACE</code> 这个网络接口（通常是物理接口）出去的数据包。<code>-j MASQUERADE</code> 指定了 NAT 操作中的伪装（masquerading）。这意味着，当数据包从 <code>$PHY_IFACE</code> 发送出去时，其源 IP 地址会被替换为 <code>$PHY_IFACE</code> 的 IP 地址。这通常用于允许内部网络通过一个公共 IP 地址进行外部通信；</p>
+</li>
+<li><p><strong>规则 2：</strong> <code>sudo iptables -A FORWARD -i $PHY_IFACE -o $ZT_IFACE -m state --state RELATED,ESTABLISHED -j ACCEPT</code></p>
+<p>这条规则在 <code>filter</code> 表的 <code>FORWARD</code> 链中添加了一条规则。<code>-i $PHY_IFACE</code> 表示适用于从 <code>$PHY_IFACE</code> 这个接口进入的数据包，<code>-o $ZT_IFACE</code> 表示这些数据包要转发到 <code>$ZT_IFACE</code> 这个接口。<code>-m state --state RELATED,ESTABLISHED</code> 指定了只有那些与已有连接相关或已经建立的连接的数据包才被接受（<code>ACCEPT</code>）。这个规则通常用于允许来自外部网络的返回流量进入内部网络，从而支持诸如 HTTP 会话等；</p>
+</li>
+<li><p><strong>规则 3：</strong> <code>sudo iptables -A FORWARD -i $ZT_IFACE -o $PHY_IFACE -j ACCEPT</code></p>
+<p>这条规则在 <code>filter</code> 表的 <code>FORWARD</code> 链中添加了一条规则。<code>-i $ZT_IFACE</code> 表示适用于从 <code>$ZT_IFACE</code> 这个接口进入的数据包，<code>-o $PHY_IFACE</code> 表示这些数据包要转发到 <code>$PHY_IFACE</code> 这个接口。<code>-j ACCEPT</code> 表示这些数据包会被接受并转发。这条规则允许来自 <code>$ZT_IFACE</code> 的流量经过路由器转发到 <code>$PHY_IFACE</code>，从而实现网络之间的数据传输；</p>
+<p>总结：</p>
+</li>
+</ol>
+<ul>
+<li>第一条规则用于设置源地址伪装，允许内部网络设备通过一个公共 IP 地址进行外部通信；</li>
+<li>第二条规则允许返回流量和已经建立的连接的数据包从外部网络进入内部网络；</li>
+<li>第三条规则允许来自内部网络的数据包被转发到外部网络；</li>
+</ul>
+</blockquote>
+<p>保存配置到文件：</p>
+<pre><code class="lang-bash">iptables-save
+</code></pre>
+<p><strong>此时就可以用另一台加入了此Zerotier网络的机器访问内网机器的其他电脑了！</strong></p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>文章参考：</p>
+<ul>
+<li><a href="https://blog.51cto.com/u_6364219/5264985">https://blog.51cto.com/u_6364219/5264985</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
