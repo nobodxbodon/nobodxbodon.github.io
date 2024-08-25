@@ -6,7 +6,7 @@ slug: swr-swc-msw
 description: ""
 added: "Oct 25 2023"
 tags: [web]</p>
-<h2>updatedDate: "Mar 11 2024"</h2>
+<h2>updatedDate: "Aug 24 2024"</h2>
 <p>SWR, SWC, and MSW, three similar names, are always mentioned in the context of web development, but they are totally different things. In this article, we will learn each of them and where they are used.</p>
 <h2>SWR - React Hooks for Data Fetching</h2>
 <p>The name “SWR” is derived from <code>stale-while-revalidate</code>, a HTTP cache invalidation strategy. SWR is created by the same team behind Next.js.</p>
@@ -104,26 +104,71 @@ function Bookmarks({ category }) {
 <blockquote><p>Remember about potential race conditions whenever you see an <code>await</code>. What else could happen while awaiting? After the await, is the result still relevant?</p>
 </blockquote>
 <p>With React Query, the above code becomes:</p>
-<pre><code class="lang-jsx">function Bookmarks({ category }) {
-  const { isLoading, data, error } = useQuery({
-    // Treat parameters as dependencies
+<pre><code class="lang-jsx">const useBookmarks = (category) =&gt; {
+  return useQuery({
     queryKey: ['bookmarks', category],
-    queryFn: () =&gt;
-      fetch(`${endpoint}/${category}`).then((res) =&gt; {
-        if (!res.ok) {
-          throw new Error('Failed to fetch')
-        }
-        return res.json()
-      }),
+    queryFn: async () =&gt; {
+      const response = await fetch(`${endpoint}/${category}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch');
+      }
+      return response.json();
+    },
+  });
+};
+
+const Bookmarks = ({ category }) =&gt; {
+  const { isLoading, data, error } = useBookmarks(category);
+
+  if (isLoading) return &lt;div&gt;Loading...&lt;/div&gt;;
+  if (error) return &lt;div&gt;Error: {error.message}&lt;/div&gt;;
+
+  return (
+    &lt;div&gt;
+      &lt;h2&gt;{category} Bookmarks&lt;/h2&gt;
+      &lt;ul&gt;
+        {data.map((bookmark) =&gt; (
+          &lt;li key={bookmark.id}&gt;{bookmark.title}&lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/div&gt;
+  );
+};
+</code></pre>
+<pre><code class="lang-jsx">// besides `useQuery`, there's also `useMutation`
+function App() {
+  const postQuery = useQuery({
+    queryKey: ['post'],
+    queryFn: () =&gt; fetch(...).then(res =&gt; res.json()),
   })
 
-  // Return JSX based on data and error state
+  const newPostMutation = useMutation({
+    mutationFn: async (newTitle) =&gt; {
+      const response = await fetch(...)
+      return response.json()
+    },
+    onSuccess: (data) =&gt; {
+      // update the cache
+      queryClient.invalidateQueries(['post'])
+    }
+  })
+
+  return (
+    &lt;div&gt;
+      { postQuery.data.map(post =&gt; &lt;div key={post.id}&gt;{post.title}&lt;/div&gt;) }
+      &lt;button
+        disabled={newPostMutation.isLoading}
+        onClick={() =&gt; newPostMutation.mutate('My new post')}&gt;
+        Create new
+      &lt;/button&gt;
+    &lt;/div&gt;
+  )
 }
 </code></pre>
 <p>React Query, as an async state manager, works with any function that returns a Promise and embraces the stale-while-revalidate caching strategy. The library tries to keep your data as fresh as possible while at the same time showing data to the user as early as possible.</p>
 <blockquote><p>TanStack Query is a server-state library, responsible for managing asynchronous operations between your server and client. Vuex, Pinia, Zustand, etc. are client-state libraries that can be used to store asynchronous data.</p>
 </blockquote>
-<p><code>staleTime</code> is the duration until a query transitions from fresh to stale. As long as the query is fresh, data will always be read from the cache only - no network request will happen. If the query is stale (which per default is: instantly), you will still get data from the cache, but a background refetch can happen.</p>
+<p><code>staleTime</code> is the duration until a query transitions from fresh to stale. As long as the query is fresh, data will always be read from the cache only - no network request will happen. If the query is stale (which per default is: instantly), <strong>you will still get data from the cache, but a background refetch can happen</strong>.</p>
 <p>Stale queries are refetched automatically in the background when:</p>
 <ul>
 <li>Its corresponding component mounts (<code>refetchOnMount</code>)</li>

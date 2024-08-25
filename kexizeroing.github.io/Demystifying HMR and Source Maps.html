@@ -1,0 +1,191 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/demystifying-hmr-and-source-maps.md">仓库源文</a>，<a href="https://kexizeroing.github.io/demystifying-hmr-and-source-maps">站点原文</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Demystifying HMR and Source Maps"
+slug: demystifying-hmr-and-source-maps
+description: ""
+added: "Aug 24 2024"</p>
+<h2>tags: [web, code]</h2>
+<h2>Hot Module Replacement</h2>
+<p>HMR is a feature used in development that enables real-time updates to modules in a running application without requiring a full page reload.</p>
+<p>Take webpack as an example, <code>webpack-dev-server</code> (WDS) inserts some code in the bundle that we call “WDS client”, because it must tell the client when a file has changed and new code can be loaded. WDS server does this by opening a websocket connection to the WDS client on page load. When the WDS client receives the websocket messages, it tells the HMR runtime to download the new manifest of the new module and the actual code for that module that has changed.</p>
+<pre><code class="lang-js">// https://github.com/lmiller1990/build-your-own-vite
+// 1. inject client.js code into the bundle
+// 2. ws connection between client and server
+// 3. server side use `chokidar` to watch the files change and send ws message
+// 4. client dynamically import the updated file
+
+// server.js
+import fs from "node:fs/promises";
+import path from "node:path";
+import http from "node:http";
+
+import express from "express";
+import chokidar from "chokidar";
+import { WebSocketServer } from "ws";
+
+const app = express();
+const server = http.createServer(app);
+const ws = new WebSocketServer({
+  server,
+});
+
+let socket;
+
+ws.on("connection", (_socket) =&gt; {
+  console.log("ws connected...");
+  socket = _socket;
+});
+
+const watcher = chokidar.watch("src/*.js");
+
+watcher.on("change", (file) =&gt; {
+  const payload = JSON.stringify({
+    type: "file:changed",
+    file: `/${file}`,
+  });
+  socket.send(payload);
+});
+
+const hmrMiddleware = async (req, res, next) =&gt; {
+  // only process js files
+  if (!req.url.endsWith(".js")) {
+    return next();
+  }
+
+  let client = await fs.readFile(path.join(process.cwd(), "client.js"), "utf8");
+  let content = await fs.readFile(path.join(process.cwd(), req.url), "utf8");
+
+  // `import.meta` provides information about the current module
+  content = `
+    ${client}
+
+    hmrClient(import.meta)
+
+    ${content}
+  `;
+
+  res.type(".js");  // "application/javascript"
+  res.send(content);
+};
+
+app.use(hmrMiddleware);
+app.use(express.static(process.cwd()));
+
+server.listen(8080, () =&gt; console.log("Listening on port 8080"));
+</code></pre>
+<pre><code class="lang-js">// client.js
+class HotModule {
+  file;
+  cb;
+
+  constructor(file) {
+    this.file = file;
+  }
+
+  accept(cb) {
+    this.cb = cb;
+  }
+
+  handleAccept() {
+    if (!this.cb) {
+      return;
+    }
+
+    import(`${this.file}?t=${Date.now()}`).then((newMod) =&gt; {
+      this.cb(newMod);
+    });
+  }
+}
+
+window.hotModules ??= new Map();
+
+function hmrClient(mod) {
+  const url = new URL(mod.url);
+  const hot = new HotModule(url.pathname);
+
+  import.meta.hot = hot;
+  window.hotModules.set(url.pathname, hot);
+}
+
+if (!window.ws) {
+  const ws = new window.WebSocket("ws://localhost:8080");
+
+  ws.addEventListener("message", (msg) =&gt; {
+    const data = JSON.parse(msg.data);
+    const mod = window.hotModules.get(data.file);
+
+    mod.handleAccept();
+  });
+
+  window.ws = ws;
+}
+</code></pre>
+<pre><code class="lang-js">// framework code
+if (import.meta.hot) {
+  import.meta.hot.accept((newModule) =&gt; {
+    if (newModule) {
+      // Handle updates
+      // console.log(`Handling hot reload accept for ${import.meta.url}`);
+    }
+  });
+}
+</code></pre>
+<p>Here's what happens:</p>
+<ol>
+<li>When you make changes to a file (e.g., src/module.js), the server detects the change.</li>
+<li>The server sends a WebSocket message to the client.</li>
+<li>The client receives the message and triggers the <code>handleAccept</code> method of the corresponding HotModule.</li>
+<li>This re-imports the updated module and calls the callback function you provided in <code>import.meta.hot.accept</code>. (Only use <code>import.meta.hot.accept</code> in development environments, as it won't be available in production builds.)</li>
+</ol>
+<p>The manual HMR API is primarily intended for framework and tooling authors. As an end user, HMR is likely already handled for you in the framework specific starter templates. For example, when you create an app via <code>create-vite</code>, the selected templates (e.g. using @vitejs/plugin-vue, @vitejs/plugin-react, etc.) would have these pre-configured for you already.</p>
+<h2>Source Maps</h2>
+<p>Compressing the code can make debugging more difficult - The code you write is not the code you run. Source maps remove this problem by mapping your compiled code back to the original code, they can help you quickly find the source of an error.</p>
+<p>Once you've compiled and minified your code, normally alongside it will exist a sourceMap file (for example, <code>example.min.js.map</code> and <code>styles.css.map</code>). The bundler will add a source map location comment <code>//# sourceMappingURL=/path/to/file.js.map</code> at the end of every generated bundle, which is required to signify to the browser devtools that a source map is available. Another type of source map is inline which has a base64 data URL like <code># sourceMappingURL=data:application/json;base64,xxx...</code></p>
+<p>Here's an example of a source map:</p>
+<pre><code class="lang-js">{
+  "version": 3,
+  "file": "example.min.js.map",
+  "names": ["document","querySelector", ...],
+  "sources": ["src/script.ts"],
+  "sourcesContent": ["document.querySelector('button')..."],
+  "mappings": "AAAAA,SAASC,cAAc,WAAWC, ...",
+}
+</code></pre>
+<p>The most important part of a source map is the <code>mappings</code> field. It uses encoded strings to map lines and locations in the compiled file to the corresponding original file.</p>
+<pre><code>step 1: Convert base64 (A-Za-z0-9+/) to binary. Ending with 1 means negative
+AAKA -&gt; 000000 000000 001010 000000
+
+step 2: Ignore the first and last bits
+AAKA -&gt; 0000 0000 0101 0000
+
+step 3: Convert to base 10
+AAKA -&gt; 0 0 5 0
+
+The number means: col 0 is mapping to source[0] line 5, col 0
+
+SAAMA -&gt; 9 0 0 6 0
+The numbers are relative to the previous mapping. The last extra number maps to `names` field.
+It means: col 9 is mapping to source[0] line 5, col 6
+</code></pre>
+<p>You can view this mapping using a source map visualizer like <a href="https://sokra.github.io/source-map-visualization">source-map-visualization</a>. For example, the entry <code>65 -&gt; 2:2</code> means:</p>
+<ul>
+<li>Generated code: The word <code>const</code> starts at position 65 in the compressed content.</li>
+<li>Original code: The word <code>const</code> starts at line 2 and column 2 in the original content.</li>
+</ul>
+<blockquote><p>Source mappings aren't always as complete as you need them to be. For example, a variable can be optimized away during the build process. In this case, when you debug the code, developer tools might not be able to infer and display the actual value.</p>
+</blockquote>
+<p>Source maps support custom extension fields that start with an <code>x_</code> prefix. Chrome DevTools parses the <code>x_google_ignoreList</code> field in source maps to filter out generated code and let web developers focus only on the code they author.</p>
+<pre><code class="lang-js">{
+  "version": 3,
+  "mappings": "AAAAA, ..." 
+  "sources": [
+    "app.js",
+    "components/Button.ts",
+    "node_modules/.../framework.js",
+    "node_modules/.../library.js",
+    ...
+  ],
+  "x_google_ignoreList": [2, 3],
+}
+</code></pre>
