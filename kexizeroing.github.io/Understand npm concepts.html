@@ -6,7 +6,7 @@ slug: understand-npm-concepts
 description: ""
 added: "Dec 14 2022"
 tags: [web]</p>
-<h2>updatedDate: "July 17 2024"</h2>
+<h2>updatedDate: "Aug 26 2024"</h2>
 <h3>package.json and package-lock.json</h3>
 <p><code>package-lock.json</code> (called package locks, or lockfiles) is automatically generated for any operations where npm modifies either the <code>node_modules</code> tree or <code>package.json</code>. This file is intended to be committed into source repositories. The purpose of the <code>package-lock.json</code> is to avoid the situation where installing modules from the same <code>package.json</code> results in two different installs. <code>package-lock.json</code> is a large list of each dependency listed in your <code>package.json</code>, the specific version that should be installed, the location (URI) of the module, a hash that verifies the integrity of the module, the list of packages it requires.</p>
 <ol>
@@ -27,6 +27,29 @@ tags: [web]</p>
 </ul>
 </blockquote>
 <p>&lt;img alt="package-code-entries" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/package-code-entries.png" width="700" /&gt;</p>
+<h4>Read <a href="https://www.totaltypescript.com/how-to-create-an-npm-package">How To Create An NPM Package</a> by Total TypeScript</h4>
+<p>Create a <code>package.json</code> with:</p>
+<ul>
+<li><code>files</code> is an array of files that should be included when people install your package. In this case, we're including the <code>dist</code> folder. <code>README.md</code>, <code>package.json</code> and <code>LICENSE</code> are included by default.</li>
+<li><code>type</code> is set to <code>module</code> to indicate that your package uses ECMAScript modules, not CommonJS modules.</li>
+</ul>
+<p><a href="https://github.com/arethetypeswrong/arethetypeswrong.github.io">@arethetypeswrong/cli</a> is a tool that checks if your package exports are correct. Add a script <code>"check-exports": "attw --pack ."</code> to check if all exports from your package are correct.</p>
+<p>Add a <code>main</code> field to your package.json with <code>"main": "dist/index.js"</code>, and our package is compatible with systems running ESM.</p>
+<pre><code>npm run check-exports
+┌───────────────────┬──────────────────────────────┐
+│                   │ "tt-package-demo"            │
+├───────────────────┼──────────────────────────────┤
+│ node10            │ 🟢                           │
+├───────────────────┼──────────────────────────────┤
+│ node16 (from CJS) │ ⚠️ ESM (dynamic import only) │
+├───────────────────┼──────────────────────────────┤
+│ node16 (from ESM) │ 🟢 (ESM)                     │
+├───────────────────┼──────────────────────────────┤
+│ bundler           │ 🟢                           │
+└───────────────────┴──────────────────────────────┘
+</code></pre>
+<p>If you want to publish both CJS and ESM code, you can use <code>tsup</code>. This is a tool built on top of esbuild that compiles your TypeScript code into both formats. We'll now be running <code>tsup</code> to compile our code instead of <code>tsc</code>.</p>
+<p>Add an <code>exports</code> field to your <code>package.json</code>, which tells programs consuming your package how to find the CJS and ESM versions of your package. In this case, we're pointing folks using <code>import</code> to <code>dist/index.js</code> and folks using <code>require</code> to <code>dist/index.cjs</code>. Run <code>check-exports</code> again, everything is green.</p>
 <h3>npm install and npm ci</h3>
 <p><code>npm install</code> reads <code>package.json</code> to create a list of dependencies and uses <code>package-lock.json</code> to inform which versions of these dependencies to install. If a dependency is not in <code>package-lock.json</code> it will be added by <code>npm install</code>.</p>
 <p><code>npm ci</code> (named after <strong>C</strong>ontinuous <strong>I</strong>ntegration) installs dependencies directly from <code>package-lock.json</code> and uses <code>package.json</code> only to validate that there are no mismatched versions. If any dependencies are missing or have incompatible versions, it will throw an error. It will delete any existing <code>node_modules</code> folder to ensure a clean state. It never writes to <code>package.json</code> or <code>package-lock.json</code>. It does however expect a <code>package-lock.json</code> file in your project — if you do not have this file, <code>npm ci</code> will not work and you have to use <code>npm install</code> instead.</p>
