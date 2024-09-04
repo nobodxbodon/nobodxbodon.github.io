@@ -7,7 +7,7 @@ description: ""
 added: ""
 top: true
 order: 5</p>
-<h2>updatedDate: "Aug 21 2024"</h2>
+<h2>updatedDate: "Sep 2 2024"</h2>
 <p>更全面的准备可以参考:</p>
 <ul>
 <li><a href="https://hzfe.github.io/awesome-interview">https://hzfe.github.io/awesome-interview</a></li>
@@ -52,7 +52,7 @@ order: 5</p>
     }
 
     const times = Math.min(maxNum, urls.length);
-    for(let i = 0; i &lt; times; i++) {
+    for (let i = 0; i &lt; times; i++) {
       request();
     }
   })
@@ -270,7 +270,7 @@ function add(A, B) {
     t %= 10
 
     sum = (i === ML &amp;&amp; carry)
-      ? carry * 10 + t + sum
+      ? (carry * 10 + t) + sum
       : t + sum
   }
 
@@ -320,4 +320,134 @@ app.compose();  // Logs: 1, 3, 5, 6, 4, 2
 };
 
 app.compose = compose(app.middlewares);
+</code></pre>
+<ol>
+<li>You need to send to the browser is HTML — not a JSON tree. Write a function that turns your JSX to an HTML string. That's what React's built-in <code>renderToString</code> does.</li>
+</ol>
+<pre><code class="lang-js">// written by Dan Abramov
+// {
+//   $$typeof: Symbol("react.element"),
+//   type: "div",
+//   props: { children: "Hello" },
+// }
+async function renderJSXToHTML(jsx) {
+  if (typeof jsx === "string" || typeof jsx === "number") {
+    // This is a string. Escape it and put it into HTML directly.
+    return escapeHtml(jsx);
+  } else if (jsx == null || typeof jsx === "boolean") {
+    // This is an empty node. Don't emit anything in HTML for it.
+    return "";
+  } else if (Array.isArray(jsx)) {
+    const childHtmls = await Promise.all(
+      jsx.map((child) =&gt; renderJSXToHTML(child))
+    );
+    return childHtmls.join("");
+  } else if (typeof jsx === "object") {
+    // Check if this object is a React JSX element.
+    if (jsx.$$typeof === Symbol.for("react.element")) {
+      if (typeof jsx.type === "string") {
+        let html = "&lt;" + jsx.type;
+        for (const propName in jsx.props) {
+          if (jsx.props.hasOwnProperty(propName) &amp;&amp; propName !== "children") {
+            html += " ";
+            html += propName;
+            html += "=";
+            html += escapeHtml(jsx.props[propName]);
+          }
+        }
+        html += "&gt;";
+        html += await renderJSXToHTML(jsx.props.children);
+        html += "&lt;/" + jsx.type + "&gt;";
+        return html;
+      } else if (typeof jsx.type === "function") {
+        // Call the component with its props, and turn its returned JSX into HTML.
+        const Component = jsx.type;
+        const props = jsx.props;
+        const returnedJsx = await Component(props);
+        return renderJSXToHTML(returnedJsx);
+      }
+    }
+  };
+}
+</code></pre>
+<ol>
+<li>Implement a simplified version of Vue reactivity system.</li>
+</ol>
+<pre><code class="lang-js">let activeEffect = null;
+
+function reactive(target) {
+  const depsMap = new Map();
+
+  const handler = {
+    get(target, key, receiver) {
+      if (!depsMap.has(key)) {
+        depsMap.set(key, new Set());
+      }
+      const dep = depsMap.get(key);
+      track(dep);
+      return Reflect.get(target, key, receiver);
+    },
+    set(target, key, value, receiver) {
+      const result = Reflect.set(target, key, value, receiver);
+      if (depsMap.has(key)) {
+        const dep = depsMap.get(key);
+        trigger(dep);
+      }
+      return result;
+    }
+  };
+
+  return new Proxy(target, handler);
+}
+
+function track(dep) {
+  if (activeEffect) {
+    dep.add(activeEffect);
+  }
+}
+
+function trigger(dep) {
+  dep.forEach(effect =&gt; effect());
+}
+</code></pre>
+<ol>
+<li>Check if an object has circular references.</li>
+</ol>
+<pre><code class="lang-js">// `JSON.stringify` throws if one attempts to encode an object with circular references.
+function hasCircularReference(obj) {
+  try {
+    JSON.stringify(obj);
+    return false;
+  } catch (e) {
+    return true;
+  }
+}
+
+// use `WeakSet`
+// 1. don’t need to worry about cleaning up the references manually.
+// 2. O(1) time complexity.
+// 3. specifically designed to store objects.
+function hasCircularReference(obj) {
+  const seenObjects = new WeakSet();
+
+  function detect(obj) {
+    if (obj &amp;&amp; typeof obj === 'object') {
+      if (seenObjects.has(obj)) {
+        return true;
+      }
+      seenObjects.add(obj);
+
+      for (let key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          if (detect(obj[key])) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  return detect(obj);
+}
 </code></pre>
