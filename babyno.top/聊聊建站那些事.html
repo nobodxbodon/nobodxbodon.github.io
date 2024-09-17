@@ -1,0 +1,169 @@
+<h2><a href="https://github.com/caol64/caol64.github.io/blob/master/content/posts/2024/2024-09-10-lets-talk-about-website-building.md">仓库源文</a>，<a href="https://babyno.top/posts/2024/09/10/lets-talk-about-website-building">站点原文</a></h2>
+<hr/>
+<p>author: 路边的阿不
+title: 聊聊建站那些事
+slug: lets-talk-about-website-building
+description: ""
+date: 2024-09-10 11:41:16
+draft: false
+ShowToc: true
+TocOpen: true
+tags:</p>
+<ul>
+<li>Cloudflare</li>
+<li>Svelte
+categories:</li>
+<li>建站</li>
+</ul>
+<hr/>
+<p>这两天建了个<a href="https://yuzhi.tech/">新站</a>，与<a href="https://babyno.top/posts/2023/11/new-hugo-blog/">本博客建站</a>过程不同，因此想写篇文章记录下。</p>
+<h2>网站功能设计</h2>
+<p>最近上线了一个APP，因此需要一个网站来做产品说明，正好我还有一些其它待上线的项目，因此该网站的核心功能暂定为：</p>
+<ul>
+<li>产品目录</li>
+<li>产品介绍</li>
+<li>产品文档</li>
+</ul>
+<p>于是就有了网站最初的目录结构：</p>
+<ul>
+<li>网站首页</li>
+<li>产品首页</li>
+<li>产品详情页</li>
+<li>文档首页</li>
+<li>文档详情页</li>
+<li>隐私政策页</li>
+</ul>
+<p>这里的隐私政策页是APP上线必须的。</p>
+<h2>技术选型</h2>
+<p>以简单为第一原则，现阶段的网站只需要静态页面即可。因此选择<code>Cloudflare Pages</code>作为托管服务，<code>svelte</code>作为开发框架。</p>
+<p><code>Cloudflare Pages</code>不仅免费托管，还免流量费用，还能免费享受到全球网络优化服务，还有什么可吐槽的呢？（除了百度收录外）</p>
+<p><code>svelte</code>的简洁以及轻量级的特性特别适合这种轻量级网站的开发。</p>
+<h2>准备工作</h2>
+<ul>
+<li>一个域名</li>
+<li>一个网站<code>logo</code></li>
+<li>一个<code>favicon</code></li>
+<li>一个<code>github</code>仓库</li>
+</ul>
+<p>说说<code>logo</code>和<code>favicon</code>，我认为这两个非常重要，最好在网站推广前设计好。具体怎么设计，如果你是设计师出身，那大可不必担心。如果你非设计出身，那这方面的工作还是挺痛苦的。建议这里找专业设计师或者AI帮助你设计。不要让AI给你画设计图，这样基本没法用。让它给你画svg图像，并且给你代码，你用代码进行修改。介绍几个svg相关的工具和资源站：</p>
+<ul>
+<li><a href="https://iconpark.oceanengine.com/home">https://iconpark.oceanengine.com/home</a></li>
+<li><a href="https://www.svgviewer.dev/">https://www.svgviewer.dev/</a></li>
+<li><a href="https://yqnn.github.io/svg-path-editor/">https://yqnn.github.io/svg-path-editor/</a></li>
+</ul>
+<h2>开始编码</h2>
+<p>使用<code>svelte cli</code>创建项目。</p>
+<pre><code class="lang-shell">npm create svelte@latest yourApp
+</code></pre>
+<p>因为我们需要编译为静态网站，因此将<code>@sveltejs/adapter-auto</code>修改为<code>@sveltejs/adapter-static</code>。</p>
+<pre><code class="lang-shell">npm uninstall @sveltejs/adapter-auto
+npm i -D @sveltejs/adapter-static
+</code></pre>
+<p>如果遇到<code>@sveltejs/adapter-static: all routes must be fully prerenderable, but found the following routes that are dynamic:</code></p>
+<p>在<code>routes</code>目录创建<code>+layout.ts</code>，添加：</p>
+<pre><code class="lang-javascript">export const prerender = true;
+</code></pre>
+<p>至此，你可以愉快的编写前端代码了，这里我没有太多的建议可以给你，我以前是后端开发。不过如果你使用了<code>tailwind</code>，我会推荐<a href="https://flowbite.com/docs/getting-started/introduction/"><code>flowbite</code>网站</a>，这里有很多开箱即用的组件。</p>
+<h2>访问统计</h2>
+<p>如果想添加网站用户流量分析，可以添加访问统计脚本。以下是添加<code>Google Analytics</code>的<code>svelte</code>组件代码。</p>
+<pre><code class="lang-typescript">&lt;script context="module" lang="ts"&gt;
+    declare const window: Window &amp; { dataLayer: any[]; };
+&lt;/script&gt;
+&lt;script lang="ts"&gt;
+    import { onMount } from "svelte";
+    const analyticsId = import.meta.env.VITE_ANALYTICS_ID;
+
+    if (analyticsId) {
+        onMount(async () =&gt; {
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push('js', new Date());
+            window.dataLayer.push('config', analyticsId);
+            var s = document.createElement('script');
+            s.src = `https://www.googletagmanager.com/gtag/js?id=${analyticsId}`;
+            s.async = true;
+            document.head.append(s);
+        });
+    }
+&lt;/script&gt;
+</code></pre>
+<h2>巧用环境变量</h2>
+<p>如果想让统计代码只有在生产环境启用，本地运行的时候不启用，可以使用环境变量来控制。以上面那段<code>Google Analytics</code>代码为例，此时你可以创建<code>.env.production</code>文件，在其中添加<code>VITE_ANALYTICS_ID</code>变量。这样当使用<code>vite build</code>命令进行构建的时候，就会搜索到环境变量了。</p>
+<p>此功能<code>Cloudflare Pages</code>同样提供，你需要提前在上面设置。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2024-09-10-lets-talk-about-website-building/1.webp"/></p>
+<h2>自动生成sitemap</h2>
+<p>网站地图是搜索引擎索引你网站的向导，我们可以自己编写脚本实现。具体思路是每次编译完成后，写一个脚本自动将html页面收集起来生成<code>sitemap.xml</code>。</p>
+<p>在<code>package.json</code>文件中添加<code>postbuild</code>命令：</p>
+<pre><code class="lang-json">"scripts": {
+        "dev": "vite dev",
+        "build": "vite build",
+        "postbuild": "node scripts/generate-sitemap.js"
+    },
+</code></pre>
+<p><code>generate-sitemap.js</code>内容如下：</p>
+<pre><code class="lang-javascript">// scripts/generate-sitemap.js
+
+import { fileURLToPath } from 'url';
+import { dirname, resolve, join } from 'path';
+import fs from 'fs';
+import glob from 'glob';
+
+// 获取当前模块文件的路径
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// 获取项目根目录的路径
+const projectRoot = resolve(__dirname, '..');
+
+// 设置 build 目录的路径
+const buildDir = join(projectRoot, 'build');
+const sitemapPath = join(buildDir, 'sitemap.xml');
+
+// 生成 sitemap 的函数
+function generateSitemap() {
+    // 查找 build 目录下的所有 HTML 文件
+    glob(`${buildDir}/**/*.html`, (err, files) =&gt; {
+        if (err) {
+            console.error('查找 HTML 文件时出错:', err);
+            process.exit(1);
+        }
+
+        // 生成 sitemap 的 XML 内容
+        const urls = files
+        .map(file =&gt; {
+            const url = file
+                .replace(buildDir, '')
+                .replace(/index.html$/, '')
+                .replace(/\\/g, '/')
+                .replace(/\.html$/, '');
+            return `    &lt;url&gt;&lt;loc&gt;https://your.site${url}&lt;/loc&gt;&lt;/url&gt;`;
+        }).join('\n');
+
+        const sitemap = `&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"&gt;
+${urls}
+&lt;/urlset&gt;`;
+
+        if (fs.existsSync(sitemapPath)) {
+            console.log('sitemap.xml 已存在，将会被覆盖。');
+        }
+
+        // 将 sitemap 写入文件
+        fs.writeFileSync(sitemapPath, sitemap, 'utf8');
+        console.log('Sitemap 生成成功!');
+    });
+}
+
+// 运行生成 sitemap 的函数
+generateSitemap();
+</code></pre>
+<p>如此，每次运行<code>build</code>命令后，就会生成<code>sitemap</code>。</p>
+<h2>自动部署</h2>
+<p>测试的差不多以后先将代码提交到<code>github</code>。此时去<code>cloudflare</code>创建一个新的<code>pages</code>，并且按照提示连接到<code>github</code>仓库。然后设置“构建配置”：</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2024-09-10-lets-talk-about-website-building/2.webp"/></p>
+<p>如果你有自己的域名，在这里设置：</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2024-09-10-lets-talk-about-website-building/3.webp"/></p>
+<p>如此设置完后，以后每次提交代码到<code>github</code>，你的网站都会自动部署。</p>
+<h2>上线后</h2>
+<p>上线后第一件事当然是向各搜索引擎提交你的网站了，以<code>google</code>为例，访问<a href="https://search.google.com/search-console，将`sitemap`提交上去，然后就等待收录吧。">https://search.google.com/search-console，将`sitemap`提交上去，然后就等待收录吧。</a></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2024-09-10-lets-talk-about-website-building/4.webp"/></p>
+<p>最后说下百度，百度对建在<code>ckoudflare</code>上的网站收录不友好，因此如果你的网站极度依赖百度收录，可能需要其它的方案。</p>

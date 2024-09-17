@@ -6,7 +6,7 @@ slug: start-js-stack-project
 description: ""
 added: "Jun 16 2022"
 tags: [web]</p>
-<h2>updatedDate: "Aug 25 2024"</h2>
+<h2>updatedDate: "Sep 10 2024"</h2>
 <h2>Start a modern web project</h2>
 <pre><code class="lang-sh"># `npm create` is an alias for `npm init`
 npm create vite@latest
@@ -104,8 +104,8 @@ console.log(module)  // { exports: { name: 'Bob', add: [Function] } }
 </code></pre>
 <p><code>require</code> keyword refers to a function which is used to import all the constructs exported using the <code>module.exports</code> from another module. The value returned by the <code>require</code> function in module y is equal to the <code>module.exports</code> object in the module x. The require function takes in an argument which can be a name or a path. You should provide the name as an argument when you are using the third-party modules or core modules provided by NPM. On the other hand, when you have custom modules defined by you, you should provide the path of the module as the argument.</p>
 <p>Modules are cached after the first time they are loaded. This means every call to <code>require('foo')</code> will get exactly the same object returned, if it would resolve to the same file.</p>
-<h3>browserslist and postcss</h3>
-<p>The <a href="https://github.com/browserslist/browserslist">browserslist</a> configuration (either in <code>package.json</code> or <code>.browserslistrc</code>) uses <code>caniuse</code> data (<a href="https://caniuse.com/usage-table">https://caniuse.com/usage-table</a>) for queries to control the outputted JS/CSS so that the emitted code will be compatible with the browsers specified. It will be installed with webpack and used by many popular tools like autoprefixer, babel-preset-env. You can find these tools require <code>browserslist</code> in the <code>package-lock.json</code> file.</p>
+<h3>browserslist and postcss for compatibility</h3>
+<p>The <a href="https://github.com/browserslist/browserslist">browserslist</a> configuration <em>(either in <code>package.json</code> or <code>.browserslistrc</code>)</em> uses <code>caniuse</code> data for queries to control the outputted JS/CSS so that the emitted code will be compatible with the browsers specified. It will be installed with webpack and used by many popular tools like autoprefixer, babel-preset-env. You can find these tools require <code>browserslist</code> in the <code>package-lock.json</code> file.</p>
 <ul>
 <li>There is a <code>defaults</code> query (<code>&gt; 0.5%, last 2 versions, Firefox ESR, not dead</code>), which gives a reasonable configuration for most users.</li>
 <li>If you want to change the default set of browsers, we recommend combining <code>last 2 versions</code>, <code>not dead</code> with a usage number like <code>&gt; 0.2%</code>.</li>
@@ -113,22 +113,38 @@ console.log(module)  // { exports: { name: 'Bob', add: [Function] } }
 <li>Display target browsers from a browserslist config: <a href="https://browsersl.ist/#q=defaults">https://browsersl.ist/#q=defaults</a></li>
 <li>Run <code>npx browserslist</code> in project directory to see what browsers was selected by your queries.</li>
 </ul>
-<p><code>PostCSS</code> is a tool for transforming CSS with JavaScript plugins. It provides features via its extensive plugin ecosystem to help improve the CSS writing experience. Plugins for just about <a href="https://www.postcss.parts">anything</a>. For example:</p>
+<p><code>PostCSS</code> is a tool for transforming CSS with JavaScript plugins. It provides features via its extensive plugin ecosystem to help improve the CSS writing experience. Currently, PostCSS has more than 200 plugins.</p>
 <ul>
-<li><a href="https://github.com/postcss/autoprefixer">Autoprefixer</a> is one of the many popular PostCSS plugins.</li>
+<li><a href="https://github.com/postcss/autoprefixer">Autoprefixer</a> is one of the many popular PostCSS plugins. It doesn't add polyfills, only adds prefixes.</li>
 <li><a href="https://github.com/postcss/postcss-import">postcss-import</a> to transform <code>@import</code> rules by inlining content. (<code>postcss-import</code> is different than the import rule in native CSS. You should avoid the import rule in native CSS, since it can prevent stylesheets from being downloaded concurrently which affects the loading speed and performance.)</li>
-<li><a href="https://www.npmjs.com/package/postcss-preset-env">postcss-preset-env</a> lets you convert modern CSS into something most browsers can understand, which is similar to <code>@babel/preset-env</code>.</li>
+<li><a href="https://www.npmjs.com/package/postcss-preset-env">postcss-preset-env</a> is a plugin that allows you to use modern CSS features while automatically adding the necessary fallbacks for older browsers, based on the specified compatibility targets. It includes <code>Autoprefixer</code> as part of its feature set. </li>
 <li><a href="https://cssnano.co">cssnano</a> is a compression tool written on top of the PostCSS ecosystem to compact CSS appropriately.</li>
 </ul>
 <pre><code class="lang-js">// postcss.config.js
+// This will take care of both vendor prefixes and polyfills
 module.exports = {
   plugins: [
-    require('postcss-import'),
-    require('postcss-preset-env')({ stage: 1 }),
-    require('cssnano'),
+    require('postcss-preset-env')({
+      stage: 3, // Determines which CSS features to polyfill. Default is 2
+      features: {
+        // https://github.com/csstools/postcss-plugins/blob/main/plugin-packs/postcss-preset-env/FEATURES.md
+        'nesting-rules': true
+      },
+      browsers: 'last 2 versions, &gt; 1%, not ie &lt;= 8'
+    })
   ]
-}
+};
 </code></pre>
+<pre><code class="lang-js">module.exports = {
+  plugins: [
+    require('autoprefixer')({
+      overrideBrowserslist: ['last 2 versions', '&gt; 1%', 'not ie &lt;= 8']
+    })
+  ]
+};
+</code></pre>
+<blockquote><p>PostCSS itself is a Node.js module that parses CSS into an abstract syntax tree (AST); passes that AST through any number of "plugin" functions; and then converts that AST back into a string, which you can output to a file. PostCSS plugins can do pretty much whatever they want with the parsed CSS.</p>
+</blockquote>
 <h3>Polyfills and Transpilers</h3>
 <p>When Babel compiles your code, what it's doing is taking your syntax and running it through various syntax transforms in order to get browser compatible syntax. What it's not doing is adding any new JavaScript primitives or any properties you may need to the browser's global namespace. One way you can think about it is that when you compile your code, you're transforming it. When you add a polyfill, you're adding new functionality to the browser. For example, Babel can transform <code>arrow functions</code> into regular functions, so, they can be compiled. However, there's nothing Babel can do to transform <code>Promises</code> or <code>Math.trunc</code> into native syntax that browsers understand, so they need to be polyfilled.</p>
 <p>With syntax transforms, I recommend <code>babel-preset-env</code>. For polyfills, the most popular one is <code>core-js</code>.</p>
