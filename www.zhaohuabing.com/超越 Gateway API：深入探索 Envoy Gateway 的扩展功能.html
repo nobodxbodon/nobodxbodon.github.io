@@ -11,11 +11,12 @@ published: true
 tags: [Envoy, Envoy Gateway]
 categories: [Tech,Open Source]</p>
 <h2>showtoc: true</h2>
-&lt;center&gt;大阪的城市天际线 - 摄于日本大阪，2024 年夏&lt;/center&gt;<blockquote><p>本文是我在 2024 年 8 月于香港举行的 Kubecon China 上的技术分享：<a href="https://kccncossaidevchn2024.sched.com/event/1eYcX/gateway-api-and-beyond-introducing-envoy-gateways-gateway-api-extensions-jie-api-daeptao-envoyjie-zha-jie-api-huabing-zhao-tetrate">Gateway API and Beyond: Introducing Envoy Gateway's Gateway API Extensions</a> 的内容总结。</p>
+&lt;center&gt;大阪的城市天际线 - 摄于日本大阪，2024 年夏&lt;/center&gt;<blockquote><p>本文是我在 2024 年 8 月于香港举行的 Kubecon China 上的技术分享：<a href="https://kccncossaidevchn2024.sched.com/event/1eYcX/gateway-api-and-beyond-introducing-envoy-gateways-gateway-api-extensions-jie-api-daeptao-envoyjie-zha-jie-api-huabing-zhao-tetrate">Gateway API and Beyond: Introducing Envoy Gateway's Gateway API Extensions¹</a> 的内容总结。</p>
 </blockquote>
-<p>Envoy Gateway 作为 Envoy 社区推出的 Ingress Gateway 实现，全面支持了 Kubernetes Gateway API 的所有能力。除此之外，基于 Gateway API 的扩展机制，Envoy Gateway 还提供了丰富的流量管理、安全性、自定义扩展等 Gateway API 中不包含的增强功能。本文将介绍 Envoy Gateway 的 Gateway API 扩展功能，并深入探讨这些功能的应用场景。</p>
+<p>{{&lt; youtube qH2byF7SDO8 &gt;}}</p>
+<p><a href="https://github.com/envoyproxy/gateway">Envoy Gateway²</a> 作为 Envoy 社区推出的 Ingress Gateway 实现，全面支持了 <a href="https://gateway-api.sigs.k8s.io">Kubernetes Gateway API³</a> 的所有能力。除此之外，基于 Gateway API 的扩展机制，Envoy Gateway 还提供了丰富的流量管理、安全性、自定义扩展等 Gateway API 中不包含的增强功能。本文将介绍 Envoy Gateway 的 Gateway API 扩展功能，并深入探讨这些功能的应用场景。</p>
 <h2>Kubernets Ingerss 的现状与问题</h2>
-<p>Ingress 是 Kubernetes 中定义集群入口流量规则的 API 对象。Ingress API 为用户提供了定义 HTTP 和 HTTPS 路由规则的能力，但是 &lt;font color="red"&gt;**Ingress API 的功能有限，只提供了按照 Host、Path 进行路由和 TLS 卸载的基本功能**&lt;/font&gt;。这些功能在实际应用中往往无法满足复杂的流量管理需求，导致用户需要通过 Annotations 或者自定义 API 对象来扩展 Ingress 的功能。</p>
+<p><a href="https://kubernetes.io/docs/concepts/services-networking/ingres">Ingress⁴</a> 是 Kubernetes 中定义集群入口流量规则的 API 对象。Ingress API 为用户提供了定义 HTTP 和 HTTPS 路由规则的能力，但是 &lt;font color="red"&gt;**Ingress API 的功能有限，只提供了按照 Host、Path 进行路由和 TLS 卸载的基本功能**&lt;/font&gt;。这些功能在实际应用中往往无法满足复杂的流量管理需求，导致用户需要通过 Annotations 或者自定义 API 对象来扩展 Ingress 的功能。</p>
 <p>例如，一个很常见的需求是采用正则表达式对请求的 Path 进行匹配，但是 Ingress API 只支持 Prefix 和 Exact 两种 Path 匹配方式，无法满足这个需求。</p>
 <p>为了处理这个简单的需求，一些 Ingress Controller 实现提供了 Annotations 来支持正则表达式 Path 匹配，例如 Nginx Ingress Controller 的 <code>nginx.org/path-regex</code> Annotation。</p>
 <pre><code class="lang-yaml">apiVersion: networking.k8s.io/v1
@@ -85,7 +86,7 @@ spec:
           port: 80
 </code></pre>
 <p>虽然 Gateway API 提供了比 Ingress 更丰富的功能，但是&lt;font color="red"&gt;**任何一个标准，不管定义得多么完善，理论上都只能是其所有实现的最小公约数**&lt;/font&gt;。Gateway API 也不例外。Gateway API 作为一个通用的 API 规范，为了保持通用性，无法对一些和具体实现细节相关的功能提供直接的支持。例如，虽然请求限流、权限控制等功能在实际应用中非常重要，但是不同的数据平面如 Envoy，Nginx 等的实现方式各有不同，因此 Gateway API 无法提供一个通用的规范来支持这些功能。Ingress API 就是由于这个原因，导致了 Annotations 和自定义 API 对象的泛滥。</p>
-<p>Gateway API 中创新的地方在于，它提供了 <a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment/">Policy Attachment</a> 扩展机制，允许用户在&lt;font color="red"&gt;**不修改 Gateway API 的情况下，通过关联自定义的 Policy 对象到 Gateway 和 xRoute 等资源对象上，以实现对流量的自定义处理**&lt;/font&gt;。Policy Attachment 机制为 Gateway API 提供了更好的可扩展性，使得 Gateway API 可以支持更多的流量管理、安全性、自定义扩展等功能。此外，Gateway API 还支持将自定义的 Backend 对象关联到 HTTPRoute 和 GRPCRoute 等资源对象上，以支持将流量路由到自定义的后端服务。支持在 HTTPRoute  和 GRPCRoute 的规则中关联自定义的 Filter 对象，以支持对请求和响应进行自定义处理。</p>
+<p>Gateway API 中创新的地方在于，它提供了 <a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment/">Policy Attachment⁵</a> 扩展机制，允许用户在&lt;font color="red"&gt;**不修改 Gateway API 的情况下，通过关联自定义的 Policy 对象到 Gateway 和 xRoute 等资源对象上，以实现对流量的自定义处理**&lt;/font&gt;。Policy Attachment 机制为 Gateway API 提供了更好的可扩展性，使得 Gateway API 可以支持更多的流量管理、安全性、自定义扩展等功能。此外，Gateway API 还支持将自定义的 Backend 对象关联到 HTTPRoute 和 GRPCRoute 等资源对象上，以支持将流量路由到自定义的后端服务。支持在 HTTPRoute  和 GRPCRoute 的规则中关联自定义的 Filter 对象，以支持对请求和响应进行自定义处理。</p>
 <p>通过这些内建的扩展机制，Gateway API 既保持了 Gateway，HTTPRoute 等核心资源对象的通用性，保证了不同实现之间对核心功能的兼容性；又为不同 Controller 实现在 Gateway API 的基础上进行功能扩展提供了一个统一的规范，让不同的 Ingress Controller 实现可以在 Gateway API 的基础上，通过自定义的 Policy、Backend、Filter 等资源对象来实现更多自己独有的增强功能。</p>
 <p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/1.png"/></p>
 &lt;center&gt;Ingerss 和 Gateway API 的对比&lt;/center&gt;<h2>Envoy Gateway 的 Gateway API 扩展功能</h2>
@@ -100,7 +101,7 @@ spec:
 <p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/Envoy-Gateway-Resources.png"/></p>
 &lt;center&gt;Envoy Gateway 的资源对象&lt;/center&gt;<p>下面我们将详细介绍 Envoy Gateway 的 Gateway API 扩展功能，并深入探讨这些功能的应用场景。</p>
 <h2>Policy Attachment 扩展机制</h2>
-<p><a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment/">Policy Attachment</a> 是 Gateway API 提供的一个扩展机制，允许将一个 Policy 对象关联到 GatewayClass、Gateway、HTTPRoute、GRPCRoute 和 Service 等资源对象上，以实现对流量的自定义处理。Envoy Gateway 通过 Policy Attachment 机制提供了丰富的 Policy 对象，用于实现对流量的自定义处理。Envoy Gateway 对 Policy Attachment 的生效范围和优先级的规定如下：</p>
+<p><a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment/">Policy Attachment⁵</a> 是 Gateway API 提供的一个扩展机制，允许将一个 Policy 对象关联到 GatewayClass、Gateway、HTTPRoute、GRPCRoute 和 Service 等资源对象上，以实现对流量的自定义处理。Envoy Gateway 通过 Policy Attachment 机制提供了丰富的 Policy 对象，用于实现对流量的自定义处理。Envoy Gateway 对 Policy Attachment 的生效范围和优先级的规定如下：</p>
 <ul>
 <li>父资源上关联的 Policy 对其所有子资源生效。<ul>
 <li>Gateway 上关联的 Policy 对该 Gateway 中的所有 Listener 生效。（ClientTrafficPolicy）</li>
@@ -149,7 +150,7 @@ spec:
 <h1>SecurityPolicy：安全策略</h1>
 <p>SecurityPolicy 用于对请求进行访问控制，包括 CORS 策略、用户认证、权限控制等。SecurityPolicy 的作用原理如下图所示：</p>
 <p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/6.png"/></p>
-&lt;center&gt;SecurityPolicy 资源的作用原理&lt;/center&gt;<p>上图是一个逻辑视图，实际上并没有一个单独的 Acces Controll 组件，Envoy Gateway 会将 SecurityPolicy 的配置应用到 Envoy 的 Filter Chain 中，以实现对请求的访问控制。</p>
+&lt;center&gt;SecurityPolicy 资源的作用原理&lt;/center&gt;<p>注意上图是一个逻辑视图，Envoy Gateway 中并没有一个单独的 Acces Controll 组件。Envoy Gateway 会将 SecurityPolicy 的配置应用到 Envoy 的 Filter Chain 中，以实现对请求的访问控制。</p>
 <p>SecurityPolicy 支持下面这些配置选项：</p>
 <ul>
 <li>CORS 策略：配置跨域资源共享策略，包括允许的 Origin、Headers、Methods 等。</li>
@@ -192,9 +193,31 @@ spec:
 </ul>
 <p>总的来说，WebAssembly 扩展适合在数据处理路径上的一些简单的处理逻辑，而 External Process 则适合一些需要和外部系统交互的复杂逻辑。大家可以根据自己的需求和场景来选择使用 WebAssembly 还是 External Process 扩展。</p>
 <h2>EnvoyPatchPolicy：Envoy 配置补丁</h2>
-<p>Envoy 提供了丰富的配置选项，这些配置选项是用于控制面
-Envoy Gateway 通过 Gateway API 和各种 Policy 资源简化了对 Envoy 配置的管理。这些面向用户的 API 
-提供了对 Envoy 配置的控制。但是有时候用户可能需要对 Envoy 的配置进行一些微调，例如修改 Envoy 的 Listener、Cluster、Route 等配置。为了实现这个目的，Envoy Gateway 提供了 EnvoyPatchPolicy 资源对象，用于对 Envoy 的配置进行补丁。</p>
-<p>To be continued...</p>
+<p>Envoy Gateway 通过 Gateway API 和各种 Policy 资源简化了对 Envoy 配置的管理。这些配置资源可以覆盖 99% 的用户场景，但是总有一些特定的需求无法通过这些配置资源来实现。在这种情况下，用户可以通过 EnvoyPatchPolicy 来对 Envoy 的配置打补丁。</p>
+<p>EnvoyPatchPolicy 的作用原理如下图所示：</p>
+<p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/13.png"/></p>
+&lt;center&gt;EnvoyPatchPolicy 资源的作用原理&lt;/center&gt;<p>EnvoyPatchPolicy 缺省情况下是未被启用的，用户需要在 Envoy Gateway 的配置中显式地启用 EnvoyPatchPolicy 才能生效。启用以后，用户可以通过 EnvoyPatchPolicy 可以对 Envoy Gateway 生成的 Envoy 配置中的 Listener、Cluster、Route 等的配置参数进行修改。</p>
+<p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/14.png"/></p>
+&lt;center&gt;EnvoyPatchPolicy 示例&lt;/center&gt;<p>该 EnvoyPatchPolicy 资源对 Envoy Gateway 生成的 Envoy 配置中的 Listener <code>default/eg/http</code> 进行了修改，在 Listener 的 Default Filter Chain 中的第一个 Filter （即是 Envoy 中处理 HTTP 协议的 <code>envoy.http_connection_manager</code>） 中添加了 localReplyConfig 参数。该配置将 404 错误的响应 码改为了406，同时将响应体改为了 <code>could not find what you are looking for</code>。</p>
+<p>从上面的例子中可以看到，EnvoyPatchPolicy 是一个非常强大的功能，可以用于对 Envoy 的配置进行任意的修改。</p>
+<p>EnvoyPatchPolicy 的应用直接依赖于 Envoy Gateway 生成的 Envoy 配置。例如上面例子中的 EnvoyPatchPolicy 依赖了 listener 的名称，以及其内部的 Filter Chain 结构。因此用户需要了解 Envoy Gateway 生成的 Envoy 配置的结构和规则，才能正确地使用 EnvoyPatchPolicy。</p>
+<p>一般来说，只建议在下面两种情况下使用 EnvoyPatchPolicy：</p>
+<ul>
+<li>在 Envoy Gateway 还没有提供对某个新特性的支持时，可以通过 EnvoyPatchPolicy 来临时实现这个特性。</li>
+<li>在某些特定的场景下，Envoy Gateway 生成的 Envoy 配置无法满足用户的需求时，可以通过 EnvoyPatchPolicy 来对 Envoy 配置进行修改。</li>
+</ul>
+<p>在创建 EnvoyPatchPolicy 前，我们可以通过 <code>egctl</code> 工具来查看原始的 Envoy 配置，以确定如何对 Envoy 配置进行修改。</p>
+<pre><code class="lang-bash">egctl config envoy-proxy all -oyaml
+</code></pre>
+<p>在编写好 EnvoyPatchPolicy 后，我们也可以通过 <code>egctl</code> 工具来验证采用 EnvoyPatchPolicy 打补丁后的 Envoy 配置是否符合预期。</p>
+<pre><code class="lang-bash">egctl experimental translate -f epp.yaml
+</code></pre>
+<p>需要注意的是，Envoy Gateway 版本的升级可能会导致 Envoy 配置的变化，从而导致原来的 EnvoyPatchPolicy 不再生效。因此我们在升级 Envoy Gateway 版本时，需要重新审视原来的 EnvoyPatchPolicy 是否还适用，是否需要进行修改。</p>
 <h2>参考</h2>
-<p><a href="https://static.sched.com/hosted_files/kccncossaidevchn2024/2b/Gateway%20API%20and%20Beyond_%20Introducing%20Envoy%20Gateway%27s%20Gateway%20API%20Extensions.pptx.pdf?_gl=1*12o6gcq*_gcl_au*OTA5NzEzMTU1LjE3MjQzMTQwMzEuOTE5NzQwMjIuMTcyNDMxNDYyNS4xNzI0MzE0NzE3*FPAU*OTA5NzEzMTU1LjE3MjQzMTQwMzE">演讲稿下载地址</a></p>
+<ol>
+<li><a href="https://kccncossaidevchn2024.sched.com/event/1eYcX/gateway-api-and-beyond-introducing-envoy-gateways-gateway-api-extensions-jie-api-daeptao-envoyjie-zha-jie-api-huabing-zhao-tetrate">KubeCon 演讲稿下载地址</a>：<a href="https://kccncossaidevchn2024.sched.com/event/1eYcX/gateway-api-and-beyond-introducing-envoy-gateways-gateway-api-extensions-jie-api-daeptao-envoyjie-zha-jie-api-huabing-zhao-tetrate">https://kccncossaidevchn2024.sched.com/event/1eYcX/gateway-api-and-beyond-introducing-envoy-gateways-gateway-api-extensions-jie-api-daeptao-envoyjie-zha-jie-api-huabing-zhao-tetrate</a></li>
+<li><a href="ttps://github.com/envoyproxy/gateway">Envoy Gateway GitHub 项目地址</a>：<a href="https://github.com/envoyproxy/gateway">https://github.com/envoyproxy/gateway</a></li>
+<li><a href="https://gateway-api.sigs.k8s.io">Kubernetes Gateway API</a>：<a href="https://gateway-api.sigs.k8s.io">https://gateway-api.sigs.k8s.io</a></li>
+<li><a href="https://kubernetes.io/docs/concepts/services-networking/ingress">Kubernetes Ingress API</a>：<a href="https://kubernetes.io/docs/concepts/services-networking/ingress">https://kubernetes.io/docs/concepts/services-networking/ingress</a></li>
+<li><a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment">Policy Attachment</a>：<a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment">https://gateway-api.sigs.k8s.io/reference/policy-attachment</a></li>
+</ol>

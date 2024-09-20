@@ -1,0 +1,64 @@
+<h2><a href="https://github.com/wa008/wa008.github.io/blob/master/blog/_posts/2024-09-19-validated-example.md">仓库源文</a>，<a href="https://informal.top/blog/2024/09/19/validated-example">站点原文</a></h2>
+<hr/>
+<p>layout: default</p>
+<h2>title: Validated example of LLM acceleration</h2>
+<h1>Theory of Fast Cross Entropy Loss</h1>
+<p>As a start of LLM acceleration project, I learnt <a href="https://unsloth.ai/blog/mistral-benchmark">Fast Cross Entropy Loss in unsloth</a>, it shows a better realize solution of cross entropy loss than default pytorch code.</p>
+<p>As default, pytorch will use log_softmax to realize CE loss, it's common for all solution, but, the target has only one valid value in the training process of LLM and other element are 0, this is the different part between LLM training and common CE, that's why LLM acceleration solution works.</p>
+<p>So, we can update the calculate process of CE as below</p>
+<p>$$
+\begin{align<em>}\label{2}
+&amp; CT(x, y)_i = -y_i(log(softmax(x))) \
+&amp; =-y_i(log(p_i)) \
+&amp; =-(log(\frac{exp(x_y)}{sum(exp(x))})) \
+&amp; =logsumexp(x) - x_y \
+\end{align</em>}
+$$</p>
+<p>After optimizaiton, this can reduce time complexity from $O(4n)$ to $O(2n)$, which can reduce the cost of time and GPU memory for the best suitation.</p>
+<p>This is all the theory of solution</p>
+<h1>Validation</h1>
+<p>Taking finetuning Gemma2 as example, I tried to compare the result of new CE loss and <a href="https://github.com/huggingface/transformers/blob/454a0f2efdf9f0d94b77ef08efabbdc6418c868d/src/transformers/trainer_pt_utils.py#L545">default one</a>, but I found some thing that I have never know before.</p>
+<p>(1) <a href="https://github.com/huggingface/transformers/blob/454a0f2efdf9f0d94b77ef08efabbdc6418c868d/src/transformers/trainer_pt_utils.py#L575">smoothed_loss</a></p>
+<p>There is a <a href="https://github.com/huggingface/transformers/blob/454a0f2efdf9f0d94b77ef08efabbdc6418c868d/src/transformers/trainer_pt_utils.py#L575">smoothed_loss</a> which is used in CE Loss except traditional log_softmax, which is the first noise during my validation.</p>
+<p>But I also realize it throught new method.</p>
+<p>(2) <a href="https://www.reddit.com/r/MachineLearning/comments/1fkbful/d_simple_question_torchfunction_vs">A trick that subtracting the max-logit to make softmax more stable</a></p>
+<p>After I realize above code and fine-tune Gemma2, I found it can reduce fine-tune time by 4.8%, but loss of new code didn't reduce by training step, so, I <a href="https://www.reddit.com/r/MachineLearning/comments/1fkbful/d_simple_question_torchfunction_vs/">ask help</a> in Machine Learning subreddit and get what I want.</p>
+<p>After applying subtracting max-logit to my code, it works, there almost zero differences for loss between default pytorch code and my new code, the loss as below:</p>
+<p>&lt;img src="/images/2024/09/001.png" width="600"&gt;</p>
+<p>This can prove that My new code have the same result compare to default official code.</p>
+<h1>Result</h1>
+<p>default offical key code:</p>
+<pre><code class="lang-python"># time complexity 2n for subtracting max-logit
+log_probs = -nn.functional.log_softmax(logits, dim=-1) # time complexity 4n
+
+nll_loss = log_probs.gather(dim=-1, index=labels) # 1n
+smoothed_loss = log_probs.sum(dim=-1, keepdim=True, dtype=torch.float32) # 1n
+</code></pre>
+<p>My new code:</p>
+<pre><code class="lang-python">logitsmax = logits.max(dim = -1)[0].unsqueeze(-1) # 1n
+logsumexp = ((logits - logitsmax.repeat(1, 1, logits.shape[-1])).exp().sum(dim = -1).log()).unsqueeze(-1) + logitsmax # 3n
+
+nll_loss = logsumexp - logits.gather(dim=-1, index=labels) # 0
+smoothed_loss = (logits.shape[-1] * logsumexp - logits.sum(dim = -1, keepdim=True, dtype = torch.float32)) # 1n
+</code></pre>
+<p>PS: In theory, time complexity reduce from $8n$ to $5n$, I'm not 100% confirm this value right and it's hard to prove that.</p>
+<p>In terms of time cost in finetune Gemma2, I only sample 100 sample(my fault) from <a href="https://huggingface.co/datasets/yahma/alpaca-cleaned">yahma/alpaca-cleaned</a> and run 60 steps two times for both official code and new code.</p>
+<table>
+<thead><tr>
+<th>offical CE Loss code</th>
+<th>New code</th>
+<th>differences</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>362.5s (average)</td>
+<td>352.5s</td>
+<td>2.8%</td>
+</tr>
+</tbody>
+</table>
+<h1>Conclusion</h1>
+<p>I validated the new method to calculate CE Loss and reduce time cost by 2.8%.</p>
+<p>In additional, using <a href="https://openai.com/index/triton/">Triton</a> to realize should have better performance.</p>
+<p>This is just a example for LLM acceleration, more similiar thing can be done to accelerate the process.</p>
