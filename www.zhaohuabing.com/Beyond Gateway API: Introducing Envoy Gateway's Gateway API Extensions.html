@@ -1,25 +1,25 @@
-<h2><a href="https://github.com/zhaohuabing/hugo_blog/blob/master/content/post/2024-08-31-Introducing Envoy Gateway's Gateway API Extensions.md">仓库源文</a>，<a href="https://www.zhaohuabing.com/post/2024-08-31-Introducing Envoy Gateway's Gateway API Extensions">站点原文</a></h2>
+<h2><a href="https://github.com/zhaohuabing/hugo_blog/blob/master/content/post/2024-09-22-Introducing Envoy Gateway's Gateway API Extensions-en.md">仓库源文</a>，<a href="https://www.zhaohuabing.com/post/2024-09-22-Introducing Envoy Gateway's Gateway API Extensions-en">站点原文</a></h2>
 <hr/>
-<p>layout:     post</p>
-<p>title:      "超越 Gateway API：深入探索 Envoy Gateway 的扩展功能"
+<p>layout:     post
+title:      "Beyond Gateway API: Introducing Envoy Gateway's Gateway API Extensions"
 subtitle:
-description: '作为 Envoy 社区推出的 Ingress Gateway 实现，Envoy Gateway 全面支持了 Kubernetes Gateway API 的所有能力。除此之外，基于 Gateway API 的扩展机制，Envoy Gateway 还提供了丰富的流量管理、安全性、自定义扩展等 Gateway API 中并不包含的增强功能。本文将介绍 Envoy Gateway 的 Gateway API 扩展功能，并深入探讨这些功能的应用场景。'
-author: "赵化冰（Envoy Gateway Maintainer）"
+description: 'As the official Gateway Controller for the Envoy, Envoy Gateway provides full support for all the features of the Kubernetes Gateway API. In addition, Envoy Gateway extends the Gateway API by introducing a range of enhancements for traffic management, security features, and custom extensions that go beyond the standard API. In this post, we’ll dive into these Envoy Gateway extensions and explore their use cases.'
+author: "Huabing Zhao（Envoy Gateway Maintainer）"
 date: 2024-08-31
 image: "/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/IMG_1624.JPG"
 published: true
 tags: [Envoy, Envoy Gateway]
 categories: [Tech,Open Source]</p>
 <h2>showtoc: true</h2>
-&lt;center&gt;大阪的城市天际线 - 摄于日本大阪，2024 年夏&lt;/center&gt;<blockquote><p>本文是我在 2024 年 8 月于香港举行的 Kubecon China 上的技术分享：<a href="https://kccncossaidevchn2024.sched.com/event/1eYcX/gateway-api-and-beyond-introducing-envoy-gateways-gateway-api-extensions-jie-api-daeptao-envoyjie-zha-jie-api-huabing-zhao-tetrate">Gateway API and Beyond: Introducing Envoy Gateway's Gateway API Extensions¹</a> 的内容总结。</p>
+&lt;center&gt;Osaka City Skyline, Taken in Osaka, Japan, Summer 2024&lt;/center&gt;<blockquote><p>This article is a summary of my talk,"<a href="https://kccncossaidevchn2024.sched.com/event/1eYcX/gateway-api-and-beyond-introducing-envoy-gateways-gateway-api-extensions-jie-api-daeptao-envoyjie-zha-jie-api-huabing-zhao-tetrate">Gateway API and Beyond: Introducing Envoy Gateway's Gateway API Extensions¹</a>", presented at KubeCon China in Hong Kong, August 2024.</p>
 </blockquote>
 <p>{{&lt; youtube qH2byF7SDO8 &gt;}}</p>
-<p>作为 Envoy 社区推出的 Ingress Gateway 实现，<a href="https://github.com/envoyproxy/gateway">Envoy Gateway²</a> 全面支持了 <a href="https://gateway-api.sigs.k8s.io">Kubernetes Gateway API³</a> 的所有能力。除此之外，基于 Gateway API 的扩展机制，Envoy Gateway 还提供了丰富的流量管理、安全性、自定义扩展等 Gateway API 中并不包含的增强功能。本文将介绍 Envoy Gateway 的 Gateway API 扩展功能，并深入探讨这些功能的应用场景。</p>
-<h2>Kubernets Ingerss 的现状与问题</h2>
-<p><a href="https://kubernetes.io/docs/concepts/services-networking/ingres">Ingress⁴</a> 是 Kubernetes 中定义集群入口流量规则的 API 资源。Ingress API 为用户提供了基本的定义 HTTP 路由规则的能力，但是 &lt;font color="red"&gt;**Ingress API 的功能非常有限，只提供了按照 Host、Path 进行路由和 TLS 卸载的基本功能**&lt;/font&gt;。</p>
-<p>在实际应用中， Ingress API 的基本功能往往无法满足应用程序复杂的流量管理需求。这导致各个 Ingress Controller 实现需要通过 Annotations 或者自定义 API 资源等非标准的方式来扩展 Ingress API 的功能。</p>
-<p>例如，一个很常见的需求是采用正则表达式对请求的 Path 进行匹配，但是 Ingress API 只支持 Prefix 和 Exact 两种 Path 匹配方式，无法满足这个需求。</p>
-<p>为了处理这个简单的需求，一些 Ingress Controller 实现提供了 Annotations 来支持正则表达式 Path 匹配，例如 Nginx Ingress Controller 的 <code>nginx.org/path-regex</code> Annotation。</p>
+<p>As the official Gateway Controller for the Envoy, <a href="https://github.com/envoyproxy/gateway">Envoy Gateway²</a> provides full support for all the features of the <a href="https://gateway-api.sigs.k8s.io">Kubernetes Gateway API³</a>.In addition, Envoy Gateway extends the Gateway API by introducing a range of enhancements for traffic management, security features, and custom extensions that go beyond the standard API. In this post, we’ll dive into these Envoy Gateway extensions and explore their use cases.</p>
+<h2>Kubernetes Ingress and Its Limitations</h2>
+<p><a href="https://kubernetes.io/docs/concepts/services-networking/ingres">Ingress⁴</a> is a Kubernetes API resource used to define rules for managing inbound traffic to a cluster. While the Ingress API provides users with basic capabilities for defining HTTP routing rules, &lt;font color="red"&gt;**its functionality is quite limited, providing only fundamental features such as Host-based routing, Path-based routing, and TLS termination.**&lt;/font&gt;.</p>
+<p>In practice, the basic functionality of the Ingress API often falls short of meeting the complex traffic management requirements of modern applications. As a result, various Ingress Controller implementations have extended the Ingress API using non-standard methods like annotations or custom API resources.</p>
+<p>For example, a common requirement is to match request paths using regular expressions. However, the Ingress API only supports Prefix and Exact path matching, which is insufficient to meet this need.</p>
+<p>To address this relatively simple requirement, some Ingress Controllers have introduced annotations to support regex path matching. For example, the NGINX Ingress Controller provides the <code>nginx.org/path-regex</code> annotation for this purpose.</p>
 <pre><code class="lang-yaml">apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -39,7 +39,7 @@ spec:
           serviceName: coffee-svc
           servicePort: 80
 </code></pre>
-<p>另外一些 Ingress Controller 实现则在 Ingess API 之外定义了自己的 API 资源，例如 Traefik 的 采用 IngressRoute 来支持正则表达式 Path 匹配。</p>
+<p>Other controllers, like Traefik, take a different approach, using custom resources like <code>IngressRoute</code> to achieve the same result.</p>
 <pre><code class="lang-yaml">apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
 metadata:
@@ -58,11 +58,11 @@ spec:
         - name: coffee-svc
           port: 80
 </code></pre>
-<p>不管是通过 Annotations，还是自定义 API 资源，&lt;font color="red"&gt;**这些非标准的扩展方式都导致 Ingress API 的可移植性变差，用户在不同的 Ingress Controller 之间切换时，需要重新学习和配置不同的 API 资源。分裂的 Ingress API 也不利于社区的统一和发展，给 Kubernetes 社区带来了维护和扩展的困难**&lt;/font&gt;。</p>
-<h2>Gateway API：下一代 Ingress API</h2>
-<p>为了解决 Ingress API 的问题，Kubernetes 社区提出了 Gateway API，Gateway API 是一个新的 API 规范，旨在提供一个统一的、可扩展的、功能丰富的 API 来定义集群入口流量规则。</p>
-<p>相对于 Ingress API，Gateway API 提供了更丰富的功能：Gateway API 定义了多种资源，包括 Gateway、HTTPRoute、GRPCRoute、TLSRoute、TCPRoute、UDPRoute 等。对流量路由也提供了更多的配置选项，例如 Path 匹配、Header 匹配、Host 匹配、TLS 配置、流量拆分、请求重定向等功能。原来很多需要通过 Annotations 或者自定义 API 资源来扩展的功能，现在都可以直接通过 Gateway API 来实现。</p>
-<p>例如，下面的 Gateway API 资源定义了一个 HTTPRoute，用于实现上面例子中的正则表达式 Path 匹配。</p>
+<p>Whether it’s through annotations or custom API resources, &lt;font color="red"&gt; **these non-standard extensions hurt the portability of the Ingress API. Users have to relearn and reconfigure different API setups when switching between Ingress Controllers** &lt;/font&gt;. This fragmentation makes things more complicated and slows down community progress, making it tougher for the Kubernetes ecosystem to maintain and evolve the API.</p>
+<h2>Gateway API: The Next-Generation Ingress API</h2>
+<p>To address the limitations of the Ingress API, the Kubernetes community introduced the next generation of Ingress API, known as the Gateway API. This new API specification aims to provide a unified, scalable, and feature-rich way to define rules for managing inbound traffic to a cluster.</p>
+<p>Compared to the Ingress API, the Gateway API offers a lot more functionality. It defines multiple resource types, including Gateway, HTTPRoute, GRPCRoute, TLSRoute, TCPRoute, and UDPRoute. It also gives you more configuration options for traffic routing, such as Path matching, Header matching, Host matching, TLS configuration, traffic splitting, request redirection, and more. Many features that previously required annotations or custom API resources can now be handled directly through the Gateway API.</p>
+<p>For example, here’s a Gateway API resource that defines an HTTPRoute, implementing the regular expression-based path matching from the earlier example.</p>
 <pre><code class="lang-yaml">apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -86,49 +86,52 @@ spec:
         - name: coffee-svc
           port: 80
 </code></pre>
-<p>虽然 Gateway API 提供了比 Ingress 更丰富的功能，但是&lt;font color="red"&gt;**任何一个标准，不管定义得多么完善，理论上都只能是其所有实现的最小公约数**&lt;/font&gt;。Gateway API 也不例外。Gateway API 作为一个通用的 API 规范，为了保持通用性，无法对一些和具体实现细节相关的功能提供直接的支持。例如，虽然请求限流、权限控制等功能在实际应用中非常重要，但是不同的数据平面如 Envoy，Nginx 等的实现方式各有不同，因此 Gateway API 无法提供一个通用的规范来支持这些功能。Ingress API 就是由于这个原因，导致了 Annotations 和自定义 API 资源的泛滥。</p>
-<p>Gateway API 中创新的地方在于，它提供了 <a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment/">Policy Attachment⁵</a> 扩展机制，允许各个 Controller 实现在&lt;font color="red"&gt;**不修改 Gateway API 的情况下，通过关联自定义的 Policy 到 Gateway 和 HTTPRoute 等资源上，以实现对流量的自定义处理**&lt;/font&gt;。Policy Attachment 机制为 Gateway API 提供了更好的可扩展性，使得 Gateway API 可以支持更多的流量管理、安全性、自定义扩展等功能。此外，Gateway API 还支持将自定义的 Backend 资源关联到 HTTPRoute 和 GRPCRoute 等资源上，以支持将流量路由到自定义的后端服务。支持在 HTTPRoute  和 GRPCRoute 的规则中关联自定义的 Filter 资源，以支持对请求和响应进行自定义处理。</p>
-<p>通过这些内建的扩展机制，Gateway API 既保持了 Gateway，HTTPRoute 等核心资源的通用性，保证了不同实现之间对核心功能的兼容性；又为不同 Controller 实现在 Gateway API 的基础上进行功能扩展提供了一个统一的规范。Gateway API 让不同的 Ingress Controller 实现可以在其核心资源的基础上，通过自定义的 Policy、Backend、Filter 等资源来实现更多自己独有的增强功能。</p>
+<p>Although the Gateway API offers more functionality than Ingress, it’s important to remember that &lt;font color="red"&gt; **any standard, no matter how well-defined, can only serve as the lowest common denominator across all implementations** &lt;/font&gt;. The Gateway API is no exception. Because the Gateway API is designed as a universal API specification to ensure wide compatibility, it cannot directly support features that are closely linked to specific implementation details.</p>
+<p>For instance, although features like rate limiting and access control are essential in real-world scenarios, they are implemented differently across data planes like Envoy and NGINX. Because of these differences, the Gateway API cannot offer a universal standard for such functionalities. This is also why the Ingress API saw a proliferation of annotations and custom API resources to fill those gaps.</p>
+<p>&lt;font color="red"&gt; **A key innovation of the Gateway API is the [Policy Attachment⁵](https://gateway-api.sigs.k8s.io/reference/policy-attachment/) mechanism, which allows controllers to extend the API’s capabilities through custom policies without modifying the Gateway API itself**&lt;/font&gt;. By associating custom policies with resources like Gateway and HTTPRoute, this feature enhances the API’s flexibility and enables advanced traffic management, security, and custom extensions.</p>
+<p>In addition to Policy Attachment, the Gateway API aslo supports other extension mechanisms, such as linking custom Backend resources to HTTPRoute and GRPCRoute for routing traffic to non-standard backends, as well as adding custom Filter resources for handling requests and responses.</p>
+<p>With these built-in extension mechanisms, the Gateway API strikes a balance between keeping core resources like Gateway and HTTPRoute general enough for broad compatibility, while also providing a standardized way for different controllers to extend functionality. This allows different Ingress Controller implementations to build on the Gateway API’s core resources and offer enhanced features through custom policies, backends, and filters.</p>
 <p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/1.png"/></p>
-&lt;center&gt;Ingerss 和 Gateway API 的对比&lt;/center&gt;<h2>Envoy Gateway 的 Gateway API 扩展功能</h2>
-<p>Envoy 是一个非常强大的云原生代理，广泛应用于服务网格、API Gateway、边缘代理等场景。Envoy 提供了丰富的流量管理能力，其配置也非常灵活。要将 Envoy 作为 Ingress Gateway 使用，需要配置大量的 Envoy 的配置项，这对用户来说是一个挑战。</p>
-<p>为了简化 Envoy 的配置和管理，Envoy 社区推出了 Envoy Gateway 项目。 &lt;font color=red&gt;**Envoy Gateway 是一个基于 Envoy 的 Ingress Gateway 实现，它为用户提供了一个简单易用的 API 来配置 Envoy 的流量管理能力**&lt;/font&gt;。Envoy Gateway 使用 Gateway API 作为其面向用户的接口，兼容 Gateway API 的最新版本，提供了对 Gateway、HTTPRoute、GRPCRoute、TLSRoute、TCPRoute、UDPRoute 等资源的支持。除此之外，Envoy Gateway 还通过 Gateway API 的扩展机制提供了丰富的增强功能，例如请求限流、权限控制、WebAssembly 扩展等功能。</p>
-<p>Envoy Gateway 提供了下面这些自定义资源：</p>
+&lt;center&gt;Comparison Between Ingress and Gateway API&lt;/center&gt;<h2>Envoy Gateway's Gateway API Extensions</h2>
+<p>Envoy is a powerful cloud-native proxy widely used in service mesh, API gateway, and edge proxy scenarios, offering advanced traffic management capabilities and flexible configuration options. However, configuring Envoy as an Ingress Gateway can be challenging, often requiring users to write hundreds or even thousands of lines of configuration—on top of the complexity of deploying and managing the Envoy instances themselves.</p>
+<p>To make configuring and managing Envoy easier, the Envoy community introduced the Envoy Gateway project. &lt;font color=red&gt; **Envoy Gateway is an Ingress Gateway built on Envoy, designed to provide a streamlined, user-friendly experience for managing Envoy as an API Gateway**&lt;/font&gt;. It uses the Gateway API as its configuration language, fully compatible with the latest Gateway API version, and supports resources like Gateway, HTTPRoute, GRPCRoute, TLSRoute, TCPRoute, and UDPRoute.</p>
+<p>Moreover, Envoy Gateway leverages the Gateway API’s extension mechanisms to offer a rich set of additional features, , including rate limiting, access control, WebAssembly extensions, and more, extending beyond the capabilities of the standard Gateway API.</p>
+<p>Envoy Gateway introduces the following custom resources:</p>
 <ul>
-<li>Policy Attachment：ClientTrafficPolicy、BackendTrafficPolicy、SecurityPolicy、EnvoyExtensionPolicy、EnvoyPatchPolicy。这些 Policy 可以关联到 API Gateway 的 Gateway、HTTPRoute 和 GRPCRoute 资源上，以实现对流量的自定义处理。</li>
-<li>自定义 Backend：Backend 可以用于 HTTPRoute 和 GRPCRoute 的规则中，将流量路由到自定义的后端服务。</li>
+<li>Policy Attachment: Includes ClientTrafficPolicy, BackendTrafficPolicy, SecurityPolicy, EnvoyExtensionPolicy, and EnvoyPatchPolicy. These policies can be attached to API Gateway resources like Gateway, HTTPRoute, and GRPCRoute to provide advanced traffic management, security, and custom extension capabilities.</li>
+<li>Custom Backend: The Backend can be used within HTTPRoute and GRPCRoute rules to route traffic to custom backend services</li>
 </ul>
-<p>这些自定义资源和 Gateway API 的标准资源的关系如下图所示：</p>
+<p>The relationship between these custom resources and the standard resources of the Gateway API is illustrated in the diagram below:</p>
 <p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/Envoy-Gateway-Resources.png"/></p>
-&lt;center&gt;Envoy Gateway 的资源&lt;/center&gt;<p>下面我们将详细介绍 Envoy Gateway 的 Gateway API 扩展功能，并深入探讨这些功能的应用场景。</p>
-<h2>Policy Attachment 扩展机制</h2>
-<p><a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment/">Policy Attachment⁵</a> 是 Gateway API 提供的一个扩展机制，允许将一个 Policy 关联到 GatewayClass、Gateway、HTTPRoute、GRPCRoute 和 Service 等资源上，以实现对流量的自定义处理。Envoy Gateway 通过 Policy Attachment 机制实现了多种 Policy，用于在 Gateway 上提供 Envoy 强大的流量管理能力。</p>
-<p>同一个 Policy 可以关联到多个 Gateway API 的资源上。Envoy Gateway 对 Policy Attachment 的生效范围和优先级的规定如下：</p>
+&lt;center&gt;Envoy Gateway Resources&lt;/center&gt;<p>Next, let's take a closer look at Envoy Gateway's Gateway API extension features and explore their use cases.</p>
+<h2>Policy Attachment Mechanism</h2>
+<p><a href="https://gateway-api.sigs.k8s.io/reference/policy-attachment/">Policy Attachment⁵</a> is an extension mechanism provided by the Gateway API, allowing a policy to be attached to resources like GatewayClass, Gateway, HTTPRoute, GRPCRoute, and Service to provide additional capabilities. Envoy Gateway leverages the Policy Attachment mechanism to implement various policies, exposing Envoy's powerful traffic management capabilities at the Gateway level.</p>
+<p>A policy can be attached to different lelves in the Gateway API resource hierarchy, and multiple policies can be attached to the same resource. The scope and priority of Policy Attachment in Envoy Gateway are defined as follows:</p>
 <ul>
-<li>父资源上关联的 Policy 对其所有子资源生效。<ul>
-<li>Gateway 上关联的 Policy 对该 Gateway 中的所有 Listener 生效。（ClientTrafficPolicy）</li>
-<li>Gateway 上关联的 Policy 对该 Gateway 下的所有 HTTPRoute 和 GRPCRoute 资源生效。（BackendTrafficPolicy，SecurityPolicy，EnvoyExtensionPolicy）</li>
+<li>A policy attached to a parent resource applies to all of its child resources.<ul>
+<li>A policy attached to a Gateway applies to all Listeners within that Gateway. (e.g., ClientTrafficPolicy)</li>
+<li>A policy attached to a Gateway applies to all HTTPRoute and GRPCRoute resources under that Gateway. (e.g., BackendTrafficPolicy, SecurityPolicy, EnvoyExtensionPolicy)</li>
 </ul>
 </li>
-<li>如果一个父资源和子资源上都关联了相同类型的 Policy，那么子资源上的 Policy 生效。<ul>
-<li>Gateway 和 Listener 上都关联了相同类型的 Policy，那么 Listener 上的 Policy 生效。（ClientTrafficPolicy）</li>
-<li>Gateway 和 HTTPRoute 或 GRPCRoute 上都关联了相同类型的 Policy，那么 HTTPRoute 或 GRPCRoute 上的 Policy 生效。（BackendTrafficPolicy，SecurityPolicy，EnvoyExtensionPolicy）</li>
+<li>If policies of the same type are attached to both a parent and child resource, the policy on the child resource takes precedence.<ul>
+<li>If both a Gateway and a Listener have the same type of policy attached, the policy on the Listener takes effect. (e.g., ClientTrafficPolicy)</li>
+<li>If both a Gateway and an HTTPRoute or GRPCRoute have the same type of policy attached, the policy on the HTTPRoute or GRPCRoute takes precedence. (e.g., BackendTrafficPolicy, SecurityPolicy, EnvoyExtensionPolicy)</li>
 </ul>
 </li>
-<li>如果一个资源上关联了多个相同类型的 Policy，那么这些 Policy 的优先级由 Policy 的创建时间决定，创建时间最早的 Policy 生效。</li>
+<li>If multiple policies of the same type are attached to a single resource, the policy with the earliest creation time takes priority and is applied.</li>
 </ul>
-<h2>ClientTrafficPolicy：客户端连接流量控制</h2>
-<p>ClientTrafficPolicy 是 Envoy Gateway 提供的一个 Policy Attachment 资源，用于对客户端到 Envoy 之间这段连接的流量进行控制。 ClientTrafficPolicy 的作用原理如下图所示：
+<h2>ClientTrafficPolicy: Managing Traffic Between Clients and Envoy</h2>
+<p>ClientTrafficPolicy is a Policy Attachment resource in Envoy Gateway designed to control traffic between the client and Envoy. The diagram below illustrates how ClientTrafficPolicy operates:
 <img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/2.png"/></p>
-&lt;center&gt;ClientTrafficPolicy 资源的作用原理&lt;/center&gt;<p>从上图中可以看到，当 ClientTrafficPolicy 作用时，Envoy 尚未对请求进行路由处理。因此 ClientTrafficPolicy 只能作用于 Gateway 资源上，不能用于 HTTPRoute 和 GRPCRoute 资源上。</p>
-<p>ClientTrafficPolicy 提供了下面这些配置选项：</p>
+&lt;center&gt; How ClientTrafficPolicy Works&lt;/center&gt;<p>As shown in the diagram, ClientTrafficPolicy is applied before Envoy processes request routing. This means ClientTrafficPolicy can only be applied to Gateway resources and cannot be used with HTTPRoute or GRPCRoute resources.</p>
+<p>ClientTrafficPolicy provides the following configuration for the client-Envoy connection:</p>
 <ul>
-<li>客户端到 Envoy 之间连接的 TCP 相关配置：TCP Keepalive、TCP Timeout、Connection Limit、Socket Buffer Size、Connection Buffer Size。</li>
-<li>客户端到 Envoy 之间连接的 TLS 相关配置：TLS Options(包括 TLS Version、Cipher Suites、 ALPN），是否开启客户端证书验证。</li>
-<li>客户端到 Envoy 之间连接的 HTTP 相关配置：HTTP Request Timeout、HTTP Idle Timeout、HTTP1/HTTP2/HTTP3 相关配置 (例如 HTTP2 stream window size)</li>
-<li>客户端到 Envoy 之间连接的其他配置：是否支持 Proxy Protocol、如何获取客户端原始 IP 地址（通过 XFF Header 或者 Proxy Protocol）。</li>
+<li>TCP settings: TCP Keepalive, TCP Timeout, Connection Limit, Socket Buffer Size, and Connection Buffer Size.</li>
+<li>TLS settings: TLS Options (including TLS Version, Cipher Suites, ALPN), and whether to enable client certificate verification.</li>
+<li>HTTP settings: HTTP Request Timeout, HTTP Idle Timeout, and HTTP1/HTTP2/HTTP3-specific settings (e.g., HTTP2 stream window size).</li>
+<li>Other settings: support for Proxy Protocol and options for retrieving the client’s original IP address (via XFF Header or Proxy Protocol).</li>
 </ul>
-<p>下图是 ClientTrafficPolicy 的一个示例：</p>
+<p>The following diagram shows an example of ClientTrafficPolicy:</p>
 <p><img alt="" src="/img/2024-08-31-introducing-envoy-gateways-gateway-api-extensions/3.png"/></p>
 &lt;center&gt;ClientTrafficPolicy 示例&lt;/center&gt;<p><code>client-traffic-policy-gateway</code> 是一个 ClientTrafficPolicy 资源，它关联到了名为 <code>eg</code> 的 Gateway 资源上，用于对客户端到 Envoy 之间的连接进行流量控制。这个 ClientTrafficPolicy 资源配置了 TCP Keepalive、Connection Buffer Size、HTTP Request Timeout、HTTP Idle Timeout、客户端原始 IP 地址的获取方式等配置。由于 <code>eg</code> Gateway 资源上有两个 Listener <code>http</code> 和 <code>https</code>，因此这个 ClientTrafficPolicy 资源会对这两个 Listener 生效。</p>
 <p>同时，<code>client-traffic-policy-https-listener</code> 这个 ClientTrafficPolicy 资源直接关联到了 <code>https</code> Listener 上（通过指定其 targetRef 的 sectionName 字段）。这个 ClientTrafficPolicy 资源会覆盖 <code>client-traffic-policy-gateway</code> 对 <code>https</code> Listener 的配置，以对 <code>https</code> Listener 配置 tls 相关的参数。</p>
