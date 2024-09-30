@@ -1431,9 +1431,24 @@ crontab/reports/jobs/promotion_group_attribute/schedule/cron_expr
 
 输出全部的 cronjob
 /** @var \Magento\Cron\Model\Config\Data */
-$configData = $objectMamager-&gt;get(\Magento\Cron\Model\Config\Data::class);
+$configData = $objectManager-&gt;get(\Magento\Cron\Model\Config\Data::class);
 var_dump($configData-&gt;getJobs());
 
+php -a &lt;&lt;- 'EOF'
+try {
+require __DIR__ . '/app/bootstrap.php';
+$bootstrap = \Magento\Framework\App\Bootstrap::create(BP, $_SERVER);
+$objectManager = $bootstrap-&gt;getObjectManager();
+$state = $objectManager-&gt;get(\Magento\Framework\App\State::class);
+$state-&gt;setAreaCode(\Magento\Framework\App\Area::AREA_CRONTAB);
+/** @var \Magento\Cron\Model\Config\Data */
+$configData = $objectManager-&gt;get(\Magento\Cron\Model\Config\Data::class);
+var_dump($configData-&gt;getJobs());
+} catch (\Throwable $e) {
+    echo $e-&gt;getFile() . ':' . $e-&gt;getLine() . PHP_EOL;
+    echo $e-&gt;getMessage() . PHP_EOL . $e-&gt;getTraceAsString();
+}
+EOF
 
 SELECT * from cron_schedule order by schedule_id desc limit 10;
 SELECT * from cron_schedule WHERE job_code in ('promotion_group_attribute') order by schedule_id desc;
@@ -2703,6 +2718,11 @@ EOF
 </code></pre>
 </li>
 </ol>
+&lt;!--
+可以在模板里加载其它模板
+模板是没有缓存的
+--&gt;
+
 <h3>不使用模板</h3>
 <pre><code class="lang-php">try {
     $message = $objectManager-&gt;get(\Magento\Framework\Mail\Message::class);
@@ -2745,7 +2765,7 @@ EOF
 <p>可以用这个仓库来测试邮件的发送</p>
 <ul>
 <li><a href="https://github.com/axllent/mailpit">https://github.com/axllent/mailpit</a></li>
-<li>启动命令<pre><code>  mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:25 --smtp-auth-accept-any
+<li>启动命令<pre><code>  mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:25 --smtp-auth-accept-any --smtp-auth-allow-insecure
 </code></pre>
 </li>
 <li>启动完后用浏览器访问 listen 的地址</li>
@@ -2771,7 +2791,7 @@ $orderCollection-&gt;addFieldToFilter('entity_id', $orderId); // 可以修改条
 /** @var \Magento\Sales\Model\Order */
 $order = $orderCollection-&gt;getFirstItem(); // $orderCollection-&gt;getItems(); // 获取集合
 </code></pre>
-<pre><code class="lang-php">$objectMamager = \Magento\Framework\App\ObjectManager::getInstance();
+<pre><code class="lang-php">$objectManager = \Magento\Framework\App\ObjectManager::getInstance();
 
 // 根据 customer id 或 email 获取 customer 对象
 /** @var \Magento\Customer\Model\CustomerFactory */
@@ -2990,10 +3010,10 @@ magento/**/*.php
 <p>例子</p>
 <pre><code class="lang-php">    protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $objectMamager = \Magento\Framework\App\ObjectManager::getInstance();
+        $objectManager = \Magento\Framework\App\ObjectManager::getInstance();
 
         /** @var \Magento\Framework\App\State */
-        $appState = $objectMamager-&gt;get(\Magento\Framework\App\State::class);
+        $appState = $objectManager-&gt;get(\Magento\Framework\App\State::class);
         try { // 没有这句很容易会出现 Area code is not set 的错误
             $appState-&gt;setAreaCode(\Magento\Framework\App\Area::AREA_ADMINHTML);
         } catch (\Exception $e) {
@@ -3001,19 +3021,19 @@ magento/**/*.php
 
         // 可以尝试这样更改 store view
         // /** @var \Magento\Store\Model\StoreManagerInterface */
-        // $storeManager =  $objectMamager-&gt;get(\Magento\Store\Model\StoreManagerInterface::class);
+        // $storeManager =  $objectManager-&gt;get(\Magento\Store\Model\StoreManagerInterface::class);
         // $storeManager-&gt;setCurrentStore('zh_Hans_CN');
 
         /** @var \Magento\Framework\App\ResourceConnection */
-        $connection = $objectMamager-&gt;get(\Magento\Framework\App\ResourceConnection::class);
+        $connection = $objectManager-&gt;get(\Magento\Framework\App\ResourceConnection::class);
         $conn = $connection-&gt;getConnection();
 
         /** @var \Mageplaza\SocialLogin\Model\Social */
-        $social = $objectMamager-&gt;get(\Mageplaza\SocialLogin\Model\Social::class);
+        $social = $objectManager-&gt;get(\Mageplaza\SocialLogin\Model\Social::class);
         $customer = $social-&gt;getCustomerByEmail('qwe@asd.com');
 
         /** @var \Magento\Quote\Model\QuoteFactory */
-        $quoteFactory = $objectMamager-&gt;get(\Magento\Quote\Model\QuoteFactory::class);
+        $quoteFactory = $objectManager-&gt;get(\Magento\Quote\Model\QuoteFactory::class);
         $quote = $quoteFactory-&gt;create();
         $quote-&gt;setCustomer($customer-&gt;getDataModel());
         $address = $quote-&gt;getShippingAddress();
@@ -3172,11 +3192,11 @@ WHERE user_id = (
 <pre><code class="lang-php">// 直接生成一个密码，在命令行里是用，只运行一次，因为重置了key，可能会使其他逻辑混乱
 // 输出的值，填到 admin_user.password 和 admin_passwords.password_hash
 /** @var \Magento\Framework\App\ObjectManager */
-$objectMamager = \Magento\Framework\App\ObjectManager::getInstance();
+$objectManager = \Magento\Framework\App\ObjectManager::getInstance();
 /** @var \Magento\Framework\Encryption\Encryptor */
-$encryptor = $objectMamager-&gt;get(\Magento\Framework\Encryption\Encryptor::class);
+$encryptor = $objectManager-&gt;get(\Magento\Framework\Encryption\Encryptor::class);
 /** @var \Magento\Framework\App\DeploymentConfig */
-$deploymentConfig = $objectMamager-&gt;get(\Magento\Framework\App\DeploymentConfig::class);
+$deploymentConfig = $objectManager-&gt;get(\Magento\Framework\App\DeploymentConfig::class);
 $cryptkey = preg_split('/\s+/s', trim((string)$deploymentConfig-&gt;get('crypt/key')))[0]; // 本地的 key
 $cryptkey = '4oyi2yvpl8kx3sh9e4u05vnql41kn8fa'; // crypt/key ，其它的 key ，可能会在本地生成用于线上环境的 password
 $encryptor-&gt;setNewKey($cryptkey);
