@@ -1,0 +1,124 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/type-challenges-solutions.md">仓库源文</a>，<a href="https://kexizeroing.github.io/type-challenges-solutions">站点原文</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Type challenges solutions"
+slug: type-challenges-solutions
+description: ""
+added: ""
+top: true
+order: 6</p>
+<h2>updatedDate: "Sep 30 2024"</h2>
+<p>Implement the built-in <code>Pick&lt;T, K&gt;</code> generic without using it. Constructs a type by picking the set of properties K from T.</p>
+<pre><code class="lang-ts">interface Todo {
+  title: string;
+  description: string;
+  completed: boolean;
+}
+
+type TodoPreview = MyPick&lt;Todo, "title" | "completed"&gt;;
+
+const todo: TodoPreview = {
+  title: "Clean room",
+  completed: false,
+};
+
+// solution
+type MyPick&lt;T, K extends keyof T&gt; = {
+  [P in K]: T[P];
+}
+</code></pre>
+<blockquote><p>Why <code>extends</code> is used here instead of <code>in</code>?</p>
+<ul>
+<li><code>K extends keyof T</code>: "K is a type that is assignable to keyof T"</li>
+<li><code>K in keyof T</code>: "K is each key in keyof T"</li>
+</ul>
+</blockquote>
+<p>Implement the built-in <code>Readonly&lt;T&gt;</code> generic without using it. Constructs a type with all properties of T set to <code>readonly</code>, meaning the properties of the constructed type cannot be reassigned.</p>
+<pre><code class="lang-ts">interface Todo {
+  title: string;
+  description: string;
+}
+
+const todo: MyReadonly&lt;Todo&gt; = {
+  title: "Hey",
+  description: "foobar",
+};
+
+todo.title = "Hello"; // Error: cannot reassign a readonly property
+todo.description = "barFoo"; // Error: cannot reassign a readonly property
+
+// solution
+type MyReadonly&lt;T&gt; = {
+  readonly [P in keyof T]: T[P]
+}
+</code></pre>
+<p>Given an array, transform to an object type and the key/value must in the given array.</p>
+<pre><code class="lang-ts">const tuple = ["tesla", "model 3", "model X", "model Y"] as const;
+
+// expected { tesla: 'tesla', model 3: 'model 3', model X: 'model X', model Y: 'model Y'}
+const result: TupleToObject&lt;typeof tuple&gt;;
+
+// solution 1
+type TupleToObject&lt;T extends readonly (string | symbol | number)[]&gt; = {
+  [P in T[number]]: P
+}
+
+// solution 2
+// built-in `PropertyKey` represents the data type of a property key.
+// It can be a string, a symbol, or a number.
+// https://www.totaltypescript.com/concepts/propertykey-type
+type TupleToObject&lt;T extends readonly PropertyKey[]&gt; = {
+  [P in T[number]]: P
+};
+</code></pre>
+<p>Implement a generic <code>First&lt;T&gt;</code> that takes an Array T and returns it's first element's type.</p>
+<pre><code class="lang-ts">type arr1 = ["a", "b", "c"];
+type arr2 = [3, 2, 1];
+
+type head1 = First&lt;arr1&gt;; // expected to be 'a'
+type head2 = First&lt;arr2&gt;; // expected to be 3
+
+// solution
+type First&lt;T extends any[]&gt; = T extends [] ? never : T[0];
+</code></pre>
+<p>For given a tuple, you need create a generic <code>Length</code>, pick the length of the tuple.</p>
+<pre><code class="lang-ts">type tesla = ["tesla", "model 3", "model X", "model Y"];
+type teslaLength = Length&lt;tesla&gt;; // expected 4
+
+// solution
+type Length&lt;T extends readonly any[]&gt; = T["length"];
+</code></pre>
+<p>Implement the built-in <code>Exclude&lt;T, U&gt;</code>. Exclude from T those types that are assignable to U.</p>
+<pre><code class="lang-ts">type T0 = MyExclude&lt;"a" | "b" | "c", "a"&gt;; // expected "b" | "c"
+type T1 = MyExclude&lt;"a" | "b" | "c", "a" | "b"&gt;; // expected "c"
+
+// solution
+type MyExclude&lt;T, U&gt; = T extends U ? never : T;
+</code></pre>
+<blockquote><p>When you are writing <code>T extends U</code> where T is the union, actually what is happening is TypeScript iterates over the union T and applies the condition to each element.</p>
+</blockquote>
+<p>If we have a type which is wrapped type like <code>Promise</code>. How we can get a type which is inside the wrapped type? You need to unwrap the type recursively.</p>
+<pre><code class="lang-ts">type Example1 = MyAwaited&lt;Promise&lt;string&gt;&gt;; // Type is string
+type Example2 = MyAwaited&lt;Promise&lt;Promise&lt;number&gt;&gt;&gt;; // Type is number
+
+// solution
+// `infer R` is saying "if T is a Promise, infer the type it contains and call it R".
+// `Awaited` is a built-in TypeScript utility type that recursively unwraps Promise types.
+type MyAwaited&lt;T&gt; = T extends Promise&lt;infer R&gt; ? Awaited&lt;R&gt; : T;
+</code></pre>
+<p>Implement a utils <code>If</code> which accepts condition C, a truthy return type T, and a falsy return type F. C is expected to be either <code>true</code> or <code>false</code> while T and F can be any type.</p>
+<pre><code class="lang-ts">type A = If&lt;true, "a", "b"&gt;; // expected to be 'a'
+type B = If&lt;false, "a", "b"&gt;; // expected to be 'b'
+
+// solution
+type If&lt;C extends boolean, T, F&gt; = C extends true ? T : F;
+// `strictNullChecks: false`
+type If&lt;C extends boolean, T, F&gt; = C extends undefined | null 
+  ? never
+  : (C extends true ? T : F)
+</code></pre>
+<p>Implement the <code>Array.concat</code> function in the type system. A type takes the two arguments. The output should be a new array that includes inputs in ltr order.</p>
+<pre><code class="lang-ts">type Result = Concat&lt;[1], [2]&gt;; // expected to be [1, 2]
+// solution
+type Concat&lt;T extends unknown[], U extends unknown[]&gt; = [...T, ...U];
+</code></pre>

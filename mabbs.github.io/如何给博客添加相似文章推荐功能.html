@@ -1,0 +1,90 @@
+<h2><a href="https://github.com/mabbs/mabbs.github.io/blob/master/_posts/2024-10-01-suggest.md">仓库源文</a>，<a href="https://mabbs.github.io/2024/10/01/suggest">站点原文</a></h2>
+<hr/>
+<p>layout: post
+title: 如何给博客添加相似文章推荐功能</p>
+<h2>tags: [Cloudflare, Workers, Vectorize, 博客]</h2>
+<p>看来向量数据库的作用有很多啊……&lt;!--more--&gt;</p>
+<h1>起因</h1>
+<p>前几天我<a href="/2024/09/27/rag.html">用Cloudflare Vectorize给博客的聊天机器人加了知识库的功能</a>，本来想着用向量数据库做文章推荐是不是每次都要走翻译+向量化的操作，不过后来我又仔细看了一下Cloudflare的官方文档，发现它是<a href="https://developers.cloudflare.com/vectorize/reference/client-api/#get-vectors-by-id">可以根据ID查询存储的向量</a>的，既然这样的话用现有的数据库做一个相似文章推荐应该非常简单，于是我就做了一个试试看。</p>
+<h1>制作过程</h1>
+<h2>后端部分</h2>
+<p>其实流程很简单，就是把对应ID的向量查出来之后拿着这个向量再去查询就好了，唯一需要注意的就是它查出来的第一条肯定是自己，所以只要把第一条删掉就行， <del>代码也非常简单</del> （后来又加了缓存稍微变的复杂了😂）：</p>
+<pre><code class="lang-javascript">if (url.pathname.startsWith("/suggest")) {
+  let resp = [];
+  let update_time = url.searchParams.get('update');
+  if (update_time) {
+    let result = await env.mayx_index.getByIds([
+      query
+    ]);
+    if (result.length) {
+      let cache = await db.prepare("SELECT `id`, `suggest`, `suggest_update` FROM `blog_summary` WHERE `id` = ?1")
+        .bind(query).first();
+      if (!cache.id) {
+        return Response.json(resp, {
+          headers: commonHeader
+        });
+      }
+      if (update_time != cache.suggest_update) {
+        resp = await env.mayx_index.query(result[0].values, { topK: 6 });
+        resp = resp.matches;
+        resp.splice(0, 1);
+        await db.prepare("UPDATE `blog_summary` SET `suggest_update` = ?1, `suggest` = ?2 WHERE `id` = ?3")
+          .bind(update_time, JSON.stringify(resp), query).run();
+      } else {
+        resp = JSON.parse(cache.suggest);
+      }
+    }
+    resp = resp.map(respObj =&gt; {
+      respObj.id = encodeURI(respObj.id);
+      return respObj;
+    });
+  }
+  return Response.json(resp, {
+    headers: commonHeader
+  });
+}
+</code></pre>
+<h2>前端部分</h2>
+<p>后端当然很简单，但是我之前有些欠考虑了，我当时做<a href="/2024/07/03/ai-summary.html">AI摘要</a>和<a href="/2024/09/27/rag.html">知识库</a>的时候，都只存了文章的链接，没有存标题😅……但是推荐文章的超链接总不能不放标题吧……那怎么办呢？一种就是我把数据库清空然后摘要中加一个字段，向量数据库中加一个元数据，这样查询的时候就能查到标题然后显示出来了。不过这种方法我仔细考虑了一下，麻烦是一方面，另一方面是我的接口没做验证，有人乱上传文章会影响推荐链接显示的内容，不太合适……那应该用什么办法呢？<br/>
+  我还想到一个办法，我之前<a href="/2021/07/23/search.html">给博客做过全文搜索的功能</a>，用这个JS关联查询就能查到标题，而且查不到的内容也显示不出来，这样就能避免有人故意乱上传导致显示奇怪的内容了，不过之前的设计是每次查询都要加载一次包含我文章内容的JSON文件，感觉不太合理，虽然那个文件不算特别大，但是也挺影响速度的，所以我想了一下还是用localStorage缓存一下比较好，所以增加了一个能缓存获取搜索JSON的函数：</p>
+<pre><code class="lang-javascript">function getSearchJSON(callback) {
+  var searchData = JSON.parse(localStorage.getItem("blog_" + lastUpdated.valueOf()));
+  if (!searchData) {
+    localStorage.clear();
+    $.getJSON("/search.json", function (data) {
+        localStorage.setItem("blog_" + lastUpdated.valueOf(), JSON.stringify(data));
+        callback(data);
+    });
+  } else {
+    callback(searchData);
+  }
+}
+</code></pre>
+<p>做好这个之后就可以做文章推荐的功能了，不过文章推荐应不应该加载完页面就加载呢？其实我测了一下Vectorize数据库的查询速度，不算很慢，但还是需要时间，另外免费版我看了下额度是每月3000万个查询的向量维度，这个其实我没看太懂😂。另外Cloudflare不知道为什么没有展示免费版剩余的额度，而且它是按月计算的，导致我不敢乱用这个查询。 <del>所以我想了一下还是给个按钮来调用吧</del> （后来想了一下干脆直接调用然后加个缓存吧，毕竟我的文章不变，推荐内容也不会变）。最终调用的函数如下：</p>
+<pre><code class="lang-javascript">function getSuggestBlog(blogurl) {
+    var suggest = $("#suggest-container")[0];
+    suggest.innerHTML = "Loading...";
+    $.get(BlogAPI + "/suggest?id=" + blogurl + "&amp;update=" + lastUpdated.valueOf(), function (data) {
+        if (data.length) {
+            getSearchJSON(function (search) {
+                suggest.innerHTML = '&lt;b&gt;推荐文章&lt;/b&gt;&lt;hr style="margin: 0 0 5px"/&gt;';
+                const searchMap = new Map(search.map(item =&gt; [item.url, item]));
+                const merged = data.map(suggestObj =&gt; {
+                    const searchObj = searchMap.get(suggestObj.id);
+                    return searchObj ? { ...searchObj } : null;
+                });
+                merged.forEach(element =&gt; {
+                    if (element) {
+                        suggest.innerHTML += "&lt;a href=" + element.url + "&gt;" + element.title + "&lt;/a&gt; - " + element.date + "&lt;br /&gt;";
+                    }
+                });
+            });
+        } else {
+            suggest.innerHTML = "暂无推荐文章……";
+        }
+    });
+}
+</code></pre>
+<h1>感想</h1>
+<p>看来向量数据库的用途还是挺广泛的，不仅仅是为了给AI使用，说不定还能做更多有意思的功能，这下不得不更依赖Cloudflare了😆。<br/>
+  另外随着做了越来越多的功能，做新的功能还能用上旧的功能，感觉这样我的博客可以有不少发展的空间啊😁。</p>
