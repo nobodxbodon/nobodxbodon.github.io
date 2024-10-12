@@ -1,0 +1,196 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/react-hooks-clone.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-hooks-clone">站点原文</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "React hooks clone and related concepts"
+slug: react-hooks-clone-and-related-concepts
+description: ""
+added: "Sep 12 2020"
+tags: [react, code]</p>
+<h2>updatedDate: "Oct 9 2024"</h2>
+<h3>Getting Closure on Hooks presented by @swyx</h3>
+<pre><code class="lang-js">// https://www.youtube.com/watch?v=KJP1E-Y-xyo
+const React = (function() {
+  let hooks = [];
+  let idx = 0;
+
+  function useState(initVal) {
+    const state = hooks[idx] || initVal;
+    const _idx = idx;
+    const setState = newVal =&gt; {
+      hooks[_idx] = newVal;
+    };
+    idx++;
+    return [state, setState];
+  }
+
+  function useEffect(cb, depArray) {
+    const oldDeps = hooks[idx];
+    let hasChanged = true;
+
+    if(oldDeps) {
+      hasChanged = depArray.some((dep, i) =&gt; !Object.is(dep, oldDeps[i]));
+    }
+    if(hasChanged) cb();
+    hooks[idx] = depArray;
+    idx++;
+  }
+
+  function render(Component) {
+    idx = 0;
+    const C = Component();
+    C.render();
+    return C;
+  }
+
+  return { useState, useEffect, render };
+})();
+
+function Component() {
+  const [count, setCount] = React.useState(1);
+  const [text, setText] = React.useState('apple');
+
+  React.useEffect(() =&gt; {
+    console.log('useEffect with count dep')
+  }, [count]);
+
+  React.useEffect(() =&gt; {
+    console.log('useEffect empty dep')
+  }, []);
+
+  React.useEffect(() =&gt; {
+    console.log('useEffect no dep')
+  });
+
+  return {
+    render: () =&gt; console.log({count, text}),
+    click: () =&gt; setCount(count + 1),
+    type: word =&gt; setText(word)
+  }
+}
+
+var App = React.render(Component);
+App.click();
+var App = React.render(Component);
+App.type('pear');
+var App = React.render(Component);
+
+/*
+  useEffect with count dep
+  useEffect empty dep
+  useEffect no dep
+  {count: 1, text: "apple"} 
+
+  useEffect with count dep
+  useEffect no dep
+  {count: 2, text: "apple"}
+
+  useEffect no dep
+  {count: 2, text: "pear"}`
+*/
+</code></pre>
+<h3>Vanilla React data fetching</h3>
+<p>If you're going to fetch in <code>useEffect()</code>, you should at least make sure that you're handling:</p>
+<ul>
+<li>Loading states</li>
+<li>Error handling (rejections &amp; HTTP error codes)</li>
+<li>Race conditions &amp; cancellation</li>
+</ul>
+<pre><code class="lang-js">import * as React from "react"
+
+export default function useQuery(url) {
+  const [data, setData] = React.useState(null)
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [error, setError] = React.useState(null)
+
+  React.useEffect(() =&gt; {
+    let ignore = false  // isCancelled
+
+    const handleFetch = async () =&gt; {
+      setData(null)
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const res = await fetch(url)
+
+        if (ignore) {
+          return 
+        }
+
+        if (res.ok === false) {
+          throw new Error(`A network error occurred.`)
+        }
+
+        const json = await res.json()
+
+        setData(json)
+        setIsLoading(false)
+      } catch (e) {
+        setError(e.message)
+        setIsLoading(false)
+      }
+    }
+
+    handleFetch()
+
+    return () =&gt; {
+      ignore = true
+    }
+  }, [url])
+
+  return { data, isLoading, error }
+}
+</code></pre>
+<h3>You Might Not Need an Effect</h3>
+<blockquote><p>Whenever you think of writing <code>useEffect</code>, the only sane thing is to NOT do it. Instead, go to the react docs and re-read the page about why you don't need an effect. You really don't. -@TkDodo</p>
+</blockquote>
+<p>When developing an application in React 18+, you may encounter an issue where the <code>useEffect</code> hook is being run twice on mount. This occurs because since React 18, when you are in development, your application is being run in StrictMode by default. In Strict Mode, React will try to simulate the behavior of mounting, unmounting, and remounting a component to help developers uncover bugs during testing. <em>From the user’s perspective, visiting a page shouldn’t be different from visiting it, clicking a link, and then pressing Back. React verifies that your components don’t break this principle by remounting them once in development.</em> In most cases, it should be fine to leave your code as-is, since the <code>useEffect</code> will only run once in production.</p>
+<ul>
+<li><a href="https://react.dev/learn/you-might-not-need-an-effect">https://react.dev/learn/you-might-not-need-an-effect</a></li>
+<li><a href="https://eslint-react.xyz/docs/rules/hooks-extra-no-direct-set-state-in-use-effect">https://eslint-react.xyz/docs/rules/hooks-extra-no-direct-set-state-in-use-effect</a></li>
+<li><a href="https://www.youtube.com/watch?v=bGzanfKVFeU">https://www.youtube.com/watch?v=bGzanfKVFeU</a></li>
+</ul>
+<h3>Referencing Values with Refs</h3>
+<p>When you want a component to “remember” some information, but you don’t want that information to trigger new renders, you can use a <code>ref</code>. Typically, you will use a ref when your component needs to “step outside” React and communicate with external APIs. (e.g. storing timeout IDs, DOM elements)</p>
+<ul>
+<li>Refs are an escape hatch to hold onto values that aren’t used for rendering. You won’t need them often.</li>
+<li>A ref is a plain JavaScript object with a single property called <code>current</code>, which you can read or set.</li>
+<li>You can ask React to give you a ref by calling the <code>useRef</code> Hook.</li>
+<li>Like state, refs let you retain information between re-renders of a component.</li>
+<li>Unlike state, setting the ref’s current value does not trigger a re-render.</li>
+</ul>
+<h3>Higher Order Components</h3>
+<p>HOCs are wrapper components that help provide additional functionality to existing components. While hooks probably replaced most of shared logic concerns, there are still use cases where higher-order components could be useful. For example, you want to fire analytics event on every click of every button, dropdown and link everywhere.</p>
+<pre><code class="lang-js">export const withLoggingOnClick = (Component) =&gt; {
+  return (props) =&gt; {
+    const log = useLoggingFromSomewhere();
+
+    const onClick = () =&gt; {
+      // console.info('Log on click something');
+      log('Log on click something');
+      props.onClick();
+    };
+
+    // return original component with all the props
+    // and overriding onClick with our own callback
+    return &lt;Component {...props} onClick={onClick} /&gt;;
+  };
+};
+</code></pre>
+<h3>What's new in React 17+</h3>
+<p>React 17:</p>
+<ul>
+<li><a href="https://legacy.reactjs.org/blog/2020/10/20/react-v17.html">https://legacy.reactjs.org/blog/2020/10/20/react-v17.html</a></li>
+</ul>
+<p>React 18:</p>
+<ul>
+<li><a href="https://react.dev/blog/2022/03/29/react-v18">https://react.dev/blog/2022/03/29/react-v18</a></li>
+<li><a href="https://www.youtube.com/watch?v=Z-NCLePa2x8">https://www.youtube.com/watch?v=Z-NCLePa2x8</a></li>
+<li><a href="https://www.youtube.com/watch?v=ytudH8je5ko">https://www.youtube.com/watch?v=ytudH8je5ko</a></li>
+</ul>
+<p>React 19:</p>
+<ul>
+<li><a href="https://react.dev/blog/2024/04/25/react-19">https://react.dev/blog/2024/04/25/react-19</a></li>
+<li><a href="https://shrutikapoor.dev/posts/react-react19">https://shrutikapoor.dev/posts/react-react19</a></li>
+<li><a href="https://www.youtube.com/watch?v=AJOGzVygGcY">https://www.youtube.com/watch?v=AJOGzVygGcY</a></li>
+</ul>

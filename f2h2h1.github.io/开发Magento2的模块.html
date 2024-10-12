@@ -351,7 +351,13 @@ class Collection extends AbstractCollection
 </li>
 </ol>
 <ul>
-<li>Magento的 模型系统 分为四部分 - 模型(Model) 资源模型(ResourceModel) 集合(Collection) 工厂(Factory)</li>
+<li>Magento的 模型系统 分为四部分<ul>
+<li>模型 (Model)</li>
+<li>资源模型 (ResourceModel)</li>
+<li>集合 (Collection)</li>
+<li>工厂 (Factory)</li>
+</ul>
+</li>
 <li>模型是一个抽象的对象</li>
 <li>资源模型会对应数据库里的表，模型的增删查改通过资源模型进行，例如 资源模型-&gt;save(模型)</li>
 <li>集合就是模型的集合，一些查询操作也是在集合里进行</li>
@@ -1501,8 +1507,13 @@ EOF
 <h2>队列</h2>
 &lt;!--
 
-php bin/magento queue:consumers:start sales_rule.codegenerator
+列出所有消费者
 php bin/magento queue:consumers:list
+
+启用名为 sales_rule.codegenerator 的消费者
+php bin/magento queue:consumers:start sales_rule.codegenerator
+
+好像每个消费者都需要一个单独的命令
 
 php bin/magento queue:consumers:start [--max-messages=&lt;value&gt;] [--batch-size=&lt;value&gt;] [--single-thread] [--area-code=&lt;value&gt;] &lt;consumer_name&gt;
 
@@ -1520,6 +1531,11 @@ vendor\magento\module-message-queue\etc\cron_groups.xml
 
 这是通过 cron 来运行 队列
 php bin/magento cron:run --group=consumers
+这种通过 cron 运行的队列会启用所有消费者？
+
+php -r "while(true){exec('php bin/magento cron:run --group=default');sleep(1);}"
+php -r "while(true){exec('php bin/magento cron:run --group=index');sleep(10);}"
+php -r "while(true){exec('php bin/magento cron:run --group=consumers');sleep(5);}"
 
 --&gt;
 
@@ -1852,6 +1868,24 @@ vendor\magento\module-logging\Model\Processor.php:363
 $scopeConfig = \Magento\Framework\App\ObjectManager::getInstance()-&gt;get(Magento\Framework\App\Config\ScopeConfigInterface::class);
 $scopeConfig-&gt;getValue('general/file/bunch_size');
 </code></pre>
+&lt;!--
+php -a &lt;&lt;- 'EOF'
+try {
+    require __DIR__ . '/app/bootstrap.php';
+    $bootstrap = \Magento\Framework\App\Bootstrap::create(BP, $_SERVER);
+    $objectManager = $bootstrap-&gt;getObjectManager();
+    $state = $objectManager-&gt;get(\Magento\Framework\App\State::class);
+    $state-&gt;setAreaCode(\Magento\Framework\App\Area::AREA_CRONTAB);
+    /** @var \Magento\Framework\App\Config\ScopeConfigInterface */
+    $scopeConfig = $objectManager-&gt;get(Magento\Framework\App\Config\ScopeConfigInterface::class);
+    var_dump($scopeConfig-&gt;getValue('general/file/bunch_size'));
+} catch (\Throwable $e) {
+    echo $e-&gt;getFile() . ':' . $e-&gt;getLine() . PHP_EOL;
+    echo $e-&gt;getMessage() . PHP_EOL . $e-&gt;getTraceAsString();
+}
+EOF
+--&gt;
+
 <p>还可以用命令行来修改配置，这种修改会保存在数据库里
 <a href="https://experienceleague.adobe.com/docs/commerce-operations/configuration-guide/cli/configuration-management/set-configuration-values.html">https://experienceleague.adobe.com/docs/commerce-operations/configuration-guide/cli/configuration-management/set-configuration-values.html</a></p>
 <pre><code># 设置某个配置
@@ -2721,6 +2755,32 @@ EOF
 &lt;!--
 可以在模板里加载其它模板
 模板是没有缓存的
+
+在模板里加上 header 和 footer ，要注意模板的 area
+{{template area='frontend' config_path="design/email/header_template"}}
+&lt;p&gt;{{var mail_content}}&lt;/p&gt;
+{{template config_path="design/email/footer_template"}}
+
+
+$to = [
+    '001' =&gt; '001@example.com',
+    '002' =&gt; '002@example.com',
+    '003' =&gt; '003@example.com',
+];
+foreach ($to as $name =&gt; $item) {
+    $transportBuilder-&gt;addTo($item, $name);
+}
+
+
+$to = [
+    '001 001@example.com',
+    '002 002@example.com',
+    '003 003@example.com',
+];
+foreach ($to as $item) {
+    $message-&gt;addTo($item);
+}
+
 --&gt;
 
 <h3>不使用模板</h3>
@@ -2762,16 +2822,18 @@ EOF
 <a href="https://www.mageplaza.com/magento-2-smtp/">https://www.mageplaza.com/magento-2-smtp/</a></p>
 <p>magento2 使用这个库来发送邮件的
 <a href="https://github.com/laminas/laminas-mail">https://github.com/laminas/laminas-mail</a></p>
-<p>可以用这个仓库来测试邮件的发送</p>
-<ul>
-<li><a href="https://github.com/axllent/mailpit">https://github.com/axllent/mailpit</a></li>
-<li>启动命令<pre><code>  mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:25 --smtp-auth-accept-any --smtp-auth-allow-insecure
-</code></pre>
-</li>
-<li>启动完后用浏览器访问 listen 的地址</li>
-<li>sendmail 和 smtp 两种方式都可以用 mailpit 来测试， mailpit 可以忽略 smtp 的账号密码</li>
-</ul>
+<p>在本地测试邮件可以参考这篇文章《在Windows下配置PHP服务器》的这个章节 mailpit</p>
+<p>sendmail 和 smtp 两种方式都可以用 mailpit 来测试， mailpit 可以忽略 smtp 的账号密码</p>
 &lt;!--
+可以用这个仓库来测试邮件的发送
+- https://github.com/axllent/mailpit
+- 启动命令
+    ```
+    mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:25 --smtp-auth-accept-any --smtp-auth-allow-insecure
+    ```
+- 启动完后用浏览器访问 listen 的地址
+- sendmail 和 smtp 两种方式都可以用 mailpit 来测试， mailpit 可以忽略 smtp 的账号密码
+
 mailpit 的版本是 v1.20
 邮件里如何加上附件？
 --&gt;
@@ -2897,7 +2959,10 @@ echo $collection-&gt;getSelectSql(true);
 </code></pre>
 <p>日志会输出到这个文件里 var/debug/db.log</p>
 <h3>sql 语句最终的执行位置</h3>
-<pre><code>vendor\magento\zendframework1\library\Zend\Db\Adapter\Abstract.php query
+<pre><code>通过 composer 安装的
+vendor\magento\zendframework1\library\Zend\Db\Adapter\Abstract.php query
+通过 github 安装的
+vendor\magento\zend-db\library\Zend\Db\Adapter\Abstract.php query
 </code></pre>
 <h3>写日志，并记录调用栈堆</h3>
 <pre><code class="lang-php"># region logsql
@@ -2997,7 +3062,7 @@ if ($logOpen) {
 extends(?:.*)AbstractResource\n
 </code></pre>
 <p>搜索时的排除选项</p>
-<pre><code>.js,.css,.md,.txt,.json,.csv,.html,.less,.phtml,**/tests,**/test,**/Test,**/setup,**/view,**/magento2-functional-testing-framework,.wsdl,**/module-signifyd,**/Block,pub,generated
+<pre><code>.js,.css,.md,.txt,.json,.csv,.html,.less,.phtml,**/tests,**/test,**/Test,**/setup,**/view,**/magento2-functional-testing-framework,.wsdl,**/module-signifyd,**/Block,pub,generated,var,dev
 </code></pre>
 <pre><code>app/code/Vendor/**/*.php
 app/**/*Test.php
