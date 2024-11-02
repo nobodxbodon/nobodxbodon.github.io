@@ -49,9 +49,28 @@ tags: [web]</p>
 └───────────────────┴──────────────────────────────┘
 </code></pre>
 <p>If you want to publish both CJS and ESM code, you can use <code>tsup</code>. This is a tool built on top of esbuild that compiles your TypeScript code into both formats. We'll now be running <code>tsup</code> to compile our code instead of <code>tsc</code>.</p>
-<p>Add an <code>exports</code> field to your <code>package.json</code>, which tells programs consuming your package how to find the CJS and ESM versions of your package. In this case, we're pointing folks using <code>import</code> to <code>dist/index.js</code> and folks using <code>require</code> to <code>dist/index.cjs</code>. Run <code>check-exports</code> again, everything is green.</p>
-<blockquote><p><a href="https://github.com/wooorm/npm-esm-vs-cjs">npm-esm-vs-cjs</a> has the data on the share of ESM vs CJS on the public npm registry. By August 2024, close to 1 in 4 of the popular npm packages contains ESM: ESM-only (12.1%) or dual (11.5%).</p>
-</blockquote>
+<pre><code class="lang-ts">// tsup.config.ts
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entryPoints: ["src/index.ts"],
+  format: ["cjs", "esm"],
+  dts: true,
+  outDir: "dist",
+  clean: true,
+});
+</code></pre>
+<p>This will create a <code>dist/index.js</code> (for ESM) and a <code>dist/index.cjs</code> (for CJS). Add an <code>exports</code> field to your <code>package.json</code>, which tells programs consuming your package how to find the CJS and ESM versions of your package. In this case, we're pointing folks using <code>import</code> to <code>dist/index.js</code> and folks using <code>require</code> to <code>dist/index.cjs</code>. Run <code>check-exports</code> again, everything is green.</p>
+<pre><code class="lang-json">{
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  }
+}
+</code></pre>
+<p><code>tsup</code> also creates declaration files for each of your outputs. <code>index.d.ts</code> for ESM and <code>index.d.cts</code> for CJS. This means you don't need to specify types in your <code>package.json</code>. TypeScript can automatically find the declaration file it needs.</p>
 <h3>npm install and npm ci</h3>
 <p><code>npm install</code> reads <code>package.json</code> to create a list of dependencies and uses <code>package-lock.json</code> to inform which versions of these dependencies to install. If a dependency is not in <code>package-lock.json</code> it will be added by <code>npm install</code>.</p>
 <p><code>npm ci</code> (named after <strong>C</strong>ontinuous <strong>I</strong>ntegration) installs dependencies directly from <code>package-lock.json</code> and uses <code>package.json</code> only to validate that there are no mismatched versions. If any dependencies are missing or have incompatible versions, it will throw an error. It will delete any existing <code>node_modules</code> folder to ensure a clean state. It never writes to <code>package.json</code> or <code>package-lock.json</code>. It does however expect a <code>package-lock.json</code> file in your project — if you do not have this file, <code>npm ci</code> will not work and you have to use <code>npm install</code> instead.</p>

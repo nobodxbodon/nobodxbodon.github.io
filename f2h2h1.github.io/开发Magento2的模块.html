@@ -1440,7 +1440,7 @@ crontab/reports/jobs/promotion_group_attribute/schedule/cron_expr
 $configData = $objectManager-&gt;get(\Magento\Cron\Model\Config\Data::class);
 var_dump($configData-&gt;getJobs());
 
-php -a &lt;&lt;- 'EOF'
+php -a &lt;&lt;- 'EOF' &gt; cron.json
 try {
 require __DIR__ . '/app/bootstrap.php';
 $bootstrap = \Magento\Framework\App\Bootstrap::create(BP, $_SERVER);
@@ -1449,7 +1449,7 @@ $state = $objectManager-&gt;get(\Magento\Framework\App\State::class);
 $state-&gt;setAreaCode(\Magento\Framework\App\Area::AREA_CRONTAB);
 /** @var \Magento\Cron\Model\Config\Data */
 $configData = $objectManager-&gt;get(\Magento\Cron\Model\Config\Data::class);
-var_dump($configData-&gt;getJobs());
+echo json_encode($configData-&gt;getJobs(), JSON_PRETTY_PRINT);
 } catch (\Throwable $e) {
     echo $e-&gt;getFile() . ':' . $e-&gt;getLine() . PHP_EOL;
     echo $e-&gt;getMessage() . PHP_EOL . $e-&gt;getTraceAsString();
@@ -2785,6 +2785,12 @@ foreach ($to as $item) {
 
 <h3>不使用模板</h3>
 <pre><code class="lang-php">try {
+    require __DIR__ . '/app/bootstrap.php';
+    $bootstrap = \Magento\Framework\App\Bootstrap::create(BP, $_SERVER);
+    $objectManager = $bootstrap-&gt;getObjectManager();
+    $state = $objectManager-&gt;get(\Magento\Framework\App\State::class);
+    $state-&gt;setAreaCode(\Magento\Framework\App\Area::AREA_CRONTAB);
+
     $message = $objectManager-&gt;get(\Magento\Framework\Mail\Message::class);
     $appConfig = $objectManager-&gt;get(\Magento\Framework\App\Config\ScopeConfigInterface::class);
 
@@ -3306,6 +3312,11 @@ authorization_rule
 </li>
 <li>status 和 state 的对应关系在这个表里 sales_order_status_state</li>
 </ul>
+&lt;!--
+select * from sales_order_status;
+select * from sales_order_status_state;
+--&gt;
+
 <h3>打补丁</h3>
 <ul>
 <li>遇到问题，可以先搜索一下 github 的 iusses ，同样的问题可能已经出了补丁，不用自己修改。</li>
@@ -3332,6 +3343,15 @@ authorization_rule
 <li>运行 bin/magento setup:upgrade</li>
 <li>参考 <a href="https://devdocs.magento.com/extensions/install">https://devdocs.magento.com/extensions/install</a></li>
 </ol>
+<h3>常见的 magento 扩展供应商</h3>
+<ul>
+<li>magento <a href="https://commercemarketplace.adobe.com/extensions.html">https://commercemarketplace.adobe.com/extensions.html</a></li>
+<li>mageplaz <a href="https://www.mageplaza.com/">https://www.mageplaza.com/</a></li>
+<li>magefan <a href="https://magefan.com/">https://magefan.com/</a></li>
+<li>amasty <a href="https://amasty.com/">https://amasty.com/</a></li>
+<li>vnecoms <a href="https://www.vnecoms.com/">https://www.vnecoms.com/</a></li>
+<li>webkul <a href="https://webkul.com/">https://webkul.com/</a></li>
+</ul>
 &lt;!--
 https://devdocs.magento.com/guides/v2.4/config-guide/cli/config-cli-subcommands-cron.html
 
@@ -3657,7 +3677,7 @@ eav 模型里还有一些表无法理解？
     eav_attribute_label
     eav_attribute_option
     eav_attribute_option_switch
-    eav_attribute_option_value
+    eav_attribute_option_value 一些情况下 eav 里具体的值好像是存在这个表里的
     eav_attribute_set
     eav_entity_attribute
 
@@ -3968,6 +3988,7 @@ FROM
     sales_order
 JOIN 
     sales_order_payment ON sales_order.entity_id = sales_order_payment.parent_id
+WHERE sales_order.increment_id = 3100182449;
 order by sales_order.entity_id desc
 limit 100
 
@@ -3986,8 +4007,9 @@ FROM
     sales_order
 JOIN 
     sales_order_item on sales_order.entity_id = sales_order_item.order_id
+WHERE sales_order.increment_id = 3100182449;
 WHERE sales_order.entity_id = 28546;
-
+3100182449
 
 如果 http 头里存在这个字段 X-Requested-With ，而且这个字段的值是 XMLHttpRequest 那么这就是一个 ajax 请求
 在控制器里可以这样判断
@@ -4005,5 +4027,41 @@ $isAjax = $this-&gt;getRequest()-&gt;isAjax() lib\internal\Magento\Framework\App
     }
 
 
+select
+    *
+FROM 
+    sales_order
+WHERE sales_order.increment_id = 3100182449 \G
+
+select
+    sales_order_payment.*
+FROM 
+    sales_order
+JOIN 
+    sales_order_payment ON sales_order.entity_id = sales_order_payment.parent_id
+WHERE sales_order.increment_id = 3100182449 \G
+
+SELECT x.* FROM core_config_data x
+WHERE value like '%sales%';
+
+
+
+
+
+select
+    entity_id,
+    is_virtual,
+    customer_id,
+    email_sent,
+    send_email,
+    increment_id,
+    customer_email,
+    club_member_id,
+    area_code,
+    created_at,
+    updated_at
+FROM 
+    sales_order
+WHERE sales_order.increment_id = 3100182449 \G
 
 --&gt;

@@ -7,7 +7,9 @@ description: ""
 added: ""
 top: true
 order: 6</p>
-<h2>updatedDate: "Oct 9 2024"</h2>
+<h2>updatedDate: "Oct 27 2024"</h2>
+<blockquote><p>TypeScript allows you to write complex yet elegant code. Some TypeScript users love to explore the possibilities of the type system and love to encode logic at type level. This practice is known as type gymnastics. The community also helps users to learn type gymnastics by creating fun and challenges such as <a href="https://github.com/type-challenges/type-challenges">type challenges</a>.</p>
+</blockquote>
 <p>Implement the built-in <code>Pick&lt;T, K&gt;</code> generic without using it. Constructs a type by picking the set of properties K from T.</p>
 <pre><code class="lang-ts">interface Todo {
   title: string;
@@ -15,24 +17,14 @@ order: 6</p>
   completed: boolean;
 }
 
+// expected type: { title: string; completed: boolean; }
 type TodoPreview = MyPick&lt;Todo, "title" | "completed"&gt;;
-
-const todo: TodoPreview = {
-  title: "Clean room",
-  completed: false,
-};
 
 // solution
 type MyPick&lt;T, K extends keyof T&gt; = {
   [P in K]: T[P];
 }
 </code></pre>
-<blockquote><p>Why <code>extends</code> is used here instead of <code>in</code>?</p>
-<ul>
-<li><code>K extends keyof T</code>: "K is a type that is assignable to keyof T"</li>
-<li><code>K in keyof T</code>: "K is each key in keyof T"</li>
-</ul>
-</blockquote>
 <p>Implement the built-in <code>Readonly&lt;T&gt;</code> generic without using it. Constructs a type with all properties of T set to <code>readonly</code>, meaning the properties of the constructed type cannot be reassigned.</p>
 <pre><code class="lang-ts">interface Todo {
   title: string;
@@ -109,7 +101,6 @@ type TupleToObject&lt;T extends readonly (string | symbol | number)[]&gt; = {
 // solution 2
 // built-in `PropertyKey` represents the data type of a property key.
 // It can be a string, a symbol, or a number.
-// https://www.totaltypescript.com/concepts/propertykey-type
 type TupleToObject&lt;T extends readonly PropertyKey[]&gt; = {
   [P in T[number]]: P
 };
@@ -129,10 +120,15 @@ type First&lt;T extends any[]&gt; = T extends [] ? never : T[0];
 type tail = Last&lt;arr&gt;; // expected to be 'c'
 
 // solution
-// It is a hint to use **variadic tuple types**; we have an array and we need to work with its elements.
-// https://fettblog.eu/variadic-tuple-types-preview/
+// It is a hint to use variadic tuple types: https://fettblog.eu/variadic-tuple-types-preview
 type Last&lt;T extends any[]&gt; = T extends [...infer X, infer L] ? L : never;
 </code></pre>
+<pre><code class="lang-ts">type MyType&lt;T&gt; = T extends infer R ? R : never;
+type T1 = MyType&lt;{b: string}&gt; // T1 is { b: string; }
+type MyType2&lt;T&gt; = T extends R2 ? R2 : never; // error, R2 undeclared
+</code></pre>
+<blockquote><p>With <code>infer</code>, the compiler ensures that you have declared all type variables explicitly. Here we declare a new type variable R in <code>MyType</code>. Without <code>infer</code>, the compiler does not introduce an additional type variable R2 that is to be inferred. If R2 has not been declared, it will result in a compile error. <strong>Note that <code>infer</code> is only used within the <code>extends</code> clause of a conditional type.</strong></p>
+</blockquote>
 <p>For given a tuple, you need create a generic <code>Length</code>, pick the length of the tuple.</p>
 <pre><code class="lang-ts">type tesla = ["tesla", "model 3", "model X", "model Y"];
 type teslaLength = Length&lt;tesla&gt;; // expected 4
@@ -171,6 +167,7 @@ type If&lt;C extends boolean, T, F&gt; = C extends undefined | null
 </code></pre>
 <p>Implement the JavaScript <code>Array.concat</code> function in the type system. A type takes the two arguments. The output should be a new array that includes inputs in ltr order.</p>
 <pre><code class="lang-ts">type Result = Concat&lt;[1], [2]&gt;; // expected to be [1, 2]
+
 // solution
 type Concat&lt;T extends unknown[], U extends unknown[]&gt; = [...T, ...U];
 </code></pre>
@@ -220,11 +217,8 @@ type MyReturnType&lt;T&gt; = T extends (...args: any[]) =&gt; infer P ? P : neve
   completed: boolean;
 }
 
+// expected type: { completed: boolean; }
 type TodoPreview = MyOmit&lt;Todo, "description" | "title"&gt;;
-
-const todo: TodoPreview = {
-  completed: false,
-};
 
 // solution
 // https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-1.html#key-remapping-in-mapped-types
@@ -238,7 +232,6 @@ type MyOmit&lt;T, K&gt; = { [P in keyof T as P extends K ? never : P]: T[P] };
 type Test = TupleToUnion&lt;Arr&gt; // expected '1' | 2 | boolean
 
 // solution
-// lookup types: looks like an element access, but are written as types
 type TupleToUnion&lt;T&gt; = T extends unknown[] ? T[number] : never
 </code></pre>
 <p>Type the function <code>PromiseAll</code> that accepts an array of <code>PromiseLike</code> objects. The returning value should be <code>Promise&lt;T&gt;</code> where T is the resolved result array.</p>
@@ -264,4 +257,216 @@ declare function PromiseAll&lt;T extends unknown[]&gt;(
 declare function PromiseAll&lt;T extends unknown[]&gt;(
   values: readonly [...T],
 ): Promise&lt;{ [P in keyof T]: T[P] extends Promise&lt;infer R&gt; ? R : T[P] }&gt;;
+</code></pre>
+<p>Implement <code>TrimLeft&lt;T&gt;</code> which takes an exact string type and returns a new string with the whitespace beginning removed.</p>
+<pre><code class="lang-ts">type trimmed = TrimLeft&lt;"  Hello World  "&gt;; // expected to be 'Hello World  '
+
+// solution
+type TrimLeft&lt;S&gt; = S extends `${" " | "\n" | "\t"}${infer T}` ? TrimLeft&lt;T&gt; : S;
+</code></pre>
+<p>Implement the type <code>ReplaceFirst&lt;T, S, R&gt;</code> which will replace the first occurrence of S in a tuple T with R. If no such S exists in T, the result should be T.</p>
+<pre><code class="lang-ts">type replaced = ReplaceFirst&lt;["A", "B", "C"], "C", "D"&gt;;
+// expected to be ['A', 'B', 'D']
+
+// solution
+// splitting the T to infer the first Item in the list and infer the Rest
+type ReplaceFirst&lt;T extends readonly unknown[], S, R&gt; = T extends [
+  infer FI,
+  ...infer Rest,
+]
+  ? FI extends S
+    ? [R, ...Rest]
+    : [FI, ...ReplaceFirst&lt;Rest, S, R&gt;]
+  : T;
+</code></pre>
+<p>Convert a string to CamelCase.</p>
+<pre><code class="lang-ts">type camelCased = CamelCase&lt;"foo-bar-baz"&gt;; // expected "fooBarBaz"
+
+// solution
+type CamelCase&lt;S&gt; = S extends `${infer H}-${infer T}`
+  ? T extends Capitalize&lt;T&gt;
+    ? `${H}-${CamelCase&lt;T&gt;}`
+    : `${H}${CamelCase&lt;Capitalize&lt;T&gt;&gt;}`
+  : S;
+</code></pre>
+<p>Convert a string to kebab-case.</p>
+<pre><code class="lang-ts">type kebabCase = KebabCase&lt;"FooBarBaz"&gt;; // expected "foo-bar-baz"
+
+// solution
+// step 1. start from inferring to get the first character and the tail
+type KebabCase&lt;S&gt; = S extends `${infer C}${infer T}` ? never : S;
+
+// step 2. have / don't have the capitalized tail
+type KebabCase&lt;S&gt; = S extends `${infer C}${infer T}`
+  ? T extends Uncapitalize&lt;T&gt;
+    ? `${Uncapitalize&lt;C&gt;}${KebabCase&lt;T&gt;}`
+    : `${Uncapitalize&lt;C&gt;}-${KebabCase&lt;T&gt;}`
+  : S;
+</code></pre>
+<p>Implement a type that adds a new field to the interface. The output should be an object with the new field.</p>
+<pre><code class="lang-ts">type Test = { id: "1" };
+type Result = AppendToObject&lt;Test, "value", 4&gt;; // expected to be { id: '1', value: 4 }
+
+// solution
+type AppendToObject&lt;T, U extends string, V&gt; = {
+  [P in keyof T | U]: P extends keyof T ? T[P] : V;
+};
+</code></pre>
+<p>For given function type <code>Fn</code> and any type A, create a generic type which will take <code>Fn</code> as the first argument, A as the second, and will produce function type G which will be the same as <code>Fn</code> but with appended argument A as a last one.</p>
+<pre><code class="lang-ts">type Fn = (a: number, b: string) =&gt; number;
+// expected be (a: number, b: string, x: boolean) =&gt; number
+type Result = AppendArgument&lt;Fn, boolean&gt;;
+
+// solution
+type AppendArgument&lt;Fn, A&gt; = Fn extends (...args: infer P) =&gt; infer R
+  ? (...args: [...P, A]) =&gt; R
+  : never;
+</code></pre>
+<p>Merge two types into a new type. Keys of the second type overrides keys of the first type.</p>
+<pre><code class="lang-ts">type Foo = {
+  a: number;
+  b: string;
+};
+
+type Bar = {
+  b: number;
+};
+
+type merged = Merge&lt;Foo, Bar&gt;; // expected { a: number; b: number }
+
+// solution
+type Merge&lt;F, S&gt; = {
+  [P in keyof F | keyof S]: P extends keyof S
+    ? S[P]
+    : P extends keyof F
+    ? F[P]
+    : never;
+};
+</code></pre>
+<p>Implement the <code>StringToUnion</code> type. Type take string argument. The output should be a union of input letters.</p>
+<pre><code class="lang-ts">type Test = "123";
+type Result = StringToUnion&lt;Test&gt;; // expected to be "1" | "2" | "3"
+
+// solution
+type StringToUnion&lt;T extends string&gt; = T extends `${infer C}${infer T}`
+  ? C | StringToUnion&lt;T&gt;
+  : never;
+</code></pre>
+<p>Get an Object that is the difference between two types.</p>
+<pre><code class="lang-ts">type Foo = {
+  name: string;
+  age: string;
+};
+
+type Bar = {
+  name: string;
+  age: string;
+  gender: number;
+};
+
+type test = Diff&lt;Foo, Bar&gt;; // expected { gender: number }
+
+// solution
+type Diff&lt;O, O1&gt; = {
+  [P in keyof O | keyof O1 as Exclude&lt;P, keyof O &amp; keyof O1&gt;]: P extends keyof O
+    ? O[P]
+    : P extends keyof O1
+    ? O1[P]
+    : never;
+};
+</code></pre>
+<p>Implement the <code>Absolute</code> type. A type that take string, number or bigint. The output should be a positive number string.</p>
+<pre><code class="lang-ts">type Test = -100;
+type Result = Absolute&lt;Test&gt;; // expected to be "100"
+
+// solution
+// convert it to string and remove the “-” sign
+type Absolute&lt;T extends number | string | bigint&gt; = `${T}` extends `-${infer N}`
+  ? N
+  : `${T}`;
+</code></pre>
+<p>Implement <code>any</code> function in the type system. A type takes the array and returns true if any element of the array is true. If the array is empty, return false.</p>
+<pre><code class="lang-ts">type Sample1 = AnyOf&lt;[1, "", false, [], {}]&gt;; // expected to be true
+type Sample2 = AnyOf&lt;[0, "", false, [], {}]&gt;; // expected to be false
+
+// solution
+type Falsy = 0 | "" | false | [] | { [P in any]: never };
+
+type AnyOf&lt;T extends readonly any[]&gt; = T extends [infer H, ...infer T]
+  ? H extends Falsy
+    ? AnyOf&lt;T&gt;
+    : true
+  : false;
+</code></pre>
+<p>Implement <code>EndsWith&lt;T, U&gt;</code> which takes two exact string types and returns whether T ends with U.</p>
+<pre><code class="lang-ts">type R0 = EndsWith&lt;"abc", "bc"&gt;; // true
+type R1 = EndsWith&lt;"abc", "d"&gt;; // false
+
+// solution
+type EndsWith&lt;T extends string, U extends string&gt; = T extends `${any}${U}`
+  ? true
+  : false;
+</code></pre>
+<p>Implement the type version of <code>Array.lastIndexOf</code>. <code>LastIndexOf&lt;T, U&gt;</code> takes an Array T, any U and returns the index of the last U in Array T.</p>
+<pre><code class="lang-ts">type Res1 = LastIndexOf&lt;[1, 2, 3, 2, 1], 2&gt;; // 3
+type Res2 = LastIndexOf&lt;[0, 0, 0], 2&gt;; // -1
+
+// solution
+// Check from the right if it is equal to the item we are looking for
+type LastIndexOf&lt;T, U&gt; = T extends [...infer R, infer I]
+  ? Equal&lt;I, U&gt; extends true
+    ? R["length"]
+    : LastIndexOf&lt;R, U&gt;
+  : -1;
+</code></pre>
+<p>Implement a type <code>Zip&lt;T, U&gt;</code>, T and U must be Tuple.</p>
+<pre><code class="lang-ts">// expected to be [[1, true], [2, false]]
+type R = Zip&lt;[1, 2], [true, false]&gt;;
+
+// solution
+// step 1. if both tuples have the item and the tail - we can zip them together
+type Zip&lt;T, U&gt; = T extends [infer TI, ...infer TT]
+  ? U extends [infer UI, ...infer UT]
+    ? [TI, UI]
+    : never
+  : never;
+
+// step 2. recursive way of zipping the tail until it’s gone
+type Zip&lt;T, U&gt; = T extends [infer TI, ...infer TT]
+  ? U extends [infer UI, ...infer UT]
+    ? [[TI, UI], ...Zip&lt;TT, UT&gt;]
+    : []
+  : [];
+</code></pre>
+<p>Implement the type <code>Without&lt;T, U&gt;</code>, which takes an array T, number or array U and returns an array without the elements of U.</p>
+<pre><code class="lang-ts">type Res = Without&lt;[1, 2], 1&gt;; // expected to be [2]
+type Res1 = Without&lt;[1, 2, 4, 1, 5], [1, 2]&gt;; // expected to be [4, 5]
+
+// solution
+// step 1. when U specified as a primitive type
+type Without&lt;T, U&gt; = T extends [infer H, ...infer T]
+  ? H extends U
+    ? [...Without&lt;T, U&gt;]
+    : [H, ...Without&lt;T, U&gt;]
+  : [];
+
+// step 2. if U is a tuple of numbers
+type Without&lt;T, U&gt; = T extends [infer H, ...infer T]
+  ? H extends (U extends number[] ? U[number] : U)
+    ? [...Without&lt;T, U&gt;]
+    : [H, ...Without&lt;T, U&gt;]
+  : [];
+</code></pre>
+<p>Implement the type <code>Unique&lt;T&gt;</code>, which takes an array T, returns the array T without repeated values.</p>
+<pre><code class="lang-ts">type Res = Unique&lt;[1, 1, 2, 2, 3, 3]&gt;; // expected to be [1, 2, 3]
+type Res1 = Unique&lt;[1, "a", 2, "b", 2, "a"]&gt;; // expected to be [1, "a", 2, "b"]
+
+// solution
+// If T is present in other part of the tuple, T is the duplicate and we need to skip it,
+// otherwise, we add it to the result.
+type Unique&lt;T&gt; = T extends [...infer H, infer T]
+  ? T extends H[number]
+    ? [...Unique&lt;H&gt;]
+    : [...Unique&lt;H&gt;, T]
+  : [];
 </code></pre>

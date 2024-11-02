@@ -1,0 +1,191 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/explore-running-code-in-browser.md">仓库源文</a>，<a href="https://kexizeroing.github.io/explore-running-code-in-browser">站点原文</a></h2>
+<hr/>
+<p>layout: "../layouts/BlogPost.astro"
+title: "Explore running code in browser"
+slug: explore-running-code-in-browser
+description: ""
+added: "Aug 25 2023"
+tags: [other]</p>
+<h2>updatedDate: "Oct 25 2024"</h2>
+<h2>Interactive blog-cells</h2>
+<p><a href="https://github.com/rameshvarun/blog-cells">blog-cells</a> adds interactive code snippets to any blog or webpage. It's worth a try at here.</p>
+&lt;p&gt;
+&lt;script type="text/notebook-cell" data-autorun="true"&gt;
+console.log("Hello World!");
+&lt;/script&gt;
+&lt;/p&gt;&lt;p&gt;
+&lt;script type="text/notebook-cell"&gt;
+console.log("Hello World, but not automatic.");
+&lt;/script&gt;
+&lt;/p&gt;&lt;script type="text/notebook-cell" data-autorun="true"&gt;
+const response = await fetch("https://pokeapi.co/api/v2/pokemon/ditto");
+const data = await response.json();
+console.log(data);
+&lt;/script&gt;<p>&lt;link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/blog-cells@0.4.1/dist/blog-cells.css" /&gt;</p>
+&lt;script type="module" src="https://cdn.jsdelivr.net/npm/blog-cells@0.4.1/dist/blog-cells.js"&gt;&lt;/script&gt;<h2>Notes on running code online in browser</h2>
+<p>JSX isn't natively understood by browsers, so we need to transform it into regular JavaScript. This is typically done using Babel. In this case, we're using <code>@babel/standalone</code>, which is a browser version of Babel.</p>
+<blockquote><p>If you're using Babel in production, you should normally not use <code>@babel/standalone</code>. Instead, you should use a build system running on Node.js, such as Webpack, Rollup, or Parcel, to transpile your JS ahead of time.</p>
+</blockquote>
+<pre><code class="lang-js">import { transform } from '@babel/standalone';
+
+const babelTransform = (code) =&gt; {
+  return transform(code, {
+    presets: ['react', 'typescript'],
+  }).code;
+};
+
+const jsxCode = `
+  const App = () =&gt; {
+    return &lt;h1&gt;Hello, World!&lt;/h1&gt;;
+  };
+`;
+
+const compiledCode = babelTransform(jsxCode);
+console.log(compiledCode);
+</code></pre>
+<p>Monaco Editor can provide a rich editing experience for the JSX code.</p>
+<pre><code class="lang-js">import * as monaco from 'https://esm.sh/monaco-editor@0.30.1';
+
+const editor = monaco.editor.create(document.getElementById('editor'), {
+  value: `const App = () =&gt; {
+    return &lt;h1&gt;Hello, World!&lt;/h1&gt;;
+    };`,
+  language: 'javascript',
+  theme: 'vs-dark'
+});
+</code></pre>
+<p>To prevent the main thread from being blocked during code compilation, which could cause the UI to feel sluggish, we can use a Web Worker:</p>
+<pre><code class="lang-js">// compiler.worker.js
+self.addEventListener('message', async ({ data }) =&gt; {
+  const compiledCode = babelTransform(data);
+  self.postMessage(compiledCode);
+});
+
+// main.js
+const compilerWorker = new Worker('compiler.worker.js');
+
+compilerWorker.postMessage(jsxCode);
+
+compilerWorker.addEventListener('message', ({ data }) =&gt; {
+  // data contains the compiled code
+  console.log('Compiled code:', data);
+});
+</code></pre>
+<p>To support third-party module imports, we can use import maps. This allows us to specify module paths for the browser:</p>
+<pre><code class="lang-html">&lt;script type="importmap"&gt;
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0"
+  }
+}
+&lt;/script&gt;
+</code></pre>
+<p>To handle local module imports in the browser, we can use <code>URL.createObjectURL</code> to generate temporary URL files:</p>
+<pre><code class="lang-js">const moduleCode = `
+  export const greeting = "Hello, World!";
+`;
+
+const compiledModuleCode = babelTransform(moduleCode);
+
+const moduleURL = URL.createObjectURL(
+  new Blob([compiledModuleCode], { type: 'application/javascript' })
+);
+
+// Now you can import this module using:
+// import { greeting } from moduleURL;
+</code></pre>
+<p>To tie everything together, we need to automatically transform our import statements to use the URLs we've created. We can do this with a custom Babel plugin:</p>
+<blockquote><p>The plugin is defined as an object with a <code>visitor</code> property. The <code>ImportDeclaration</code> method will be called for every import declaration in the code being transformed. The <code>path</code> parameter represents the current path being traversed in the Abstract Syntax Tree (AST).</p>
+</blockquote>
+<pre><code class="lang-js">import { transform } from '@babel/core';
+
+const transformImportSourcePlugin = {
+  visitor: {
+    ImportDeclaration(path) {
+      // Transform the import source to a URL
+      path.node.source.value = getModuleURL(path.node.source.value);
+    }
+  }
+};
+
+const babelTransformWithPlugin = (code) =&gt; {
+  return transform(code, {
+    presets: ['react', 'typescript'],
+    plugins: [transformImportSourcePlugin]
+  }).code;
+};
+</code></pre>
+<h3>CodeSandbox and StackBlitz</h3>
+<p><strong>Sandpack</strong> is a component toolkit for creating live-running code editing experiences, powered by the online bundler used on CodeSandbox. <a href="https://sandpack.codesandbox.io">https://sandpack.codesandbox.io</a></p>
+<p><strong>WebContainers</strong> are a browser-based runtime for executing Node.js applications and operating system commands, entirely inside your browser tab. <a href="https://webcontainers.io">https://webcontainers.io</a></p>
+<pre><code class="lang-jsx">import { Sandpack } from "@codesandbox/sandpack-react";
+
+const SandpackExample = () =&gt; {
+  const files = {
+    "/App.js": `
+import React from 'react';
+
+export default function App() {
+  return (
+    &lt;div style={{ fontFamily: 'system-ui, sans-serif', lineHeight: '1.4' }}&gt;
+      &lt;h1&gt;Hello Sandpack!&lt;/h1&gt;
+      &lt;p&gt;Start editing to see some magic happen!&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+`,
+    "/index.js": `
+import React from 'react';
+import ReactDOM from 'react-dom';
+import App from './App';
+
+ReactDOM.render(
+  &lt;React.StrictMode&gt;
+    &lt;App /&gt;
+  &lt;/React.StrictMode&gt;,
+  document.getElementById('root')
+);
+`,
+  };
+
+  return (
+    &lt;div style={{ padding: "20px" }}&gt;
+      &lt;h1&gt;Sandpack Example&lt;/h1&gt;
+      &lt;Sandpack
+        options={{
+          showNavigator: true,
+          editorHeight: 400,
+          showTabs: true,
+        }}
+        files={files}
+        theme="dark"
+        template="react"
+      /&gt;
+    &lt;/div&gt;
+  );
+};
+</code></pre>
+<h3>WebLLM and Pyodide</h3>
+<p>WebLLM is a high-performance in-browser LLM inference engine, aiming to be the backend of AI-powered web applications and agents. It provides a specialized runtime for the web backend of MLCEngine, leverages WebGPU for local acceleration.</p>
+<blockquote><p>WebGPU is a new web standard for accelerated graphics and compute. The API enables web developers to use the underlying system's GPU to carry out high-performance computations directly in the browser. WebGPU is the successor to WebGL and provides significantly better performance. Before WebGPU support, ONNX Runtime Web <em>(Transformers.js uses ONNX Runtime to run models in the browser)</em> has adopted WebAssembly and WebGL technologies for providing an optimized ONNX model inference runtime for both CPUs and GPUs.</p>
+</blockquote>
+<pre><code class="lang-js">const selectedModel = "Llama-3-8B-Instruct-q4f32_1-MLC";
+const engine = await webllm.CreateMLCEngine(selectedModel);
+</code></pre>
+<p>Pyodide is a Python distribution for the browser and Node.js based on WebAssembly. Pyodide makes it possible to install and run Python packages in the browser. Try Pyodide in a <a href="https://pyodide.org/en/stable/console.html">REPL</a> directly in your browser.</p>
+<pre><code class="lang-js">async function main(){
+  let pyodide = await loadPyodide();
+  console.log(pyodide.runPython(`
+      import sys
+      sys.version
+  `));
+  pyodide.runPython("print(1 + 2)");
+}
+main();
+</code></pre>
+<p><a href="https://github.com/cfahlgren1/qwen-2.5-code-interpreter">Qwen 2.5 Code Interpreter</a> running locally on your computer. It is a lightweight, offline-compatible code interpreter that allows users to execute code snippets in real-time. (Powered by Qwen, WebLLM, and Pyodide)</p>
+<h3>VSCode Dev Containers</h3>
+<p><a href="https://code.visualstudio.com/docs/devcontainers/tutorial">https://code.visualstudio.com/docs/devcontainers/tutorial</a></p>
+<p>A dev container allows you to use a container as a full-featured development environment. It can be used to run an application, to separate tools, libraries, or runtimes needed for working with a codebase, and to aid in continuous integration and testing. <code>devcontainer.json</code> is a structured jsonc metadata format that tools can use to store any needed configuration required to develop inside of local or cloud-based containerized coding.</p>
+<p>For example, <a href="https://github.com/Azure-Samples/real-time-transcription-simple">https://github.com/Azure-Samples/real-time-transcription-simple</a> uses Devcontainers. You can use this repo on your PC/MAC or on Codespaces in Github. This makes it easy for you to develop without having to install Node, NPM, or the React modules you will need. When you clone the repository and open it with VS Code, you will see "Folder contains a Dev Container config file. Reopen folder to develop in a container." Confirm it to open the Devcontainer. Node, yarn, etc. are installed on it, and that is all you need to build and run your webapp.</p>
