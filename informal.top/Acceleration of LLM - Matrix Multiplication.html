@@ -1,0 +1,40 @@
+<h2><a href="https://github.com/wa008/wa008.github.io/blob/master/_posts/2024-10-17-try-of-torchview-to-accelerate-finetune-new.md">仓库源文</a>，<a href="https://informal.top/2024/10/17/try-of-torchview-to-accelerate-finetune-new">站点原文</a></h2>
+<hr/>
+<p>title: Acceleration of LLM - Matrix Multiplication
+tags: [LLM, acceleration, Matrix multiplication, torchview]</p>
+<h2>math: true</h2>
+<h2>Background</h2>
+<p>After read "Manual Autograd" in <a href="https://unsloth.ai/blog/mistral-benchmark">unsloth's blog</a>, I try to parse model and found more related point where we can optimize.</p>
+<p><a href="https://github.com/mert-kurttutan/torchview">torchview</a> is a great similar tool to use.</p>
+<h2>torchview</h2>
+<h3>what torchview can do</h3>
+<p>I want to show what torchview can do after I try it.</p>
+<ol>
+<li>Model: torchview can parse model when inferencing and training, it support mlp, bert, Gemma, llama3.2.</li>
+<li>Node: the <a href="https://github.com/mert-kurttutan/torchview/blob/main/torchview/computation_node/compute_node.py">smallest node</a> is tensor, module(like attention), function(like nn.funtion).</li>
+<li>Shape: show the input shape and output shape for every basic node.</li>
+<li>Edge: show the input and ouput relation between basic node.</li>
+</ol>
+<p>Showing node and related information:</p>
+<pre><code>model = AutoModel.from_pretrained("bert-base-uncased")
+tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+inputs = tokenizer("Hello world!", return_tensors="pt")
+model_graph = draw_graph(model, input_data=inputs,
+    save_graph = True,
+    filename = 'output')
+
+print (len(model_graph.edge_list))
+for a, b in model_graph.edge_list:
+    print (a, b, type(a), type(b))
+</code></pre>
+<h3>what torchview view can't so far</h3>
+<p>Attention: there are much softmax or activation functions in general model, the only three consecutive matrix multiplication is <code>(maxtrix_intput * W_q) * (maxtrix_intput * W_k)</code>, but it can not be optimized because there is no much difference between $d_input$ and $d_hidden$.</p>
+<p>Parse module: torchview can not parse the specific module so far, there are so much special case in module, like <a href="https://github.com/huggingface/transformers/blob/b54109c7466f6e680156fbd30fa929e2e222d730/src/transformers/models/llama/modeling_llama.py#L273">llamaAttention</a>. But, if we have specific input data, it can follow a specific path to execute the code, it seems that torchview works in this way because input data or input size is necessary for torchview, I didn't research much more about that.</p>
+<h2>Things worth explore</h2>
+<p>Optmization of matrix multiplication still can be used in other module, like</p>
+<ol>
+<li>LoRA, as said in unsloth</li>
+<li>Autograd in backward, maybe</li>
+</ol>
+<h2>Conclusion</h2>
+<p>Failling on this indicate that I always think too much but read insufficiently. Simple idea can not work in most situations.</p>
