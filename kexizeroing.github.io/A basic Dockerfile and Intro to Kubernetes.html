@@ -6,7 +6,7 @@ slug: basic-dockerfile-and-kubernetes
 description: ""
 added: "Mar 12 2023"
 tags: [devops]</p>
-<h2>updatedDate: "July 14 2024"</h2>
+<h2>updatedDate: "Nov 5 2024"</h2>
 <h2>Docker concepts</h2>
 <p>Docker is the most popular container technology tool. It is a tool used for building, running, and deploying containerized applications. An application’s code, libraries, tools, dependencies, and other files are all contained in a Docker image; when a user executes an image, it turns into a container.</p>
 <p>Docker Engine is the core product of Docker, including its daemon (dockerd) as well as its CLI (docker).</p>
@@ -22,7 +22,7 @@ tags: [devops]</p>
 <li>A layer is a change on an image, or an intermediate image. Every command you specify (FROM, RUN, COPY, etc.) in your Dockerfile causes the previous image to change, thus creating a new layer. If you make a change to your Dockerfile, docker will rebuild only the layer that was changed and the ones after that. This is called layer caching.</li>
 </ol>
 </blockquote>
-<h2>A Dockerfile for a NodeJS application</h2>
+<h3>A Dockerfile for a NodeJS application</h3>
 <p>This is a valid Dockerfile for a NodeJS application. But we can improve it a lot.</p>
 <pre><code class="lang-dockerfile">FROM node
 
@@ -151,6 +151,33 @@ Dockerfile
 <li>Now, you have to make sure that when the kids want to play with your house in the playground (your servers or Kubernetes), they are using the right version. So, you update the playground instructions (Terraform configuration) with the newest version of your house.</li>
 <li>The playground helpers (Terraform) read the updated plan you prepared. Terraform will actually deploy it, which means they replace the old toy house with the new one.</li>
 </ol>
+<h3>Docker Multi-stage builds</h3>
+<p>Most of the time, we COPY files from the host to the container image. However, you can also COPY files straight from other images <code>COPY --from=&lt;image&gt;</code>. Every FROM instruction defines a stage.</p>
+<ul>
+<li>The order of stages in the Dockerfile matters - it's impossible to <code>COPY --from</code> a stage defined below the current stage.</li>
+<li>The <code>AS</code> aliases are optional - if you don't name your stages, they still can be referred to by their sequence number.</li>
+<li>Separating build and runtime environments can reduce image size, improve security, and make build scripts cleaner.</li>
+</ul>
+<pre><code class="lang-dockerfile"># https://labs.iximiuz.com/tutorials/docker-multi-stage-builds
+# Build stage
+FROM node:lts-slim AS build
+
+WORKDIR /app
+
+COPY package*.json .
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# Runtime stage
+FROM nginx:alpine
+
+WORKDIR /usr/share/nginx/html
+
+RUN rm -rf ./*
+COPY --from=build /app/dist .
+</code></pre>
 <h2>Intro to Kubernetes</h2>
 <p>Let's say you have an app which you have containerized (Monoliths were broken into microservices). So you run a bunch of containers to serve your app to users. But how do you manage these different containers? This is where K8s comes to the rescue. Kubernetes is a container orchestration tool for managing production-ready containerized workloads and services that allows for declarative setup as well as automation.</p>
 <ul>
@@ -242,3 +269,14 @@ spec:
           type: Utilization
           averageUtilization: 50
 </code></pre>
+<h2>Basic Terraform steps</h2>
+<p>The process starts with <code>terraform init</code> <strong>(Write the Blueprint)</strong>, Terraform downloads all necessary providers and modules - think of it as collecting all the right building blocks before starting construction.</p>
+<p>Next comes <code>terraform plan</code> <strong>(Check the Layout)</strong>. It examines what currently exists in your infrastructure and compares it with what you want to build, creating a detailed execution plan.</p>
+<p>The real action happens with <code>terraform apply</code> <strong>(Build the Playground)</strong>. Terraform will create new resources, modify existing ones, or remove what's no longer needed. Throughout this process, it keeps track of everything in a state file (<code>terraform.tfstate</code>), which is like having a perfect memory of how everything was built.</p>
+<p>Your infrastructure blueprint lives in configuration files (typically <code>main.tf</code> or <code>terraform.tf</code>). These files are like the rulebook that tells Terraform exactly what to build and how to build it.</p>
+<ul>
+<li><code>terraform.tf</code> is your wishes (what you want)</li>
+<li><code>terraform.tfstate</code> is reality (what actually exists)</li>
+</ul>
+<p>This is why when you run <code>terraform plan</code>, Terraform compares these two files to determine what changes need to be made to turn your wishes (<code>terraform.tf</code>) into reality (<code>terraform.tfstate</code>).</p>
+<p><em>"Error: Saved plan is stale"</em> may occur in Terraform when the actual infrastructure state has changed between when you created the plan and when you try to apply that saved plan. For example, someone else made changes to the same infrastructure while you had your plan file waiting, or another automation process (like CI/CD) modified the infrastructure.</p>
