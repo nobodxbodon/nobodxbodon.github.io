@@ -1,0 +1,535 @@
+<h2><a href="https://gitee.com/jaredtao/jaredtao/blob/master/source/_posts/Qt/玩转Qt(16">仓库源文</a>-自动属性.md)，<a href="https://jaredtao.gitee.io/玩转Qt(16">站点原文</a>-自动属性)</h2>
+<hr/>
+<h2>abbrlink: 3417</h2>
+<hr/>
+<p>title: 玩转Qt(16)-自动属性
+photos: /img/avatar.jpg
+tags:</p>
+<ul>
+<li>Qt</li>
+<li>Qt实用技能
+categories: 玩转Qt
+date: 2024-12-9 19:44:23</li>
+</ul>
+<ul>
+<li><a href="#简介">简介</a><ul>
+<li><a href="#痛点">痛点</a></li>
+<li><a href="#解决方案">解决方案</a></li>
+<li><a href="#原理">原理</a><ul>
+<li><a href="#qobject属性">QObject属性</a><ul>
+<li><a href="#常规类成员函数">常规类成员函数</a></li>
+<li><a href="#qt加的特殊标记">Qt加的特殊标记</a></li>
+<li><a href="#set函数的通知">set函数的通知</a></li>
+</ul>
+</li>
+<li><a href="#搞一套宏">搞一套宏</a><ul>
+<li><a href="#简易成员函数的宏">简易成员函数的宏</a></li>
+<li><a href="#qt信号槽的宏">Qt信号槽的宏</a></li>
+<li><a href="#浮点数比较大小">浮点数比较大小</a></li>
+</ul>
+</li>
+<li><a href="#运行环境适配">运行环境适配</a></li>
+</ul>
+</li>
+<li><a href="#源代码">源代码</a></li>
+</ul>
+</li>
+</ul>
+<h1>简介</h1>
+<p>这次分享QObject属性的自动生成。</p>
+<p>Qt的QObject，拥有强大的属性系统，这个属性系统在Qt各处都能见到运用。</p>
+<p>例如： QWidget自定义控件，在designer中可视化配置属性；在qss中控制样式； 在qml中进行属性绑定；</p>
+<p>在Q-DBus中进行数据通知；在WebChannel中与js进行同步 等等。</p>
+<h2>痛点</h2>
+<p>Qt的属性系统应用相当广泛，但是也有一些弊端，其中之一便是Q_PROPERTY及相应代码比较长。</p>
+<pre><code class="lang-c++">class AppInfo_Old : public QObject
+{
+    Q_OBJECT
+
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged FINAL)
+    Q_PROPERTY(QString appVersion READ appVersion WRITE setAppVersion NOTIFY appVersionChanged FINAL)
+    Q_PROPERTY(QString lasterVersion READ lasterVersion WRITE setLasterVersion NOTIFY lasterVersionChanged FINAL)
+    Q_PROPERTY(QString buildDateTime READ buildDateTime WRITE setBuildDateTime NOTIFY buildDateTimeChanged FINAL)
+    Q_PROPERTY(QString buildRevision READ buildRevision WRITE setBuildRevision NOTIFY buildRevisionChanged FINAL)
+    Q_PROPERTY(QString copyRight READ copyRight WRITE setCopyRight NOTIFY copyRightChanged FINAL)
+    Q_PROPERTY(QString descript READ descript WRITE setDescript NOTIFY descriptChanged FINAL)
+    Q_PROPERTY(QString compilerVendor READ compilerVendor WRITE setCompilerVendor NOTIFY compilerVendorChanged FINAL)
+    Q_PROPERTY(bool splashShow READ splashShow WRITE setSplashShow NOTIFY splashShowChanged FINAL)
+    Q_PROPERTY(float scale READ scale WRITE setScale NOTIFY scaleChanged FINAL)
+    Q_PROPERTY(double ratio READ ratio WRITE setRatio NOTIFY ratioChanged FINAL)
+    Q_PROPERTY(QStringList customs READ customs WRITE setCustoms NOTIFY customsChanged FINAL)
+
+public:
+    explicit AppInfo_Old(QObject* parent = nullptr);
+    virtual ~AppInfo_Old() override;
+
+public:
+private:
+};
+</code></pre>
+<p>比如说有这样一个QObject对象, 它有十多个属性。</p>
+<p>为此我们需要先写上十多条Q_PROPERTY，然后再为每一条写上对应的set函数、get函数和changed信号。</p>
+<p>可以手动敲，也可以使用QtCreator的快捷生成功能。</p>
+<p><img alt="预览" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt16/img2.png"/>
+<img alt="预览" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt16/img3.png"/></p>
+<p>全部完成后，代码变得很长很长，看着都很费劲。</p>
+<p>在这样的代码上进行修改会非常的痛苦。</p>
+<pre><code class="lang-c++">class AppInfo_Old : public QObject
+{
+    Q_OBJECT
+
+    Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged FINAL)
+    Q_PROPERTY(QString appVersion READ appVersion WRITE setAppVersion NOTIFY appVersionChanged FINAL)
+    Q_PROPERTY(QString lasterVersion READ lasterVersion WRITE setLasterVersion NOTIFY lasterVersionChanged FINAL)
+    Q_PROPERTY(QString buildDateTime READ buildDateTime WRITE setBuildDateTime NOTIFY buildDateTimeChanged FINAL)
+    Q_PROPERTY(QString buildRevision READ buildRevision WRITE setBuildRevision NOTIFY buildRevisionChanged FINAL)
+    Q_PROPERTY(QString copyRight READ copyRight WRITE setCopyRight NOTIFY copyRightChanged FINAL)
+    Q_PROPERTY(QString descript READ descript WRITE setDescript NOTIFY descriptChanged FINAL)
+    Q_PROPERTY(QString compilerVendor READ compilerVendor WRITE setCompilerVendor NOTIFY compilerVendorChanged FINAL)
+    Q_PROPERTY(bool splashShow READ splashShow WRITE setSplashShow NOTIFY splashShowChanged FINAL)
+    Q_PROPERTY(float scale READ scale WRITE setScale NOTIFY scaleChanged FINAL)
+    Q_PROPERTY(double ratio READ ratio WRITE setRatio NOTIFY ratioChanged FINAL)
+    Q_PROPERTY(QStringList customs READ customs WRITE setCustoms NOTIFY customsChanged FINAL)
+
+public:
+    explicit AppInfo_Old(QObject* parent = nullptr);
+    virtual ~AppInfo_Old() override;
+
+public:
+    QString name() const;
+    void    setName(const QString&amp; newName);
+
+    QString appVersion() const;
+    void    setAppVersion(const QString&amp; newAppVersion);
+
+    QString lasterVersion() const;
+    void    setLasterVersion(const QString&amp; newLasterVersion);
+
+    QString buildDateTime() const;
+    void    setBuildDateTime(const QString&amp; newBuildDateTime);
+
+    QString buildRevision() const;
+    void    setBuildRevision(const QString&amp; newBuildRevision);
+
+    QString copyRight() const;
+    void    setCopyRight(const QString&amp; newCopyRight);
+
+    QString descript() const;
+    void    setDescript(const QString&amp; newDescript);
+
+    QString compilerVendor() const;
+    void    setCompilerVendor(const QString&amp; newCompilerVendor);
+
+    bool splashShow() const;
+    void setSplashShow(bool newSplashShow);
+
+    float scale() const;
+    void  setScale(float newScale);
+
+    double ratio() const;
+    void   setRatio(double newRatio);
+
+    QStringList customs() const;
+    void        setCustoms(const QStringList&amp; newCustoms);
+
+signals:
+    void nameChanged();
+
+    void appVersionChanged();
+
+    void lasterVersionChanged();
+
+    void buildDateTimeChanged();
+
+    void buildRevisionChanged();
+
+    void copyRightChanged();
+
+    void descriptChanged();
+
+    void compilerVendorChanged();
+
+    void splashShowChanged();
+
+    void scaleChanged();
+
+    void ratioChanged();
+
+    void customsChanged();
+
+private:
+    QString m_name;
+    QString m_appVersion;
+    QString m_lasterVersion;
+    QString m_buildDateTime;
+    QString m_buildRevision;
+    QString m_copyRight;
+    QString m_descript;
+    QString m_compilerVendor;
+    bool    m_splashShow;
+    float   m_scale;
+    double  m_ratio;
+    QStringList m_customs;
+};
+
+inline QString AppInfo_Old::name() const
+{
+    return m_name;
+}
+
+inline void AppInfo_Old::setName(const QString&amp; newName)
+{
+    if (m_name == newName)
+        return;
+    m_name = newName;
+    emit nameChanged();
+}
+
+inline QString AppInfo_Old::appVersion() const
+{
+    return m_appVersion;
+}
+
+inline void AppInfo_Old::setAppVersion(const QString&amp; newAppVersion)
+{
+    if (m_appVersion == newAppVersion)
+        return;
+    m_appVersion = newAppVersion;
+    emit appVersionChanged();
+}
+
+inline QString AppInfo_Old::lasterVersion() const
+{
+    return m_lasterVersion;
+}
+
+inline void AppInfo_Old::setLasterVersion(const QString&amp; newLasterVersion)
+{
+    if (m_lasterVersion == newLasterVersion)
+        return;
+    m_lasterVersion = newLasterVersion;
+    emit lasterVersionChanged();
+}
+
+inline QString AppInfo_Old::buildDateTime() const
+{
+    return m_buildDateTime;
+}
+
+inline void AppInfo_Old::setBuildDateTime(const QString&amp; newBuildDateTime)
+{
+    if (m_buildDateTime == newBuildDateTime)
+        return;
+    m_buildDateTime = newBuildDateTime;
+    emit buildDateTimeChanged();
+}
+
+inline QString AppInfo_Old::buildRevision() const
+{
+    return m_buildRevision;
+}
+
+inline void AppInfo_Old::setBuildRevision(const QString&amp; newBuildRevision)
+{
+    if (m_buildRevision == newBuildRevision)
+        return;
+    m_buildRevision = newBuildRevision;
+    emit buildRevisionChanged();
+}
+
+inline QString AppInfo_Old::copyRight() const
+{
+    return m_copyRight;
+}
+
+inline void AppInfo_Old::setCopyRight(const QString&amp; newCopyRight)
+{
+    if (m_copyRight == newCopyRight)
+        return;
+    m_copyRight = newCopyRight;
+    emit copyRightChanged();
+}
+
+inline QString AppInfo_Old::descript() const
+{
+    return m_descript;
+}
+
+inline void AppInfo_Old::setDescript(const QString&amp; newDescript)
+{
+    if (m_descript == newDescript)
+        return;
+    m_descript = newDescript;
+    emit descriptChanged();
+}
+
+inline QString AppInfo_Old::compilerVendor() const
+{
+    return m_compilerVendor;
+}
+
+inline void AppInfo_Old::setCompilerVendor(const QString&amp; newCompilerVendor)
+{
+    if (m_compilerVendor == newCompilerVendor)
+        return;
+    m_compilerVendor = newCompilerVendor;
+    emit compilerVendorChanged();
+}
+
+inline bool AppInfo_Old::splashShow() const
+{
+    return m_splashShow;
+}
+
+inline void AppInfo_Old::setSplashShow(bool newSplashShow)
+{
+    if (m_splashShow == newSplashShow)
+        return;
+    m_splashShow = newSplashShow;
+    emit splashShowChanged();
+}
+
+inline float AppInfo_Old::scale() const
+{
+    return m_scale;
+}
+
+inline void AppInfo_Old::setScale(float newScale)
+{
+    if (qFuzzyCompare(m_scale, newScale))
+        return;
+    m_scale = newScale;
+    emit scaleChanged();
+}
+
+inline double AppInfo_Old::ratio() const
+{
+    return m_ratio;
+}
+
+inline void AppInfo_Old::setRatio(double newRatio)
+{
+    if (qFuzzyCompare(m_ratio, newRatio))
+        return;
+    m_ratio = newRatio;
+    emit ratioChanged();
+}
+
+inline QStringList AppInfo_Old::customs() const
+{
+    return m_customs;
+}
+
+inline void AppInfo_Old::setCustoms(const QStringList&amp; newCustoms)
+{
+    if (m_customs == newCustoms)
+        return;
+    m_customs = newCustoms;
+    emit customsChanged();
+}
+</code></pre>
+<h2>解决方案</h2>
+<p>从我刚开始接触Qt不久，就看到各种大佬在尝试写一些宏，来解决这个问题。</p>
+<p>但是一直都没有看到一份我觉得比较满意的。</p>
+<p>这次我把我在项目中长期验证过的轮子也分享出来，看看能不能杀死这个比赛。</p>
+<p>先来看一下最终效果吧</p>
+<pre><code class="lang-c++">class AppInfo : public QObject
+{
+    Q_OBJECT
+
+    AUTO_PROPERTY(QString, appName, "")
+    AUTO_PROPERTY(QString, appVersion, "")
+    AUTO_PROPERTY(QString, latestVersion, "")
+    AUTO_PROPERTY(QString, buildDateTime, "")
+    AUTO_PROPERTY(QString, buildRevision, "")
+    AUTO_PROPERTY(QString, copyRight, "")
+    AUTO_PROPERTY(QString, descript, "")
+    AUTO_PROPERTY(QString, compilerVendor, "")
+    AUTO_PROPERTY(bool, splashShow, false)
+    AUTO_PROPERTY(float, scale, 1.0f)
+    AUTO_PROPERTY(double, ratio, 14.0 / 9.0)
+    AUTO_PROPERTY(QStringList, customs, {})
+
+public:
+    explicit AppInfo(QObject* parent = nullptr);
+    virtual ~AppInfo() override;
+
+public:
+};
+</code></pre>
+<p>这是我封装的AUTO_PROPERTY宏，一个属性只要这一行就够了，非常的简洁了。</p>
+<h2>原理</h2>
+<h3>QObject属性</h3>
+<p>QObject属性的本质，就是在常规的C++成员函数上做了一些“信号”、“槽”相关的特殊标记，外部通过信号-槽动态调用这些标记过的函数。</p>
+<p>有一个叫moc的可执行程序，在编译之前先解析这些特殊标记，生成一些额外的c++代码， 编译链接的时候加上这些额外的代码，就实现了信号-槽的功能。</p>
+<p>(简单来说，额外的代码中，记录了标记过的函数在这个对象中的函数指针的偏移，其它地方需要调用的时候就通过偏移量找到对应的函数指针)</p>
+<h4>常规类成员函数</h4>
+<p>常规的C++代码如下，就是很基本的set和get函数：</p>
+<pre><code class="lang-c++">class AppInfo
+{
+public:
+    const QString&amp; appName() const 
+    {
+        return mAppName
+    }
+    void setAppName(const QString&amp; name) 
+    {
+        mAppName = name;
+    }
+private:
+    QString mAppName;
+};
+</code></pre>
+<h4>Qt加的特殊标记</h4>
+<p>Qt 定义了一些宏，Q_OBJECT, 以及 Q_SIGNAL 、 Q_SLOT 、Q_INVOKABLE 等等</p>
+<p>(使用signals 或者 SLOTS等关键字可以批量定义，原理是一样的)</p>
+<pre><code class="lang-c++">class AppInfo
+{
+    Q_OBJECT
+public:
+    Q_SLOT const QString&amp; appName() const 
+    {
+        return mAppName
+    }
+    Q_SLOT void setAppName(const QString&amp; name) 
+    {
+        mAppName = name;
+    }
+private:
+    QString mAppName;
+};
+</code></pre>
+<p>这样标记了以后，就可以被外部动态调用了。</p>
+<h4>set函数的通知</h4>
+<p>set函数成功修改了成员的时候，需要对外部做出通知，于是增加了一个判断和信号</p>
+<pre><code class="lang-c++">
+    Q_SIGNAL void appNameChanged();
+
+    Q_SLOT void setAppName(const QString&amp; name) 
+    {
+        if (mAppName != name) 
+        {
+            mAppName = name;
+            emit appNameChanged();
+        }
+    }
+</code></pre>
+<p>这里的信号可以简单理解为回调函数即可。</p>
+<p>Q_PROPERTY宏 对这些属性进一步做了标记，指定哪个是get、哪个是set函数、哪个是changed信号。</p>
+<h3>搞一套宏</h3>
+<p>上面说明了一个属性需要的成员函数，十几个属性也是一样的做法，只不过名字和类型不同。</p>
+<p>这里可以用c++的宏，进行提取。</p>
+<h4>简易成员函数的宏</h4>
+<p>成员变量定义的宏</p>
+<pre><code class="lang-c++">#define PROP_MEM(T, NAME, InitValue) T m_##NAME = InitValue;
+</code></pre>
+<p>两个#号是c++宏的常规用法，可以把变量连起来。</p>
+<p>由于宏不好实现首字母大写，所以这里用了m_ (m和下划线) 做前缀的命名风格。</p>
+<p>再来set和get成员函数的宏。</p>
+<pre><code class="lang-c++">#define MEM_GET(T, NAME)
+    const T&amp; NAME() const   \
+    {                       \
+        return m_##NAME;    \
+    }                       
+
+#define MEM_SET(T, NAME)
+    void set_##NAME(const T&amp;value)  \
+    {                               \
+        m_##NAME = value;           \
+    }
+</code></pre>
+<p>有了这三个宏定义，就可以组合出一份成员变量及函数的完整定义了</p>
+<pre><code class="lang-c++">#define AUTO_MEM(T, NAME, InivValue)    \
+public:                                 \
+    MEM_SET(T, NAME)                    \
+    MEM_GET(T, NAME)                    \
+private:                                \
+    PROP_MEM(T, NAME, InitValue)
+</code></pre>
+<p>这样只要一行AUTO_MEM 就可以完成 成员变量、get函数、set函数了。</p>
+<h4>Qt信号槽的宏</h4>
+<p>Qt的信号，可以当作普通的get函数，加一个信号标记即可。</p>
+<p>所以信号的宏这样写
+````c++</p>
+<h1>define PROP_CHANGE(T, NAME) Q_SIGNAL void NAME##Changed(const T&amp; value);</h1>
+<pre><code>set函数在原来的基础上，增加一个比较操作，成员变量实际有变化时才更新成员，更新后发出信号。
+
+```c++
+
+#define PROP_SET(T, NAME)
+    Q_SLOT void set_##NAME(const T&amp;value)   \
+    {                                       \
+        if (m_##NAME == value)              \
+        {                                   \
+            return;                         \
+        }                                   \
+        m_##NAME = value;                   \
+        emit NAME##Changed(value);          \
+    }
+</code></pre>
+<p>set函数要当作槽函数的话，函数前面加一个Q_SLOT标记即可。</p>
+<p>然后组合到一起，补一个Q_PROPERTY的定义，就可以实现AUTO_PROPERTY了</p>
+<pre><code class="lang-c++">#define AUTO_PROPERTY(T, NAME, InitValue)                                   \
+private:                                                                    \
+    Q_PROPERTY(T NAME READ NAME WRITE set_##NAME NOTIFY NAME##Changed)      \
+public:                                                                     \
+    PROP_GET(T, NAME);                                                      \
+    PROP_SET(T, NAME);                                                      \
+    PROP_CHANGED(T, NAME);                                                  \
+private:                                                                    \
+    PROP_MEM(T, NAME, InitValue)
+</code></pre>
+<h4>浮点数比较大小</h4>
+<p>上面的set函数中，比较是否相等直接用的 “不等于操作” 进行判断的，如果遇到浮点数，就会存在误差。</p>
+<p>因此需要加强一下，使用浮点数专用的比较操作。</p>
+<p>这里用一点C++模板的特性，先写一个通用的比较器</p>
+<pre><code class="lang-c++">template&lt;typename T&gt;
+struct Compare 
+{
+    static bool isEqual(const T&amp; t1, const T&amp; t2)
+    {
+        return t1 == t2;
+    }
+}
+</code></pre>
+<p>然后 模板偏特化 写 float和double类型的比较器,具体比较操作用Qt的模糊比较qFuzzyCompare</p>
+<pre><code class="lang-c++">// float 比较器。
+template &lt;&gt;
+struct Compare&lt;float&gt;
+{
+    static bool isEqual(float f1, float f2)
+    {
+        return qFuzzyCompare(f1, f2);
+    }
+};
+// double 比较器。
+template &lt;&gt;
+struct Compare&lt;double&gt;
+{
+    static bool isEqual(double d1, double d2)
+    {
+        return qFuzzyCompare(d1, d2);
+    }
+};
+</code></pre>
+<p>最后把PROP_SET中的“比较操作”换成“比较器”就行了</p>
+<pre><code class="lang-c++">#define PROP_SET(T, NAME)
+    Q_SLOT void set_##NAME(const T&amp;value)           \
+    {                                               \
+        if (Compare&lt;T&gt;::isEqual(m_##NAME, value))   \
+        {                                           \
+            return;                                 \
+        }                                           \
+        m_##NAME = value;                           \
+        emit NAME##Changed(value);                  \
+    }
+</code></pre>
+<h3>运行环境适配</h3>
+<p>这套宏在qmake和cmake环境中，都可以直接使用。</p>
+<p>在visual studio解决方案中使用时，使用qt-vsaddin插件的情况下，</p>
+<p>可能会出现链接失败的情况，需要给插件的moc配置项中设置参数Compiler Flavor为 "MSVC"。</p>
+<p><img alt="预览" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/jaredtao.gitee.io/source/images/Qt16/img4.png"/></p>
+<p>这个插件的moc参数flavor默认为空，为空则是按照"Unix"生成,不符合msvc的编译特性，所以会编不过。</p>
+<h2>源代码</h2>
+<p><a href="https://github.com/jaredtao/TaoQuick.git">https://github.com/jaredtao/TaoQuick.git</a></p>
+<p><a href="https://gitee.com/jaredtao/TaoQuick.git">https://gitee.com/jaredtao/TaoQuick.git</a></p>

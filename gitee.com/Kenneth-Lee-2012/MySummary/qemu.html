@@ -179,7 +179,14 @@
 </ul>
 </li>
 </ul>
-<p>实例化这些类，就可以构成一个完整的VM。</p>
+<p>实例化这些类，就可以构成一个完整的VM。下面是一个不完整的示例：::</p>
+<p>/                                  &lt;-- object_get_root()
+    machine                          &lt;-- qdev_get_machine()
+      peripheral
+      peripheral-anon
+    objects
+    backend
+    chardevs</p>
 <p>我们看一个简单的例子对类建立感性认识：</p>
 <p>.. code-block:: C</p>
 <p>typedef DeviceClass MyDeviceClass;
@@ -223,13 +230,31 @@
 对象进行初始化。</p>
 <p>在这个class的init里面我们用OBJECT_CLASS_CHECK把父类转换为子类，然后设置了
 Device这个子类的realize和unrealize函数。这样，整个类的初始化逻辑框架就撑起来了。</p>
+<p>.. note::</p>
+<p>这里有必要特别解释一下这个realize的含义。理论上我们有类和对象的构造和析构，
+  一般面向对象的结构就建立起来了。但对于qemu来说，对象之间是有关系的，很多时候
+  我们需要先把所有对象都建立好了，然后才能初始化。所以就又补充了这个realize。
+  让所有实例和关系都挂接好了，才会真的去“realize（实现）它”，所以就多了这个回
+  调的阶段了。通常我们把需要所有类都在位才能做的初始化，放到这个地方来。</p>
 <p>在实际实现中，整个QOM主要就管理两种对象：Device和Bus。两者通过props进行互相关联
 。这种关联有两种类型：composition和link，分别用object_property_add_child/link()
 建立。比如你在创建machine的时候，可以在machine中创建一个bus，然后把它作为
 machine的child连到machine上，之后你还可以创建bus上的设备，作为bus的child，连到
 bus上，你还可以创建一个iommu，作为一个link连到这个bus的每个设备上。这种关联接口
 ，可以在qemu console中用Info qom-tree命令查看（但只有child没有link）。</p>
-<h2>child和link关联</h2>
+<h2>props的实现具象</h2>
+<p>props相当于管理界面的对象属性（像大部分类似解决方案，每个prop有自己的setter和
+getter)，除了composition和link，一般的可配置项，都可以通过prop暴露出来，供qom
+维护接口访问。</p>
+<p>它的接口类似这样：::</p>
+<p>static Property xxx_properties[] = {
+    DEFINE_PROP_BIT("prop_bit",   XXXState, field_name_in_state, BIT_MASK, false),
+    DEFINE_PROP_BOOL("prop_bool", XXXState, field_name_in_state, false),
+    DEFINE_PROP_LINK("prop_link", XXXState, field_name_in_state, TYPE_NAME, field_type),
+    DEFINE_PROP_END_OF_LIST(),
+  };</p>
+<p>device_class_set_props(class, xxx_properties);</p>
+<h2>child和link关联的进一步解释</h2>
 <p>除了一般用于设置对象参数的Property，qemu内部会经常使用child和link的概念。child
 和link是通过对象props建立的关联。本质上就是给一个对象增加一个prop，名字叫
 child&lt;...&gt;或者link&lt;...&gt;，和手工创建一个这样的属性也没有什么区别。</p>
@@ -279,6 +304,38 @@ object_property_set_link()去设置。这两个步骤相当于在一个接口中
 。Link是有类型的，不能把不同类型的对象挂到Link上。</p>
 <p>这不算什么特别的功能，只是简单的数据结构控制而已。用户自己用其他方法建立索引
 去找到其他设备，也无不可。但qemu的惯例是用child和link。</p>
+<h2>id关联</h2>
+<p>我们在使用qemu的时候经常用到通过id关联两个对象的手段，比如创建网卡：::</p>
+<p>qemu-system-x86_64 -netdev user,id=n1,ipv6=off 
+                -device e1000,netdev=n1,mac=52:54:98:76:54:32</p>
+<p>这里的user netdev通过id n1和device e1000关联。这个即不是Child，也不是link，而
+是这两个对象专有的设施。它通过netdev上这个属性：::</p>
+<h1>define DEFINE_PROP_NETDEV(_n, _s, _f)             \</h1>
+<pre><code> DEFINE_PROP(_n, _s, _f, qdev_prop_netdev, NICPeers)
+</code></pre>
+<p>建立两者的关联。其他设备有其他设备的手法，这并不是一个全局的技术，只是一个功能
+上的惯例。</p>
+<h2>interface</h2>
+<p>要理解qom的interface，我们首先理解一下泛泛的面向对象的interface是什么东西。它
+本质就是一组函数，如果某个对象说自己支持某个interface，其实我们就是说它提供这
+组函数的调用。</p>
+<p>所以，qom的interface其实很简单，如果某个qom说自己支持某个interface，它只要在自
+己的interface列出这组interface的声明就可以了，就像这样：::</p>
+<p>static const TypeInfo virtio_mem_info = {
+    .interfaces = (InterfaceInfo[]) {
+        { TYPE_RAM_DISCARD_MANAGER },
+        { }
+    }
+    ...</p>
+<p>每个InterfaceInfo其实就是一个字符串（名字）。当你要从这个类转换为那个interface
+的接口的时候，它只要从名字找全局类库，找到那个类，然后把那么大的空间放到你这个
+类型的Interface Cache中就可以了。这个Cache就放在类的基类ObjectClass中（当前版
+本叫interfaces)，之后你初始化你的类的时候，进行类型转换，你就看见这个空间（都
+是回调函数），然后你给这个空间中每个函数附上你需要的回调，这个interface就生效
+了。如果有人转换了你的类为这个interface，调用其中的函数，那么这个回调函数拿到
+的Instance指针，就是你这个类的Instance指针，而这个interface的回调函数又是你提
+供的，你自然也就知道怎么解释它了。</p>
+<p>说起来，qom的实现实在是把面向对象语言明牌实现了一遍给你看了。</p>
 <h1>MemoryRegion</h1>
 <p>本小节看看qemu的内存管理逻辑。对于VM来说，它有它视角中的内存，当这个内存被VM中
 的CPU或者设备访问，我们还需要Host中有backend去支撑这个访问，所以，qemu有Host视
@@ -301,10 +358,13 @@ object_property_set_link()去设置。这两个步骤相当于在一个接口中
 <p>Container
         包含其他MR的MR叫Container。没有RAM或者IO属性的Container叫纯Container，
         不影响理解的时候也可以简单叫Container。纯Container是透明的，要判断一段
-        MRS的行为，如果它属于纯Container，就要看它上一层MR的定义了。</p>
+        MRS的行为，如果它属于纯Container，就要看它下一层MR的定义了。</p>
 <p>AddressSpace
-        这表示一个地址空间，以下简称AS。一个地址空间可以包含多个不同属性的MR，
-        MR可以包含其他MR，这些MR互相覆盖，最终层叠在一起，所以AS是MR的层叠表述。</p>
+        这表示一个VM眼中的地址空间，以下简称AS。同一个VM可以有多个不同角度的AS，
+        比如系统内存，这是一个AS，这个AS中的不同地址会map不同的属性的内存片段
+        （MR/MRS）。但比如x86还支持用io指令去访问IO的地址空间，这个也是一个AS，
+        但就不是前面那个AS了。如果VM中而某个设备观察它可以访问的地址空间，看到
+        的可能和CPU看到的不一样，这就会有这个设备自己的AS。</p>
 <p>FlatView
         这表示看到的地址空间，本文简称FV。这个概念比较绕。我们这样说：AS是立体
         的，里面的MR是相互独立的，他们可以交叠，转义，动态开关等。但当你去访问
@@ -316,41 +376,40 @@ object_property_set_link()去设置。这两个步骤相当于在一个接口中
 <p>综合来说，我们用MR定义一个有特定属性的内存区（比如RAM或者IO），然后把它们叠起来
 构成一个AS，backend用这个AS去访问内存，首先压平为一个FV，然后匹配到一个MRS，最终
 用这个MRS所在MR决定如何访问。</p>
-<p>全系统的根container是对所有backend可见的，它包括system_memory和system_io两个，
-分别代表内存空间和IO空间（像ARM或者RISCV这些没有IO总线的系统，后者完全没有意义
-）。两者合起来就是Guest的虚拟空间。其他MR，都是这两者的子MR。</p>
-<p>system_memory和system_io可以通过get_system_memory()和get_system_io()获得。对应
-的AS可以直接用全局变量address_space_meory和address_space_io访问。所以，其实对所
-有backend驱动来说，系统内存是直接敞开的。</p>
+<p>CPU眼中的AS是全局变量，可以用address_space_meory和address_space_io直接访问（没
+有io指令的平台没有后者），这两个AS对应的基础container可以通过
+get_system_memory()和get_system_io()获得。</p>
 <p>整个概念可以用下图展示：</p>
 <p>.. figure:: _static/memory_region.svg</p>
 <p>我们通过例子看看MR的创建方法。</p>
 <p>RISCV的系统RAM是这样创建的：</p>
-<p>.. code-block: C</p>
+<p>.. code-block:: C</p>
 <p>memory_region_init_ram(main_mem, NULL, "riscv_virt_board.ram",
                            machine-&gt;ram_size, &amp;error_fatal);
    memory_region_add_subregion(system_memory, memmap[VIRT_DRAM].base,
         main_mem);</p>
-<p>原理是：你创建一个RAM的MR，然后根据位置，加到全系统的MR（system_memory）中。
-MMIO空间的MR一般由设备创建，通常长这样：</p>
-<p>.. code-block: C</p>
+<p>system_memory是个纯container，初始化的时候就可以创建，真正的内存用
+memory_region_init_ram()创建，然后用memory_region_add_subregion()加到container
+中。</p>
+<p>如果其中有一段IO的空间，这个通常是你有了某个系统总线的IO设备的时候才会有，这由
+驱动来创建，通常长这样：</p>
+<p>.. code-block:: C</p>
 <p>memory_region_init_io(&amp;ar-&gt;pm1.evt.io, memory_region_owner(parent),
                          &amp;acpi_pm_evt_ops, ar, "acpi-evt", 4);
    memory_region_add_subregion(parent, 0, &amp;ar-&gt;pm1.evt.io);</p>
-<p>同样是创建MR，然后作为一个子region加到上一级的MR中。这样最后在系统的AS中，看到
-的就是一个叠起来的AS了。</p>
+<p>如果是系统一级的IO，这里的parent就是system_memory container了。</p>
 <p>Guest访问的时候有两种可能，一种是Guest的CPU直接做地址访问，这会变成TLB的访问过
-程在这个过程中，CPU模拟程序把系统的AS压平为FV，然后找到对应的MR，最后根据MR的属
-性去回调IO或者直接访问RAM（RAM MR中有ram_block的地址）。</p>
+程。在这个过程中，CPU模拟程序把系统的AS压平为FV，然后找到对应的MR，最后根据MR
+的属性去回调IO或者直接访问RAM（RAM MR中有ram_block的地址）。</p>
 <p>另一种是backend的设备直接调函数去访问地址了，这样的调用：</p>
-<p>.. code-block: C</p>
+<p>.. code-block:: C</p>
 <p>dma_memory_rw(&amp;address_space_memory, pa, buf, size, direction);
    pci_dma_rw(pdev, addr, buffer, len, direction);</p>
 <p>pci的调用本质还是对dma_memory_rw的封装，只是有可能用比如iommu这样的手段做一个地
 址转换而已。</p>
 <p>这个实现和前面CPU的访问没有什么区别，仍从AS开始，从AS得到FV，然后定位MRS，最终
 找到MR。之后作为RAM处理还是IO处理，就由MR的属性决定了。这个代码是这样的：</p>
-<p>.. code-block: C</p>
+<p>.. code-block:: C</p>
 <p>static MemTxResult flatview_write(FlatView <em>fv, hwaddr addr, MemTxAttrs attrs,
                                   const void </em>buf, hwaddr len)
    {
@@ -360,16 +419,18 @@ MMIO空间的MR一般由设备创建，通常长这样：</p>
                                      addr1, l, mr);
        ...
    }</p>
-<p>还有一种Device Backend的DMA访问路径是这样的：</p>
-<p>.. code-block: C</p>
+<p>还有一种Device Backend的DMA访问方法是这样的：</p>
+<p>.. code-block:: C</p>
 <pre><code>    dma_memory_map(address_space, pa, len, direction);
     dma_memory_unmap(address_space, buffer, len, direction, access_len);
 </code></pre>
-<p>这有两种实现策略：如果这片MR背后有直接分配的内存，那最好办，直接把本地内存的指
-针拿过来就可以了，unmap的时候保证发起相关的通知即可。如果没有，那可以使用Bounce
-DMA Buffer机制。也就是说，直接另外分配一片内存，到时映射过来就是了。</p>
+<p>就是说，你有一个VM意义上的pa，你不调用前面的函数去访问它，而是map它变成一个指
+针，之后，你可以直接访问上面的内容。</p>
+<p>这两个函数的原理是：如果这片MR背后有直接分配的内存，那最好办，直接把本地内存的
+指针拿过来就可以了，unmap的时候保证发起相关的通知即可。如果没有，那可以使用
+Bounce DMA Buffer机制。也就是说，直接另外分配一片内存，到时映射过来就是了。</p>
 <p>MR有很多类型，比如RAM，ROM，IO等，本质都是io，ram和container的变体：</p>
-<p>.. code-block: C</p>
+<p>.. code-block:: C</p>
 <p>memory_region_init(mr, owner, name, size);
    memory_region_init_alias(mr, owner, name, orig, offset, size);
    memory_region_init_io(mr, owner, ops, opaque, name, size);
@@ -394,7 +455,7 @@ DMA Buffer机制。也就是说，直接另外分配一片内存，到时映射�
 设备访问的就不是物理地址了，它必须是针对每个设备的虚拟地址。</p>
 <p>下面是这种MR的一个应用实例（这个例子是ARM SMMU的，但由于ARM的SMMU在qemu中是专门
 为PCI子系统定制的，我们在例子中把两个模块中的流程进行了组合和化简，突出关键逻辑）：</p>
-<p>.. code-block: C</p>
+<p>.. code-block:: C</p>
 <p>// 为设备创建设备自己的AS，包含一个代表物理空间的container
    memory_region_init(&amp;dev-&gt;bus_master_container_region, OBJECT(dev),
                        "bus master container", UINT64_MAX);
@@ -841,6 +902,9 @@ TYPE_VIRTIO_DEVICE
 <p>virtio_pci_types_register()是register_type_static的封装，同时注册了多个相互继
 承的对象，但基本可以认为主要名字是.gnereric_name的类的封装，下面的那些回调函数
 这是针对这个类的，我们这里不深入细节。</p>
+<p>.. note::</p>
+<p>transitional那个概念是用于表示是否支持PCIe的，如果是non-transitional，就仅支
+  持PCI标准，不支持PCIe。</p>
 <p>PCIE的BAR空间，中断等设计都代理给这个类，从而实现整个PCI之上的传输层。而真正的
 驱动要做的是把这个PCI设备的行为代理到一个真正的TYPE_VIRTIO_DEVICE设备，像这样
 ：</p>
@@ -1312,4 +1376,11 @@ signalfd(2)的封装，在Windows下是对CreateEvent()的封装。它主要是�
 录用的子meson.build，在这些meson.build文件中，你只需要把你的文件加到对应的
 xxx_ss文件集中，就可以参与编译。所以每个子目录的行为还是很简单的。</p>
 <p>.. _meson: <a href="https://mesonbuild.com">https://mesonbuild.com</a></p>
+<h2>命令行参数</h2>
+<p>qemu的命令行参数在主程序system/vl.c中解释，但因为参数众多，它也做成一个框架了，
+在解释前通过qemu_add_opts()或者qemu_add_drive_opts()这一类的调用注册新的参数进
+去。然后在后面用循环去独处其中的参数，再设置给对应的模块。每个参数的自参数可以
+用qemu_opt_get...()系列函数分类型读出。</p>
+<p>更通用的参数可以通过qemu-options.hx直接生成，这基本是一个生成qemu_add_opts()的
+参数表。</p>
 <p>.. vim: set tw=78</p>

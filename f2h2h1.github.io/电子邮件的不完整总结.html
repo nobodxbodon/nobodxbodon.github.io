@@ -73,15 +73,27 @@
 </ul>
 </li>
 </ul>
-<p>一封 电子邮件地址 由三个部分组成</p>
+<p>一个 电子邮件地址 由三个部分组成</p>
 <ul>
-<li>用户名</li>
-<li>@ 符号<ul>
+<li>用户名 / @ 符号 / 域名<ul>
 <li>@ 符号 读作 at</li>
 <li>@ 的意思就是 who at where ， user at domain</li>
 </ul>
 </li>
-<li>域名</li>
+<li>电子邮件地址的 ABNF<ul>
+<li>atext 部分来自 rfc5322</li>
+<li>ldh-str 部分来自 rfc1034<pre><code>1*( atext / "." ) "@" ldh-str 1*( "." ldh-str )
+</code></pre>
+</li>
+</ul>
+</li>
+<li>电子邮件地址的正则表达式<ul>
+<li><a href="https://www.w3.org/TR/2012/WD-html-markup-20120329/datatypes.html#form.data.emailaddress-def">https://www.w3.org/TR/2012/WD-html-markup-20120329/datatypes.html#form.data.emailaddress-def</a><pre><code>/^[a-zA-Z0-9.!#$%&amp;’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/
+</code></pre>
+</li>
+</ul>
+</li>
+<li>电子邮件地址的格式也是 IMF 的一部分</li>
 </ul>
 <p>总结一下就是 三种协议，一种格式</p>
 <ul>
@@ -283,6 +295,7 @@
       --mail-rcpt 'bob1@example.com' \
       --mail-rcpt 'bob2@example.com' \
       --mail-rcpt 'bob3@example.com' \
+      --login-options AUTH=LOGIN \
       --upload-file - \
   Date: Fri, 5 Apr 2024 06:27:52 +0000
   To: bob1@example.com, bob2@example.com, bob3@example.com
@@ -316,6 +329,195 @@ curl -v --ssl --url 'smtps://smtp.qq.com:465/smtp.qq.com' \
 
 --&gt;
 
+<ul>
+<li><p>powershell</p>
+<ul>
+<li><p>Send-MailMessage</p>
+<ul>
+<li>Send-MailMessage 在文档里有明确提及不建议使用</li>
+<li><p>Send-MailMessage 不支持 465 端口的 smtps ，如果要使用 smtps 就要改用其他端口</p>
+<pre><code class="lang-powershell">Send-MailMessage -SmtpServer "smtp.qq.com" -Port 587 -UseSsl `
+  -Credential $(New-Object System.Management.Automation.PSCredential("alice@example.com", $(ConvertTo-SecureString "NvbQBTZW5kRW" -AsPlainText -Force))) `
+  -From "alice@example.com" `
+  -To 'User02 &lt;user02@fabrikam.com&gt;', 'User03 &lt;user03@fabrikam.com&gt;' `
+  -Subject 'Test mail' `
+  -Body "message"
+
+Send-MailMessage -SmtpServer "127.0.0.1" -Port 587  -UseSsl `
+  -Credential $(New-Object System.Management.Automation.PSCredential("alice@example.com", $(ConvertTo-SecureString "NvbQBTZW5kRW" -AsPlainText -Force))) `
+  -From "alice@example.com" `
+  -To 'User02 &lt;user02@fabrikam.com&gt;', 'User03 &lt;user03@fabrikam.com&gt;' `
+  -Cc 'Cc02 &lt;Cc02@fabrikam.com&gt;', 'Cc03 &lt;Cc03@fabrikam.com&gt;' `
+  -Bcc 'Bcc02 &lt;Bcc02@fabrikam.com&gt;', 'Bcc03 &lt;Bcc03@fabrikam.com&gt;' `
+  -Subject '中文Test mail' `
+  -Encoding 'utf8' `
+  -Attachments './v2.php' `
+  -BodyAsHtml `
+  -Body "&lt;p&gt;中文mailMessage&lt;/p&gt;"
+</code></pre>
+</li>
+</ul>
+</li>
+<li>System.Net.Mail<pre><code class="lang-powershell">  $smtpClient = New-Object System.Net.Mail.SmtpClient("smtp.qq.com", 587)
+  $smtpClient.EnableSsl = $True
+  $smtpClient.Credentials = New-Object System.Net.NetworkCredential("alice@qq.com", "NvbQBTZW5kRW")
+  $smtpClient.Send("alice@qq.com", "user02@fabrikam.com", "Subject", "mailMessage")
+</code></pre>
+&lt;!--
+  ```
+  $smtpClient = New-Object System.Net.Mail.SmtpClient("127.0.0.1", 25)
+  $smtpClient.Credentials = New-Object System.Net.NetworkCredential("1643253513@qq.com", "wdgwshjofvvmdeef")
+  $mailMessage = New-Object System.Net.Mail.MailMessage
+  $mailMessage.From = New-Object System.Net.Mail.MailAddress("jane@contoso.com", "Jane Clayton")
+  $mailMessage.To.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso2.com", "Jane Clayton2")))
+  $mailMessage.To.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso3.com", "Jane Clayton3")))
+  $mailMessage.CC.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso4.com", "Jane Clayton4")))
+  $mailMessage.CC.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso5.com", "Jane Clayton5")))
+  $mailMessage.Bcc.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso6.com", "Jane Clayton6")))
+  $mailMessage.Bcc.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso7.com", "Jane Clayton7")))</li>
+</ul>
+</li>
+</ul>
+<p>$contentType = New-Object System.Net.Mime.ContentType
+$contentType.Name = 'v2.php'
+$contentType.MediaType = <a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a>::Text::Plain
+System.Net.Mail.Attachment('./v2.php', $contentType)</p>
+<p>System.Net.Mime.MediaTypeNames.Text.Plain</p>
+<p><a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a>.ToString() 
+<a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a>.Text</p>
+<p>Get-Member -MemberType Property
+<a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a> | Get-Member</p>
+<p><a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a>.Attributes
+<a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a>.GetEnumNames</p>
+<p>如果是完整的类名，静态类，对象，或者已经赋值的变量
+[System.Net.Mail.MailAddress] | Get-Member
+<a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a> | Get-Member
+$a | Get-Member</p>
+<p><a href=":Text::Plain">System.Net.Mime.MediaTypeNames</a> | Get-Member
+$a | Get-Member</p>
+<p>[AppDomain]::CurrentDomain.GetAssemblies() | ? {$<em>.Location -and ($</em>.Location.Split('\')[-1] -eq 'System.Net.Mime.MediaTypeNames.dll')}</p>
+<p><a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() |
+    ForEach-Object { $_.GetTypes() }</p>
+<p><a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() |
+    ForEach-Object { $_.GetTypes() } | Select-Object -First 1 | format-list</p>
+<p><a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() | Select-Object -First 1 | format-list
+<a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() | Select-Object -First 1 | Get-Member
+(<a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() | Select-Object -First 1 ).GetName()
+(<a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() | Select-Object -First 1 ).GetTypes()</p>
+<p><a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() |
+    ForEach-Object { $<em>.GetTypes() } | Select-Object -First 1 | Get-Member -Name Name
+        Where-Object { $</em>.GetName() -eq "System" } |
+            Get-Member</p>
+<p><a href=":CurrentDomain.GetExecutingAssembly()">System.AppDomain</a>::CurrentDomain.GetAssemblies() |
+    ForEach-Object { $<em>.GetTypes() } |
+        ForEach-Object { $</em>.GetMethods(‘NonPublic, Public, Static’) } |
+            ForEach-Object { $MethodInfo = $<em>; $</em>.GetCustomAttributes($false) } |
+                Where-Object {
+                    $MethodInfo.Name.ToLower() -eq $FunctionName.ToLower() -and
+                    $_.Value -eq $Module
+                } | ForEach-Object { $MethodInfo }</p>
+<p>这一段是可行的 只能用在 windows powershell
+$mscorlib = [AppDomain]::CurrentDomain.GetAssemblies() | ? {$<em>.Location -and ($</em>.Location.Split('\')[-1] -eq 'System.dll')}
+$Win32Native = $mscorlib.GetType('Microsoft.Win32.NativeMethods')
+$OpenProcessMethod = $Win32Native.GetMethod('OpenProcess', ([Reflection.BindingFlags] 'NonPublic, Public, Static'))
+$OpenProcessMethod.Invoke($null, @(0x1F0FFF, $False, 524))</p>
+<p>这一段是可行的 只能用在 powershell
+$mscorlib = [AppDomain]::CurrentDomain.GetAssemblies() | ? {$<em>.Location -and ($</em>.Location.Split('\')[-1] -eq 'System.Diagnostics.Process.dll')}
+$Win32Native = $mscorlib.GetType('Interop+Kernel32')
+$OpenProcessMethod = $Win32Native.GetMethod('OpenProcess', ([Reflection.BindingFlags] 'NonPublic, Public, Static'))
+$OpenProcessMethod.Invoke($null, @(0x1F0FFF, $False, 524))</p>
+<p>$mscorlib = [AppDomain]::CurrentDomain.GetAssemblies() | ? {$<em>.Location -and ($</em>.Location.Split('\')[-1] -eq 'System.dll')} | Select-Object -ExpandProperty Namespace -Unique</p>
+<pre><code>    $mailMessage.SubjectEncoding = [System.Text.Encoding]::UTF8
+    $mailMessage.BodyEncoding = [System.Text.Encoding]::UTF8
+    $mailMessage.Subject = "中文Subject"
+    $mailMessage.IsBodyHtml = $True
+    $mailMessage.Body = "&lt;p&gt;中文mailMessage&lt;/p&gt;"
+    ```
+- System.Web.Mail
+</code></pre>
+<p>printf "auth\0%s\0%s" "1643253513@qq.com" "wdgwshjofvvmdeef" | base64</p>
+<p>$smtpMail = New-Object System.Web.Mail.SmtpMail</p>
+<p>Add-Type -AssemblyName "System.Web"
+[System.Web.Mail.SmtpMail]</p>
+<p>Add-Type -AssemblyName "System.Web"
+为什么要单独加载 System.Web 程序集？
+因为 powershell 没有默认加载 System.Web</p>
+<p>什么是程序集？
+就是 .NET 的 .dll 文件
+程序集采用可执行文件 (.exe) 或动态链接库文件 (.dll) 的形式，是 .NET 应用程序的构建基块 。
+它们向公共语言运行时提供了注意类型实现代码所需的信息。</p>
+<p>动态链接会按一定的顺序去搜索
+<a href="https://learn.microsoft.com/zh-cn/windows/win32/dlls/dynamic-link-library-search-order">https://learn.microsoft.com/zh-cn/windows/win32/dlls/dynamic-link-library-search-order</a></p>
+<p>Add-Type 也可以直接指定 dll 的路径
+Add-Type -Path "C:\path\to\your\MyLibrary.dll"</p>
+<p>$smtpClient = New-Object System.Net.Mail.SmtpClient("127.0.0.1", 25)</p>
+<p>Get-Help Add-Type</p>
+<p>$smtpClient = New-Object System.Net.Mail.SmtpClient("smtp.qq.com", 587)
+$smtpClient.EnableSsl = $True</p>
+<p>$smtpClient = New-Object System.Net.Mail.SmtpClient("127.0.0.1", 25)
+$smtpClient.Credentials = New-Object System.Net.NetworkCredential("1643253513@qq.com", "wdgwshjofvvmdeef")
+$mailMessage = New-Object System.Net.Mail.MailMessage
+$mailMessage.From = New-Object System.Net.Mail.MailAddress("jane@contoso.com", "Jane Clayton")
+$mailMessage.To.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso2.com", "Jane Clayton2")))
+$mailMessage.To.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso3.com", "Jane Clayton3")))
+$mailMessage.CC.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso4.com", "Jane Clayton4")))
+$mailMessage.CC.Add($(New-Object System.Net.Mail.MailAddress("jane@contoso5.com", "Jane Clayton5")))
+$mailMessage.SubjectEncoding = [System.Text.Encoding]::UTF8
+$mailMessage.BodyEncoding = [System.Text.Encoding]::UTF8
+$mailMessage.Subject = "中文Subject"
+$mailMessage.IsBodyHtml = $True
+$mailMessage.Body = "&lt;p&gt;中文mailMessage&lt;/p&gt;"</p>
+<p>$winDir = New-Object -TypeName "System.Text.Encoding"</p>
+<p>New-Object System.Text.Encoding</p>
+<p>$smtpClient.Send($mailMessage);</p>
+<p>IsBodyHtml</p>
+<p>$smtpClient.Send("1643253513@qq.com", "ricardo.qt.lu@pccw.com", "Subject", "mailMessage");</p>
+<p>.NET 中的程序集就是 exe 或 dll
+程序集通常有一个或多个命名空间</p>
+<p>程序集需要先加载再使用
+通常会默认加载一部分程序集</p>
+<p>jsc csc vbc</p>
+<p>windows powershell 依赖 .NET Framework
+所以系统里一定有 .NET Framework
+有 .NET Framework 也会有 csc jsc vbc 这三个编译器</p>
+<p>powershell core 之后有自包含 .NET Framework 的安装包，所以 powershell 可以不依赖 .NET Framework</p>
+<p>PowerShell 中只要变量不为 null ，就可以用 Get-Member 方法</p>
+<p>在 PowerShell 中，可以通过几种方法判断一个变量是否为 <code>null</code>。以下是一些常用的方法：</p>
+<h3>1. 使用 <code>-eq</code> 运算符</h3>
+<p>你可以直接将变量与 <code>$null</code> 进行比较：</p>
+<pre><code class="lang-powershell">if ($variable -eq $null) {
+    Write-Host "变量是 null"
+} else {
+    Write-Host "变量不是 null"
+}
+</code></pre>
+<h3>2. 使用 <code>-ne</code> 运算符</h3>
+<p>如果你想检查变量是否不为 <code>null</code>，可以使用 <code>-ne</code> 运算符：</p>
+<pre><code class="lang-powershell">if ($variable -ne $null) {
+    Write-Host "变量不是 null"
+} else {
+    Write-Host "变量是 null"
+}
+</code></pre>
+<h3>3. 简单的 <code>if</code> 语句</h3>
+<p>你还可以使用简单的 <code>if</code> 语句来检查变量的存在性：</p>
+<pre><code class="lang-powershell">if ($variable) {
+    Write-Host "变量不是 null 或空"
+} else {
+    Write-Host "变量是 null 或空"
+}
+</code></pre>
+<h3>4. 使用 <code>IsNullOrEmpty</code> 方法</h3>
+<p>如果你想同时检查变量是否为 <code>null</code> 或空字符串，可以使用 <code>IsNullOrEmpty</code> 方法：</p>
+<pre><code class="lang-powershell">if ([string]::IsNullOrEmpty($variable)) {
+    Write-Host "变量是 null 或空字符串"
+} else {
+    Write-Host "变量不是 null 且不是空字符串"
+}
+</code></pre>
+<h3>总结</h3>
+<p>这些方法可以帮助你有效地判断 PowerShell 中的变量是否为 <code>null</code>。选择适合你需求的方法即可。如果你有其他问题或需要进一步的帮助，请告诉我！</p>
+<p>--&gt;</p>
 <h2>php 发送邮件</h2>
 <h3>使用原生的函数</h3>
 <ul>

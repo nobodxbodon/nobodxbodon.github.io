@@ -133,6 +133,7 @@
 </ul>
 </li>
 <li>修改 hosts 文件，把域名 localhost-magento.com 指向本地 ip （其实这步没有也没关系，但为了方便下文的描述还是加上了这步）</li>
+<li>正确地启动 mysql redis elasticsearch</li>
 <li>在数据库里新建对应的库<pre><code> create database magento2ce;
 </code></pre>
 </li>
@@ -624,6 +625,10 @@ EOF
 </ul>
 &lt;!--
 
+通过 alias 设置当前命令行里的 php 版本
+alias php="/c/Users/a/dev/php-7.4.29-Win32-vc15-x64/php.exe"; \
+alias composer="php /c/Users/a/dev/php-7.4.29-Win32-vc15-x64/composer.phar";
+
 暂时最完善的构建脚本
 startAtTimestamp=$(date +%s); \
 startAt=$(date -d @$startAtTimestamp +%FT%T%:z); \
@@ -761,5 +766,37 @@ openssl req -new -x509 -days 365 -nodes -out apache-selfsigned.crt -keyout apach
     ErrorLog "logs/localhost-magento.com-error.log"
     CustomLog "logs/localhost-magento.com-access.log" common
 &lt;/VirtualHost&gt;
+
+
+
+用于替换 nginx配置中magento根目录的命令
+newpath=$(echo "C:\Users\a\dev\magento-core\2647-magento" | sed 's/\\/\\\\/g'); \
+confpath=$(cygpath -u "C:\Users\a\dev\nginx-1.25.3\conf\nginx.conf"); \
+oldpath=$(cat $confpath | grep -o -P "(?&lt;=MAGE_ROOT)(.*)(?=;)"); \
+oldpath=$(echo $oldpath | sed 's/\\/\\\\/g'); \
+oldpath=$(echo $oldpath | xargs ); \
+oldpath=$(echo $oldpath | sed 's/\\/\\\\/g'); \
+echo "confpath: " $confpath; \
+echo "oldpath: " $oldpath; \
+echo "newpath: " $newpath; \
+sed -i 's/'$oldpath'/'$newpath'/g' $confpath; \
+cat $confpath;
+
+用于替换 apache配置中magento根目录的命令
+newpath=$(echo "D:\code\magento-core\2121-magento" | sed 's/\\/\//g'); \
+confpath=$(cygpath -u "C:\Users\a\dev\Apache24\conf\extra\httpd-vhosts-magentoee.conf"); \
+oldpath=$(cat $confpath | grep -o -P '(?&lt;=DocumentRoot ")(.*)(?=\/pub")'); \
+oldpath=$(echo $oldpath | sed 's/\//\\\//g'); \
+newpath=$(echo $newpath | sed 's/\//\\\//g'); \
+echo "confpath: " $confpath; \
+echo "oldpath: " $oldpath; \
+echo "newpath: " $newpath; \
+sed -i 's/'$oldpath'/'$newpath'/g' $confpath; \
+cat $confpath;
+
+额外新建了一个文件 conf\extra\httpd-vhosts-magentoee.conf
+并且在 conf/extra/httpd-vhosts.conf 里引入
+Include conf/extra/httpd-vhosts-magentoee.conf
+
 
 --&gt;

@@ -1,8 +1,6 @@
-<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/work-project-notes-chinese.md">仓库源文</a>，<a href="https://kexizeroing.github.io/work-project-notes-chinese">站点原文</a></h2>
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/work-project-notes-chinese.md">仓库源文</a>，<a href="https://kexizeroing.github.io/work-project-notes-chinese">站点原文</a></h2>
 <hr/>
-<p>layout: "../layouts/BlogPost.astro"
-title: "Notes on work projects (in Chinese)"
-slug: work-project-notes-chinese
+<p>title: "Notes on work projects (in Chinese)"
 description: ""
 added: "Oct 19 2021"
 tags: [web]</p>
@@ -245,12 +243,32 @@ declare module "*.vue" {
   }
 }
 </code></pre>
+<h4>打包时插入 git 提交信息</h4>
+<p><a href="https://github.com/pirelenito/git-revision-webpack-plugin">git-revision-webpack-plugin</a> generates VERSION and COMMITHASH files during build.</p>
+<pre><code class="lang-js">const GitRevisionPlugin = require('git-revision-webpack-plugin');
+const gitRevisionPlugin = new GitRevisionPlugin();
+
+plugins: [
+  new DefinePlugin({
+    'VERSION': JSON.stringify(gitRevisionPlugin.version()),
+    'COMMITHASH': JSON.stringify(gitRevisionPlugin.commithash()),
+    'BRANCH': JSON.stringify(gitRevisionPlugin.branch()),
+  }),
+]
+</code></pre>
+<blockquote><p>The <code>DefinePlugin</code> allows you to create global constants that are replaced at compile time, commonly used to specify environment variables or configuration values that should be available throughout your application during the build process. For example, you might use it to define <code>process.env.NODE_ENV</code> as 'production' or 'development' which webpack will literally replace in your code during bundling.</p>
+</blockquote>
 <h3>本地 build 与上线 build</h3>
 <ol>
 <li>公共组件库 C 需要先 build，再 <code>npm link</code> 映射到全局的 node_modules，然后被其他项目 <code>npm link C</code> 引用。(关于 <code>npm link</code> 的使用场景可以看看 <a href="https://github.com/atian25/blog/issues/17">https://github.com/atian25/blog/issues/17</a>)</li>
 <li>项目 A 的上线脚本中会先进入组件库 C，执行 <code>npm build</code> 和 <code>npm link</code>，之后再进入项目 A 本身，执行 <code>npm link C</code>，<code>npm build</code> 等项目本身的构建。</li>
 <li>项目 C 会在本地构建（静态资源传七牛），远程仓库中包括 <code>server-static</code> 存放 build 后的静态文件，它的上线脚本里并不含构建过程，只是在拷贝仓库中的 <code>server-static</code> 目录。因为源文件中会有对组件库的引用 <code>import foo from 'C/dist/foo.js</code>，本地 build 时组件库已经被打包进去。</li>
 </ol>
+<p>The build job uses Kaniko (a tool for building Docker images in Kubernetes). Its main task is to build a Docker image.</p>
+<ul>
+<li>For master, dev, or tagged commits: builds and pushes the Docker image</li>
+<li>For other branches: builds but doesn't push the image</li>
+</ul>
 <pre><code class="lang-sh">prefixOss=`echo ${CI_COMMIT_REF_NAME} | sed -e "s/\_/-/g" -e "s/\//-/g"`
 
 [ -z ${CI_COMMIT_TAG} ] &amp;&amp; sed -i -E "s/^  \"version\": \"[0-9\.]+\"/  \"version\": \"0.0.0-${prefixOss}-${CI_COMMIT_SHORT_SHA}\"/g" package.json
@@ -296,6 +314,8 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 &lt;/script&gt;
 &lt;script src="https://cdn.example.com/assets/login.js"&gt;&lt;/script&gt;
 </code></pre>
+<blockquote><p>关于 iframe 的配置：<a href="https://iframegenerator.top">https://iframegenerator.top</a></p>
+</blockquote>
 <h3>登录逻辑</h3>
 <ul>
 <li>二维码登录先使用 websocket 连接，message 中定义不同的 <code>op</code> 代表不同的操作，比如 requestlogin 会返回微信生成的二维码（包括 qrcode, ticket, expire_seconds 等）, 扫码成功返回类型是 loginsuccess，并附带 OpenID, UnionID, Name, UserID, Auth 等信息，前端拿到这些信息后可以请求后端登录的 http 接口，拿到 sessionid，并被种在 cookie 里。</li>
@@ -306,6 +326,7 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <li>PC 端携带设备信息向服务端发起生成二维码的请求，生成的二维码中封装了 uuid 信息，并且跟 PC 设备信息关联起来，二维码有失效时间。PC 端轮询检查是否已经扫码登录。</li>
 <li>手机（已经登录过）进行扫码，将手机端登录的信息凭证（token）和二维码 uuid 发送给服务端，此时的手机一定是登录的，不存在没登录的情况。服务端生成一个一次性 token 返回给移动端，用作确认时候的凭证。</li>
 <li>移动端携带上一步的临时 token 确认登录，服务端校对完成后，会更新二维码状态，并且给 PC 端一个正式的 token，后续 PC 端就是持有这个 token 访问服务端。</li>
+<li>流程参考 <a href="https://github.com/ahu/scan_qrcode_login/blob/master/qr.js">https://github.com/ahu/scan_qrcode_login/blob/master/qr.js</a></li>
 </ol>
 <p>常规的密码存储：</p>
 <p>A Rainbow Table is a precomputed table of hashes and their inputs. This allows an attacker to simply look up the hash in the table to find the input. This means that if an attacker gets access to your database, they can simply look up the hashes to find the passwords.</p>
@@ -587,9 +608,21 @@ https://registry.npmmirror.com/antd/latest/files
 </li>
 <li><p>防止重复提交：前端防抖，按钮点击后立即禁用。后端接口幂等性设计。</p>
 </li>
+<li><p>iframe 技术方案（浏览器原生的隔离方案）</p>
+<ol>
+<li>iframe 内部的路由变化要体现在浏览器地址栏上</li>
+<li>刷新页面时要把当前状态的 url 传递给 iframe</li>
+<li>浏览器前进后退符合预期</li>
+<li>弹窗全局居中</li>
+<li>CSP, sandbox 等安全属性</li>
+<li>局限性：每次刷新页面都可能使 iframe 内部状态丢失；postMessage 只能传递可序列化的数据；iframe 白屏时间相对较长</li>
+</ol>
+</li>
 </ul>
 <h3>桌面端 Electron 的本地构建过程</h3>
 <p>Electron是一个集成项目，允许开发者使用前端技术开发桌面端应用。其中 <strong>Chromium 基础能力</strong>可以让应用渲染 HTML 页面，执行页面的 JS 脚本，让应用可以在 Cookie 或 LocalStorage 中存取数据。Electron 还继承了 Chromium 的多进程架构，分一个主进程和多个渲染进程，主进程进行核心的调度启动，不同的 GUI 窗口独立渲染，做到进程间的隔离，进程与进程之间实现了 IPC 通信。<strong>Node.js 基础能力</strong>可以让开发者读写本地磁盘的文件，通过 socket 访问网络，创建和控制子进程等。<strong>Electron 内置模块</strong>可以支持创建操作系统的托盘图标，访问操作系统的剪切板，获取屏幕信息，发送系统通知，收集崩溃报告等。</p>
+<blockquote><p>Node.js（内置 libuv）有自己的消息循环，要想把这个消息循环和应用程序的消息循环合并到一起并不容易。Electron 的做法是创建了一个单独的线程并使用系统调用来轮询 libuv 的 fd (文件描述符)，以获得 libuv 的消息，再把消息交给 GUI 主线程，由主线程的消息循环处理 libuv 的消息。</p>
+</blockquote>
 <ol>
 <li>调用 <code>greeting()</code> 方法，根据终端窗口的宽度 <code>process.stdout.columns</code> 显示不同样式的问候语。</li>
 <li>使用 <code>Promise.all()</code> 同时启动主进程和渲染进程的构建，两者分别有自己的 webpack 配置文件 <code>webpack.main.config</code> 和 <code>webpack.renderer.config</code></li>

@@ -1,12 +1,10 @@
-<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/posts/understand-npm-concepts.md">仓库源文</a>，<a href="https://kexizeroing.github.io/understand-npm-concepts">站点原文</a></h2>
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/understand-npm-concepts.md">仓库源文</a>，<a href="https://kexizeroing.github.io/understand-npm-concepts">站点原文</a></h2>
 <hr/>
-<p>layout: "../layouts/BlogPost.astro"
-title: "Understand npm concepts"
-slug: understand-npm-concepts
+<p>title: "Understand npm concepts"
 description: ""
 added: "Dec 14 2022"
 tags: [web]</p>
-<h2>updatedDate: "Aug 26 2024"</h2>
+<h2>updatedDate: "Nov 27 2024"</h2>
 <h3>package.json and package-lock.json</h3>
 <p><code>package-lock.json</code> (called package locks, or lockfiles) is automatically generated for any operations where npm modifies either the <code>node_modules</code> tree or <code>package.json</code>. This file is intended to be committed into source repositories. The purpose of the <code>package-lock.json</code> is to avoid the situation where installing modules from the same <code>package.json</code> results in two different installs. <code>package-lock.json</code> is a large list of each dependency listed in your <code>package.json</code>, the specific version that should be installed, the location (URI) of the module, a hash that verifies the integrity of the module, the list of packages it requires.</p>
 <ol>
@@ -26,7 +24,42 @@ tags: [web]</p>
 <li><code>exports</code>, modern entry points, more flexible</li>
 </ul>
 </blockquote>
-<p>&lt;img alt="package-code-entries" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/package-code-entries.png" width="700" /&gt;</p>
+<h4>Benefits of <code>exports</code> field</h4>
+<pre><code class="lang-json">// package.json
+{
+  "name": "my-package",
+  "type": "module",
+  "exports": {
+    ".": {
+      // Entry-point for `import "my-package"` in ESM
+      "import": {
+        // Where TypeScript will look
+        "types": "./types/esm/index.d.ts",
+        // Where Node.js will look
+        "default": "./esm/index.js"
+      },
+      // Entry-point for `require("my-package") in CJS
+      "require": {
+        "types": "./types/commonjs/index.d.cts",
+        "default": "./commonjs/index.cjs"
+      },
+    }
+  },
+  // Fall-back for older versions of TypeScript
+  "types": "./types/index.d.ts",
+  // CJS fall-back for older versions of Node.js
+  "main": "./commonjs/index.cjs"
+}
+</code></pre>
+<p>By default, TypeScript overlays the same rules with import conditions – if you write an <code>import</code> from an ES module, it will look up the <code>import</code> field, and from a CommonJS module, it will look at the <code>require</code> field. If it finds them, it will look for a corresponding declaration file. If you need to point to a different location for your type declarations, you can add a <code>"types"</code> import condition. Note that the <code>"types"</code> condition should always come first in <code>"exports"</code>.</p>
+<ul>
+<li><p><strong>Protecting internal files:</strong> Previously, consumers could import any file in a package, even internal ones. With <code>exports</code>, maintainers can explicitly define which files are accessible, establishing a clear public API and preventing unintended imports of internal files.</p>
+</li>
+<li><p><strong>Mapping subpaths to <code>dist</code> directory:</strong> Package authors may prefer not to have <code>dist</code> in the import path for a simpler API. With <code>exports</code>, package subpaths can map directly inside the dist directory, allowing consumers to use cleaner imports like <code>import foo from 'pkg-a/util'</code> without complex publishing scripts for maintainers.</p>
+</li>
+<li><p><strong>Multi-format packages:</strong> Packages can toggle entry points to resolve to different files for different environments (e.g., Node.js vs. browsers) and module types (e.g., CJS vs. ESM).</p>
+</li>
+</ul>
 <h4>Read <a href="https://www.totaltypescript.com/how-to-create-an-npm-package">How To Create An NPM Package</a> by Total TypeScript</h4>
 <p>Create a <code>package.json</code> with:</p>
 <ul>
@@ -80,6 +113,7 @@ export default defineConfig({
 <li><a href="https://github.com/depcheck/depcheck">depcheck</a> check your npm module for unused dependencies.</li>
 <li><a href="https://github.com/antfu/taze">Taze</a> is a modern cli tool that keeps your deps fresh. No installation required — <code>npx taze</code>. <code>-g</code> for global and <code>-I</code> for interactive.</li>
 <li><a href="https://github.com/raineorshine/npm-check-updates">npm-check-updates</a> upgrades your <code>package.json</code> dependencies to the latest versions, ignoring specified versions.</li>
+<li><a href="https://craigory.dev/npm-burst">Npm Burst</a> tracks statistics of released npm packages and installed version counts.</li>
 <li><a href="https://marketplace.visualstudio.com/items?itemName=pflannery.vscode-versionlens">Version Lens</a> VS Code extension shows the latest version for each package.</li>
 </ul>
 </blockquote>
@@ -110,6 +144,8 @@ An <code>idealTree</code> is the tree of package data that we intend to install.
 <p><strong>devDependencies</strong> are dependencies you only need during development, like compilers that take your code and compile it into javascript, test frameworks or documentation generators. They are not installed transitively (if A depends on B dev-depends on C, npm install on A will install B only). <em>Example: grunt, your project uses grunt to build itself</em>.</p>
 <ul>
 <li><p>The <code>npm install</code> command will install both <em>devDependencies</em> and <em>dependencies</em>. With the <code>--production</code> flag or when the <code>NODE_ENV</code> environment variable is set to production <code>NODE_ENV=production npm install</code>, npm will not install modules listed in devDependencies.</p>
+</li>
+<li><p>Many applications use different configuration settings when <code>NODE_ENV</code> is set to <code>production</code>. This also makes the Node.js process more efficient. If you set <code>NODE_ENV=testing</code> which means the devDependencies will be installed and it is more like development than it is like production.</p>
 </li>
 <li><p>Using the <code>npm uninstall --no-save</code> will tell npm not to remove the package from your <code>package.json</code> or <code>package-lock.json</code> files.</p>
 </li>
@@ -167,8 +203,10 @@ git commit -m "fix brokenFile.js in some-package"
 <p>You can find the <code>npm-debug.log</code> file in your <code>.npm</code> directory. To find your <code>.npm</code> directory, use <code>npm config get cache</code>. <em>(It is located in ~/.npm so shared accross nodejs versions that nvm installed.)</em> The default location of the logs directory is a directory named <code>_logs</code> inside the npm cache.</p>
 <h3>npm init and exec</h3>
 <p><code>npm init &lt;initializer&gt;</code> can be used to set up a npm package. <code>initializer</code> in this case is an npm package named <code>create-&lt;initializer&gt;</code>, which will be installed by <code>npm exec</code>. The init command is transformed to a corresponding <code>npm exec</code> operation like <code>npm init foo</code> -&gt; <code>npm exec create-foo</code>. Another example is <code>npm init react-app myapp</code>, which is same as <code>npx create-react-app myapp</code>. If the initializer is omitted (by just calling <code>npm init</code>), init will fall back to legacy init behavior. It will ask you a bunch of questions, and then write a <code>package.json</code> for you. You can also use <code>-y/--yes</code> to skip the questionnaire altogether.</p>
-<p>npm 7 introduced the new <code>npm exec</code> command which, like npx, provided an easy way to run npm scripts on the fly. If the package is not present in the local project dependencies, <code>npm exec</code> installs the required package and its dependencies to a folder in the npm cache. With the introduction of <code>npm exec</code>, npx had been rewritten to use <code>npm exec</code> under the hood in a backwards compatible way.</p>
 <blockquote><p><code>npm create</code> is an alias for <code>npm init</code>. Check more about <code>npm init --help</code>.</p>
+</blockquote>
+<p>npm 7 introduced the new <code>npm exec</code> command which, like npx, provided an easy way to run npm scripts on the fly. If the package is not present in the local project dependencies, <code>npm exec</code> installs the required package and its dependencies to a folder in the npm cache. With the introduction of <code>npm exec</code>, npx had been rewritten to use <code>npm exec</code> under the hood in a backwards compatible way, and the standalone <code>npx</code> package deprecated at that time.</p>
+<blockquote><p>To prevent security and user-experience problems from mistyping package names, <code>npx</code> prompts before installing anything. Suppress this prompt with the <code>-y</code> or <code>--yes</code> option.</p>
 </blockquote>
 <h3>npm link</h3>
 <ol>
@@ -187,6 +225,9 @@ git commit -m "fix brokenFile.js in some-package"
 <p>pnpm was released in 2017. It is a drop-in replacement for npm, so if you have an npm project, you can use pnpm right away. The main problem the creators of pnpm had with npm was the redundant storage of dependencies that were used across projects. 1) The way npm manages the disc space is not efficient. 2) pnpm doesn’t have the blocking stages of installation - the processes run for each of the packages independently.</p>
 <p>Traditionally, npm installed dependencies in a flat <code>node_modules</code> folder. On the other hand, pnpm manages <code>node_modules</code> by using hard linking and symbolic linking to a global on-disk content-addressable store. It results in a nested <code>node_modules</code> folder that stores packages in a global store on your home folder (<code>~/.pnpm-store/</code>). Every version of a dependency is physically stored in that folder only once, constituting a single source of truth. pnpm identifies the files by a hash id (also called "content integrity" or "checksum") and not by the filename, which means that two same files will have identical hash id and pnpm will determine that there’s no reason for duplication.</p>
 <p>&lt;img alt="pnpm" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/008vxvgGly1h7aw9ablr4j30vm0u0q5z.jpg" width="650" /&gt;</p>
+<h4>pnpm <code>shamefully-hoist=true</code> configuration</h4>
+<p>pnpm organizes <code>node_modules</code> differently from npm, exposing only the dependencies explicitly declared in <code>package.json</code>. Transitive dependencies are installed in <code>node_modules/.pnpm/registry.npmjs.org/</code>, rather than the flat structure for <code>node_modules</code> as npm.</p>
+<p>In simple terms, if there is a module A that depends on module B, and module A is depended on in the project's <code>package.json</code>, module A can access module B, but the project cannot. When <code>shamefully-hoist=true</code> is set, module B will be hoisted, making it accessible in the project.</p>
 <h3>npm scripts</h3>
 <p>npm scripts are a set of built-in and custom scripts defined in the <code>package.json</code> file. Their goal is to provide a simple way to execute repetitive tasks.</p>
 <ul>
