@@ -4,7 +4,7 @@
 description: ""
 added: "Dec 27 2022"
 tags: [vue]</p>
-<h2>updatedDate: "Nov 27 2024"</h2>
+<h2>updatedDate: "Jan 4 2025"</h2>
 <h3>Code Structure</h3>
 <p>Use the template <a href="https://stackblitz.com/edit/vue3-vite-starter">https://stackblitz.com/edit/vue3-vite-starter</a> to start.</p>
 <p>In a Vue component, <code>&lt;script setup&gt;</code> can be used alongside normal <code>&lt;script&gt;</code> using the options API. It works because the <code>&lt;script setup&gt;</code> block is compiled into the component's <code>setup()</code> function. A normal <code>&lt;script&gt;</code> may be needed, for example, we need to run side effects or create objects that should only execute once in module scope (outside the <code>export default {}</code>).</p>
@@ -43,6 +43,14 @@ state.value.count = 2
 // does trigger change
 state.value = { count: 2 }
 </code></pre>
+<h3><code>defineProps</code> and compiler macros</h3>
+<p>You don't need to import <code>defineProps</code> from Vue. <code>defineProps</code>, <code>defineEmits</code>, and <code>defineExpose</code> are <strong>compiler macros</strong> that are compiled away, and they are not actual functions in the Vue package. These are just hints for the compiler to create them nicely.</p>
+<blockquote><p>A compiler macro is special code that is processed by a compiler and converted into something else. They are effectively a clever form of string replacement.</p>
+</blockquote>
+<p>&lt;img alt="vue-cmp-props" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/vue-props.png" width="750"&gt;
+&lt;br&gt;</p>
+<p>&lt;img alt="vue-setup-defineprops" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/vue-setup-defineprops.png" width="750"&gt;</p>
+<p>The output structure looks like what we had before with our <code>defineComponent</code> approach, and the only difference is that the compiler is creating this for us.</p>
 <h3>Recursive Tree</h3>
 <ol>
 <li>Recursion always requires two things: Define your base case and recursive case. To do this you need a switch of some kind (maybe a <code>v-if</code>), and a value that changes with each step in the recursion.</li>
@@ -297,6 +305,71 @@ const { playing: videoPlaying} = useMediaControls(videoRef, {
     &lt;/template&gt;
   &lt;/SlotsScoped&gt;
 &lt;/template&gt;
+</code></pre>
+<h3>Async Components</h3>
+<p>Vue allows us to divide an app into smaller chunks by loading components asynchronously with the help of the <code>defineAsyncComponent()</code> function, which accepts a loader function that returns a Promise that resolves to the imported component.</p>
+<pre><code class="lang-js">import { defineAsyncComponent } from "vue";
+
+export const AsyncModal = defineAsyncComponent(() =&gt; import("./Modal.vue"));
+</code></pre>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;button id="show-modal" @click="showModal = true"&gt;Show Modal&lt;/button&gt;
+  &lt;AsyncModal v-if="showModal" :show="showModal" @close="showModal = false" /&gt;
+&lt;/template&gt;
+
+&lt;script setup&gt;
+  import { ref } from "vue";
+  import { AsyncModal } from "./components/AsyncModal.js";
+
+  const showModal = ref(false);
+&lt;/script&gt;
+</code></pre>
+<p>The <code>AsyncModal</code> is a wrapper component that only calls the loader function when it is actually rendered on the page.</p>
+<p>When our application webpage initially loads, we’ll recognize that the bundle for the Modal component is no longer loaded automatically upon page load. When we click the button to trigger the modal to be shown, we’ll notice the bundle is then asynchronously loaded as the modal component is being rendered.</p>
+<p>For Vue 2, the following example shows how to lazy load a component. By passing <code>() =&gt; import("./tooltip")</code> instead of the static <code>import Tooltip from "./tooltip"</code>. Vue will lazy load that component as soon as is requested to be rendered, which normally happens right away when the App component gets mounted. However, in practice, we'd like to defer the Tooltip component loading until it is required, which for example when hovering a button or text.</p>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;div&gt;
+    &lt;button @click="show = true"&gt;Load Tooltip&lt;/button&gt;
+    &lt;div v-if="show"&gt;
+      &lt;tooltip&gt;&lt;/tooltip&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  data: () =&gt; ({ show: false }),
+  components: {
+    Tooltip: () =&gt; import("./Tooltip")
+    // Tooltip: () =&gt; ({
+    //   component: import("./Tooltip"),
+    //   loading: AwesomeSpinner,
+    //   error: SadFaceComponent,
+    //   timeout: 5000,
+    // })
+  }
+};
+&lt;/script&gt;
+</code></pre>
+<h3>Global Properties</h3>
+<p>It's possible to add global properties to your Vue app in both Vue 2 and Vue 3. Prefixing global properties with a <code>$</code> helps prevent naming conflicts with other variables, and it's a standard convention that makes it easy to spot when a value is global.</p>
+<pre><code class="lang-js">// Vue 3
+const app = createApp({});
+app.config.globalProperties.$myGlobalVariable = 'foo';
+
+// Vue 2
+Vue.prototype.$myGlobalVariable = 'foo';
+</code></pre>
+<p>Properties added to <code>globalProperties</code> will be available via the component instance for all components within the application. So if you're using the Options API you'll be able to access them using <code>this.$myGlobalVariable</code>, just like you could with <code>Vue.prototype</code>. They'll also be available in the template without the <code>this</code>, e.g. <code>{{ $myGlobalVariable }}</code>.</p>
+<p>If you're using the Composition API then you'll still be able to use these properties within the template, but you won't have access to the component instance within <code>setup</code>, so these properties won't be accessible there. <em>(Composition API is designed to be context-free and has no access to <code>this</code>.)</em> Application-level <code>provide</code>/<code>inject</code> can be used as an alternative to <code>Vue.prototype</code>.</p>
+<pre><code class="lang-js">const app = createApp(RootComponent)
+app.provide('myGlobalVariable', globalVariable)
+
+// In the descendant component
+&lt;script setup&gt;
+import { inject } from 'vue'
+const myGlobalVariable = inject('myGlobalVariable')
+&lt;/script&gt;
 </code></pre>
 <h3>Vue router and Suspense</h3>
 <pre><code class="lang-vue">&lt;template&gt;

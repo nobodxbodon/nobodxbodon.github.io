@@ -4,7 +4,7 @@
 description: ""
 added: "Jun 12 2022"
 tags: [js]</p>
-<h2>updatedDate: "Dec 28 2024"</h2>
+<h2>updatedDate: "Jan 7 2025"</h2>
 <p>TypeScript is a strongly typed programming language that builds on JavaScript. It is currently developed and maintained by Microsoft as an open source project. TypeScript supports multiple programming paradigms such as functional, generic, imperative, and object-oriented.</p>
 <p>Every time you write JavaScript in e.g. VS Code, TypeScript runs behind the curtains and gives you information on built-in APIs. In fact, a lot of people think that they can live without TypeScript because JavaScript support is so fantastic in modern editors. Guess what’s, it has always been TypeScript. <em>In VS Code, open a <code>.ts</code> file, <code>Cmd+Shift+P</code> enter "Select TypeScript Version" to check. There is a "Use VS Code's Version" and "Use Workspace Version" (this is from node_modules).</em></p>
 <h2>Setting up TypeScript</h2>
@@ -77,11 +77,23 @@ yarn add --dev typescript
 <li>The way this is decided is via <code>module</code>. You can hardcode this by choosing some older options. <code>module: CommonJS</code> will always emit CommonJS syntax, and <code>module: ESNext</code> will always emit ESM syntax.</li>
 <li>Using the recommended <code>module: NodeNext</code>, we know that a given module might be an ES module or it might be a CJS module, based on its file extension(<code>mts</code>, <code>.cts</code>) and/or the <code>type</code> field in the nearest <code>package.json</code> file.</li>
 </ol>
-<p>Relative import paths <a href="https://www.totaltypescript.com/relative-import-paths-need-explicit-file-extensions-in-ecmascript-imports">need explicit file extensions in ES imports</a> when <code>--moduleResolution</code> is <code>node16</code> or <code>nodenext</code>.</p>
+<p>Relative import paths <a href="https://www.totaltypescript.com/relative-import-paths-need-explicit-file-extensions-in-ecmascript-imports">need explicit file extensions in ES imports</a> when <code>--moduleResolution</code> is <code>node16</code> or <code>nodenext</code> <em>(currently identical to <code>node16</code>)</em>.</p>
 <ol>
-<li>Most bundlers let you omit the file extension when importing files. But TS rules like <code>moduleResolution: NodeNext</code> force you to specify the file extension. This can feel really weird when you're working in <code>.ts</code> files, but writing <code>.js</code> on your imports. Why do we need to do it? Well, it's the spec. <em>The Node spec requires that you use <code>.js</code> file extensions for all imports and exports.</em> If you want to go back to the old style, then specify <code>moduleResolution: Bundler</code> and bundle your code with a tool like esbuild.</li>
+<li>Most bundlers let you omit the file extension when importing files. But TS rules like <code>moduleResolution: NodeNext</code> force you to specify the file extension. This can feel really weird when you're working in <code>.ts</code> files, but writing <code>.js</code> on your imports. Why do we need to do it? Well, it's the spec. <strong>The Node spec requires that you use <code>.js</code> file extensions for all ESM imports and exports.</strong> If you want to go back to the old style, then specify <code>moduleResolution: Bundler</code> and bundle your code with a tool like esbuild.</li>
+<li>TypeScript doesn’t modify import specifiers during emit: the relationship between an import specifier and a file on disk is host-defined, and TypeScript is not a host.</li>
 <li><code>--allowImportingTsExtensions</code> allows TypeScript files to import each other with a TypeScript-specific extension like <code>.ts</code>, <code>.mts</code>, or <code>.tsx</code>. This flag is only allowed when <code>--noEmit</code> is enabled. The expectation here is that your resolver (e.g. your bundler, a runtime, or some other tool) is going to make these imports between <code>.ts</code> files work.</li>
 </ol>
+<pre><code class="lang-js">// @moduleResolution: node16
+// @rootDir: src
+// @outDir: dist
+// @Filename: src/math.mts
+export function add(a: number, b: number) {
+  return a + b;
+}
+// @Filename: src/main.mts
+import { add } from "./math.mjs";
+add(1, 2);
+</code></pre>
 <p>How multiple <code>tsconfig.json</code> files can be composed together?</p>
 <ol>
 <li>Your IDE determines which <code>tsconfig.json</code> to use by looking for the closest one to the current <code>.ts</code> file.</li>
@@ -824,10 +836,10 @@ npx tsc --init
 </blockquote>
 <p>How to run ts files from command line? There is <a href="https://github.com/TypeStrong/ts-node">ts-node</a> that will compile the code and REPL for node.js: <code>npx ts-node src/foo.ts</code>. <code>tsc</code> writes js to disk. <code>ts-node</code> doesn't need to do that and runs ts on the fly. But it's not typechecking your code. So we recommend to type check your code first with <code>tsc</code> and then run it with <code>ts-node</code> before shipping it.</p>
 <p>Btw, you can use <a href="https://github.com/unjs/jiti">jiti</a> CLI to quickly run any script with TypeScript and native ESM support.</p>
-<p>Node 23 will soon be able to run TypeScript files without any extra configuration <em>(unflagging <code>--experimental-strip-types</code>)</em>.</p>
+<p>For lightweight support to enable runtime TypeScript in Node.js, you can use the built-in support for <a href="https://nodejs.org/api/typescript.html#type-stripping">type stripping</a>. By default Node.js will execute only files that contain no TypeScript features that require transformation, such as enums or namespaces. Node.js will replace inline type annotations with whitespace, and no type checking is performed. Node 23 will be able to run TypeScript files without any extra configuration <em>(unflagging <code>--experimental-strip-types</code>)</em>.</p>
 <ul>
 <li>Create an <code>index.ts</code> file containing TS syntax. Enums and namespaces are not supported by default.</li>
 <li>Run node <code>index.ts</code> with no further flags.</li>
 <li>Node will strip out the types using a version of swc, then run the resulting code.</li>
-<li>Node will not typecheck your files when it runs them. </li>
+<li>Node will not typecheck your files when it runs them.</li>
 </ul>

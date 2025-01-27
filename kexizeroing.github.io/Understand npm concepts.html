@@ -4,7 +4,7 @@
 description: ""
 added: "Dec 14 2022"
 tags: [web]</p>
-<h2>updatedDate: "Nov 27 2024"</h2>
+<h2>updatedDate: "Jan 4 2025"</h2>
 <h3>package.json and package-lock.json</h3>
 <p><code>package-lock.json</code> (called package locks, or lockfiles) is automatically generated for any operations where npm modifies either the <code>node_modules</code> tree or <code>package.json</code>. This file is intended to be committed into source repositories. The purpose of the <code>package-lock.json</code> is to avoid the situation where installing modules from the same <code>package.json</code> results in two different installs. <code>package-lock.json</code> is a large list of each dependency listed in your <code>package.json</code>, the specific version that should be installed, the location (URI) of the module, a hash that verifies the integrity of the module, the list of packages it requires.</p>
 <ol>
@@ -117,6 +117,30 @@ export default defineConfig({
 <li><a href="https://marketplace.visualstudio.com/items?itemName=pflannery.vscode-versionlens">Version Lens</a> VS Code extension shows the latest version for each package.</li>
 </ul>
 </blockquote>
+<h3>dependency overrides</h3>
+<p>If you need to make specific changes to dependencies of your dependencies, you may add an <em>override</em>. Overrides provide a way to replace a package in your dependency tree with another version, or another package entirely.</p>
+<p>To make sure the package <code>foo</code> is always installed as version 1.0.0 no matter what version your dependencies rely on:</p>
+<pre><code class="lang-json">{
+  "overrides": {
+    "foo": "1.0.0"
+  }
+}
+
+// To only override foo to be 1.0.0 when it's a child of the package bar
+{
+  "overrides": {
+    "bar": {
+      "foo": "1.0.0"
+    }
+  }
+}
+</code></pre>
+<p>However, be cautious when doing this because:</p>
+<ul>
+<li>Package A might not work correctly if B's version is incompatible.</li>
+<li>When package A updates, it might require a different version of B.</li>
+<li>Other packages might also depend on B and need different versions.</li>
+</ul>
 <h3>npm ls</h3>
 <p><code>npm ls</code> (aliases: list, la, ll) list dependencies that have been installed to <code>node_modules</code>. It throws an error for discrepancies between <code>package.json</code> and its lock file.</p>
 <ul>
@@ -228,6 +252,32 @@ git commit -m "fix brokenFile.js in some-package"
 <h4>pnpm <code>shamefully-hoist=true</code> configuration</h4>
 <p>pnpm organizes <code>node_modules</code> differently from npm, exposing only the dependencies explicitly declared in <code>package.json</code>. Transitive dependencies are installed in <code>node_modules/.pnpm/registry.npmjs.org/</code>, rather than the flat structure for <code>node_modules</code> as npm.</p>
 <p>In simple terms, if there is a module A that depends on module B, and module A is depended on in the project's <code>package.json</code>, module A can access module B, but the project cannot. When <code>shamefully-hoist=true</code> is set, module B will be hoisted, making it accessible in the project.</p>
+<h4>corepack</h4>
+<p>Instead of installing <code>yarn</code> or <code>pnpm</code> globally, Corepack manages them for you behind the scenes. When you run a package manager command, Corepack intercepts it, checks what version you need, downloads it if necessary, and runs your command with the correct version.</p>
+<p>Corepack makes sure you're using the correct package manager for your project. Since v16.13, Node.js is shipping Corepack for managing package managers. This is an experimental feature, so you need to enable it by running <code>corepack enable pnpm</code>. To configure the package manager for your project, add the <code>packageManager</code> field to your <code>package.json</code>:</p>
+<pre><code class="lang-json">{
+  // npm
+  "packageManager": "npm@10.8.1",
+  // pnpm
+  "packageManager": "pnpm@9.1.4",
+  // yarn
+  "packageManager": "yarn@3.1.1"
+}
+</code></pre>
+<p>You can use <code>corepack use pnpm@x.y.z</code> to ask Corepack to update your local <code>package.json</code> to use the package manager of your choice. <em>(Corepack intercepts calls to <code>pnpm</code> or <code>yarn</code> to make sure you're using them correctly.)</em> You must specify an exact version of the package manager you want to use - not a range. Now, if you try to <code>npm install</code> in a project that has <code>packageManager</code> set to <code>pnpm</code>, corepack will show an error. And if you try to <code>pnpm install</code> there, corepack will automatically download and use the correct pnpm version.</p>
+<h4>monorepo setup</h4>
+<p>Monorepos are specified using a <code>pnpm-workspace.yaml</code> file instead of the <code>"workspaces"</code> field in <code>package.json</code> that npm and yarn use.</p>
+<pre><code class="lang-yml"># The only field in this config file
+packages:
+  - apps/*
+  - packages/*
+</code></pre>
+<p>To add a local dependency within a monorepo, in your <code>package.json</code> "dependencies" field you'll prefix your local dependencies' version-range strings with <code>"workspace:^"</code> <em>(<code>workspace:</code> indicates that the dependency should be resolved from the local workspace packages rather than pulling from an external registry. <code>^</code> means the version should follow the semver caret (^) range rule.)</em> <code>workspace:*</code> uses the exact version of the dependency as defined in its <code>package.json</code> within the workspace.</p>
+<p>Check out the example:</p>
+<ul>
+<li><a href="https://www.youtube.com/watch?v=KIgPJT806D0">https://www.youtube.com/watch?v=KIgPJT806D0</a></li>
+<li><a href="https://github.com/w3cj/monorepo-example-tasks-app">https://github.com/w3cj/monorepo-example-tasks-app</a></li>
+</ul>
 <h3>npm scripts</h3>
 <p>npm scripts are a set of built-in and custom scripts defined in the <code>package.json</code> file. Their goal is to provide a simple way to execute repetitive tasks.</p>
 <ul>

@@ -700,7 +700,7 @@ curl -X POST https://dev.magento.com/rest/en_US/V1/gtm-layer/mine/quote-item-dat
 </li>
 </ul>
 </li>
-<li><p>可以用这决 curl 命令来查看当前 magento 项目的 graphql 文档</p>
+<li><p>可以用这句 curl 命令来查看当前 magento 项目的 graphql 文档</p>
 <pre><code> graphqlquery=$(cat &lt;&lt;- EOF
  query IntrospectionQuery {
      __schema {
@@ -819,7 +819,8 @@ curl -X POST https://dev.magento.com/rest/en_US/V1/gtm-layer/mine/quote-item-dat
 <li>关键还是这个接口 \GraphQL\Error\ClientAware</li>
 </ul>
 </li>
-<li>graphql 接口大概的执行位置<ul>
+<li><p>graphql 接口大概的执行位置</p>
+<ul>
 <li>vendor\magento\module-graph-ql\Controller\GraphQl.php</li>
 <li>vendor\webonyx\graphql-php\src\Executor\ReferenceExecutor.php doExecute</li>
 <li>vendor\webonyx\graphql-php\src\Executor\ReferenceExecutor.php executeOperation</li>
@@ -827,8 +828,125 @@ curl -X POST https://dev.magento.com/rest/en_US/V1/gtm-layer/mine/quote-item-dat
 <li>vendor\webonyx\graphql-php\src\Executor\ReferenceExecutor.php resolveOrError</li>
 </ul>
 </li>
+<li><p>可以用类似这样的方式直接执行 graphql 的查询
+ ```php
+ try {</p>
+<pre><code> // 引入 magento2 的引导文件
+ require __DIR__ . '/app/bootstrap.php';
+ // 创建一个应用对象
+ $bootstrap = \Magento\Framework\App\Bootstrap::create(BP, $_SERVER);
+ // 获取一个对象管理器
+ $objectManager = $bootstrap-&gt;getObjectManager();
+
+ // 如果出现这种错误 area code is not set ，则加上这两句， area 的值可以根据实际场景修改
+ $state = $objectManager-&gt;get(\Magento\Framework\App\State::class);
+ $state-&gt;setAreaCode(\Magento\Framework\App\Area::AREA_GRAPHQL);
+
+ // app\code\Magento\Authorization\Model\UserContextInterface.php
+
+ /** @var \Magento\Framework\GraphQl\Schema\SchemaGeneratorInterface */
+ $schemaGenerator = $objectManager-&gt;get(\Magento\Framework\GraphQl\Schema\SchemaGeneratorInterface::class);
+
+ $source = '';
+
+ $rootValue = null;
+
+ $contextValue = new class implements \Magento\GraphQl\Model\Query\ContextInterface {
+     public function getUserId(): ?int {
+         return 123;
+     }
+     public function getUserType(): ?int {
+         return \Magento\Authorization\Model\UserContextInterface::USER_TYPE_CUSTOMER;
+     }
+     public function getExtensionAttributes(): \Magento\GraphQl\Model\Query\ContextExtensionInterface {
+         return new class implements \Magento\GraphQl\Model\Query\ContextExtensionInterface {
+
+             private $store;
+             private $isCustomer;
+             private $customerGroupId;
+
+             public function __construct()
+             {
+                 /** @var \Magento\Customer\Model\CustomerFactory */
+                 $customerFactory = \Magento\Framework\App\ObjectManager::getInstance()-&gt;get(\Magento\Customer\Model\CustomerFactory::class);
+                 // $customer = $customerFactory-&gt;create()-&gt;loadByEmail($email);
+                 // $customer-&gt;getGroupId();
+
+                 /** @var \Magento\Store\Model\StoreManager */
+                 $storeManager = \Magento\Framework\App\ObjectManager::getInstance()-&gt;get(\Magento\Store\Model\StoreManager::class);
+                 $storeManager-&gt;getStore();
+
+                 $this-&gt;setStore($storeManager-&gt;getStore());
+                 $this-&gt;setIsCustomer(false);
+                 $this-&gt;setCustomerGroupId(null);
+             }
+
+             public function getStore()
+             {
+                 return $this-&gt;store;
+             }
+
+             public function setStore(\Magento\Store\Api\Data\StoreInterface $store)
+             {
+                 $this-&gt;store = $store;
+                 return $this;
+             }
+
+             public function getIsCustomer()
+             {
+                 return $this-&gt;isCustomer;
+             }
+
+             public function setIsCustomer($isCustomer)
+             {
+                 $this-&gt;isCustomer = $isCustomer;
+                 return $this;
+             }
+
+             public function getCustomerGroupId()
+             {
+                 return $this-&gt;customerGroupId;
+             }
+
+             public function setCustomerGroupId($customerGroupId)
+             {
+                 $this-&gt;customerGroupId = $customerGroupId;
+                 return $this;
+             }
+         };
+     }
+ };
+</code></pre>
+</li>
 </ol>
+<pre><code>    $variables = [];
+    $result = \GraphQL\GraphQL::executeQuery($schemaGenerator-&gt;generate(), $source, $rootValue, $contextValue, $variables);
+    $output = $result-&gt;toArray();
+    echo json_encode($output);
+} catch (\Throwable $e) {
+    echo $e-&gt;getFile() . ':' . $e-&gt;getLine() . PHP_EOL;
+    echo $e-&gt;getMessage() . PHP_EOL . $e-&gt;getTraceAsString();
+}
+
+```
+</code></pre>
 &lt;!--
+
+{
+  currency {
+    available_currency_codes
+    base_currency_code
+    base_currency_symbol
+    default_display_currecy_code
+    default_display_currecy_symbol
+    default_display_currency_code
+    default_display_currency_symbol
+    exchange_rates {
+      currency_to
+      rate
+    }
+  }
+}
 
 用 get 的方式，发送的 graphql 请求，get的话可以让 http 缓存，
 graphqlquery=$(cat &lt;&lt;- EOF
@@ -845,6 +963,7 @@ graphqlquery=$(echo -n $graphqlquery | php -r 'print(http_build_query(["query"=&
 curl 'http://localhost-magento/graphql?'$graphqlquery \
     -H 'accept: application/json' \
     -H 'content-type: application/json' \
+    -H 'authorization: Bearer 214dee33a45a11eeae4800e04c947949' \
     --data-raw "$graphqlquery" \
     --compressed \
     --insecure -s -k
@@ -4131,6 +4250,18 @@ FROM
 JOIN 
     sales_order_payment ON sales_order.entity_id = sales_order_payment.parent_id
 WHERE sales_order.increment_id = 3100182449 \G
+
+
+
+
+select
+    *
+FROM 
+    sales_order
+LEFT JOIN
+    sales_order_item on sales_order.entity_id = sales_order_item.order_id
+WHERE sales_order.increment_id = 3301844358 \G
+
 
 SELECT x.* FROM core_config_data x
 WHERE value like '%sales%';
