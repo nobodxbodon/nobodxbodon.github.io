@@ -1,0 +1,161 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-01-19-Rust 在线摸索（八）：泛型没入门.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/01/19/Rust-在线摸索（八）：泛型没入门">站点原文</a></h2>
+<p><a href="https://zhuanlan.zhihu.com/p/19252635602">结构</a> 初步了解了，先跳到 <a href="https://doc.rust-lang.org/rust-by-example/generics.html">泛型</a>。之前 struct 的命名开头大写，而方法等都是下划线分隔的小写。char 是内置类型，也用全小写，也许是为了与非内置类型区分开？不知有没有类似 Java 里 int 和 Integer 的对应。</p>
+<p>如果改为 <code>let _字: 个泛&lt;String&gt; = 个泛('a');</code> 报错（1）：</p>
+<pre><code>error[E0308]: mismatched types
+  --&gt; src/main.rs:21:29
+   |
+21 |     let _字: 个泛&lt;String&gt; = 个泛('a');
+   |                             ---- ^^^- help: try using a conversion method: `.to_string()`
+   |                             |    |
+   |                             |    expected `String`, found `char`
+   |                             arguments to this struct are incorrect
+   |
+help: the type constructed contains `char` due to the type of the argument passed
+  --&gt; src/main.rs:21:26
+   |
+21 |     let _字: 个泛&lt;String&gt; = 个泛('a');
+   |                             ^^^^^---^
+   |                                  |
+   |                                  this argument influences the type of `个泛`
+note: tuple struct defined here
+  --&gt; src/main.rs:12:8
+   |
+12 | struct 个泛&lt;T&gt;(T);
+   |        ^^^^
+
+For more information about this error, try `rustc --explain E0308`.
+</code></pre>
+<p>哪个是 <code>tuple struct</code>？感觉各个错误间的关系难以看清，尤其在报错信息无间隔的情况下。</p>
+<p>如果将 'a' 改为 'ab'，是否就是 String 了呢？报错：</p>
+<pre><code>error: character literal may only contain one codepoint
+  --&gt; src/main.rs:21:29
+   |
+21 |     let _字: 个泛&lt;String&gt; = 个泛('ab');
+   |                                  ^^^^
+   |
+help: if you meant to write a string literal, use double quotes
+   |
+21 |     let _字: 个泛&lt;String&gt; = 个泛("ab");
+   |                                  ~  ~
+</code></pre>
+<p>根据建议改为双引号。结果报错：</p>
+<pre><code>error[E0308]: mismatched types
+  --&gt; src/main.rs:21:29
+   |
+21 |     let _字: 个泛&lt;String&gt; = 个泛("ab");
+   |                             ---- ^^^^- help: try using a conversion method: `.to_string()`
+   |                             |    |
+   |                             |    expected `String`, found `&amp;str`
+   |                             arguments to this struct are incorrect
+   |
+help: the type constructed contains `&amp;'static str` due to the type of the argument passed
+【后半部分同报错（1）】
+</code></pre>
+<p>之前的建议不到位啊。继续加了 <code>.to_string()</code>，通过编译，看来多数标准库的函数命名风格是下划线小写。不知像 println 的特例有几个。</p>
+<p>带出的另一个问题是 String 和 &amp;str 的差别。另外，帮助里提到 "ab" 是个 <code>&amp;'static str</code>，那为啥不直接在 "expected <code>String</code>, found <code>&amp;str</code>" 里写明 static 呢？反馈信息的简约度还有改进空间。</p>
+<p>试了一下 <code>let _个 = 个泛(个);</code> 也可以，如果参数是自己 <code>let _个泛 = 个泛(个泛);</code>，则报错：</p>
+<pre><code>error[E0282]: type annotations needed
+  --&gt; src/main.rs:28:18
+   |
+28 |     let _个泛 = 个泛(个泛);
+   |                      ^^^^ cannot infer type of the type parameter `T` declared on the struct `个泛`
+   |
+help: consider specifying the generic argument
+   |
+28 |     let _个泛 = 个泛(个泛::&lt;T&gt;);
+   |                          +++++
+
+For more information about this error, try `rustc --explain E0282`.
+</code></pre>
+<p>感觉可以搞个报错信息数据库，记录各种错误信息和可对应复现的代码。回头看看rustc --explain是不是已有类似数据。</p>
+<p>报错是说光看 <code>个泛</code> 无法确定类型，合理，不过建议里居然可以用 generic argument，试试先，于是报错：</p>
+<pre><code>error[E0412]: cannot find type `T` in this scope
+  --&gt; src/main.rs:28:23
+   |
+6  | struct 个(甲);
+   | -------------- similarly named struct `个` defined here
+...
+28 |     let _个泛 = 个泛(个泛::&lt;T&gt;);
+   |                             ^ help: a struct with a similar name exists: `个`
+
+For more information about this error, try `rustc --explain E0412`.
+</code></pre>
+<p>例程里有个 <code>struct 个泛&lt;T&gt;(T);</code> ，我就以为是它是结合了这个上下文才提示可以直接写 <code>T</code>，为确认一下，改成 <code>struct 个泛&lt;S&gt;(S);</code> 报错还是之前那样。</p>
+<p>看来前面那个报错里的 T 实际上是泛指某个类的意思。于是改成比如char <code>let _个泛 = 个泛(个泛::&lt;char&gt;);</code>，就通过了。</p>
+<p>后三句看着有点不和谐，甲 是个类名，而 6 和 'a' 都是值，如果改成对应的 i32，结果报错：</p>
+<pre><code>error[E0423]: expected value, found builtin type `i32`
+  --&gt; src/main.rs:25:17
+   |
+25 |     let _数 = 个泛(i32); // Uses `i32`.
+   |                    ^^^ not a value
+   |
+help: consider importing one of these functions instead
+   |
+2  + use fastrand::i32;
+   |
+2  + use nom::character::complete::i32;
+   |
+2  + use nom::character::streaming::i32;
+   |
+2  + use nom::number::complete::i32;
+   |
+     and 2 other candidates
+
+For more information about this error, try `rustc --explain E0423`.
+</code></pre>
+<p>那这句改成 <code>let _字: 个泛&lt;String&gt; = 个泛(String);</code> 呢？还报错：</p>
+<pre><code>error[E0423]: expected value, found struct `String`
+   --&gt; src/main.rs:21:29
+    |
+21  |     let _字: 个泛&lt;String&gt; = 个泛(String);
+    |                                  ^^^^^^
+    |
+   ::: /playground/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/string.rs:362:1
+    |
+362 | pub struct String {
+    | ----------------- `String` defined here
+    |
+help: consider importing one of these tuple variants instead
+    |
+2   + use clap::error::ContextValue::String;
+    |
+2   + use clap_builder::error::ContextValue::String;
+    |
+2   + use fs_extra::dir::DirEntryValue::String;
+    |
+2   + use gimli::AttributeValue::String;
+    |
+      and 7 other candidates
+
+For more information about this error, try `rustc --explain E0423`.
+</code></pre>
+<p>为啥 甲 这个 struct 就可以当参数而 String 不可以？改成 <code>let _类: 个泛&lt;甲&gt; = 个泛(甲);</code> 也是没问题的。</p>
+<p>至少粗看报错信息没看出端倪。。。留着疑惑先到这。代码如下：</p>
+<pre><code class="lang-rust">// A concrete type `甲`.
+struct 甲;
+
+// In defining the type `个`, the first use of `甲` is not preceded by `&lt;甲&gt;`.
+// Therefore, `个` is a concrete type, and `甲` is defined as above.
+struct 个(甲);
+//            ^ Here is `个`s first use of the type `甲`.
+
+// Here, `&lt;类&gt;` precedes the first use of `类`, so `个泛` is a generic type.
+// Because the type parameter `类` is generic, it could be anything, including
+// the concrete type `甲` defined at the top.
+struct 个泛&lt;类&gt;(类);
+
+fn main() {
+    // `个` is concrete and explicitly takes `甲`.
+    let _个 = 个(甲);
+
+    // Create a variable `_字` of type `个泛&lt;char&gt;`
+    // and give it the value `个泛('a')`.
+    // Here, `个泛` has a type parameter explicitly specified.
+    let _字: 个泛&lt;char&gt; = 个泛('a');
+
+    // `个泛` can also have a type parameter implicitly specified:
+    let _类 = 个泛(甲); // Uses `甲` defined at the top.
+    let _数 = 个泛(6); // Uses `i32`.
+    let _字 = 个泛('a'); // Uses `char`.
+}
+</code></pre>

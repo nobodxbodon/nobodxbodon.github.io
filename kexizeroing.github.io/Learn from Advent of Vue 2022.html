@@ -78,7 +78,7 @@ Normally, a Vue component is defined by a JavaScript object with various propert
 <p>Composition API provides the same level of logic composition capabilities as React Hooks, but with some <a href="https://vuejs.org/guide/extras/composition-api-faq.html#comparison-with-react-hooks">important differences</a>:</p>
 <ul>
 <li>Composition API calls are also not sensitive to call order and can be conditional.</li>
-<li>Vue's runtime reactivity system automatically collects reactive dependencies used in computed properties and watchers.</li>
+<li>Vue's runtime reactivity system automatically collects reactive dependencies used in computed properties and watchers. <em>(It tracks dependencies for reactive variables and recomputes only when necessary. There is no need for manual low level performance tuning like <code>useMemo</code> or <code>useCallback</code> in React.)</em></li>
 <li>No need to manually cache callback functions to avoid unnecessary child updates.</li>
 </ul>
 <pre><code class="lang-js">// useCounter.js
@@ -138,9 +138,39 @@ export function useTimeout = (fn, delay, options) =&gt; {
   })
 }
 </code></pre>
-<blockquote><p>Each component instance calling <code>useMouse()</code> will create its own copies of x and y state so they won't interfere with one another. But if you put those values outside of the composable function, it will persist, like a basic state or store. When you need to access those values later somewhere else, they won't be reset everytime you call the composable.</p>
+<blockquote><p>Each component instance calling <code>useXXX()</code> will create its own copies of state so they won't interfere with one another. But if you put those values outside of the composable function, it will persist, like a basic state or store. When you need to access those values later somewhere else, they won't be reset everytime you call the composable.</p>
 </blockquote>
-<h3>Organize your Composition API code</h3>
+<p>More about <code>watchEffect</code>:</p>
+<ol>
+<li><code>watchEffect</code> runs a callback function immediately and automatically tracks its reactive dependencies. The callback function is executed whenever any of the reactive dependencies change.</li>
+<li>The callback function receives a special function called <code>onCleanup</code> as its first argument. You can use this function to register a cleanup callback that will be called before the watcher is re-executed.</li>
+<li>A confusing caveat is that <code>watchEffect</code> only tracks dependencies during its synchronous execution. When using it with an async callback, only properties accessed before the first <code>await</code> tick will be tracked. Everything after the <code>await</code> will NOT be tracked.</li>
+</ol>
+<h3>Write better Vue composables</h3>
+<p>Passing props and events back and forth through the component hierarchy creates a lot of complexity. A more straightforward solution is to create a shared data store that any component can import:</p>
+<pre><code class="lang-js">import { reactive, toRefs } from 'vue'
+const state = reactive({ user: { name: 'Alice' } })
+
+export function useUserStore() {
+  // Without toRefs, if you were to destructure the returned state like this:
+  // const { user } = useUserStore()
+  // You would lose reactivity because destructuring breaks the reactive connection. T
+  return toRefs(state)
+}
+</code></pre>
+<blockquote><p>Without <code>toRefs</code>, if you were to destructure the returned state <code>const { user } = useUserStore()</code>, you would lose reactivity because destructuring breaks the reactive connection. The <code>user</code> variable would just be a static copy of the value at the time of destructuring. With <code>toRefs</code>, each property becomes an individual <code>ref</code> that maintains its reactive connection to the original state. If you only ever used the state as a whole object (like <code>state.user.name</code>) and never destructured it, then you wouldn't need <code>toRefs</code>.</p>
+</blockquote>
+<p>A giant component might put all its refs and methods in one place, so that setup quickly becomes unmanageable. Instead, an inline composable can group logic and provide it locally.</p>
+<pre><code class="lang-vue">&lt;script setup&gt;
+function useCounter() {
+  const count = ref(0)
+  const increment = () =&gt; count.value++
+  return { count, increment }
+}
+
+const { count, increment } = useCounter()
+&lt;/script&gt;
+</code></pre>
 <p>We abandon the options API for the composition API, and the idea is not that we write everything the same way as the options API but not having the data/computed/watch options.</p>
 <pre><code class="lang-js">// Common mistake: Grouping by options
 // data
@@ -184,20 +214,7 @@ function useMessage(input) {
   }
 }
 </code></pre>
-<p>It is possible to have two script sections within a Vue Single File component: one with the <code>setup</code> attribute and one without. One of reasons for this is exporting types or data that are tightly tied to the component but could be useful elsewhere.</p>
-<pre><code class="lang-vue">&lt;!-- UserProfileComponent --&gt;
-&lt;script lang="ts"&gt;
-export interface UserProfile{
-  username: string,
-  // etc...
-}
-&lt;/script&gt;
-
-&lt;script setup lang="ts"&gt;
-defineProps&lt;UserProfile&gt;()
-&lt;/script&gt;
-</code></pre>
-<p>It is also possible to use both Options API and Composition API. Although you can access Composition API from the Options API, it’s a one-way street. The Composition API cannot access anything defined through the Options API.</p>
+<p>It is possible to use both Options API and Composition API. Although you can access Composition API from the Options API, it’s a one-way street. The Composition API cannot access anything defined through the Options API.</p>
 <pre><code class="lang-js">export default {
   setup() {
     const darkMode = ref(false)
@@ -540,3 +557,10 @@ export function unmount(vnode) {
   vnode.el.parentNode.removeChild(vnode.el)
 }
 </code></pre>
+<ul>
+<li>Demystifying the Art of SFC Compilation: <a href="https://vueconf19-compiler.surge.sh">https://vueconf19-compiler.surge.sh</a></li>
+<li>Vue template explorer: <a href="https://template-explorer.vuejs.org">https://template-explorer.vuejs.org</a></li>
+<li>Vue SFC Playground: <a href="https://play.vuejs.org">https://play.vuejs.org</a></li>
+<li>Understanding Vue SFC Compiler: <a href="https://jinjiang.dev/slides/understanding-vue-compiler">https://jinjiang.dev/slides/understanding-vue-compiler</a></li>
+<li>Compile Vue SFC into plain JavaScript &amp; CSS: <a href="https://github.com/Jinjiang/vue-simple-compiler">https://github.com/Jinjiang/vue-simple-compiler</a></li>
+</ul>

@@ -23,12 +23,6 @@ yarn add --dev typescript
     "resolveJsonModule": true,
     "moduleDetection": "force",
 
-    /*
-     * https://github.com/privatenumber/fix-verbatim-module-syntax
-     * Fix error: 'SomeType' is a type and must be imported using a type-only import 
-     * when 'verbatimModuleSyntax' is enabled.
-     */
-
     /* Strictness */
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -87,6 +81,16 @@ export function add(a: number, b: number) {
 // @Filename: src/main.mts
 import { add } from "./math.mjs";
 add(1, 2);
+</code></pre>
+<p>Since TypeScript 5.0, <code>verbatimModuleSyntax</code> is the recommended way to enforce <code>import type</code>. When it is set to true, any imports or exports without a <code>type</code> modifier are left around. Anything that uses the <code>type</code> modifier is dropped entirely. You may get the message when enabling <code>verbatimModuleSyntax</code> (as expected): <em>'SomeType' is a type and must be imported using a type-only import.</em></p>
+<blockquote><p>TypeScript import elision: If an import is not used as a value, or the compiler can detect that the import doesn't refer to a value at runtime, the compiler will drop the import during emit.</p>
+</blockquote>
+<pre><code class="lang-ts">// Erased away entirely
+import type { A } from "a";
+// Rewritten to `import { b } from "bcd";`
+import { b, type c, type d } from "bcd";
+// Rewritten to `import {} from "xyz";`
+import { type xyz } from "xyz";
 </code></pre>
 <p>How multiple <code>tsconfig.json</code> files can be composed together?</p>
 <ol>
@@ -172,7 +176,7 @@ enum ThemeColors {
   DarkSecondary = 'darkSecondary',
 }
 
-// Real-world examples of Typescript enums
+// Real-world examples of TS enums
 enum LogLevel {
   ERROR,
   WARNING,
@@ -180,14 +184,13 @@ enum LogLevel {
   DEBUG
 }
 
-enum HTTPStatus {
-  OK = 200,
-  Redirect = 301,
-  BadRequest = 400,
-  Unauthorized = 401,
-  NotFound = 404,
-  InternalServerError = 500,
-}
+// An object marked "as const" accomplishes the same thing
+const status = {
+  pending: 0,
+  shipped: 1,
+  delivered: 2,
+  error: 3,
+} as const
 </code></pre>
 <pre><code class="lang-js">// How numeric enums transpile
 var AlbumStatus;
@@ -664,7 +667,7 @@ declare module "*.png" {
 <p>Note that skip declaration files in <code>node_modules</code>, <strong>it also skips all declaration files.</strong> "Declaration files" sounds like where you put your type declarations. But this is a bad idea. <code>skipLibCheck</code> will ignore these files, meaning you won't get type checking on them. Instead, put your types in regular TypeScript files.</p>
 <blockquote><p>Different browsers support different features. But TypeScript only ships one set of DOM types. So how does it know what to include? TypeScript's policy is that if a feature is supported in two major browsers, it's included in the DOM types.</p>
 </blockquote>
-<p>When you install a library with npm, you're downloading JavaScript to your file system, but not every library bundles <code>.d.ts</code> files. The <a href="https://github.com/DefinitelyTyped/DefinitelyTyped">DefinitelyTyped GitHub repository</a> was built to house high-quality type definitions for numerous popular JavaScript libraries that didn't ship definitions of their own. By installing a package with <code>@types/*</code> and your library as a dev dependency, you can add type definitions that TypeScript will be able to use immediately.</p>
+<p>When you install a library with npm, you're downloading JavaScript to your file system, but not every library bundles <code>.d.ts</code> files. The <a href="https://github.com/DefinitelyTyped/DefinitelyTyped">DefinitelyTyped GitHub repository</a> was built to house high-quality type definitions for numerous popular JavaScript libraries that didn't ship definitions of their own. By <strong>installing a package with <code>@types/*</code></strong> as a dev dependency, you can add type definitions that TypeScript will be able to use immediately.</p>
 <pre><code class="lang-sh"># For an npm package "foo", typings for it will be at "@types/foo".
 npm install --save-dev @types/node
 
@@ -828,6 +831,29 @@ npx tsc --init
 </code></pre>
 <blockquote><p>Make sure you’re using Node &gt;=20.6 — it’s required for some of the flags used in this setup. The <code>--watch</code> flag was added in Node v18.11.0. The <code>--env-file</code> flag was added in Node v20.6.0.</p>
 </blockquote>
+<pre><code class="lang-js">// testing source code
+import { describe, it } from "node:test";
+import assert from "node:assert";
+
+describe("test ...", () =&gt; {
+  it('should ...', () =&gt; {
+    assert.strictEqual(1, 1);
+  });
+});
+
+// watching source code
+"node --watch index.js"
+"node --watch-path=./src --watch-path=./tests index.js"
+
+// styling output
+import { styleText } from 'node:util'
+
+const redText = styleText('red', 'I’m a red text')  
+console.log(redText)
+
+const blackWithGreenBg = styleText(['black', 'bgGreen'], 'I’m green with a black background')  
+console.log(blackWithGreenBg)
+</code></pre>
 <p>How to run ts files from command line? There is <a href="https://github.com/TypeStrong/ts-node">ts-node</a> that will compile the code and REPL for node.js: <code>npx ts-node src/foo.ts</code>. <code>tsc</code> writes js to disk. <code>ts-node</code> doesn't need to do that and runs ts on the fly. But it's not typechecking your code. So we recommend to type check your code first with <code>tsc</code> and then run it with <code>ts-node</code> before shipping it.</p>
 <p>Btw, you can use <a href="https://github.com/unjs/jiti">jiti</a> CLI to quickly run any script with TypeScript and native ESM support.</p>
 <p>For lightweight support to enable runtime TypeScript in Node.js, you can use the built-in support for <a href="https://nodejs.org/api/typescript.html#type-stripping">type stripping</a>. By default Node.js will execute only files that contain no TypeScript features that require transformation, such as enums or namespaces. Node.js will replace inline type annotations with whitespace, and no type checking is performed. Node 23 will be able to run TypeScript files without any extra configuration <em>(unflagging <code>--experimental-strip-types</code>)</em>.</p>
