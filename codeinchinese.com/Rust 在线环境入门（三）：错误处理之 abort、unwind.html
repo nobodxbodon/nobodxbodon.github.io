@@ -1,0 +1,115 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-01-12-Rust 在线环境入门（三）：错误处理之 abort、unwind.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/01/12/Rust-在线环境入门（三）：错误处理之-abort、unwind">站点原文</a></h2>
+<p>续 <a href="https://zhuanlan.zhihu.com/p/17837138618">前文</a>，光看题目“<a href="https://doc.rust-lang.org/rust-by-example/error/abort_unwind.html">abort and unwind</a>”，以为是 panic 类似的宏，毕竟都是动词。细看后似乎是 panic 后续，不知为何并列为另一节。标准库命名风格也待继续考察。</p>
+<h2>例一</h2>
+<p>猴子测试，把 panic 改成了‘恐慌’，报错如下：</p>
+<pre><code>warning: unexpected `cfg` condition name: `恐慌`
+ --&gt; src/main.rs:4:17
+  |
+4 |         if cfg!(恐慌 = "abort") {
+  |                 ^^^^^^^^^^^^^^
+  |
+  = help: expected names are: `clippy`, `debug_assertions`, `doc`, `docsrs`, `doctest`, `feature`, `fmt_debug`, `miri`, `overflow_checks`, `panic`, `proc_macro`, `relocation_model`, `rustfmt`, `sanitize`, `sanitizer_cfi_generalize_pointers`, `sanitizer_cfi_normalize_integers`, `target_abi`, `target_arch`, `target_endian`, `target_env`, `target_family`, `target_feature`, `target_has_atomic`, `target_has_atomic_equal_alignment`, `target_has_atomic_load_store`, `target_os`, `target_pointer_width`, `target_thread_local`, `target_vendor`, `test`, `ub_checks`, `unix`, and `windows`
+  = help: consider using a Cargo feature instead
+  = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+           [lints.rust]
+           unexpected_cfgs = { level = "warn", check-cfg = ['cfg(恐慌, values("abort"))'] }
+  = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(恐慌, values(\"abort\"))");` to the top of the `build.rs`
+  = note: see &lt;https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html&gt; for more information about checking conditional configuration
+  = note: `#[warn(unexpected_cfgs)]` on by default
+</code></pre>
+<p>个人看来，随着编程工具反馈信息的逐渐丰富，篇幅也越来越长。至少在视觉效果上，中文化后应该会简约不少。</p>
+<p>中文化后：</p>
+<pre><code class="lang-rust">fn 喝(饮料: &amp;str) {
+    if 饮料 == "柠檬水" {
+        if cfg!(panic = "abort") {
+            println!("走错了，快跑！！");
+        } else {
+            println!("快吐！！");
+        }
+    } else {
+        println!("望{}止渴.", 饮料);
+    }
+}
+
+fn main() {
+    喝("水");
+    喝("柠檬水");
+}
+</code></pre>
+<p>想看看 panic 值，加了句 println!，发现在线环境的编辑器里换行没有自动缩进。</p>
+<p>照旧忘了句末分号：</p>
+<pre><code>error: expected `;`, found `println`
+ --&gt; src/main.rs:6:34
+  |
+6 |             println!("{}", panic)
+  |                                  ^ help: add `;` here
+7 |             println!("快吐！！");
+  |             ------- unexpected token
+</code></pre>
+<p>上一篇有评论提醒 println 是宏，从“found <code>println</code>”看来的确命名中没有感叹号。另外，“------- unexpected token”这句有点噪声感觉。</p>
+<p>结果报错：</p>
+<pre><code>error[E0423]: expected value, found macro `panic`
+ --&gt; src/main.rs:6:28
+  |
+6 |             println!("{}", panic);
+  |                            ^^^^^ not a value
+  |
+help: consider importing this function instead
+  |
+1 + use core::panicking::panic;
+  |
+
+For more information about this error, try `rustc --explain E0423`.
+</code></pre>
+<p>因为这句 <code>panic = "abort"</code>，以为既然可以与字符串作比较，应可以打印出 panic 的值。对了，为啥不用 == 对 panic 进行检查？</p>
+<p>试改之后，报错如下：</p>
+<pre><code>error: expected 1 cfg-pattern
+ --&gt; src/main.rs:3:12
+  |
+3 |         if cfg!(panic == "abort") {
+  |            ^^^^^^^^^^^^^^^^^^^^^
+</code></pre>
+<p>为何不将 pattern 和普通的条件判断的形式一致化呢？</p>
+<p>另外发觉，看rust里感叹号（cfg! 也是个宏？）需要和其他语言常用的 ! 的‘取否’语义区别开来，还需要习惯一下。</p>
+<h2>例二</h2>
+<p>发现 <code>#[cfg(not(panic = "unwind"))]</code> 这句，这下怀疑 cfg! 到底是 cfg(not()) 还是啥意思了。</p>
+<pre><code class="lang-rust">#[cfg(panic = "unwind")]
+fn 啊() {
+    println!("快吐！！");
+}
+
+#[cfg(not(panic = "unwind"))]
+fn 啊() {
+    println!("走错了，快跑！！");
+}
+
+fn 喝(饮料: &amp;str) {
+    if 饮料 == "柠檬水" {
+        ah();
+    } else {
+        println!("望{}止渴.", 饮料);
+    }
+}
+
+fn main() {
+    喝("水");
+    喝("柠檬水");
+}
+</code></pre>
+<p>漏了个方法名未中文化：</p>
+<pre><code>error[E0425]: cannot find function `ah` in this scope
+  --&gt; src/main.rs:13:9
+   |
+13 |         ah();
+   |         ^^ not found in this scope
+
+For more information about this error, try `rustc --explain E0425`.
+</code></pre>
+<p>在线环境没找到命令行运行 rustc，好像有些错误是由错误码索引，而另一些如 cfg-pattern 与分号缺失等错误不是。不知是否编译期和运行时的区别，但对一般开发者来说似乎不需了解。</p>
+<p>改正之后，运行如期，与例一输出相同：</p>
+<pre><code>Standard Output
+
+望水止渴.
+快吐！！
+</code></pre>
+<p>光看这两个例子，猜度 panic 的默认值为 unwind。还得再研究 cfg 和 #[] 的含义。</p>

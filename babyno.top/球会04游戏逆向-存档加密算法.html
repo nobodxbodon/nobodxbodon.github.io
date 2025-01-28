@@ -1,0 +1,57 @@
+<h2><a href="https://github.com/caol64/caol64.github.io/blob/master/content/posts/2025/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm.md">仓库源文</a>，<a href="https://babyno.top/posts/2025/01/17/sakatsuku-04-game-reverse-save-file-encryption-algorithm">站点原文</a></h2>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-14-sakatsuku-04-game-reverse-save-file-analysis/cover.jpg"/></p>
+<p>话接上回，文章提到“主存档文件使用<code>Bit-Packing</code>技术进行压缩，再使用<code>BlowFish</code>算法进行加密”。我们是如何确定加密算法的呢？</p>
+<h2>工具选择</h2>
+<p>“工欲善其事，必先利其器”，既然我们要对<code>PS2</code>游戏进行逆向，适合的工具是必不可少的。本文需要使用以下两个工具：</p>
+<ul>
+<li><a href="https://pcsx2.net/">PSCX2</a> -- <code>PS2</code>模拟器，带<code>debug</code>功能</li>
+<li><a href="https://ghidra-sre.org/">Ghidra</a> -- 逆向神器</li>
+</ul>
+<p><code>PSCX2</code>挑最新稳定版安装，<code>GHDIRA</code>安装说明如下：</p>
+<ul>
+<li>确保本机已安装<code>JDK21</code></li>
+<li><a href="https://github.com/NationalSecurityAgency/ghidra/releases">下载<code>Ghidra 11.2.1</code></a>。</li>
+<li><a href="https://github.com/chaoticgd/ghidra-emotionengine-reloaded/releases">下载<code>emotionengine</code>插件</a>，注意匹配<code>Ghidra</code>版本。</li>
+<li>将插件解压缩，得到<code>ghidra-emotionengine-reloaded</code>目录，将该目录复制到<code>Ghidra</code>根目录下的<code>Ghidra/Extensions/</code>目录下。</li>
+<li>运行<code>./ghidraRun</code>命令启动。</li>
+</ul>
+<p><code>PSCX2</code>配置说明如下：</p>
+<ul>
+<li>菜单“工具”下勾选“显示高级设置“。</li>
+<li>进入“设置”界面，选择“高级”，在“即时存档设置“选项卡中将“压缩模式”从“ZStandard“改成“未压缩”。（注意这一步是非必须的，这样做会导致游戏即时存档变大）</li>
+</ul>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/1.jpg"/></p>
+<h2>Dump游戏内存</h2>
+<p>启动<code>PSCX2</code>，进入游戏，在游戏进入到读取存档界面时暂停。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/2.jpg"/></p>
+<p>选择“保存即时存档”。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/3.jpg"/></p>
+<p>转到<code>PSCX2</code>安装目录下的<code>sstates</code>目录，找到刚才保存的即时存档。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/4.jpg"/></p>
+<p>注意看03和04两个文件，03是使用<code>ZStandard</code>压缩过的，04是未压缩的。</p>
+<p>在<code>MAC</code>环境下，可以直接使用“归档实用工具”解包。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/5.jpg"/></p>
+<p>在解包目录下，找到<code>eeMemory.bin</code>，这就是我们今天要分析的游戏内存。</p>
+<h2>内存逆向</h2>
+<p>将<code>eeMemory.bin</code>拖拽进<code>Ghidra</code>，此时会弹出目标语言选择界面：</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/6.jpg"/></p>
+<p>如果之前的插件安装步骤正确完成，应该可以出现<code>MIPS-R5900</code>选项，选择它。之后出现的<code>Analysis</code>选项保留默认即可。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/7.jpg"/></p>
+<p>之后点击<code>Analyze</code>进行分析，分析完毕后会出现如下界面：</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/8.jpg"/></p>
+<p>恭喜你，你获得了游戏中的部分函数代码。但是这些函数是由反编译引擎反编译出来的，可读性非常差，懂得都懂。</p>
+<h2>搜索加密函数</h2>
+<p>回到<code>PSCX2</code>，在菜单栏选择“调试”-“打开调试器“。</p>
+<p>在调试器中选中“函数”选项卡，在下面的输入框中输入<code>BF_</code>，此时出现在最上方的两个函数即是我们感兴趣的，记住它们的内存位置。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/9.jpg"/></p>
+<p>切换到<code>Ghidra</code>，在键盘按下<code>G</code>，出现对话框，输入内存地址<code>378f10</code>。此时会定位到一个函数，函数名为<code>Fun_</code>后面跟地址偏移量。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/10.jpg"/></p>
+<p>点击函数，右键<code>Edit Function Signature</code>，将函数名改为游戏中的<code>BF_En</code>。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/11.jpg"/></p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-01-17-sakatsuku-04-game-reverse-save-file-encryption-algorithm/12.jpg"/></p>
+<p>这样就顺眼多了。</p>
+<h2>破解加密函数</h2>
+<p>到了这一步是真正考验你编程技术的时刻了，读懂函数逻辑并将其改写为你自己熟悉的语言是这一步的目标。</p>
+<p>根据函数名和函数逻辑大致可以判断出加密算法是<code>BlowFish</code>，当然你可以借助<code>ChatGPT</code>进一步确认。</p>
+<h2>最后</h2>
+<p>如果你对球会04游戏逆向感兴趣，欢迎关注<a href="https://github.com/caol64/sakatsuku04">Github</a>，我之后会将逆向代码逐步上传，目标是完成一个存档查看甚至是编辑器。</p>

@@ -1,10 +1,4 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/intro-to-typescript.md">仓库源文</a>，<a href="https://kexizeroing.github.io/intro-to-typescript">站点原文</a></h2>
-<hr/>
-<p>title: "Intro to TypeScript"
-description: ""
-added: "Jun 12 2022"
-tags: [js]</p>
-<h2>updatedDate: "Dec 28 2024"</h2>
 <p>TypeScript is a strongly typed programming language that builds on JavaScript. It is currently developed and maintained by Microsoft as an open source project. TypeScript supports multiple programming paradigms such as functional, generic, imperative, and object-oriented.</p>
 <p>Every time you write JavaScript in e.g. VS Code, TypeScript runs behind the curtains and gives you information on built-in APIs. In fact, a lot of people think that they can live without TypeScript because JavaScript support is so fantastic in modern editors. Guess what’s, it has always been TypeScript. <em>In VS Code, open a <code>.ts</code> file, <code>Cmd+Shift+P</code> enter "Select TypeScript Version" to check. There is a "Use VS Code's Version" and "Use Workspace Version" (this is from node_modules).</em></p>
 <h2>Setting up TypeScript</h2>
@@ -28,12 +22,6 @@ yarn add --dev typescript
     "allowJs": true,
     "resolveJsonModule": true,
     "moduleDetection": "force",
-
-    /*
-     * https://github.com/privatenumber/fix-verbatim-module-syntax
-     * Fix error: 'SomeType' is a type and must be imported using a type-only import 
-     * when 'verbatimModuleSyntax' is enabled.
-     */
 
     /* Strictness */
     "strict": true,
@@ -77,11 +65,33 @@ yarn add --dev typescript
 <li>The way this is decided is via <code>module</code>. You can hardcode this by choosing some older options. <code>module: CommonJS</code> will always emit CommonJS syntax, and <code>module: ESNext</code> will always emit ESM syntax.</li>
 <li>Using the recommended <code>module: NodeNext</code>, we know that a given module might be an ES module or it might be a CJS module, based on its file extension(<code>mts</code>, <code>.cts</code>) and/or the <code>type</code> field in the nearest <code>package.json</code> file.</li>
 </ol>
-<p>Relative import paths <a href="https://www.totaltypescript.com/relative-import-paths-need-explicit-file-extensions-in-ecmascript-imports">need explicit file extensions in ES imports</a> when <code>--moduleResolution</code> is <code>node16</code> or <code>nodenext</code>.</p>
+<p>Relative import paths <a href="https://www.totaltypescript.com/relative-import-paths-need-explicit-file-extensions-in-ecmascript-imports">need explicit file extensions in ES imports</a> when <code>--moduleResolution</code> is <code>node16</code> or <code>nodenext</code> <em>(currently identical to <code>node16</code>)</em>.</p>
 <ol>
-<li>Most bundlers let you omit the file extension when importing files. But TS rules like <code>moduleResolution: NodeNext</code> force you to specify the file extension. This can feel really weird when you're working in <code>.ts</code> files, but writing <code>.js</code> on your imports. Why do we need to do it? Well, it's the spec. <em>The Node spec requires that you use <code>.js</code> file extensions for all imports and exports.</em> If you want to go back to the old style, then specify <code>moduleResolution: Bundler</code> and bundle your code with a tool like esbuild.</li>
+<li>Most bundlers let you omit the file extension when importing files. But TS rules like <code>moduleResolution: NodeNext</code> force you to specify the file extension. This can feel really weird when you're working in <code>.ts</code> files, but writing <code>.js</code> on your imports. Why do we need to do it? Well, it's the spec. <strong>The Node spec requires that you use <code>.js</code> file extensions for all ESM imports and exports.</strong> If you want to go back to the old style, then specify <code>moduleResolution: Bundler</code> and bundle your code with a tool like esbuild.</li>
+<li>TypeScript doesn’t modify import specifiers during emit: the relationship between an import specifier and a file on disk is host-defined, and TypeScript is not a host.</li>
 <li><code>--allowImportingTsExtensions</code> allows TypeScript files to import each other with a TypeScript-specific extension like <code>.ts</code>, <code>.mts</code>, or <code>.tsx</code>. This flag is only allowed when <code>--noEmit</code> is enabled. The expectation here is that your resolver (e.g. your bundler, a runtime, or some other tool) is going to make these imports between <code>.ts</code> files work.</li>
 </ol>
+<pre><code class="lang-js">// @moduleResolution: node16
+// @rootDir: src
+// @outDir: dist
+// @Filename: src/math.mts
+export function add(a: number, b: number) {
+  return a + b;
+}
+// @Filename: src/main.mts
+import { add } from "./math.mjs";
+add(1, 2);
+</code></pre>
+<p>Since TypeScript 5.0, <code>verbatimModuleSyntax</code> is the recommended way to enforce <code>import type</code>. When it is set to true, any imports or exports without a <code>type</code> modifier are left around. Anything that uses the <code>type</code> modifier is dropped entirely. You may get the message when enabling <code>verbatimModuleSyntax</code> (as expected): <em>'SomeType' is a type and must be imported using a type-only import.</em></p>
+<blockquote><p>TypeScript import elision: If an import is not used as a value, or the compiler can detect that the import doesn't refer to a value at runtime, the compiler will drop the import during emit.</p>
+</blockquote>
+<pre><code class="lang-ts">// Erased away entirely
+import type { A } from "a";
+// Rewritten to `import { b } from "bcd";`
+import { b, type c, type d } from "bcd";
+// Rewritten to `import {} from "xyz";`
+import { type xyz } from "xyz";
+</code></pre>
 <p>How multiple <code>tsconfig.json</code> files can be composed together?</p>
 <ol>
 <li>Your IDE determines which <code>tsconfig.json</code> to use by looking for the closest one to the current <code>.ts</code> file.</li>
@@ -166,7 +176,7 @@ enum ThemeColors {
   DarkSecondary = 'darkSecondary',
 }
 
-// Real-world examples of Typescript enums
+// Real-world examples of TS enums
 enum LogLevel {
   ERROR,
   WARNING,
@@ -174,14 +184,13 @@ enum LogLevel {
   DEBUG
 }
 
-enum HTTPStatus {
-  OK = 200,
-  Redirect = 301,
-  BadRequest = 400,
-  Unauthorized = 401,
-  NotFound = 404,
-  InternalServerError = 500,
-}
+// An object marked "as const" accomplishes the same thing
+const status = {
+  pending: 0,
+  shipped: 1,
+  delivered: 2,
+  error: 3,
+} as const
 </code></pre>
 <pre><code class="lang-js">// How numeric enums transpile
 var AlbumStatus;
@@ -658,7 +667,7 @@ declare module "*.png" {
 <p>Note that skip declaration files in <code>node_modules</code>, <strong>it also skips all declaration files.</strong> "Declaration files" sounds like where you put your type declarations. But this is a bad idea. <code>skipLibCheck</code> will ignore these files, meaning you won't get type checking on them. Instead, put your types in regular TypeScript files.</p>
 <blockquote><p>Different browsers support different features. But TypeScript only ships one set of DOM types. So how does it know what to include? TypeScript's policy is that if a feature is supported in two major browsers, it's included in the DOM types.</p>
 </blockquote>
-<p>When you install a library with npm, you're downloading JavaScript to your file system, but not every library bundles <code>.d.ts</code> files. The <a href="https://github.com/DefinitelyTyped/DefinitelyTyped">DefinitelyTyped GitHub repository</a> was built to house high-quality type definitions for numerous popular JavaScript libraries that didn't ship definitions of their own. By installing a package with <code>@types/*</code> and your library as a dev dependency, you can add type definitions that TypeScript will be able to use immediately.</p>
+<p>When you install a library with npm, you're downloading JavaScript to your file system, but not every library bundles <code>.d.ts</code> files. The <a href="https://github.com/DefinitelyTyped/DefinitelyTyped">DefinitelyTyped GitHub repository</a> was built to house high-quality type definitions for numerous popular JavaScript libraries that didn't ship definitions of their own. By <strong>installing a package with <code>@types/*</code></strong> as a dev dependency, you can add type definitions that TypeScript will be able to use immediately.</p>
 <pre><code class="lang-sh"># For an npm package "foo", typings for it will be at "@types/foo".
 npm install --save-dev @types/node
 
@@ -822,12 +831,35 @@ npx tsc --init
 </code></pre>
 <blockquote><p>Make sure you’re using Node &gt;=20.6 — it’s required for some of the flags used in this setup. The <code>--watch</code> flag was added in Node v18.11.0. The <code>--env-file</code> flag was added in Node v20.6.0.</p>
 </blockquote>
+<pre><code class="lang-js">// testing source code
+import { describe, it } from "node:test";
+import assert from "node:assert";
+
+describe("test ...", () =&gt; {
+  it('should ...', () =&gt; {
+    assert.strictEqual(1, 1);
+  });
+});
+
+// watching source code
+"node --watch index.js"
+"node --watch-path=./src --watch-path=./tests index.js"
+
+// styling output
+import { styleText } from 'node:util'
+
+const redText = styleText('red', 'I’m a red text')  
+console.log(redText)
+
+const blackWithGreenBg = styleText(['black', 'bgGreen'], 'I’m green with a black background')  
+console.log(blackWithGreenBg)
+</code></pre>
 <p>How to run ts files from command line? There is <a href="https://github.com/TypeStrong/ts-node">ts-node</a> that will compile the code and REPL for node.js: <code>npx ts-node src/foo.ts</code>. <code>tsc</code> writes js to disk. <code>ts-node</code> doesn't need to do that and runs ts on the fly. But it's not typechecking your code. So we recommend to type check your code first with <code>tsc</code> and then run it with <code>ts-node</code> before shipping it.</p>
 <p>Btw, you can use <a href="https://github.com/unjs/jiti">jiti</a> CLI to quickly run any script with TypeScript and native ESM support.</p>
-<p>Node 23 will soon be able to run TypeScript files without any extra configuration <em>(unflagging <code>--experimental-strip-types</code>)</em>.</p>
+<p>For lightweight support to enable runtime TypeScript in Node.js, you can use the built-in support for <a href="https://nodejs.org/api/typescript.html#type-stripping">type stripping</a>. By default Node.js will execute only files that contain no TypeScript features that require transformation, such as enums or namespaces. Node.js will replace inline type annotations with whitespace, and no type checking is performed. Node 23 will be able to run TypeScript files without any extra configuration <em>(unflagging <code>--experimental-strip-types</code>)</em>.</p>
 <ul>
 <li>Create an <code>index.ts</code> file containing TS syntax. Enums and namespaces are not supported by default.</li>
 <li>Run node <code>index.ts</code> with no further flags.</li>
 <li>Node will strip out the types using a version of swc, then run the resulting code.</li>
-<li>Node will not typecheck your files when it runs them. </li>
+<li>Node will not typecheck your files when it runs them.</li>
 </ul>

@@ -1,0 +1,168 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-01-16-Rust 在线摸索（五）：trait之零.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/01/16/Rust-在线摸索（五）：trait之零">站点原文</a></h2>
+<p>为了更明白某个广为流传的 Rust 反面例程，暂停错误处理部分学习，先看 <a href="https://doc.rust-lang.org/rust-by-example/trait.html">trait</a>。仍用 <a href="https://play.rust-lang.org/">在线环境</a> 运行。</p>
+<p>trait 意为 特性，初看有点像接口（interface）。</p>
+<p>本章节第一段代码输出：</p>
+<pre><code>Dolly pauses briefly... baaaaah!
+Dolly gets a haircut!
+Dolly pauses briefly... baaaaah?
+</code></pre>
+<p>开始中文化，有一处 <code>Animal</code> 未改，报错：</p>
+<pre><code>error[E0433]: failed to resolve: use of undeclared type `Animal`
+  --&gt; src/main.rs:62:28
+   |
+62 |     let mut dolly: Sheep = Animal::new("Dolly");
+   |                            ^^^^^^ use of undeclared type `Animal`
+
+For more information about this error, try `rustc --explain E0433`.
+</code></pre>
+<p>这里用的术语是 'type'，为何不用 ‘trait’呢？难道 trait 是 type 的一种，仅靠上下文无法确定吗？</p>
+<p>继续中文化，不大明白为何要在实现 <code>绵羊</code> 之前先定义一个同名 struct。</p>
+<p>一路顺利，直到在把 is_naked 改名后，八个错：</p>
+<pre><code>error: unknown start of token: \u{ff1f}
+  --&gt; src/main.rs:18:10
+   |
+18 |     fn 光着？(&amp;self) -&gt; bool {
+   |            ^^
+   |
+help: Unicode character '？' (Fullwidth Question Mark) looks like '?' (Question Mark), but it is not
+   |
+18 |     fn 光着?(&amp;self) -&gt; bool {
+   |            ~
+
+error: unknown start of token: \u{ff1f}
+  --&gt; src/main.rs:23:19
+【同上】  
+  --&gt; src/main.rs:46:19
+   |
+46 |         if self.光着？() {
+   |                     ^^
+   |
+help: Unicode character '？' (Fullwidth Question Mark) looks like '?' (Question Mark), but it is not
+   |
+46 |         if self.光着?() {
+   |                     ~
+
+error: missing parameters for function definition
+  --&gt; src/main.rs:18:10
+   |
+18 |     fn 光着？(&amp;self) -&gt; bool {
+   |            ^
+   |
+help: add a parameter list
+   |
+18 |     fn 光着()？(&amp;self) -&gt; bool {
+   |            ++
+
+error: expected one of `-&gt;`, `&lt;`, `where`, or `{`, found `?`
+  --&gt; src/main.rs:18:10
+   |
+17 | impl 绵羊 {
+   |           - while parsing this item list starting here
+18 |     fn 光着？(&amp;self) -&gt; bool {
+   |            ^^ expected one of `-&gt;`, `&lt;`, `where`, or `{`
+...
+32 | }
+   | - the item list ends here
+
+error[E0277]: the `?` operator can only be applied to values that implement `Try`
+  --&gt; src/main.rs:46:12
+   |
+46 |         if self.光着？() {
+   |            ^^^^^^^^^^^ the `?` operator cannot be applied to type `bool`
+   |
+   = help: the trait `Try` is not implemented for `bool`
+
+error[E0277]: the `?` operator can only be used in a method that returns `Result` or `Option` (or another type that implements `FromResidual`)
+  --&gt; src/main.rs:46:19
+   |
+45 |     fn 嘶鸣(&amp;self) -&gt; &amp;'static str {
+   |     ------------------------------ this function should return `Result` or `Option` to accept `?`
+46 |         if self.光着？() {
+   |                     ^^ cannot use the `?` operator in a method that returns `&amp;str`
+   |
+   = help: the trait `FromResidual&lt;_&gt;` is not implemented for `&amp;str`
+
+error[E0599]: no method named `剃毛` found for struct `绵羊` in the current scope
+  --&gt; src/main.rs:66:11
+   |
+1  | struct 绵羊 { 光着: bool, 名字: &amp;'static str }
+   | ----------- method `剃毛` not found for this struct
+...
+66 |     dolly.剃毛();
+   |           ^^^^ method not found in `绵羊`
+
+Some errors have detailed explanations: E0277, E0599.
+For more information about an error, try `rustc --explain E0277`.
+</code></pre>
+<p>挺有意思，首先是把中文问号换成了英文的，然后根据上下文给不同建议。而且，因为<code>剃毛</code>函数因<code>光着？</code>无法编译，下面就报没有这个函数定义，感觉可以在报错时隐去此问题，以简约化报告。</p>
+<p>最后效果：</p>
+<pre><code class="lang-rust">struct 绵羊 { 光着: bool, 名字: &amp;'static str }
+
+trait 动物 {
+    // Associated function signature; `Self` refers to the implementor type.
+    fn new(名字: &amp;'static str) -&gt; Self;
+
+    // Method signatures; these will return a string.
+    fn 名字(&amp;self) -&gt; &amp;'static str;
+    fn 嘶鸣(&amp;self) -&gt; &amp;'static str;
+
+    // Traits can provide default method definitions.
+    fn 发声(&amp;self) {
+        println!("{} says {}", self.名字(), self.嘶鸣());
+    }
+}
+
+impl 绵羊 {
+    fn 是否光着(&amp;self) -&gt; bool {
+        self.光着
+    }
+
+    fn 剃毛(&amp;mut self) {
+        if self.是否光着() {
+            // Implementor methods can use the implementor's trait methods.
+            println!("{} is already naked...", self.名字());
+        } else {
+            println!("{} gets a haircut!", self.名字);
+
+            self.光着 = true;
+        }
+    }
+}
+
+// Implement the `Animal` trait for `绵羊`.
+impl 动物 for 绵羊 {
+    // `Self` is the implementor type: `绵羊`.
+    fn new(名字: &amp;'static str) -&gt; 绵羊 {
+        绵羊 { 名字: 名字, 光着: false }
+    }
+
+    fn 名字(&amp;self) -&gt; &amp;'static str {
+        self.名字
+    }
+
+    fn 嘶鸣(&amp;self) -&gt; &amp;'static str {
+        if self.是否光着() {
+            "baaaaah?"
+        } else {
+            "baaaaah!"
+        }
+    }
+
+    // Default trait methods can be overridden.
+    fn 发声(&amp;self) {
+        // For example, we can add some quiet contemplation.
+        println!("{} pauses briefly... {}", self.名字, self.嘶鸣());
+    }
+}
+
+fn main() {
+    // Type annotation is necessary in this case.
+    let mut 多利: 绵羊 = 动物::new("Dolly");
+    // TODO ^ Try removing the type annotations.
+
+    多利.发声();
+    多利.剃毛();
+    多利.发声();
+}
+</code></pre>
+<p>输出与原代码相同。</p>
