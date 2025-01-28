@@ -1,0 +1,131 @@
+<h2><a href="https://github.com/sakurawald/sakurawald.github.io/blob/master/source/_posts/expression-evaluation.md">仓库源文</a>，<a href="https://sakurawald.github.io/posts/expression-evaluation">站点原文</a></h2>
+<h1>Expression Evaluation</h1>
+<h2>Problem</h2>
+<ol>
+<li>Given a string, including: + - * / ^ () and numbers.</li>
+<li>Evaluate this string.</li>
+</ol>
+<p>eg: <code>2*((11+3)*(2+3)^2)+2</code> = <code>702</code></p>
+<h2>Analysis</h2>
+<p>Expression evaluation problem: Operand stack and operator stack need to be handled properly. Operand stack only needs to be scanned and stacked one by one according to the high-order priority of the string, while operator stack needs to correctly handle the priority of operators. Operators scanned in the future may affect previous operators. (Therefore, the idea of ​​recursive solution is clear.)</p>
+<p>Recursive solution of reverse Polish notation: Use the implicit function call stack to handle operator priority, and treat each part of the expression as a token of different sizes, such as (3+6/2) and 100 can be regarded as 1 token.</p>
+<p>Regarding the priority of operators, when processing 4*3^2, we still scan according to the high-order priority rule of the string.</p>
+<p>Each token_value() function call stack contains 1 operator or operand</p>
+<p>When the recursive top-down process is completed, we scan and read the entire expression</p>
+<p>Next, in the recursive bottom-up process, we will calculate each part of the expression one by one, and replace the calculation results of the expression part into the expression</p>
+<p>According to the operator priority corresponding to the implicit function call stack during recursion, we successfully make operand 3 correctly perform ^ operation with operand 2,</p>
+<p>Instead of incorrectly performing <em> operation with operand 4 (although we scanned operand 4 and operator </em> first)</p>
+<p>Next, we only need to complete the recursive bottom-up process step by step to complete the calculation of the entire expression</p>
+<p>Finally complete the calculation of the entire expression</p>
+<h2>Solution: Recursive</h2>
+<pre><code>#include &lt;iostream&gt;
+#include &lt;math.h&gt;
+using namespace std;
+
+typedef int number;
+number token_value(int priority) {
+    number res;
+    if (priority == 0) {
+        res = 0;
+        char c = cin.peek();
+        if (c == '(') {
+            cin.get(); // get (
+            res = token_value(3); // as a new expression
+            cin.get();  // get )
+        } 
+        while (isdigit(c)) { // read a num
+            res = (10 * res) + (c % 48); // Nice Try.
+            cin.get(); // get digit
+            c = cin.peek();
+        }
+    } else {
+        res = token_value(priority - 1);
+        while (true) {
+            char op = cin.peek();
+            if (priority == 1 &amp;&amp; op == '^') {
+                cin.get(); // get ^
+                number val = token_value(priority - 1);
+                res = round(pow(res, val));
+            } else if (priority == 2 &amp;&amp; (op == '*' || op == '/')) {
+                cin.get(); // get * or /
+                number val = token_value(priority - 1);
+                op == '*' ? res *= val : res /= val;
+            } else if (priority == 3 &amp;&amp; (op == '+' || op == '-')) {
+                cin.get(); // get + or -
+                number val = token_value(priority - 1);
+                op == '+' ? res += val : res -= val;
+            } else break;
+       }
+   }
+    return res;
+}
+
+int main() {
+    cout &lt;&lt; token_value(3);
+    return 0;
+}
+</code></pre>
+<h2>Solution: Iterative</h2>
+<pre><code>#include &lt;stack&gt;
+#include &lt;map&gt;
+#include &lt;iostream&gt;
+#include &lt;cmath&gt;
+
+using namespace std;
+
+map&lt;char, int&gt; priority_map{{'+', 1},
+                            {'-', 1},
+                            {'*', 2},
+                            {'/', 2},
+                            {'^', 3}};
+typedef int number;
+stack&lt;number&gt; nums;
+stack&lt;char&gt; ops;
+
+void eval() {
+  number num2 = nums.top(); nums.pop();
+  number num1 = nums.top(); nums.pop();
+  char op = ops.top(); ops.pop();
+
+  if (op == '+') nums.push(num1 + num2);
+  if (op == '-') nums.push(num1 - num2);
+  if (op == '*') nums.push(num1 * num2);
+  if (op == '/') nums.push(num1 / num2);
+  if (op == '^') nums.push(round(pow(num1, num2)));
+}
+
+int main() {
+  /* Trans InOrderExpr to PostOrderExpr */
+  while (cin.peek() != '\n') {
+    // get digit.
+    if (isdigit(cin.peek())) {
+      number num = 0;
+      while (isdigit(cin.peek())) {
+        num = (num * 10) + cin.peek() % 48;
+        cin.get();
+      }
+      nums.push(num);
+    } else {
+      // get operators.
+      if (cin.peek() == '(') {
+        ops.push(cin.peek()); // push (
+        cin.get(); // get (
+      } else if (cin.peek() == ')') {
+        while (ops.top() != '(') eval();
+        ops.pop(); // pop (
+        cin.get(); // get )
+      } else {
+        while (!ops.empty() &amp;&amp; priority_map[ops.top()] &gt;= priority_map[cin.peek()]) eval();
+        ops.push(cin.peek());
+        cin.get(); // get operator
+      }
+    }
+  }
+
+  /* Calc PostorderExpr */
+  while (!ops.empty()) eval();
+
+  /* Output */
+  cout &lt;&lt; nums.top();
+}
+</code></pre>
