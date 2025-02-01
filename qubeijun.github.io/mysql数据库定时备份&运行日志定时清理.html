@@ -1,0 +1,109 @@
+<h2><a href="https://github.com/qubeijun/qubeijun.github.io/blob/master/source/_posts/mysql数据库备份.md">仓库源文</a>，<a href="https://qubeijun.github.io/posts/25283">站点原文</a></h2>
+<p>备份脚本</p>
+<pre><code>#!/bin/bash
+# 设置mysql的登录用户名和密码(根据实际情况填写)
+mysql_user="mysql"
+mysql_password="xxxxxx"
+mysql_host="xx.xx.xx.xx"
+mysql_port="3306"
+mysql_charset="utf8mb4" 
+
+# 备份文件存放地址(根据实际情况填写)
+backup_location=/mysqldata/mysqlbackup_neusoft
+
+# 是否删除过期数据
+expire_backup_delete="YES"
+expire_days=30
+backup_time=`date +%Y%m%d%H%M`
+backup_dir=$backup_location
+welcome_msg="Welcome to use MySQL backup tools!"
+
+# 判断mysql实例是否正常运行
+mysql_ps=`ps -ef |grep mysql |wc -l`
+mysql_listen=`netstat -an |grep LISTEN |grep $mysql_port|wc -l`
+if [ [$mysql_ps == 0] -o [$mysql_listen == 0] ]; then
+        echo "ERROR:MySQL is not running! backup stop!"
+        exit
+else
+        echo $welcome_msg
+fi
+
+# 备份指定数据库中数据(此处假设数据库是mysql_backup_test)
+/usr/bin/mysqldump  -h$mysql_host -P$mysql_port -u$mysql_user -p$mysql_password -B sdstm --ignore-table=sdstm.gateway_access_logs&gt; $backup_dir/sdstm-$backup_time.sql
+flag=`echo $?`
+if [ $flag == "0" ];then
+        echo "database sdstm success backup to $backup_dir/sdstm-$backup_time.sql.gz"
+else
+        echo "database sdstm backup fail!"
+fi
+
+# 删除过期数据
+if [ "$expire_backup_delete" == "ON" -a  "$backup_location" != "" ];then
+        `find $backup_location/ -type f -mtime +$expire_days | xargs rm -rf`
+        echo "Expired backup data delete complete!"
+fi# 设置mysql的登录用户名和密码(根据实际情况填写)
+</code></pre>
+<p>定时任务脚本</p>
+<pre><code>0 4 * * * /mysqldata/mysqlbackup_ticket/mysqlBackup.sh &gt; /mysqldata/mysqlbackup_ticket/log.txt 2&gt;&amp;1
+</code></pre>
+<p>定时任务相关命令</p>
+<pre><code># 启动cron服务[命令没有提示]
+systemctl start crond.service
+# 停止cron服务[命令没有提示]
+systemctl stop crond.service
+# 重启cron服务[命令没有提示]
+systemctl restart crond.service
+# 重新加载cron服务[命令没有提示]
+systemctl reload crond.service
+# 查看cron服务运行状态
+service crond status
+# 运行定时任务脚本
+crontab mysqlRollBack.cron
+# 查看已运行定时任务
+crontab -l
+</code></pre>
+<p>清理脚本</p>
+<pre><code>#!/bin/bash
+#两个月前
+twoMonth=`date -d '60 days ago' +%Y-%m`#三个月前
+threeMonth=`date -d '90 days ago' +%Y-%m`
+echo $twoMonth
+echo $threeMonth
+#日志上级主路径
+path=/home/app/logs
+#各个服务日志路径api=$path/pocean-cloud-api-zuul-server
+api=$path/pocean-cloud-api-zuul-server
+apiTwoMonth=$api/$twoMonth/
+apiThreeMonth=$api/$threeMonth/
+
+base=$path/pocean-cloud-base-server
+baseTwoMonth=$base/$twoMonth/
+baseThreeMonth=$base/$threeMonth/
+
+admin=$path/pocean-cloud-uaa-admin-server
+adminTwoMonth=$admin/$twoMonth/
+adminThreeMonth=$admin/$threeMonth/
+
+sblog=$path/sdstm-business-log
+sblogTwoMonth=$sblog/$twoMonth/
+sblogThreeMonth=$sblog/$threeMonth/
+
+sbs=$path/sdstm-business-services
+sbsTwoMonth=$sbs/$twoMonth/
+sbsThreeMonth=$sbs/$threeMonth/
+# 循环删除服务日志文件
+echo "==========clean start:`date +%Y%m%d%H%M%S`=========="
+for val in $apiTwoMonth $apiThreeMonth $baseTwoMonth $baseThreeMonth $adminTwoMonth $adminThreeMonth $sblogTwoMonth $sblogThreeMonth $sbsTwoMonth $sbsThreeMonth 
+do
+    if [ -d $val ];then
+        echo "    find filePath $val"
+        `find $val -type d -exec rm -rf {} \;`
+    else
+        echo "not find filePath $val"
+    fi
+done
+echo "==========clean   end:`date +%Y%m%d%H%M%S`=========="
+</code></pre>
+<p>定时任务脚本</p>
+<pre><code>0 4 * * * /mysqldata/mysqlbackup_ticket/mysqlBackup.sh &gt; /mysqldata/mysqlbackup_ticket/log.txt 2&gt;&amp;1
+</code></pre>

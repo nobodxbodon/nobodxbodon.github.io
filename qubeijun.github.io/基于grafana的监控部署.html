@@ -1,0 +1,333 @@
+<h2><a href="https://github.com/qubeijun/qubeijun.github.io/blob/master/source/_posts/基于grafana的监控部署.md">仓库源文</a>，<a href="https://qubeijun.github.io/posts/63116">站点原文</a></h2>
+<h1>基于grafana的监控部署</h1>
+<h2>1.Grafana</h2>
+<p>Grafana是一个开源的，拥有丰富dashboard和图表编辑的指标分析平台
+配置文件：通过nginx反向代理让域名能访问grafana平台</p>
+<p>相关命令</p>
+<pre><code>启动：service grafana-server start
+停止：service grafana-server stop
+重启：service grafana-server restart
+加入开机自启动： chkconfig --add grafana-server on
+</code></pre>
+<h2>2.Prometheus</h2>
+<p>Prometheus Server负责定时在目标上抓取Metrics数据，每个抓取目标都需要暴露一个HTTP服务接口用于Prometheus定时抓取
+配置文件：将各种监控插件的接口暴漏给prometheus进行抓去</p>
+<p>prometheus.yml（也可以额外新增配置文件，在prometheus.yml中直接引用）</p>
+<pre><code># my global config
+global:
+  scrape_interval: 15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # The job name is added as a label `job=&lt;job_name&gt;` to any timeseries scraped from this config.
+  - job_name: "prometheus"
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+    static_configs:
+      - targets: ["ip:port"]
+
+  - job_name: 'neusoft'
+    file_sd_configs:
+    - files:
+      - /home/neusoft/sdkjg/installfiles/conf/neusoft.json
+</code></pre>
+<p>neusoft.json</p>
+<pre><code>[
+  {
+    "targets": [
+      "ip:port"
+    ],
+    "labels": {
+      "group": "neusoft",
+      "app": "",
+      "hostname": "nacos"
+    }
+  },
+  {
+    "targets": [
+      "ip:port"
+    ],
+    "labels": {
+      "group": "neusoft",
+      "app": "",
+      "hostname": "微服务"
+    }
+  }
+]
+</code></pre>
+<p>启动命令（指定端口--web.listen-address、指定数据存储位置--storage.tsdb.path）</p>
+<pre><code>nohup /home/neusoft/sdkjg/installfiles/prometheus-2.42.0.linux-amd64/prometheus --config.file=/home/neusoft/sdkjg/installfiles/prometheus-2.42.0.linux-amd64/prometheus.yml  --web.listen-address=':9190' --storage.tsdb.path="/mnt/data/neusoft/sdkjg/app/data" &gt; /var/log/prometheus.log 2&gt;&amp;1 &amp;
+</code></pre>
+<h2>3.node_export</h2>
+<p>node-exporter用于采集服务器层面的运行指标，包括机器的loadavg、filesystem、meminfo等基础监控</p>
+<p>启动命令（指定端口--web.listen-address）</p>
+<pre><code>nohup /home/neusoft/sdkjg/installfiles/node_exporter --web.listen-address=':9100'  &gt; /var/log/node_exporter.log 2&gt;&amp;1 &amp;
+</code></pre>
+<h2>4.promtail</h2>
+<p>Promtail 将本地日志内容传送到 Loki 实例</p>
+<p>配置文件</p>
+<ul>
+<li>微服务
+```
+server:
+http_listen_port: 9080
+grpc_listen_port: 0</li>
+</ul>
+<p>positions:
+  filename: /tmp/positions.yaml</p>
+<p>clients:</p>
+<ul>
+<li>url: <a href="http://ip:3100/loki/api/v1/push">http://ip:3100/loki/api/v1/push</a></li>
+</ul>
+<p>scrape_configs:</p>
+<ul>
+<li>job_name: sbsdebug
+static_configs:<ul>
+<li>targets:<ul>
+<li>localhost
+labels:
+job: sbs_debug
+<strong>path</strong>: /home/neusoft/sdkjg/app/jar/logs/sdstm-business-services/debug.log
+```</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>nginx
+```
+server:
+http_listen_port: 9080
+grpc_listen_port: 0</li>
+</ul>
+<p>positions:
+  filename: /tmp/positions.yaml</p>
+<p>clients:</p>
+<ul>
+<li>url: <a href="http://ip:3100/loki/api/v1/push">http://ip:3100/loki/api/v1/push</a></li>
+</ul>
+<p>scrape_configs:</p>
+<ul>
+<li>job_name: nginx
+static_configs:<ul>
+<li>targets:<ul>
+<li>localhost
+labels:
+job: nginx_access_log
+<strong>path</strong>: /usr/local/nginx/logs/json_access.log</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<pre><code>格式化nginx出输出日志
+</code></pre>
+<p>log_format json_analytics escape=json '{'
+    '"msec": "$msec", ' # request unixtime in seconds with a milliseconds resolution
+    '"connection": "$connection", ' # connection serial number
+    '"connection_requests": "$connection_requests", ' # number of requests made in connection
+    '"pid": "$pid", ' # process pid
+    '"request_id": "$request_id", ' # the unique request id
+    '"request_length": "$request_length", ' # request length (including headers and body)
+    '"remote_addr": "$remote_addr", ' # client IP
+    '"remote_user": "$remote_user", ' # client HTTP username
+    '"remote_port": "$remote_port", ' # client port
+    '"time_local": "$time_local", '
+    '"time_iso8601": "$time_iso8601", ' # local time in the ISO 8601 standard format
+    '"request": "$request", ' # full path no arguments if the request
+    '"request_uri": "$request_uri", ' # full path and arguments if the request
+    '"args": "$args", ' # args
+    '"status": "$status", ' # response status code
+    '"body_bytes_sent": "$body_bytes_sent", ' # the number of body bytes exclude headers sent to a client
+    '"bytes_sent": "$bytes_sent", ' # the number of bytes sent to a client
+    '"http_referer": "$http_referer", ' # HTTP referer
+    '"http_user_agent": "$http_user_agent", ' # user agent
+    '"http_x_forwarded_for": "$http_x_forwarded_for", ' # http_x_forwarded_for
+    '"http_host": "$http_host", ' # the request Host: header
+    '"server_name": "$server_name", ' # the name of the vhost serving the request
+    '"request_time": "$request_time", ' # request processing time in seconds with msec resolution
+    '"upstream": "$upstream_addr", ' # upstream backend server for proxied requests
+    '"upstream_connect_time": "$upstream_connect_time", ' # upstream handshake time incl. TLS
+    '"upstream_header_time": "$upstream_header_time", ' # time spent receiving upstream headers
+    '"upstream_response_time": "$upstream_response_time", ' # time spend receiving upstream body
+    '"upstream_response_length": "$upstream_response_length", ' # upstream response length
+    '"upstream_cache_status": "$upstream_cache_status", ' # cache HIT/MISS where applicable
+    '"ssl_protocol": "$ssl_protocol", ' # TLS protocol
+    '"ssl_cipher": "$ssl_cipher", ' # TLS cipher
+    '"scheme": "$scheme", ' # http or https
+    '"request_method": "$request_method", ' # request method
+    '"server_protocol": "$server_protocol", ' # request protocol, like HTTP/1.1 or HTTP/2.0
+    '"pipe": "$pipe", ' # "p" if request was pipelined, "." otherwise
+    '"gzip_ratio": "$gzip_ratio", '
+    '"http_cf_ray": "$http_cf_ray",'
+    '"geoip_country_code": "$http_cf_ipcountry"'
+    '}';
+    access_log logs/json_access.log json_analytics;</p>
+<pre><code>启动命令
+</code></pre>
+<p>nohup /home/neusoft/sdkjg/installfiles/promtail-linux-amd64 -config.file=/home/neusoft/sdkjg/installfiles/promtail-local-config-linux.yaml  &gt; /var/log/promtail.log 2&gt;&amp;1 &amp;</p>
+<pre><code>## 5.loki
+Loki是 Grafana Labs 团队最新的开源项目，是一个水平可扩展，高可用性，多租户的日志聚合系统。
+Loki日志系统由以下3个部分组成：
+- loki是主服务器，负责存储日志和处理查询。
+- promtail是专为loki定制的代理，负责收集日志并将其发送给 loki 。
+- Grafana用于 UI展示。
+
+配置文件
+- 微服务
+</code></pre>
+<p>auth_enabled: false</p>
+<p>server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096</p>
+<p>common:
+  instance_addr: ip
+  path_prefix: /tmp/loki
+  storage:
+    filesystem:
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory</p>
+<p>query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100</p>
+<p>schema_config:
+  configs:</p>
+<pre><code>- from: 2020-10-24
+  store: boltdb-shipper
+  object_store: filesystem
+  schema: v11
+  index:
+    prefix: index_
+    period: 24h
+</code></pre>
+<p>ruler:
+  alertmanager_url: <a href="http://localhost:9093">http://localhost:9093</a></p>
+<h1>By default, Loki will send anonymous, but uniquely-identifiable usage and configuration</h1>
+<h1>analytics to Grafana Labs. These statistics are sent to <a href="https://stats.grafana.org/">https://stats.grafana.org/</a></h1>
+<p>#</p>
+<h1>Statistics help us better understand how Loki is used, and they show us performance</h1>
+<h1>levels for most users. This helps us prioritize features and documentation.</h1>
+<h1>For more information on what's sent, look at</h1>
+<h1><a href="https://github.com/grafana/loki/blob/main/pkg/usagestats/stats.go">https://github.com/grafana/loki/blob/main/pkg/usagestats/stats.go</a></h1>
+<h1>Refer to the buildReport method to see what goes into a report.</h1>
+<p>#</p>
+<h1>If you would like to disable reporting, uncomment the following lines:</h1>
+<h1>analytics:</h1>
+<h1>reporting_enabled: false</h1>
+<pre><code>- nginx
+</code></pre>
+<p>auth_enabled: false</p>
+<p>server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096</p>
+<p>common:
+  instance_addr: ip
+  path_prefix: /tmp/loki
+  storage:
+    filesystem:
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory</p>
+<p>query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100</p>
+<p>schema_config:
+  configs:</p>
+<pre><code>- from: 2020-10-24
+  store: boltdb-shipper
+  object_store: filesystem
+  schema: v11
+  index:
+    prefix: index_
+    period: 24h
+</code></pre>
+<p>limits_config:
+  enforce_metric_name: false
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  ingestion_rate_mb: 30  #修改每用户摄入速率限制，即每秒样本量，默认值为4M
+  ingestion_burst_size_mb: 15  #修改每用户摄入速率限制，即每秒样本量，默认值为6M</p>
+<p>ruler:
+  alertmanager_url: <a href="http://localhost:9093">http://localhost:9093</a></p>
+<h1>By default, Loki will send anonymous, but uniquely-identifiable usage and configuration</h1>
+<h1>analytics to Grafana Labs. These statistics are sent to <a href="https://stats.grafana.org/">https://stats.grafana.org/</a></h1>
+<p>#</p>
+<h1>Statistics help us better understand how Loki is used, and they show us performance</h1>
+<h1>levels for most users. This helps us prioritize features and documentation.</h1>
+<h1>For more information on what's sent, look at</h1>
+<h1><a href="https://github.com/grafana/loki/blob/main/pkg/usagestats/stats.go">https://github.com/grafana/loki/blob/main/pkg/usagestats/stats.go</a></h1>
+<h1>Refer to the buildReport method to see what goes into a report.</h1>
+<p>#</p>
+<h1>If you would like to disable reporting, uncomment the following lines:</h1>
+<h1>analytics:</h1>
+<h1>reporting_enabled: false</h1>
+<pre><code>
+启动命令
+</code></pre>
+<p>nohup /home/neusoft/sdkjg/installfiles/loki-linux-amd64 -config.file=/home/neusoft/sdkjg/installfiles/loki-local-config-linux.yaml  &gt; /var/log/loki.log 2&gt;&amp;1 &amp;
+```</p>
+<h2>6.grafana监控</h2>
+<p>将各监控节点作为数据源配置到grafana平台，在dashboard显示监控大屏
+{% asset_img grafana1.png %}
+服务器监控
+{% asset_img grafana2.png %}
+nginx监控
+{% asset_img grafana3.png %}
+redis监控
+{% asset_img grafana4.png %}
+{% plantuml %}
+skinparam rectangle&lt;&lt;behavior&gt;&gt; {
+    roundCorner 25
+}
+sprite $aService jar:archimate/application-service
+sprite $bService jar:archimate/business-service</p>
+<p>rectangle "Grafana" as Grafana &lt;&lt;$bService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Business
+rectangle "Loki\nip:3100" as LokiNginx &lt;&lt;$bService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Business
+rectangle "Loki\nip:3100" as LokiServer &lt;&lt;$bService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Business
+rectangle "Prometheus\nip:9190" as Prometheus &lt;&lt;$bService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Business
+rectangle "Redis\nip:6379" as Redis &lt;&lt;$bService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Business</p>
+<p>Grafana <em>-down- LokiServer
+Grafana </em>-down- LokiNginx
+Grafana <em>-down- Prometheus
+Grafana </em>-down- Redis</p>
+<p>rectangle "Promtail(nginx)\nip:9080" as PromtailNginx &lt;&lt;$aService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Application
+rectangle "Promtail(server)\nip:9080" as PromtailServer &lt;&lt;$aService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Application
+rectangle "node_export\nip:9100" as nodeExport &lt;&lt;$aService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Application
+rectangle "none" as none &lt;&lt;$aService&gt;&gt;&lt;&lt;behavior&gt;&gt; #Application</p>
+<p>archimate #Technology "Servers" as Servers &lt;&lt;technology-device&gt;&gt;</p>
+<p>none -up-&gt; Redis
+nodeExport -up-&gt; Prometheus
+PromtailNginx -up-&gt; LokiNginx 
+PromtailServer -up-&gt; LokiServer</p>
+<p>Servers -up-&gt; none
+Servers -up-&gt; PromtailNginx 
+Servers -up-&gt; PromtailServer 
+Servers -up-&gt; nodeExport
+{% endplantuml %}</p>
