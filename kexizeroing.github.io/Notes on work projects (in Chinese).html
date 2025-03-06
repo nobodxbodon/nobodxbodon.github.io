@@ -94,6 +94,11 @@
 <li><code>webpack-dev-middleware</code> is an express-style development middleware that will emit files processed by webpack to a server. This is used in <code>webpack-dev-server</code> internally.</li>
 <li>Want to access <code>webpack-dev-server</code> from the mobile in local network: run <code>webpack-dev-server</code> with <code>--host 0.0.0.0</code>, which lets the server listen for requests from the network (all IP addresses on the local machine), not just localhost. But Chrome won't access <code>http://0.0.0.0:8089</code> (Safari can open). It's not the IP, it just means it is listening on all the network interfaces, so you can use any IP the host has.</li>
 </ul>
+<p>The <code>DefinePlugin</code> allows you to create global constants that are replaced at compile time, commonly used to specify environment variables or configuration values that should be available throughout your application during the build process. For example, you might use it to define <code>process.env.NODE_ENV</code> as 'production' or 'development' which webpack will literally replace in your code during bundling.</p>
+<pre><code class="lang-js">new webpack.DefinePlugin({
+  'process.env.NODE_ENV': JSON.stringify('development')
+}),
+</code></pre>
 <h4>difference between <code>--watch</code> and <code>--hot</code></h4>
 <ul>
 <li><code>webpack --watch</code>: watch for the file changes and compile again when the source files changes. <code>webpack-dev-server</code> uses webpack's watch mode by default.</li>
@@ -177,7 +182,6 @@ const webpackConfig = smp.wrap({
   plugins: [new MyPlugin(), new MyOtherPlugin()],
 });
 </code></pre>
-<p>Webpack 5 fails if using <code>smp.wrap()</code> the config, with the error: "You forgot to add <code>mini-css-extract-plugin</code> plugin". As a hacky workaround, you can append <code>MiniCssExtractPlugin</code> after wrapping with <code>speed-measure-webpack-plugin</code>.</p>
 <h4>TypeScript and Webpack</h4>
 <p>Webpack is extensible with "loaders" that can be added to handle particular file formats.</p>
 <ol>
@@ -215,26 +219,13 @@ declare module "*.vue" {
   }
 }
 </code></pre>
-<h4>打包时插入 git 提交信息</h4>
-<p><a href="https://github.com/pirelenito/git-revision-webpack-plugin">git-revision-webpack-plugin</a> generates VERSION and COMMITHASH files during build.</p>
-<pre><code class="lang-js">const GitRevisionPlugin = require('git-revision-webpack-plugin');
-const gitRevisionPlugin = new GitRevisionPlugin();
-
-plugins: [
-  new DefinePlugin({
-    'VERSION': JSON.stringify(gitRevisionPlugin.version()),
-    'COMMITHASH': JSON.stringify(gitRevisionPlugin.commithash()),
-    'BRANCH': JSON.stringify(gitRevisionPlugin.branch()),
-  }),
-]
-</code></pre>
-<blockquote><p>The <code>DefinePlugin</code> allows you to create global constants that are replaced at compile time, commonly used to specify environment variables or configuration values that should be available throughout your application during the build process. For example, you might use it to define <code>process.env.NODE_ENV</code> as 'production' or 'development' which webpack will literally replace in your code during bundling.</p>
-</blockquote>
 <h3>本地 build 与上线 build</h3>
 <ol>
-<li>公共组件库 C 需要先 build，再 <code>npm link</code> 映射到全局的 node_modules，然后被其他项目 <code>npm link C</code> 引用。(关于 <code>npm link</code> 的使用场景可以看看 <a href="https://github.com/atian25/blog/issues/17">https://github.com/atian25/blog/issues/17</a>)</li>
-<li>项目 A 的上线脚本中会先进入组件库 C，执行 <code>npm build</code> 和 <code>npm link</code>，之后再进入项目 A 本身，执行 <code>npm link C</code>，<code>npm build</code> 等项目本身的构建。</li>
-<li>项目 C 会在本地构建（静态资源传七牛），远程仓库中包括 <code>server-static</code> 存放 build 后的静态文件，它的上线脚本里并不含构建过程，只是在拷贝仓库中的 <code>server-static</code> 目录。因为源文件中会有对组件库的引用 <code>import foo from 'C/dist/foo.js</code>，本地 build 时组件库已经被打包进去。</li>
+<li>使用 <a href="https://www.npmjs.com/package/ora">ora</a> 做 spinner，提示 building for production...</li>
+<li>使用 <a href="https://www.npmjs.com/package/rimraf">rimraf</a> 删除打包路径下的资源 (<code>rimraf</code> command is an alternative to the Linux command <code>rm -rf</code>)</li>
+<li>调用 <code>webpack()</code> 传入配置 <code>webpack.prod.conf</code> 和一个回调函数，<strong>webpack stats 对象</strong> 作为回调函数的参数，可以通过它获取到 webpack 打包过程中的信息，使用 <code>process.stdout.write(stats.toString(...))</code> 输出到命令行中 (<code>console.log</code> in Node is just <code>process.stdout.write</code> with formatted output)</li>
+<li>使用 <a href="https://www.npmjs.com/package/chalk">chalk</a> 在命令行中显示一些提示信息。</li>
+<li>补充：目前大多数工程都是通过脚手架来创建的，使用脚手架的时候最明显的就是与命令行的交互，<a href="https://github.com/SBoudrias/Inquirer.js">Inquirer.js</a> 是一组常见的交互式命令行用户界面。<a href="https://github.com/tj/commander.js">Commander.js</a> 作为 node.js 命令行解决方案，是开发 node cli 的必备技能。</li>
 </ol>
 <p>The build job uses Kaniko (a tool for building Docker images in Kubernetes). Its main task is to build a Docker image.</p>
 <ul>
@@ -248,14 +239,52 @@ plugins: [
 <p>The above checks if the environment variable <code>CI_COMMIT_TAG</code> is empty (meaning it's not a tag build). If that's the case, it uses sed to perform an in-place replacement in the <code>package.json</code> file. Specifically, it looks for lines that start with "version": "[0-9.]+" and replaces them with a new version format <code>0.0.0-${prefixOss}-${CI_COMMIT_SHORT_SHA}</code>. This script appears to be adjusting versioning and paths based on the branch or tag being built in a CI/CD pipeline.</p>
 <blockquote><p>The <code>s</code> command is for substitute, to replace text -- the format is <code>s/[text to select]/[text to replace]/</code>. For example, <code>sed 's/target/replacement/g' file.txt</code> will globally substitute the word <code>target</code> with <code>replacement</code>.</p>
 </blockquote>
-<h3>本地 build 脚本</h3>
+<h3>实时检测 web 应用更新</h3>
+<p>当应用发布新版本时，考虑及时通知用户并引导其刷新页面以加载最新资源。</p>
 <ol>
-<li>使用 <a href="https://www.npmjs.com/package/ora">ora</a> 做 spinner，提示 building for production...</li>
-<li>使用 <a href="https://www.npmjs.com/package/rimraf">rimraf</a> 删除打包路径下的资源 (<code>rimraf</code> command is an alternative to the Linux command <code>rm -rf</code>)</li>
-<li>调用 <code>webpack()</code> 传入配置 <code>webpack.prod.conf</code> 和一个回调函数，<strong>webpack stats 对象</strong> 作为回调函数的参数，可以通过它获取到 webpack 打包过程中的信息，使用 <code>process.stdout.write(stats.toString(...))</code> 输出到命令行中 (<code>console.log</code> in Node is just <code>process.stdout.write</code> with formatted output)</li>
-<li>使用 <a href="https://www.npmjs.com/package/chalk">chalk</a> 在命令行中显示一些提示信息。</li>
-<li>补充：目前大多数工程都是通过脚手架来创建的，使用脚手架的时候最明显的就是与命令行的交互，<a href="https://github.com/SBoudrias/Inquirer.js">Inquirer.js</a> 是一组常见的交互式命令行用户界面。<a href="https://github.com/tj/commander.js">Commander.js</a> 作为 node.js 命令行解决方案，是开发 node cli 的必备技能。</li>
+<li>使用 Web Worker API 在浏览器后台轮询请求 <code>index.html</code> 文件，不会影响主线程运行。</li>
+<li>请求 <code>index.html</code> 文件，对比本地和请求响应头的 ETag 的字段值。</li>
+<li>如果 ETag 字段值不一致，说明有更新，则弹出更新提示。</li>
+<li>当页面不可见时（例如切换标签页或最小化窗口），停止实时检测任务；再次可见时，恢复实时检测任务。</li>
 </ol>
+<p>Vercel's Skew Protection is a mechanism to eliminate version skew between web clients and servers.</p>
+<pre><code class="lang-jsx">function useSkewProtectionBusted() {
+  const { data, error, isFetching } = useQuery({
+    queryKey: ["skew-protection-buster_NOSTORE"],
+    queryFn: async () =&gt; {
+      const res = await fetch("/api/server-version?dpl=LATEST", {
+        cache: "no-store", // Ensure no caching
+      });
+      return res.json() as Promise&lt;{ VERCEL_DEPLOYMENT_ID: string }&gt;;
+    },
+    staleTime: 0,
+    gcTime: 0,
+    refetchInterval: 30_000, // Refetch every 30 seconds
+  });
+
+  if (isFetching || error || !data) return false;
+  // If they do not match, the client is outdated (return true)
+  return data.VERCEL_DEPLOYMENT_ID !== process.env.NEXT_PUBLIC_VERCEL_DEPLOYMENT_ID;
+}
+
+export function SkewProtectionBuster() {
+  const isBusted = useSkewProtectionBusted();
+
+  useEffect(() =&gt; {
+    if (isBusted) {
+      toast("Client out of date", {
+        description: "Please refresh to get the latest version",
+        action: {
+          label: "Refresh now",
+          onClick: () =&gt; window.location.reload(),
+        },
+      });
+    }
+  }, [isBusted]);
+
+  return null; // No UI component, just logic
+}
+</code></pre>
 <h3>后端模板</h3>
 <p>有些 url 请求是后端直出页面返回 html，通过类似 <code>render_to_response(template, data)</code> 的方法，将数据打到模板中，模板里会引用 <code>xx/static/js</code> 路径下的 js 文件，这些 js 使用 require 框架，导入需要的其他 js 文件或 tpl 模板，再结合业务逻辑使用 underscore 的 template 方法（<code>_.template(xx)</code>）可以将 tpl 渲染为 html，然后被 jquery <code>.html()</code> 方法插入到 DOM 中。</p>
 <ul>
@@ -320,6 +349,7 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <blockquote><ol>
 <li>微信公众平台接口测试帐号申请: <a href="https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login">https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login</a></li>
 <li>某个公众号的关注页面地址为 <a href="https://mp.weixin.qq.com/mp/profile_ext?action=home&amp;__biz=MzI0NDA2OTc2Nw==#wechat_redirect">https://mp.weixin.qq.com/mp/profile_ext?action=home&amp;__biz=MzI0NDA2OTc2Nw==#wechat_redirect</a> 其中 biz 字符串是微信公众号标识，在浏览器打开该公众号下的任意一篇文章，查看网页源代码，搜索 <code>var biz</code> 这样的关键字即可得到。</li>
+<li>在微信开发中，JS 接口安全域名和网页授权域名是两个不同的配置项。JS 接口安全域名用于控制哪些域名下的页面可以调用微信的 JS-SDK 接口（如分享、拍照、支付、定位等）。网页授权域名用于控制哪些域名下的页面可以发起微信网页授权，用户授权后，后端可通过 code 换取用户信息（如 openid、nickname 等）。</li>
 </ol>
 </blockquote>
 <p>微信授权也符合通常的 OAuth 流程：<br/>
@@ -335,6 +365,7 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <p>微信外网页通过小程序链接 URL Scheme，微信内通过微信开放标签，且微信内不会直接拉起小程序，需要手动点击按钮跳转。这是官方提供的一个例子 <a href="https://postpay-2g5hm2oxbbb721a4-1258211818.tcloudbaseapp.com/jump-mp.html">https://postpay-2g5hm2oxbbb721a4-1258211818.tcloudbaseapp.com/jump-mp.html</a> 可以用手机浏览器查看效果，直接跳转小程序。</p>
 <ul>
 <li>使用微信开放标签 <code>&lt;wx-open-launch-weapp&gt;</code>，提供要跳转小程序的原始 ID 和路径，标签内插入自定义的 html 元素。开放标签会被渲染成一个 iframe，所以外部的样式是不会生效的。另外在开放标签上模拟 click 事件也不生效，即不可以在微信内不通过点击直接跳转小程序。可以监听 <code>&lt;wx-open-launch-weapp&gt;</code> 元素的 <code>launch</code> 事件，用户点击跳转按钮并对确认弹窗进行操作后触发。</li>
+<li>通过开放标签 <code>&lt;wx-open-launch-app&gt;</code> 唤起 App，提供 AppId 和可选的附加信息。但是 Android 的要求是 App 必须登录过一次（客户端的微信 sdk 跑过）。如果不能跳转，要么就是未安装 App，要么就是场景值不对（这个指的是页面打开方式，比如从公众号菜单栏，收藏等地方打开的页面才可以跳转），但是报错信息无法区分这两种错误。</li>
 <li>通过<a href="https://developers.weixin.qq.com/miniprogram/dev/api-backend/open-api/url-scheme/urlscheme.generate.html">服务端接口</a>或在小程序管理后台的「工具」入口可以获取打开小程序任意页面的 URL Scheme。适用于从短信、邮件、微信外网页等场景打开小程序。</li>
 </ul>
 <blockquote><p>微信小程序相关的仓库，比如 WeUI 组件库、微信小程序示例、computed / watch 扩展等: <a href="https://github.com/wechat-miniprogram">https://github.com/wechat-miniprogram</a></p>
@@ -344,38 +375,12 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <li>iOS 方面，根据 App Store 审核指南，上架 App Store 的应用不允许使用自己的浏览器内核。如果 app 会浏览网页，则必须使用相应的 WebKit 框架和 WebKit Javascript。</li>
 <li>Android 方面，不限制应用使用自己的浏览器内核。安卓微信之前的浏览器为基于 WebKit 的 X5 浏览器，后为了和小程序的浏览器内核同构，大概 2020-05 从 X5 迁移到 XWeb，官方一般会有内核版本升级体验通告，比如<a href="https://developers.weixin.qq.com/community/develop/doc/0002c2167840006af8df3c94256001">2023-06 更新</a>：当前安卓微信 XWeb 开发版基于 111 新内核，现网仍基于 107 内核。</li>
 </ul>
-<h3>Debug iOS Safari from your Mac</h3>
-<ol>
-<li>On your iPhone, go to Settings &gt; Safari &gt; Advanced and toggle on <code>Web Inspector</code>.</li>
-<li>On your Mac, open Safari and go to Safari &gt; Preferences &gt; Advanced then check <code>Show Develop menu in menu bar</code>.</li>
-<li>Connect your iPhone to your Mac with the USB cable.</li>
-<li>On your iPhone, open the web site that you want to debug.</li>
-<li>On your Mac, in Safari, the name of the iOS device will appear as a submenu in the <code>Develop menu</code>. This will open a Web Inspector window on your Mac.</li>
+<blockquote><ol>
+<li>当小程序基于 WebView 环境下时，WebView 的 JS 逻辑、DOM 树创建、CSS 解析、样式计算、Layout、Paint 都发生在同一线程，在 WebView 上执行过多的 JS 逻辑可能阻塞渲染，导致界面卡顿（Chrome 的渲染进程是多线程的）。以此为前提，小程序同时考虑了性能与安全，采用了 AppService 和 WebView 的双线程模型。</li>
+<li>为了进一步优化小程序性能，在 WebView 渲染之外新增了一个渲染引擎 Skyline，拥有更接近原生渲染的性能体验。Skyline 创建了一条渲染线程来负责 Layout, Composite 和 Paint 等渲染任务，并在 AppService 中划出一个独立的上下文，来运行之前 WebView 承担的 JS 逻辑、DOM 树创建等逻辑。</li>
 </ol>
+</blockquote>
 <h3>HTTP 请求相关</h3>
-<ol>
-<li>使用 vue-resource</li>
-</ol>
-<ul>
-<li><a href="https://github.com/pagekit/vue-resource">vue-resource</a> 是一个轻量级的用于处理 HTTP 请求的插件，通过 <code>Vue.use</code> 使用自定义的插件。</li>
-<li>全局对象使用 <code>Vue.http.get()</code>，在一个组件内使用 <code>this.$http.get()</code></li>
-<li><p>可以定义 inteceptor 在请求发送前和接收响应前做一些处理，比如设置业务相关的请求头、添加 CSRF token、请求加 loading 状态、query 参数加时间戳等。</p>
-<pre><code class="lang-js">Vue.http.interceptors.push((request, next) =&gt; {
-  // 请求发送前的处理逻辑（比如判断传入的 request.no_loading 是否显示 loading）
-  // if (request.method === 'GET') {...}
-  // if (request.method === 'POST') {...}
-  next((response) =&gt; {
-    // 请求结果返回给 successCallback 或 errorCallback 之前，根据 `response.ok` 或 `response.status` 加一些处理逻辑 
-    // ...
-    return response
-  })
-});
-</code></pre>
-</li>
-</ul>
-<ol>
-<li>自己对 axios 封装</li>
-</ol>
 <ul>
 <li>通过 <code>axios.defaults.headers['xyz'] = 'abc'</code> 这样的方式添加需要的请求头</li>
 <li>统一对 query 参数做处理，拼在 url 后面</li>
@@ -426,9 +431,7 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
     return res.data
   })
 </code></pre>
-<ol>
-<li>使用 <a href="https://github.com/AttoJS/vue-request">VueRequest</a>，管理请求状态，支持 SWR、轮询、错误重试、缓存、分页等常用功能。<code>useRequest</code> 接收一个 service 函数，service 是一个异步的请求函数，换句话说，还可以使用 axios 来获取数据，然后返回一个 Promise。<code>useRequest</code> 会返回 data、loading、error 等，它们的值会根据请求状态和结果进行修改。返回的 run 方法，可以手动触发 service 请求。</li>
-</ol>
+<p>后续使用 <a href="https://github.com/AttoJS/vue-request">VueRequest</a>，管理请求状态，支持 SWR、轮询、错误重试、缓存、分页等常用功能。<code>useRequest</code> 接收一个 service 函数，service 是一个异步的请求函数，换句话说，还可以使用 axios 来获取数据，然后返回一个 Promise。<code>useRequest</code> 会返回 data、loading、error 等，它们的值会根据请求状态和结果进行修改。返回的 run 方法，可以手动触发 service 请求。</p>
 <h3>阿里云 CDN</h3>
 <p>阿里云 CDN 对于文件是否支持缓存是以 <code>X-Cache</code> 头部来确定，缓存时间是以 <code>X-Swift-CacheTime</code> 头部来确认。</p>
 <ul>
@@ -448,12 +451,6 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <ul>
 <li><a href="https://github.com/resumejob/How-to-design-a-spike-system">https://github.com/resumejob/How-to-design-a-spike-system</a></li>
 <li><a href="https://github.com/sunshineshu/-How-to-design-a-spike-system/blob/master/SUMMARY.md">https://github.com/sunshineshu/-How-to-design-a-spike-system/blob/master/SUMMARY.md</a></li>
-</ul>
-<h3>开发自己的调试工具</h3>
-<ul>
-<li><a href="https://kentcdodds.com/blog/make-your-own-dev-tools">https://kentcdodds.com/blog/make-your-own-dev-tools</a></li>
-<li><a href="https://app-dev-tools.netlify.app">https://app-dev-tools.netlify.app</a></li>
-<li><a href="https://github.com/coryhouse/switchboard">https://github.com/coryhouse/switchboard</a></li>
 </ul>
 <h3>日常开发 Tips and Tricks</h3>
 <ul>
@@ -504,17 +501,6 @@ target.parentNode.scrollTop = target.offsetTop;
 // can also add the css `scroll-behavior: smooth;`
 </code></pre>
 </li>
-<li><p>If several listeners are attached to the same element for the same event type, they are called in the order in which they were added. If <code>stopImmediatePropagation()</code> is invoked during one such call, no remaining listeners will be called.</p>
-</li>
-<li><p>To detect if a user has their keyboard's caps lock turn on, we'll employ KeyboardEvent's <code>getModifierState</code> method (which returns the current state of the specified modifier key, <code>true</code> if the modifier is active):</p>
-<pre><code class="lang-js">document.querySelector('input[type=password]').addEventListener('keyup', function (keyboardEvent) {
-  const capsLockOn = keyboardEvent.getModifierState('CapsLock');
-  if (capsLockOn) {
-    // Warn the user that their caps lock is on
-  }
-});
-</code></pre>
-</li>
 <li><p>npmmirror 已内置<a href="https://zhuanlan.zhihu.com/p/633904268">支持类似 unpkg cdn 解析能力</a>，可以简单理解为访问 unpkg 地址时，在回源服务里面根据 URL 参数，去 npm registry 下载对应的 npm 包，解压后响应对应的文件内容。即只需要遵循约定的 URL 进行访问，即可在页面中加载任意 npm 包里面的文件内容。</p>
 <pre><code># 获取目录信息 /${pkg}/${versionOrTag}/files?meta
 https://registry.npmmirror.com/antd/5.5.2/files?meta
@@ -534,7 +520,13 @@ https://registry.npmmirror.com/antd/latest/files
 <li>Unlike classic scripts, module scripts (<code>&lt;script type="module"</code>&gt;) require the use of the CORS protocol for cross-origin fetching.</li>
 </ol>
 </li>
-<li><p>防止重复提交：前端防抖，按钮点击后立即禁用。后端接口幂等性设计。</p>
+<li><p>针对手机网页的前端开发者调试面板 vConsole (框架无关)</p>
+<pre><code class="lang-html">&lt;script src="https://unpkg.com/vconsole@latest/dist/vconsole.min.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  // VConsole 默认会挂载到 `window.VConsole` 上
+  var vConsole = new window.VConsole();
+&lt;/script&gt;
+</code></pre>
 </li>
 </ul>
 <h3>iframe 技术方案</h3>

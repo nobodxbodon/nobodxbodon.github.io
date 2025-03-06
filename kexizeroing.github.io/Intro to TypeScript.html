@@ -12,6 +12,7 @@ yarn global add typescript
 yarn add --dev typescript
 </code></pre>
 <p>A <code>tsconfig.json</code> file is used to configure TypeScript project settings. The <code>tsconfig.json</code> file should be put in the project's root directory. You can run the <code>tsc --init</code> to generate a <code>tsconfig.json</code> file with some default options set and a bunch of other options commented out. In order to transpile the TypeScript code to JavaScript, the <code>tsc</code> command needs to be run. Running <code>tsc</code> will have the TypeScript compiler search for the <code>tsconfig.json</code> file which will determine the project's root directory as well as which options to use when compiling the TypeScript.</p>
+<p>By default all visible <code>"@types"</code> packages are included in your compilation. Packages in <code>node_modules/@types</code> of any enclosing folder are considered visible. If <code>types</code> is specified, only packages listed will be included in the global scope.</p>
 <pre><code class="lang-json">{
   "compilerOptions": {
     /* Base Options: */
@@ -67,7 +68,7 @@ yarn add --dev typescript
 </ol>
 <p>Relative import paths <a href="https://www.totaltypescript.com/relative-import-paths-need-explicit-file-extensions-in-ecmascript-imports">need explicit file extensions in ES imports</a> when <code>--moduleResolution</code> is <code>node16</code> or <code>nodenext</code> <em>(currently identical to <code>node16</code>)</em>.</p>
 <ol>
-<li>Most bundlers let you omit the file extension when importing files. But TS rules like <code>moduleResolution: NodeNext</code> force you to specify the file extension. This can feel really weird when you're working in <code>.ts</code> files, but writing <code>.js</code> on your imports. Why do we need to do it? Well, it's the spec. <strong>The Node spec requires that you use <code>.js</code> file extensions for all ESM imports and exports.</strong> If you want to go back to the old style, then specify <code>moduleResolution: Bundler</code> and bundle your code with a tool like esbuild.</li>
+<li>Most bundlers let you omit the file extension when importing files. But TS rules like <code>moduleResolution: NodeNext</code> force you to specify the file extension. This can feel really weird when you're working in <code>.ts</code> files, but writing <code>.js</code> on your imports. Why do we need to do it? Well, it's the spec. <strong>The Node spec requires that you use <code>.js</code> file extensions for all ESM imports and exports. By default, TypeScript does not change the specifiers of imported modules.</strong> If you want to go back to the old style, then specify <code>moduleResolution: Bundler</code> and bundle your code with a tool like esbuild.</li>
 <li>TypeScript doesn’t modify import specifiers during emit: the relationship between an import specifier and a file on disk is host-defined, and TypeScript is not a host.</li>
 <li><code>--allowImportingTsExtensions</code> allows TypeScript files to import each other with a TypeScript-specific extension like <code>.ts</code>, <code>.mts</code>, or <code>.tsx</code>. This flag is only allowed when <code>--noEmit</code> is enabled. The expectation here is that your resolver (e.g. your bundler, a runtime, or some other tool) is going to make these imports between <code>.ts</code> files work.</li>
 </ol>
@@ -119,6 +120,7 @@ import { type xyz } from "xyz";
 <li><a href="https://github.com/vuejs/tsconfig/blob/main/tsconfig.json">https://github.com/vuejs/tsconfig/blob/main/tsconfig.json</a></li>
 <li><a href="https://www.totaltypescript.com/tsconfig-cheat-sheet">https://www.totaltypescript.com/tsconfig-cheat-sheet</a></li>
 <li><a href="https://deno.com/blog/intro-to-tsconfig">https://deno.com/blog/intro-to-tsconfig</a></li>
+<li><a href="https://github.com/tsconfig/bases">https://github.com/tsconfig/bases</a></li>
 </ul>
 <p>Run <code>tsc --noEmit</code> that tells TypeScript that we just want to check types and not create any output files. If everything in our code is all right, <code>tsc</code> exits with no error. <code>tsc --noEmit --watch</code> will add a <code>watch</code> mode so TypeScript reruns type-checking every time you save a file.</p>
 <blockquote><p><code>json</code> doesn't normally allow comments, but comments are valid in <code>tsconfig.json</code>. It's officially supported by TypeScript and VSCode understands it too. What's going on here is <a href="https://github.com/microsoft/node-jsonc-parser">jsonc</a>, or "JSON with JavaScript style comments", a proprietary format used by a bunch of Microsoft products, most notably Typescript and VSCode.</p>
@@ -855,7 +857,7 @@ const blackWithGreenBg = styleText(['black', 'bgGreen'], 'I’m green with a bla
 console.log(blackWithGreenBg)
 </code></pre>
 <p>How to run ts files from command line? There is <a href="https://github.com/TypeStrong/ts-node">ts-node</a> that will compile the code and REPL for node.js: <code>npx ts-node src/foo.ts</code>. <code>tsc</code> writes js to disk. <code>ts-node</code> doesn't need to do that and runs ts on the fly. But it's not typechecking your code. So we recommend to type check your code first with <code>tsc</code> and then run it with <code>ts-node</code> before shipping it.</p>
-<p>Btw, you can use <a href="https://github.com/unjs/jiti">jiti</a> CLI to quickly run any script with TypeScript and native ESM support.</p>
+<p>CLI tools like <a href="https://github.com/privatenumber/tsx">tsx</a> and <a href="https://github.com/unjs/jiti">jiti</a> offer a seamless experience for running TypeScript and ESM code without requiring additional configuration.</p>
 <p>For lightweight support to enable runtime TypeScript in Node.js, you can use the built-in support for <a href="https://nodejs.org/api/typescript.html#type-stripping">type stripping</a>. By default Node.js will execute only files that contain no TypeScript features that require transformation, such as enums or namespaces. Node.js will replace inline type annotations with whitespace, and no type checking is performed. Node 23 will be able to run TypeScript files without any extra configuration <em>(unflagging <code>--experimental-strip-types</code>)</em>.</p>
 <ul>
 <li>Create an <code>index.ts</code> file containing TS syntax. Enums and namespaces are not supported by default.</li>
@@ -863,3 +865,5 @@ console.log(blackWithGreenBg)
 <li>Node will strip out the types using a version of swc, then run the resulting code.</li>
 <li>Node will not typecheck your files when it runs them.</li>
 </ul>
+<blockquote><p>In TypeScript 5.8, the flag <code>--erasableSyntaxOnly</code> marks enums, namespaces and class parameter properties as errors. These pieces of syntax are not considered erasable. "Erasable" syntax means that the syntax can be deleted without the runtime behaviour being affected.</p>
+</blockquote>

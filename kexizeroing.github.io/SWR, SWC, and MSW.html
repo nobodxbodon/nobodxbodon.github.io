@@ -1,7 +1,8 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/swr-swc-msw.md">仓库源文</a>，<a href="https://kexizeroing.github.io/swr-swc-msw">站点原文</a></h2>
 <p>SWR, SWC, and MSW, three similar names, are always mentioned in the context of web development, but they are totally different things. In this article, we will learn each of them and where they are used.</p>
 <h2>SWR - React Hooks for Data Fetching</h2>
-<p>The name “SWR” is derived from <code>stale-while-revalidate</code>, a HTTP cache invalidation strategy. SWR is created by the same team behind Next.js.</p>
+<p>The name “SWR” is derived from <code>stale-while-revalidate</code>, a cache invalidation strategy. SWR first returns the data from cache (stale), then sends the request (revalidate), and finally comes with the up-to-date data again.</p>
+<p><code>useSWR</code> accepts a key and a fetcher function. The key is a unique identifier of the request, normally the URL of the API. And the fetcher accepts key as its parameter and returns the data asynchronously. The fetcher can be any asynchronous function, you can use your favourite data-fetching library to handle that part.</p>
 <pre><code class="lang-jsx">import useSWR from 'swr'
 // you can use the native fetch or tools like Axios
 const fetcher = (...args) =&gt; fetch(...args).then(res =&gt; res.json())
@@ -42,15 +43,26 @@ function Avatar () {
 <p>By adopting this pattern, you can forget about fetching data in the imperative way: start the request, update the loading state, and return the final result. Instead, your code is more declarative: you just need to specify what data is used by the component.</p>
 <p>The most beautiful thing is that there will be only 1 request sent to the API, because they use the same SWR key (normally the API URL) and the request is cached and shared automatically. Also, the application now has the ability to refetch the data on user focus or network reconnect.</p>
 <h3>Automatic Revalidation</h3>
-<ul>
-<li>When you re-focus a page or switch between tabs, SWR automatically revalidates data.</li>
-<li>SWR will give you the option to automatically refetch data on interval.</li>
-<li>It's useful to also revalidate when the user is back online.</li>
-</ul>
-<h3>Mutation - manually revalidate the data</h3>
+<ol>
+<li><p>When you re-focus a page or switch between tabs, SWR automatically revalidates data. This can be useful to immediately synchronize to the latest state. This is helpful for refreshing data in scenarios like stale mobile tabs, or laptops that went to sleep.</p>
+</li>
+<li><p>SWR will give you the option to revalidate on interval. You can enable it by setting a <code>refreshInterval</code> value.</p>
+</li>
+<li><p>It's useful to also revalidate when the user is back online. This feature is enabled by default.</p>
+</li>
+</ol>
+<h3>Mutation - Manually revalidate the data</h3>
 <p>There're 2 ways to use the mutate API to mutate the data, the global mutate API which can mutate any key and the bound mutate API which only can mutate the data of corresponding SWR hook.</p>
-<p>When you call <code>mutate(key)</code> (or just <code>mutate()</code> with the bound mutate API) without any data, it will trigger a revalidation (mark the data as expired and trigger a refetch) for the resource.</p>
-<pre><code class="lang-jsx">// an example of bound mutate 
+<p>When you call <code>mutate(key)</code> or just <code>mutate()</code> with the bound mutate API without any data, it will trigger a revalidation (mark the data as expired and trigger a refetch) for the resource.</p>
+<pre><code class="lang-js">// global mutate
+import { useSWRConfig } from "swr"
+
+function App() {
+  const { mutate } = useSWRConfig()
+  mutate(key, data, options)
+}
+</code></pre>
+<pre><code class="lang-jsx">// bound mutate 
 function Profile () {
   const { data, mutate } = useSWR('/api/user', fetcher)
 
@@ -59,6 +71,7 @@ function Profile () {
       &lt;h1&gt;My name is {data.name}.&lt;/h1&gt;
       &lt;button onClick={async () =&gt; {
         const newName = data.name.toUpperCase()
+        // send a request to the API to update the data
         await requestUpdateUsername(newName)
         // update the local data immediately and revalidate (refetch)
         mutate({ ...data, name: newName })
@@ -67,7 +80,36 @@ function Profile () {
   )
 }
 </code></pre>
-<blockquote><p><a href="https://github.com/Kong/swrv">swrv</a> is a port of SWR for Vue, a Vue library for data fetching.</p>
+<p>SWR also provides <code>useSWRMutation</code> as a hook for remote mutations.</p>
+<pre><code class="lang-js">import useSWRMutation from 'swr/mutation'
+
+async function sendRequest(url, { arg }: { arg: { username: string }}) {
+  return fetch(url, {
+    method: 'POST',
+    body: JSON.stringify(arg)
+  }).then(res =&gt; res.json())
+}
+
+function App() {
+  const { trigger, isMutating } = useSWRMutation('/api/user', sendRequest, /* options */)
+
+  return (
+    &lt;button
+      disabled={isMutating}
+      onClick={async () =&gt; {
+        try {
+          const result = await trigger({ username: 'johndoe' }, /* options */)
+        } catch (e) {
+          // error handling
+        }
+      }}
+    &gt;
+      Create User
+    &lt;/button&gt;
+  )
+}
+</code></pre>
+<blockquote><p><a href="https://github.com/Kong/swrv">swrv</a> is a port of SWR for Vue, a Vue library for data fetching. It supports both Vue2 and Vue3.</p>
 </blockquote>
 <h3>React Query</h3>
 <p>SWR and React Query (new name: TanStack Query) are the two most popular libraries that can be used to manage data fetching in a React application. SWR is a smaller library that focuses on providing a simple way to fetch and cache data, while React Query is a more comprehensive library that offers a wider range of features.</p>
@@ -93,9 +135,68 @@ function Bookmarks({ category }) {
 <li>If your app is wrapped in <code>&lt;React.StrictMode&gt;</code>, React will intentionally call your effect twice in development mode to help you find bugs like missing cleanup functions.</li>
 <li><code>fetch</code> doesn't reject on HTTP errors, so you'd have to check for <code>res.ok</code> and throw an error yourself.</li>
 </ol>
-<blockquote><p>Remember about potential race conditions whenever you see an <code>await</code>. What else could happen while awaiting? After the await, is the result still relevant?</p>
-</blockquote>
-<p>With React Query, the above code becomes:</p>
+<h4>Vanilla React data fetching</h4>
+<p>If you're going to fetch in <code>useEffect()</code>, you should at least make sure that you're handling:</p>
+<ul>
+<li>Loading states</li>
+<li>Error handling (rejections &amp; HTTP error codes)</li>
+<li>Race conditions &amp; cancellation</li>
+</ul>
+<pre><code class="lang-js">import * as React from "react"
+
+export default function useQuery(url) {
+  const [data, setData] = React.useState(null)
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [error, setError] = React.useState(null)
+
+  React.useEffect(() =&gt; {
+    let ignore = false  // isCancelled
+
+    const handleFetch = async () =&gt; {
+      setData(null)
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const res = await fetch(url)
+
+        if (ignore) {
+          return 
+        }
+
+        if (res.ok === false) {
+          throw new Error(`A network error occurred.`)
+        }
+
+        const json = await res.json()
+
+        setData(json)
+        setIsLoading(false)
+      } catch (e) {
+        setError(e.message)
+        setIsLoading(false)
+      }
+    }
+
+    handleFetch()
+
+    return () =&gt; {
+      ignore = true
+    }
+  }, [url])
+
+  return { data, isLoading, error }
+}
+</code></pre>
+<p>In reality, we still need to think about:</p>
+<ol>
+<li>For every component that needs the same data, we have to refetch it.</li>
+<li>It's possible that while fetching to the same endpoint, one request could fail while the other succeeds.</li>
+<li>If our state is moved to "global", we've just introduced a small, in-memory cache. Since we've introduced a cache, we also need to introduce a way to invalidate it.</li>
+<li>Context often becomes confusing over time. A component subscribed to QueryContext will re-render whenever anything changes – even if the change isn't related to the url it cares about.</li>
+<li>We're treating asynchronous state as if it were synchronous state.</li>
+</ol>
+<p>That's <a href="https://ui.dev/c/query/why-react-query">why React Query</a> was created. With React Query, the above <code>Bookmarks</code> example code becomes:</p>
 <pre><code class="lang-jsx">const useBookmarks = (category) =&gt; {
   return useQuery({
     queryKey: ['bookmarks', category],
@@ -159,15 +260,45 @@ function App() {
 </code></pre>
 <p>To manage client state in a React app, we have lots of options available, starting from the built-in hooks like <code>useState</code> and <code>useReducer</code>, all the way up to community maintained solutions like redux or zustand. But what are our options for managing server state in a React app? Historically, there weren't many. That is, until React Query came along.</p>
 <p>While React Query goes very well with data fetching, a better way to describe it is as an async state manager that is also acutely aware of the needs of server state. In fact, React Query doesn't fetch any data for you. You provide it a promise (whether from fetch, axios, graphql, etc.), and React Query will then take the data that the promise resolves with and make it available wherever you need it throughout your entire application.</p>
+<blockquote><p>A common mistake people do is try to combine useEffect and useQuery. useQuery already handles the state for you. If you're using a useEffect to somehow manage what you get from useQuery, you're doing it wrong.</p>
+</blockquote>
 <p><code>staleTime</code> is the duration until a query transitions from fresh to stale. As long as the query is fresh, data will always be read from the cache only - no network request will happen. If the query is stale (which per default is: instantly), <strong>you will still get data from the cache, but a background refetch can happen</strong>.</p>
-<p>Stale queries are refetched automatically in the background when:</p>
-<ul>
-<li>Its corresponding component mounts (<code>refetchOnMount</code>)</li>
-<li>The window is refocused (<code>refetchOnWindowFocus</code>)</li>
-<li>The network is reconnected (<code>refetchOnReconnect</code>)</li>
-<li>The query is optionally configured with a refetch interval (<code>refetchInterval</code>)</li>
-</ul>
 <p>As long as a query is being actively used, the cached data will be kept in memory. What about inactive queries? <code>gcTime</code> is the duration until inactive queries will be removed from the cache. This defaults to 5 minutes, which means that if a query is not being used for 5 minutes, the cache for that query will be cleaned up.</p>
+<blockquote><ul>
+<li><code>staleTime</code>: How long before data is considered stale, when should revalidation happen? (default: 0)</li>
+<li><code>gcTime</code>: How long before inactive data is garbage collected, when should the cache be cleared? (default: 5 minutes)</li>
+</ul>
+</blockquote>
+<pre><code class="lang-jsx">function TodoList() {
+  // This query is "active" because the component is using it
+  const { data } = useQuery({
+    queryKey: ['todos'],
+    gcTime: 1000 * 60 * 5 // 5 minutes
+  })
+  return &lt;div&gt;{data.map(...)}&lt;/div&gt;
+}
+
+// When TodoList unmounts (user navigates away), the query becomes "inactive"
+// If user doesn't come back to TodoList within 5 minutes (gcTime),
+// the data is removed from cache
+// If they return within 5 minutes, the cached data is still there!
+</code></pre>
+<p>Query keys are reactive. When a key changes, React Query knows it needs fresh data. You don't manually trigger refetches, you just change the key, and React Query handles the rest. Your UI becomes a reflection of your query keys.</p>
+<pre><code class="lang-js">function TodoList({ filter }) {
+  const { data } = useQuery({
+    queryKey: ["todos", filter],
+    queryFn: () =&gt; fetchTodos(filter),
+  });
+}
+
+// Search with URL state
+const { search } = useSearchParams();
+
+useQuery({
+  queryKey: ["search", search],
+  queryFn: () =&gt; searchItems(search),
+});
+</code></pre>
 <h2>SWC - Rust-based platform for the Web</h2>
 <p>SWC (stands for Speedy Web Compiler) is a super-fast TypeScript / JavaScript compiler written in Rust, and can be used for both compilation and bundling. SWC is 20x faster than babel on a single-core benchmark, 68x faster than babel on a multicore benchmark.</p>
 <pre><code class="lang-sh">npm i -D @swc/cli @swc/core
@@ -230,6 +361,10 @@ console.log('Transformation complete. Output written to example.js');
 npx @biomejs/biome format path/to/file
 npx @biomejs/biome lint
 npx @biomejs/biome check
+</code></pre>
+<pre><code class="lang-sh"># https://biomejs.dev/guides/migrate-eslint-prettier
+biome migrate eslint --write
+biome migrate prettier --write
 </code></pre>
 <h2>MSW - API mocking library</h2>
 <p>Mock Service Worker is an API mocking library for browser and Node.js that uses a Service Worker to intercept requests that actually happened. Developers come to MSW for various reasons: to establish proper testing boundaries, to prototype applications, debug network-related issues, or monitor production traffic.</p>

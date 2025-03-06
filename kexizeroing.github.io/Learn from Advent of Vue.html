@@ -1,0 +1,568 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/learn-from-advent-of-vue.md">仓库源文</a>，<a href="https://kexizeroing.github.io/learn-from-advent-of-vue">站点原文</a></h2>
+<h3>Code Structure</h3>
+<p>Use the template <a href="https://stackblitz.com/edit/vue3-vite-starter">https://stackblitz.com/edit/vue3-vite-starter</a> to start.</p>
+<p>In a Vue component, <code>&lt;script setup&gt;</code> can be used alongside normal <code>&lt;script&gt;</code> using the options API. It works because the <code>&lt;script setup&gt;</code> block is compiled into the component's <code>setup()</code> function. A normal <code>&lt;script&gt;</code> may be needed, for example, we need to run side effects or create objects that should only execute once in module scope (outside the <code>export default {}</code>).</p>
+<p>Components using <code>&lt;script setup&gt;</code> are closed by default - i.e. the public instance of the component will not expose any of the bindings declared inside <code>&lt;script setup&gt;</code>. To explicitly expose properties, use the <code>defineExpose</code> compiler macro.</p>
+<h3>Date Countdown</h3>
+<p><a href="https://papaya-caramel-13dd76.netlify.app/">https://papaya-caramel-13dd76.netlify.app/</a></p>
+<ol>
+<li>Use the <a href="https://vueuse.org/core/usenow">useNow</a> composable from VueUse to get a reactive version of the current time and then do the math to get days, hours, minutes, and seconds.</li>
+<li>Use the Vue transition component to transition smoothly between each countdown number.</li>
+</ol>
+<p>By the way, <strong>destructuring a value from a reactive object will break reactivity</strong>, since the reactivity comes from the object itself and not the property you’re grabbing. Using <code>toRefs</code> lets us destructure our props when using <code>script setup</code> without losing reactivity.</p>
+<pre><code class="lang-js">const { count } = defineProps&lt;{ count: number }&gt;(); // Don't do this!
+
+// The first obvious solution is to not destructure the props object
+const props = defineProps&lt;{ count: number }&gt;();
+const even = computed(() =&gt; (props.count % 2 === 0 ? 'even' : 'odd'));
+
+// Use toRefs() helper
+const props = defineProps&lt;{ count: number }&gt;();
+const { count } = toRefs(props);
+const even = computed(() =&gt; (count.value % 2 === 0 ? 'even' : 'odd'));
+</code></pre>
+<blockquote><p>What is the difference between <code>ref</code>, <code>toRef</code> and <code>toRefs</code>:</p>
+<ul>
+<li>The idea of using <code>ref</code> is to wrap a non-object variable inside a reactive object.</li>
+<li><code>toRef</code> converts a single reactive object property to a ref that maintains its connection with the parent object: <code>const fooRef = toRef(state, 'foo')</code>.</li>
+<li><code>toRefs</code> is a utility method used for destructing a reactive object and convert all its properties to ref: <code>toRefs(state)</code>.</li>
+</ul>
+</blockquote>
+<p>Adding deep reactivity to a large object can cost you a lot of performance, you can optimize the reactivity in your app by using <code>shallowRef</code>. Here reactivity is only triggered when the <code>value</code> of the <code>ref</code> itself is changed, but modifying any of the nested properties won’t trigger anything.</p>
+<pre><code class="lang-js">const state = shallowRef({ count: 1 })
+
+// does NOT trigger change
+state.value.count = 2
+
+// does trigger change
+state.value = { count: 2 }
+</code></pre>
+<h3><code>defineProps</code> and compiler macros</h3>
+<p>You don't need to import <code>defineProps</code> from Vue. <code>defineProps</code>, <code>defineEmits</code>, and <code>defineExpose</code> are <strong>compiler macros</strong> that are compiled away, and they are not actual functions in the Vue package. These are just hints for the compiler to create them nicely.</p>
+<blockquote><p>A compiler macro is special code that is processed by a compiler and converted into something else. They are effectively a clever form of string replacement.</p>
+</blockquote>
+<p>&lt;img alt="vue-cmp-props" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/vue-props.png" width="750"&gt;
+&lt;br&gt;</p>
+<p>&lt;img alt="vue-setup-defineprops" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/vue-setup-defineprops.png" width="750"&gt;</p>
+<p>The output structure looks like what we had before with our <code>defineComponent</code> approach, and the only difference is that the compiler is creating this for us.</p>
+<h3>Recursive Tree</h3>
+<ol>
+<li>Recursion always requires two things: Define your base case and recursive case. To do this you need a switch of some kind (maybe a <code>v-if</code>), and a value that changes with each step in the recursion.</li>
+<li>You can either place the recusion before or after what the component is rendering. Each will give you opposite results, and the wrong one will give you an upside-down tree.</li>
+<li>Challenge on decorations: <a href="https://github.com/Advent-Of-Vue/2022-christmas-tree-ornaments-solution">https://github.com/Advent-Of-Vue/2022-christmas-tree-ornaments-solution</a></li>
+</ol>
+<pre><code class="lang-vue">&lt;!-- ChristmasTree.vue --&gt;
+&lt;template&gt;
+  &lt;div&gt;
+    &lt;ChristmasTree v-if="size &gt; 1" :size="size - 1" /&gt;
+
+    &lt;div class="flex flex-row justify-center"&gt;
+      &lt;!-- Create the tree sections --&gt;
+      &lt;div v-for="i in size" class="relative rounded-full bg-green w-16 h-16 -m-2 flex justify-center items-center" /&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+</code></pre>
+<p><code>v-if</code> vs. <code>v-show</code>: Generally speaking, <code>v-if</code> has higher toggle costs while <code>v-show</code> has higher initial render costs. For example, if you have a tabs component, that some tab contains a heavy component. Using <code>v-if</code>, it will get the component destroyed and re-created when switching tabs. Using <code>v-show</code>, you will need to pay the mounting cost on the initial render even you haven't switch to that tab yet.</p>
+<h3>Use Composables</h3>
+<blockquote><p>Similar idea to "Copy JSX? Create a component. Copy logic? Create a hook."</p>
+</blockquote>
+<p><strong>How the Vue Composition API replaces Vue Mixins?</strong><br/>
+Normally, a Vue component is defined by a JavaScript object with various properties representing the functionality we need — things like <code>data</code>, <code>methods</code>, <code>computed</code>, and so on. When we want to share the same properties between components, we can extract the common properties into a separate module. Then we can add this mixin to any consuming component by assigning it to the <code>mixin</code> config property. At runtime, Vue will merge the properties of the component with any added mixins.</p>
+<p>Mixins have drawbacks:</p>
+<ol>
+<li>Naming collisions. What happens if they both share a property with the same name?</li>
+<li>Implicit dependencies. A component can use a data property defined in the mixin but a mixin can also use a data property it assumes is defined in the component. This can cause problems. What happens if we want to refactor a component later and change the name of a variable that the mixin needs?</li>
+</ol>
+<p>The key idea of the Composition API is that, rather than defining a component’s functionality as object properties, we define them as JavaScript variables that get returned from a new <code>setup</code> function. The clear advantage of the Composition API is that it’s easy to extract logic. It allows Vue to lean on the safeguards built into native JavaScript in order to share code, like passing variables to the composition function, and the module system.</p>
+<p>Composition API provides the same level of logic composition capabilities as React Hooks, but with some <a href="https://vuejs.org/guide/extras/composition-api-faq.html#comparison-with-react-hooks">important differences</a>:</p>
+<ul>
+<li>Composition API calls are also not sensitive to call order and can be conditional.</li>
+<li>Vue's runtime reactivity system automatically collects reactive dependencies used in computed properties and watchers. <em>(It tracks dependencies for reactive variables and recomputes only when necessary. There is no need for manual low level performance tuning like <code>useMemo</code> or <code>useCallback</code> in React.)</em></li>
+<li>No need to manually cache callback functions to avoid unnecessary child updates.</li>
+</ul>
+<pre><code class="lang-js">// useCounter.js
+// https://css-tricks.com/how-the-vue-composition-api-replaces-vue-mixins/
+import { ref, computed } from 'vue'
+export default function () {
+  const count = ref(0)
+  const double = computed(() =&gt; count.value * 2)
+  function increment() {
+    count.value++
+  }
+  return {
+    count,
+    double,
+    increment
+  }
+}
+
+// useEvent composable
+import { onMounted, onBeforeUnmount } from 'vue'
+export function useEvent = (event, handler, options) =&gt; {
+  const {
+    target = window,
+    listener,
+  } = options
+  onMounted(() =&gt; {
+    target.addEventListener(event, handler, listener)
+  })
+  onBeforeUnmount(() =&gt; {
+    target.removeEventListener(event, handler, listener)
+  })
+}
+
+// useTimeout composable
+export function useTimeout = (fn, delay, options) =&gt; {
+  const immediate = options?.immediate
+  if (immediate) {
+    fn()
+  }
+
+  // The effect function receives a function that can be used to register a cleanup callback.
+  // The cleanup callback will be called right before the next time the effect is re-run.
+  watchEffect(onCleanup =&gt; {
+    if (isRef(delay)) {
+      if (typeof delay.value !== 'number' || delay.value &lt; 0) return
+    } else {
+      if (typeof delay !== 'number' || delay &lt; 0) return
+    }
+    const _delay = unref(delay)
+    const timer = setTimeout(() =&gt; {
+      fn()
+    }, _delay)
+
+    onCleanup(() =&gt; {
+      clearTimeout(timer)
+    })
+  })
+}
+</code></pre>
+<blockquote><p>Each component instance calling <code>useXXX()</code> will create its own copies of state so they won't interfere with one another. But if you put those values outside of the composable function, it will persist, like a basic state or store. When you need to access those values later somewhere else, they won't be reset everytime you call the composable. <em>(Potential issues in SSR: State declared outside component scope persists between requests.)</em></p>
+</blockquote>
+<p>More about <code>watchEffect</code>:</p>
+<ol>
+<li><code>watchEffect</code> runs a callback function immediately and automatically tracks its reactive dependencies. The callback function is executed whenever any of the reactive dependencies change.</li>
+<li>The callback function receives a special function called <code>onCleanup</code> as its first argument. You can use this function to register a cleanup callback that will be called before the watcher is re-executed.</li>
+<li>A confusing caveat is that <code>watchEffect</code> only tracks dependencies during its synchronous execution. When using it with an async callback, only properties accessed before the first <code>await</code> tick will be tracked. Everything after the <code>await</code> will NOT be tracked.</li>
+</ol>
+<h3>Write better Vue composables</h3>
+<p>Passing props and events back and forth through the component hierarchy creates a lot of complexity. A more straightforward solution is to create a shared data store that any component can import:</p>
+<pre><code class="lang-js">import { reactive, toRefs } from 'vue'
+const state = reactive({ user: { name: 'Alice' } })
+
+export function useUserStore() {
+  // Without toRefs, if you were to destructure the returned state like this:
+  // const { user } = useUserStore()
+  // You would lose reactivity because destructuring breaks the reactive connection. T
+  return toRefs(state)
+}
+</code></pre>
+<blockquote><p>Without <code>toRefs</code>, if you were to destructure the returned state <code>const { user } = useUserStore()</code>, you would lose reactivity because destructuring breaks the reactive connection. The <code>user</code> variable would just be a static copy of the value at the time of destructuring. With <code>toRefs</code>, each property becomes an individual <code>ref</code> that maintains its reactive connection to the original state. If you only ever used the state as a whole object (like <code>state.user.name</code>) and never destructured it, then you wouldn't need <code>toRefs</code>.</p>
+</blockquote>
+<p>A giant component might put all its refs and methods in one place, so that setup quickly becomes unmanageable. Instead, an inline composable can group logic and provide it locally.</p>
+<pre><code class="lang-vue">&lt;script setup&gt;
+function useCounter() {
+  const count = ref(0)
+  const increment = () =&gt; count.value++
+  return { count, increment }
+}
+
+const { count, increment } = useCounter()
+&lt;/script&gt;
+</code></pre>
+<p>We abandon the options API for the composition API, and the idea is not that we write everything the same way as the options API but not having the data/computed/watch options.</p>
+<pre><code class="lang-js">// Common mistake: Grouping by options
+// data
+const originalMessage = ref('Hello World!')
+const isReversed = ref(false)
+
+// computed
+const message = computed(() =&gt; {
+  if (isReversed.value) {
+    return originalMessage.value.split('').reverse().join('')
+  }
+  return originalMessage.value
+})
+
+// watch...
+</code></pre>
+<pre><code class="lang-js">// Let's Refactor it
+// Message-related stuff
+const originalMessage = ref('Hello World!')
+const { toggleReverse, message } = useMessage(originalMessage)
+
+// create `useMessage.js` file or inline composables
+function useMessage(input) {
+  const originalMessage = toRef(input)
+  const reversedMessage = computed(() =&gt; originalMessage.value.split('').reverse().join(''))
+  const isReversed = ref(false)
+
+  function toggleReverse() {
+    isReversed.value = !isReversed.value
+  }
+  const message = computed(() =&gt; {
+    if (isReversed.value) {
+      return reversedMessage.value
+    }
+    return originalMessage.value
+  })
+
+  return {
+    toggleReverse,
+    message
+  }
+}
+</code></pre>
+<p>It is possible to use both Options API and Composition API. Although you can access Composition API from the Options API, it’s a one-way street. The Composition API cannot access anything defined through the Options API.</p>
+<pre><code class="lang-js">export default {
+  setup() {
+    const darkMode = ref(false)
+    // We can't access the method
+    // this.changeTheme(true)
+    return { darkMode }
+  },
+  methods: {
+    saveDarkMode() {
+      localStorage.setItem('dark-mode', this.darkMode)
+    },
+    changeTheme(val) {
+      // We can update values from the Options API
+      this.darkMode = val;
+    }
+  }
+}
+</code></pre>
+<h3>Custom Directives</h3>
+<pre><code class="lang-html">&lt;div class="w-full h-full flex flex-col justify-center items-center text-center gap-12"&gt;
+  &lt;p v-christmas&gt;Red + Green (default)&lt;/p&gt;
+  &lt;p v-christmas:red&gt;Red only&lt;/p&gt;
+  &lt;p v-christmas:green&gt;Green only&lt;/p&gt;
+  &lt;p v-christmas="5"&gt;Slower Animation&lt;/p&gt;
+&lt;/div&gt;
+</code></pre>
+<pre><code class="lang-js">// main.js
+const app = createApp(App)
+
+app.directive('christmas', (el, binding) =&gt; {
+  const duration = binding.value ?? 2 // the length of the animation in seconds
+  const color = binding.arg ?? 'red-green' // the class to add for the different colors
+
+  // this will be called for both `mounted` and `updated`
+  el.classList.add('christmas-text', color)
+
+  el.style.animationDuration = duration + 's'
+})
+
+app.mount('#app')
+</code></pre>
+<h3>Writable Computed Refs</h3>
+<pre><code class="lang-js">const firstName = ref('');
+const lastName = ref('');
+
+const fullName = computed({
+  get: () =&gt; `${firstName.value} ${lastName.value}`,
+  set: (val) =&gt; {
+    const split = val.split(' '); // ['Michael', 'Thiessen']
+    firstName.value = split[0];   // 'Michael'
+    lastName.value = split[1];    // 'Thiessen'
+  }
+});
+
+fullName.value = 'Michael Thiessen';
+console.log(lastName.value);      // 'Thiessen'
+</code></pre>
+<p>A common mistake using <code>computed</code> is non reactive value as a dependency. Often developers need some reactivity when working with browser API’s, but the APIs are not reactive. To get around this, we will use VueUse library that adds reactivity to web browser APIs.</p>
+<pre><code class="lang-js">const videoPlayer = ref&lt;HTMLVideoElement&gt;();
+// wrong, not reactive
+const playing = computed(() =&gt; !videoPlayer.value?.paused);
+
+// instead, use composable from VueUse that provides a reactive ref
+const { playing: videoPlaying} = useMediaControls(videoRef, {
+  src: "/example.mp4",
+});
+</code></pre>
+<h3>Slots in Vue</h3>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;div class="named-slot"&gt;
+    &lt;h2&gt;&lt;slot name="title"&gt;default&lt;/slot&gt;&lt;/h2&gt;
+    &lt;slot&gt;&lt;/slot&gt;
+  &lt;/div&gt;
+
+  &lt;div class="scoped-slot"&gt;
+    &lt;h2&gt;&lt;slot&gt;default&lt;/slot&gt;&lt;/h2&gt;
+    &lt;slot name="display" :number="likeCount" :message="message"&gt;&lt;/slot&gt;
+    &lt;button type="button" @click="handleClick"&gt;Like&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+</code></pre>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;SlotsNamed&gt;
+    &lt;template #title&gt;
+      &lt;span&gt;My Title&lt;/span&gt;
+    &lt;/template&gt;
+    &lt;template #default&gt;
+      &lt;p&gt;Put me in, coach!&lt;/p&gt;
+    &lt;/template&gt;
+  &lt;/SlotsNamed&gt;
+
+  &lt;SlotsScoped&gt;
+    &lt;template #default&gt;
+      &lt;span&gt;My Likes&lt;/span&gt;
+    &lt;/template&gt;
+    &lt;template #display="{ number, message }"&gt;
+      &lt;p&gt;{{ number }}&lt;/p&gt;
+      &lt;p&gt;{{ message }}&lt;/p&gt;
+    &lt;/template&gt;
+  &lt;/SlotsScoped&gt;
+&lt;/template&gt;
+</code></pre>
+<h3>Async Components</h3>
+<p>Vue allows us to divide an app into smaller chunks by loading components asynchronously with the help of the <code>defineAsyncComponent()</code> function, which accepts a loader function that returns a Promise that resolves to the imported component.</p>
+<pre><code class="lang-js">import { defineAsyncComponent } from "vue";
+
+export const AsyncModal = defineAsyncComponent(() =&gt; import("./Modal.vue"));
+</code></pre>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;button id="show-modal" @click="showModal = true"&gt;Show Modal&lt;/button&gt;
+  &lt;AsyncModal v-if="showModal" :show="showModal" @close="showModal = false" /&gt;
+&lt;/template&gt;
+
+&lt;script setup&gt;
+  import { ref } from "vue";
+  import { AsyncModal } from "./components/AsyncModal.js";
+
+  const showModal = ref(false);
+&lt;/script&gt;
+</code></pre>
+<p>The <code>AsyncModal</code> is a wrapper component that only calls the loader function when it is actually rendered on the page.</p>
+<p>When our application webpage initially loads, we’ll recognize that the bundle for the Modal component is no longer loaded automatically upon page load. When we click the button to trigger the modal to be shown, we’ll notice the bundle is then asynchronously loaded as the modal component is being rendered.</p>
+<p>For Vue 2, the following example shows how to lazy load a component. By passing <code>() =&gt; import("./tooltip")</code> instead of the static <code>import Tooltip from "./tooltip"</code>. Vue will lazy load that component as soon as is requested to be rendered, which normally happens right away when the App component gets mounted. However, in practice, we'd like to defer the Tooltip component loading until it is required, which for example when hovering a button or text.</p>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;div&gt;
+    &lt;button @click="show = true"&gt;Load Tooltip&lt;/button&gt;
+    &lt;div v-if="show"&gt;
+      &lt;tooltip&gt;&lt;/tooltip&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+export default {
+  data: () =&gt; ({ show: false }),
+  components: {
+    Tooltip: () =&gt; import("./Tooltip")
+    // Tooltip: () =&gt; ({
+    //   component: import("./Tooltip"),
+    //   loading: AwesomeSpinner,
+    //   error: SadFaceComponent,
+    //   timeout: 5000,
+    // })
+  }
+};
+&lt;/script&gt;
+</code></pre>
+<h3>Global Properties</h3>
+<p>It's possible to add global properties to your Vue app in both Vue 2 and Vue 3. Prefixing global properties with a <code>$</code> helps prevent naming conflicts with other variables, and it's a standard convention that makes it easy to spot when a value is global.</p>
+<pre><code class="lang-js">// Vue 3
+const app = createApp({});
+app.config.globalProperties.$myGlobalVariable = 'foo';
+
+// Vue 2
+Vue.prototype.$myGlobalVariable = 'foo';
+</code></pre>
+<p>Properties added to <code>globalProperties</code> will be available via the component instance for all components within the application. So if you're using the Options API you'll be able to access them using <code>this.$myGlobalVariable</code>, just like you could with <code>Vue.prototype</code>. They'll also be available in the template without the <code>this</code>, e.g. <code>{{ $myGlobalVariable }}</code>.</p>
+<p>If you're using the Composition API then you'll still be able to use these properties within the template, but you won't have access to the component instance within <code>setup</code>, so these properties won't be accessible there. <em>(Composition API is designed to be context-free and has no access to <code>this</code>.)</em> Application-level <code>provide</code>/<code>inject</code> can be used as an alternative to <code>Vue.prototype</code>.</p>
+<pre><code class="lang-js">const app = createApp(RootComponent)
+app.provide('myGlobalVariable', globalVariable)
+
+// In the descendant component
+&lt;script setup&gt;
+import { inject } from 'vue'
+const myGlobalVariable = inject('myGlobalVariable')
+&lt;/script&gt;
+</code></pre>
+<blockquote><p><a href="https://alexop.dev/posts/solving-prop-drilling-in-vue">Solving Prop Drilling in Vue</a>: Instead of event buses, use Pinia for state, composables for logic, and provide/inject for component trees.</p>
+</blockquote>
+<h3>Vue router and Suspense</h3>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;nav&gt;
+    &lt;router-link to="/"&gt;first&lt;/router-link&gt; /
+    &lt;router-link to="/second"&gt;second&lt;/router-link&gt;
+  &lt;/nav&gt;
+  &lt;main&gt;
+    &lt;RouterView v-slot="{ Component }"&gt;
+      &lt;template v-if="Component"&gt;
+        &lt;KeepAlive&gt;
+          &lt;Suspense&gt;
+            &lt;!-- main content --&gt;
+            &lt;component :is="Component"&gt;&lt;/component&gt;
+
+            &lt;!-- loading state --&gt;
+            &lt;template #fallback&gt; Loading... &lt;/template&gt;
+          &lt;/Suspense&gt;
+        &lt;/KeepAlive&gt;
+      &lt;/template&gt;
+    &lt;/RouterView&gt;
+  &lt;/main&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import { watchEffect } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+
+export default {
+  setup() {
+    const route = useRoute()
+    const router = useRouter()
+    // Route isn't reactive
+    watchEffect(() =&gt; console.log('Route changed', route))
+    // But its properties are
+    watchEffect(() =&gt; console.log('Path changed', route.path))
+    // useRouter also works
+    watchEffect(() =&gt; console.log('[Router] Path changed', router.currentRoute.value))
+  },
+}
+&lt;/script&gt;
+</code></pre>
+<p><code>v-slot="{ Component }"</code> exposes a scoped slot, where <code>Component</code> is the dynamically loaded component for the current route. The scoped slot gives you more programmatic control over the rendering process, making it easier to add transitions, loading states, or additional wrapping logic around your route components.</p>
+<h3>Renderless Components</h3>
+<p>Renderless components can be an alternative to composables when finding ways to design reusable logic in your Vue apps. As you might guess, they don't render anything. Instead, they handle all the logic inside a script section and then expose properties through a scoped slot.</p>
+<p>Many components are contentless components. They provide a container, and you have to supply the content. Think of a button, a menu, or a card component. Slots allow you to pass in whatever markup and components you want, and they also are relatively open-ended, giving you lots of flexibility.</p>
+<pre><code class="lang-vue">&lt;!-- NorthPoleDistance.vue --&gt;
+&lt;script setup lang="ts"&gt;
+import { getDistanceKm, getDistanceMiles } from '@/utils/distance'
+import { useGeolocation } from '@vueuse/core'
+import { ref, computed } from 'vue'
+
+const { coords } = useGeolocation()
+
+const unit = ref&lt;'km' | 'mile'&gt;('mile')
+
+const distance = computed(() =&gt; {
+  return unit.value === 'km'
+    ? getDistanceKm(coords.value.latitude, coords.value.longitude)
+    : getDistanceMiles(coords.value.latitude, coords.value.longitude)
+})
+
+const toggleUnit = () =&gt; {
+  if (unit.value === 'km') {
+    unit.value = 'mile'
+  } else {
+    unit.value = 'km'
+  }
+}
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;!-- this should only render a slot --&gt;
+  &lt;!-- or :unit="unit" :distance="distance" :toggleUnit="toggleUnit" --&gt;
+  &lt;slot v-bind="{ unit, distance, toggleUnit }" /&gt;
+&lt;/template&gt;
+
+&lt;!-- App.vue --&gt;
+&lt;template&gt;
+  &lt;div class="container mx-auto px-4"&gt;
+    &lt;h2&gt;Example&lt;/h2&gt;
+    &lt;NorthPoleDistance v-slot="{ distance, toggleUnit, unit }"&gt;
+      &lt;p&gt;You are currently: {{ distance }} {{ unit }}s away from the North Pole.&lt;/p&gt;
+      &lt;button @click="toggleUnit" class="bg-green text-white px-4 py-2 rounded"&gt;Toggle Unit&lt;/button&gt;
+    &lt;/NorthPoleDistance&gt;
+  &lt;/div&gt;
+&lt;/template&gt;
+</code></pre>
+<p>Composables and renderless components are two patterns in Vue that offer different approaches for encapsulating and reusing logic. Composables typically consist of functions that return reactive data and methods, which can be imported and used in different components. On the other hand, renderless components focus on separating the logic of a component from its presentation by having the parent component take care of rendering the appropriate UI.</p>
+<pre><code class="lang-js">// Option 1: composables
+export function useCheckboxToggle() {
+  const checkbox = ref(false);
+
+  const toggleCheckbox = () =&gt; {
+    checkbox.value = !checkbox.value;
+  };
+
+  return {
+    checkbox,
+    toggleCheckbox,
+  };
+}
+</code></pre>
+<pre><code class="lang-vue">&lt;!-- Option 2: renderless components --&gt;
+&lt;template&gt;
+  &lt;slot :checkbox="checkbox" :toggleCheckbox="toggleCheckbox"&gt;&lt;/slot&gt;
+&lt;/template&gt;
+
+&lt;script setup&gt;
+  import { ref } from "vue";
+
+  const checkbox = ref(false);
+
+  const toggleCheckbox = () =&gt; {
+    checkbox.value = !checkbox.value;
+  };
+&lt;/script&gt;
+</code></pre>
+<h3>Render function</h3>
+<p>When using the render function instead of templates, you'll be using the <code>h</code> function a lot (<code>hyperscript</code> - "JavaScript that produces HTML"). It creates a virtual node, an object that Vue uses internally to track updates and what it should be rendering. These render functions are essentially what is happening "under the hood" when Vue compiles your single file components to be run in the browser.</p>
+<pre><code class="lang-vue">&lt;script&gt;
+import { h } from 'vue'
+
+export default {
+  render() {
+    // The first argument is either an HTML element name or a component
+    // The second argument is a list of props, attributes, and event handlers
+    // The third argument is either a string for a text node or an array of children VNodes
+    return h("div", {}, [
+      h("h1", {}, "Render Functions are awesome"),
+      h("p", {class: 'text-blue-400'}, "Some text")
+    ])
+  }
+}
+&lt;/script&gt;
+</code></pre>
+<pre><code class="lang-js">// vue-vdom.js
+// Create a virtual node
+export function h(tag, props, children) {
+  return { tag, props, children }
+}
+
+// tag: h1
+// props: { class: 'text-red-500'}
+// children: 'Hello'
+// Add a virtual node onto the DOM
+export function mount(vnode, container) {
+  const el = document.createElement(vnode.tag)
+  vnode.el = el
+
+  for (const key in vnode.props) {
+    if (key.startsWith('on')) {
+      el.addEventListener(key.slice(2).toLowerCase(), vnode.props[key])
+    }
+    el.setAttribute(key, vnode.props[key])
+  }
+
+  if (typeof vnode.children === 'string') {
+    // Text
+    el.textContent = vnode.children
+  } else if (Array.isArray(vnode.children)) {
+    // Array of vnodes
+    vnode.children.forEach(child =&gt; mount(child, el))
+  } else {
+    // Single vnode
+    mount(vnode.children, el)
+  }
+
+  container.appendChild(el)
+}
+
+// Remove a vnode from the real DOM
+export function unmount(vnode) {
+  vnode.el.parentNode.removeChild(vnode.el)
+}
+</code></pre>
+<ul>
+<li>Demystifying the Art of SFC Compilation: <a href="https://vueconf19-compiler.surge.sh">https://vueconf19-compiler.surge.sh</a></li>
+<li>Vue template explorer: <a href="https://template-explorer.vuejs.org">https://template-explorer.vuejs.org</a></li>
+<li>Vue SFC Playground: <a href="https://play.vuejs.org">https://play.vuejs.org</a></li>
+<li>Understanding Vue SFC Compiler: <a href="https://jinjiang.dev/slides/understanding-vue-compiler">https://jinjiang.dev/slides/understanding-vue-compiler</a></li>
+<li>Compile Vue SFC into plain JavaScript &amp; CSS: <a href="https://github.com/Jinjiang/vue-simple-compiler">https://github.com/Jinjiang/vue-simple-compiler</a></li>
+</ul>

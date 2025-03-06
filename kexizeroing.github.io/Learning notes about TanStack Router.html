@@ -1,0 +1,145 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/learning-tanstack-router.md">仓库源文</a>，<a href="https://kexizeroing.github.io/learning-tanstack-router">站点原文</a></h2>
+<p>TanStack Router is a fully-featured client-side JavaScript framework designed for application routing. It offers a robust navigation system with support for nested layouts and efficient data loading capabilities at every point in the route tree. Best of all, It ensures type safety throughout the entire process.</p>
+<h2>File-based routing</h2>
+<p>File-based routing is the preferred and recommended way to configure TanStack Router. You can define your routes using a series of files and directories that represent the route hierarchy of your application.</p>
+<ul>
+<li>While directories have long been used to represent route hierarchy, file-based routing introduces an additional concept of using the <code>.</code> character in the file-name to denote a route nesting. (e.g. <code>posts.index.tsx</code> and <code>posts.$postId.tsx</code>)</li>
+<li>Dynamic path params are denoted by the <code>$</code> character in the filename. </li>
+<li>Non-path routes (without requiring a matching path in the URL) are denoted by the <code>_</code> prefix in the filename. (e.g. <code>_app.a.tsx</code>)</li>
+<li>Non-nested routes can be created by suffixing a parent file route segment with a <code>_</code> and are used to un-nest a route from it's parents and render its own component tree. (e.g. <code>posts_.$postId.edit.tsx</code>)</li>
+</ul>
+<pre><code>├── blog
+│   ├── posts
+│   │   ├── $postId
+
+Render a component tree that looks like this:
+
+&lt;Blog&gt;
+  &lt;Posts&gt;
+    &lt;Post postId="123" /&gt;
+  &lt;/Posts&gt;
+&lt;/Blog&gt;
+</code></pre>
+<h3>Use file-based routing with Vite</h3>
+<pre><code class="lang-js">// vite.config.ts
+import { defineConfig } from 'vite'
+import viteReact from '@vitejs/plugin-react'
+import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
+
+export default defineConfig({
+  plugins: [
+    TanStackRouterVite(),
+    viteReact(),
+    // ...
+  ],
+})
+</code></pre>
+<h3>Create a router</h3>
+<p>The <code>router</code> instance is the core brains of TanStack Router and is responsible for managing the route tree, matching routes, and coordinating navigations and route transitions. The Router constructor requires a <code>routeTree</code> option. If you used file-based routing, then it's likely your generated route tree file was created at the default <code>src/routeTree.gen.ts</code> location.</p>
+<pre><code class="lang-js">// src/main.tsx
+import { routeTree } from './routeTree.gen'
+
+// Create a new router instance
+const router = createRouter({ routeTree })
+
+// Register the router instance for type safety
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
+}
+</code></pre>
+<pre><code class="lang-js">// src/routes/__root.tsx
+import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
+
+export const Route = createRootRoute({
+  component: () =&gt; (...),
+})
+</code></pre>
+<p>All other routes other than the root route are configured using the <code>createFileRoute</code> function. The path is automatically written and managed by the router for you via the TanStack Router plugin or Router CLI. So, as you create new routes, move routes around or rename routes, the path will be updated for you automatically.</p>
+<pre><code class="lang-js">// about.tsx
+import { createFileRoute } from '@tanstack/react-router'
+
+export const Route = createFileRoute('/about')({
+  component: AboutComponent,
+})
+
+function AboutComponent() {
+  return &lt;div&gt;About&lt;/div&gt;
+}
+</code></pre>
+<h2>Data loading</h2>
+<p>When loading a page for your app, it's ideal if all of the page's async requirements are fetched and fulfilled as early as possible. The router is the best place to coordinate these async dependencies as it's usually the only place in your app that knows where users are headed before content is rendered.</p>
+<p>TanStack Router provides a built-in SWR caching layer for route loaders that is keyed on the dependencies of a route:</p>
+<ul>
+<li>The route's fully parsed pathname, e.g. <code>/posts/1</code> vs <code>/posts/2</code></li>
+<li>Any additional dependencies provided by the <code>loaderDeps</code> option, e.g. <code>loaderDeps: ({ search: { pageIndex, pageSize } }) =&gt; ({ pageIndex, pageSize })</code></li>
+</ul>
+<p>To control router dependencies and "freshness", there are options to control the keying and caching behavior of your route loaders.</p>
+<ol>
+<li><code>loaderDeps</code> is a function that supplies you the search params for a router and returns an object of dependencies for use in your <code>loader</code> function. When these deps changed from navigation to navigation, it will cause the route to reload regardless of <code>staleTime</code>.</li>
+<li><code>staleTime</code> is the milliseconds that a route's data should be considered fresh when attempting to load. By default, <code>staleTime</code> is set to 0, meaning that the route's data will always be considered stale and will always be reloaded in the background when the route is matched and navigated to.</li>
+<li><code>gcTime</code> is the milliseconds that a route's data should be kept in the cache before being garbage collected. By default, <code>gcTime</code> is set to 30 minutes, meaning that any route data that has not been accessed in 30 minutes will be garbage collected and removed from the cache.</li>
+<li><code>router.invalidate()</code> will force all active routes to reload their loaders immediately and mark every cached route's data as stale.</li>
+</ol>
+<pre><code class="lang-js">// routes/posts.$postId.tsx
+export const Route = createFileRoute('/posts/$postId')({
+  loader: ({ params: { postId } }) =&gt; fetchPostById(postId),
+})
+</code></pre>
+<pre><code class="lang-js">// /routes/posts.tsx
+export const Route = createFileRoute('/posts')({
+  loaderDeps: ({ search: { offset, limit } }) =&gt; ({ offset, limit }),
+  loader: ({ deps: { offset, limit } }) =&gt;
+    fetchPosts({
+      offset,
+      limit,
+    }),
+  component: PostsComponent,
+})
+</code></pre>
+<p>By default, TanStack Router will show a pending component for loaders that take longer than 1 second to resolve. When the pending time threshold is exceeded, the router will render the <code>pendingComponent</code> option of the route, if configured.</p>
+<h2>Preloading</h2>
+<p>Preloading in TanStack Router is a way to load a route before the user actually navigates to it. This is useful for routes that are likely to be visited by the user next.</p>
+<p>By default, preloaded data is considered fresh for 30 seconds. This means if a route is preloaded, then preloaded again within 30 seconds, the second preload will be ignored. This prevents unnecessary preloads from happening too frequently. When a route is loaded normally, the standard <code>staleTime</code> is used. Preloading will start after 50ms of the user hovering or touching a <code>&lt;Link&gt;</code> component. You can change this delay by setting the <code>defaultPreloadDelay</code> option on your router.</p>
+<ul>
+<li>Preloading by <strong>"intent"</strong> works by using hover and touch start events on <code>&lt;Link&gt;</code> components to preload the dependencies for the destination route.</li>
+<li>Preloading by <strong>"viewport"</strong> works by using the Intersection Observer API to preload the dependencies for the destination route when the <code>&lt;Link&gt;</code> component is in the viewport.</li>
+<li>Preloading by <strong>"render"</strong> works by preloading the dependencies for the destination route as soon as the <code>&lt;Link&gt;</code> component is rendered in the DOM.</li>
+</ul>
+<pre><code class="lang-js">import { createRouter } from '@tanstack/react-router'
+
+const router = createRouter({
+  routeTree,
+  defaultPreload: 'intent',
+})
+</code></pre>
+<p>TanStack Router is designed to run loaders in parallel and wait for all of them to resolve before rendering the next route. This is great most of the time, but occasionally, you may want to show the user something sooner while the rest of the data loads in the background.</p>
+<p>As soon as any awaited promises are resolved, the next route will begin rendering while the deferred promises continue to resolve. In the component, deferred promises can be resolved and utilized using the <code>Await</code> component. In React 19, you can use the <code>use()</code> hook instead of <code>Await</code>.</p>
+<pre><code class="lang-js">export const Route = createFileRoute('/posts/$postId')({
+  loader: async () =&gt; {
+    // Fetch some slower data, but do not await it
+    const slowDataPromise = fetchSlowData()
+    // Fetch and await some data that resolves quickly
+    const fastData = await fetchFastData()
+
+    return {
+      fastData,
+      deferredSlowData: slowDataPromise,
+    }
+  },
+  component: PostIdComponent,
+})
+
+function PostIdComponent() {
+  const { deferredSlowData, fastData } = Route.useLoaderData()
+
+  return (
+    &lt;Await promise={deferredSlowData} fallback={&lt;div&gt;Loading...&lt;/div&gt;}&gt;
+      {(data) =&gt; {
+        return &lt;div&gt;{data}&lt;/div&gt;
+      }}
+    &lt;/Await&gt;
+  )
+}
+</code></pre>

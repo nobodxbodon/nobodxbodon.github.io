@@ -479,6 +479,173 @@ $retSql = $entitySql . PHP_EOL . $eavSql . ';';
 
 echo $retSql;
 </code></pre>
+<h3>增加 eav 属性</h3>
+<h3>通过后台新建</h3>
+<p><code>catalog_product_entity</code> 的 eav 属性可以通过 product 的设置页新建</p>
+<h3>通过模块里的 setup 新建</h3>
+<ul>
+<li>参考这个文档 <a href="https://experienceleague.adobe.com/en/docs/commerce-learn/tutorials/backend-development/add-product-attribute">https://experienceleague.adobe.com/en/docs/commerce-learn/tutorials/backend-development/add-product-attribute</a></li>
+<li>在模块里的 setup 文件夹下新建 InstallData.php 或 AddClothingMaterial.php<ul>
+<li>app/code/Learning/ClothingMaterial/Setup/InstallData.php<ul>
+<li>这种方式， etc/module.xml 里必须有  setup_version="0.0.1" 才会生效</li>
+</ul>
+</li>
+<li>app/codeLearning/ClothingMaterial/Setup/Patch/Data/AddClothingMaterial.php<ul>
+<li>这种方式，只要 upgrade 都会生效，但重复创建属性可能会导致 upgrade 是报错</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>新建好对应文件后，运行一次 upgrade 命令，后台的配置页面就自动有对应的属性设置了</li>
+</ul>
+<p>app/code/Learning/ClothingMaterial/Setup/InstallData.php</p>
+<pre><code class="lang-php">&lt;?php
+declare(strict_types=1);
+
+namespace Learning\ClothingMaterial\Setup;
+
+use Magento\Catalog\Model\Product;
+use Magento\Eav\Model\Entity\Attribute\ScopedAttributeInterface;
+use Magento\Framework\Setup\InstallDataInterface;
+use Magento\Framework\Setup\ModuleContextInterface;
+use Magento\Framework\Setup\ModuleDataSetupInterface;
+
+class InstallData implements InstallDataInterface
+{
+    protected $eavSetupFactory;
+
+    public function __construct(
+        \Magento\Eav\Setup\EavSetupFactory $eavSetupFactory
+    )
+    {
+        $this-&gt;eavSetupFactory = $eavSetupFactory;
+    }
+
+    /**
+     * @param ModuleDataSetupInterface $setup
+     * @param ModuleContextInterface $context
+     * {@inheritDoc}
+     *
+     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
+     * @suppressWarnings(PHPMD.ExessiveMethodLength)
+     * @SuppressWarnings(PHPMD.NPathComplexity)
+     */
+    public function install(ModuleDataSetupInterface $setup, ModuleContextInterface $context)
+    {
+        $eavSetup = $this-&gt;eavSetupFactory-&gt;create();
+        $eavSetup-&gt;addAttribute(
+            Product::ENTITY,
+            'app_only',
+            [
+                'group'         =&gt; 'General',
+                'type'          =&gt; 'int',
+                'label'         =&gt; 'App Only',
+                'input'         =&gt; 'boolean',
+                'source'        =&gt; \Magento\Eav\Model\Entity\Attribute\Source\Boolean::class,
+                'required'      =&gt; false,
+                'sort_order'    =&gt; 50,
+                'global'        =&gt; ScopedAttributeInterface::SCOPE_GLOBAL,
+                'is_used_in_grid'               =&gt; false,
+                'is_visible_in_grid'            =&gt; false,
+                'is_filterable_in_grid'         =&gt; false,
+                'visible'                       =&gt; true,
+                'is_html_allowed_on_frontend'   =&gt; true,
+                'visible_on_front'              =&gt; true,
+            ]
+        );
+    }
+}
+</code></pre>
+<p>app/codeLearning/ClothingMaterial/Setup/Patch/Data/AddClothingMaterial.php</p>
+<pre><code class="lang-php">&lt;?php
+namespace Learning\ClothingMaterial\Setup\Patch\Data;
+
+use Magento\Eav\Setup\EavSetupFactory;
+use Magento\Eav\Model\Entity\Attribute\ScopedAttributeInterface;
+use Magento\Framework\Exception\LocalizedException;
+use Magento\Framework\Setup\Patch\DataPatchInterface;
+use Magento\Framework\Setup\ModuleDataSetupInterface;
+use Learning\ClothingMaterial\Model\Attribute\Frontend\Material as Frontend;
+use Learning\ClothingMaterial\Model\Attribute\Source\Material as Source;
+use Learning\ClothingMaterial\Model\Attribute\Backend\Material as Backend;
+use Magento\Catalog\Model\Product;
+
+class AddClothingMaterial implements DataPatchInterface
+{
+    /**
+     * @var ModuleDataSetupInterface
+     */
+    private $moduleDataSetup;
+    /**
+     * @var EavSetupFactory
+     */
+    private $eavSetupFactory;
+
+    /**
+     * AddInstallmentProductAttributes constructor.
+     * @param ModuleDataSetupInterface $moduleDataSetup
+     * @param EavSetupFactory $eavSetupFactory
+     */
+    public function __construct(
+        ModuleDataSetupInterface $moduleDataSetup,
+        EavSetupFactory $eavSetupFactory
+    ) {
+        $this-&gt;moduleDataSetup = $moduleDataSetup;
+        $this-&gt;eavSetupFactory = $eavSetupFactory;
+    }
+
+    /**
+     * @return array|string[]
+     */
+    public static function getDependencies()
+    {
+        return [];
+    }
+
+    /**
+     * @return array|string[]
+     */
+    public function getAliases()
+    {
+        return [];
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function apply()
+    {
+        $eavSetup = $this-&gt;eavSetupFactory-&gt;create(['setup' =&gt; $this-&gt;moduleDataSetup]);
+
+        try {
+            $eavSetup-&gt;addAttribute(
+            Product::ENTITY,
+            'clothing_material',
+            [
+                'group'         =&gt; 'General',
+                'type'          =&gt; 'varchar',
+                'label'         =&gt; 'Clothing Material',
+                'input'         =&gt; 'select',
+                'source'        =&gt; Source::class,
+                'frontend'      =&gt; Frontend::class,
+                'backend'       =&gt; Backend::class,
+                'required'      =&gt; false,
+                'sort_order'    =&gt; 50,
+                'global'        =&gt; ScopedAttributeInterface::SCOPE_GLOBAL,
+                'is_used_in_grid'               =&gt; false,
+                'is_visible_in_grid'            =&gt; false,
+                'is_filterable_in_grid'         =&gt; false,
+                'visible'                       =&gt; true,
+                'is_html_allowed_on_frontend'   =&gt; true,
+                'visible_on_front'              =&gt; true,
+            ]
+            );
+        } catch (LocalizedException $e) {
+        } catch (\Zend_Validate_Exception $e) {
+        }
+    }
+}
+</code></pre>
 <h2>新建命令</h2>
 <ol>
 <li><p>在模块目录下 etc/di.xml 加上以下内容</p>
@@ -3275,6 +3442,23 @@ if ($logOpen) {
 <p>这一段是硬写在这个方法里的，也可以硬写到其它方法里</p>
 <pre><code>vendor\magento\zendframework1\library\Zend\Db\Adapter\Abstract.php query
 </code></pre>
+<h3>使用 Debug 类来输出调用栈</h3>
+<p>lib\internal\Magento\Framework\Debug.php</p>
+<pre><code class="lang-php">/**
+ * Prints or returns a backtrace
+ *
+ * @param bool $return      return or print
+ * @param bool $html        output in HTML format
+ * @param bool $withArgs    add short arguments of methods
+ * @return string|bool
+ */
+public static function backtrace($return = false, $html = true, $withArgs = true)
+</code></pre>
+<p>可以像这样调用</p>
+<pre><code class="lang-php">\Magento\Framework\Debug::backtrace();
+\Magento\Framework\Debug::backtrace(false, false, false);
+echo \Magento\Framework\Debug::backtrace(true, false, false);
+</code></pre>
 <h3>文件搜索</h3>
 <p>通过正则表达式搜索某个接口的实现类或某个对象的继承类</p>
 <pre><code>implements(?:.*)ObjectManagerInterface\n
@@ -4248,6 +4432,7 @@ select
     count(shipping_method) as 'count'
 FROM 
     sales_order
+group by shipping_method
 order by count desc
 
 查看订单的支付方式
@@ -4371,7 +4556,7 @@ mkdir($modulePath . '/etc', 0755, true);
 $moduleContent = &lt;&lt;&lt; EOF
 &lt;?xml version="1.0"?&gt;
 &lt;config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd"&gt;
-    &lt;module name="{$vendor}_{$moduleName}"/&gt;
+    &lt;module name="{$vendor}_{$moduleName}" setup_version="0.0.1"/&gt;
 &lt;/config&gt;
 EOF;
 

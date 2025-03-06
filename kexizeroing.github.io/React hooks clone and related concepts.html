@@ -1,4 +1,4 @@
-<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/react-hooks-clone.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-hooks-clone">站点原文</a></h2>
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/react-hooks-clone-and-related-concepts.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-hooks-clone-and-related-concepts">站点原文</a></h2>
 <h3>Getting Closure on Hooks presented by @swyx</h3>
 <pre><code class="lang-js">// https://www.youtube.com/watch?v=KJP1E-Y-xyo
 const React = (function() {
@@ -80,68 +80,46 @@ var App = React.render(Component);
   {count: 2, text: "pear"}`
 */
 </code></pre>
-<h3>Vanilla React data fetching</h3>
-<p>If you're going to fetch in <code>useEffect()</code>, you should at least make sure that you're handling:</p>
-<ul>
-<li>Loading states</li>
-<li>Error handling (rejections &amp; HTTP error codes)</li>
-<li>Race conditions &amp; cancellation</li>
-</ul>
-<pre><code class="lang-js">import * as React from "react"
-
-export default function useQuery(url) {
-  const [data, setData] = React.useState(null)
-  const [isLoading, setIsLoading] = React.useState(true)
-  const [error, setError] = React.useState(null)
-
-  React.useEffect(() =&gt; {
-    let ignore = false  // isCancelled
-
-    const handleFetch = async () =&gt; {
-      setData(null)
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const res = await fetch(url)
-
-        if (ignore) {
-          return 
-        }
-
-        if (res.ok === false) {
-          throw new Error(`A network error occurred.`)
-        }
-
-        const json = await res.json()
-
-        setData(json)
-        setIsLoading(false)
-      } catch (e) {
-        setError(e.message)
-        setIsLoading(false)
-      }
+<h3>Simple React custom renderer</h3>
+<pre><code class="lang-jsx">const React = {
+  createElement: (tag, props, ...children) =&gt; {
+    if (typeof tag === "function") {
+      return tag(props);
     }
-
-    handleFetch()
-
-    return () =&gt; {
-      ignore = true
-    }
-  }, [url])
-
-  return { data, isLoading, error }
+    let element = { tag, props: { ...props, children } };
+    return element;
+  }
 }
+
+const render = (reactElementOrText, container) =&gt; {
+  if (['string', 'number'].includes(typeof reactElementOrText)) {
+    container.appendChild(document.createTextNode(String(reactElementOrText)));
+    return;
+  }
+
+  let actualElement = document.createElement(reactElementOrText.tag);
+  if (reactElementOrText.props) {
+    Object.keys(reactElementOrText.props).filter(p =&gt; p !== children).forEach(p =&gt; {
+      actualElement.setAttribute(p, reactElementOrText.props[p])
+    })
+  }
+  if (reactElementOrText.props.children) {
+    reactElementOrText.props.children.forEach(child =&gt; {
+      render(child, actualElement)
+    })
+  }
+  container.appendChild(actualElement);
+}
+
+const App = () =&gt; (
+  &lt;div className="react-div"&gt;
+    &lt;h1&gt;Hello&lt;/h1&gt;
+    &lt;p&gt;Some text here&lt;/p&gt;
+  &lt;/div&gt;
+)
+
+render(&lt;App /&gt;, document.querySelector("#app"));
 </code></pre>
-<p>In reality, we still need to think about:</p>
-<ol>
-<li>For every component that needs the same data, we have to refetch it.</li>
-<li>It's possible that while fetching to the same endpoint, one request could fail while the other succeeds.</li>
-<li>If our state is moved to "global", we've just introduced a small, in-memory cache. Since we've introduced a cache, we also need to introduce a way to invalidate it.</li>
-<li>Context often becomes confusing over time. A component subscribed to QueryContext will re-render whenever anything changes – even if the change isn't related to the url it cares about.</li>
-<li>We're treating asynchronous state as if it were synchronous state.</li>
-</ol>
-<p>That's <a href="https://ui.dev/c/query/why-react-query">why React Query</a> was created.</p>
 <h3>You Might Not Need an Effect</h3>
 <blockquote><p>Whenever you think of writing <code>useEffect</code>, the only sane thing is to NOT do it. Instead, go to the react docs and re-read the page about why you don't need an effect. You really don't. -@TkDodo</p>
 </blockquote>
@@ -151,7 +129,7 @@ export default function useQuery(url) {
 <li><a href="https://eslint-react.xyz/docs/rules/hooks-extra-no-direct-set-state-in-use-effect">https://eslint-react.xyz/docs/rules/hooks-extra-no-direct-set-state-in-use-effect</a></li>
 <li><a href="https://www.youtube.com/watch?v=bGzanfKVFeU">https://www.youtube.com/watch?v=bGzanfKVFeU</a></li>
 </ul>
-<h3>Referencing Values with Refs</h3>
+<h3>Referencing values with <code>ref</code>s</h3>
 <p>When you want a component to “remember” some information, but you don’t want that information to trigger new renders, you can use a <code>ref</code>. Typically, you will use a ref when your component needs to “step outside” React and communicate with external APIs. (e.g. storing timeout IDs, DOM elements)</p>
 <ul>
 <li>Refs are an escape hatch to hold onto values that aren’t used for rendering. You won’t need them often.</li>
@@ -160,6 +138,34 @@ export default function useQuery(url) {
 <li>Like state, refs let you retain information between re-renders of a component.</li>
 <li>Unlike state, setting the ref’s current value does not trigger a re-render.</li>
 </ul>
+<pre><code class="lang-js">import React, { useState, useEffect, useRef } from 'react';
+
+function usePrevious(value) {
+  const ref = useRef();
+
+  useEffect(() =&gt; {
+    ref.current = value;
+  }, [value]);
+
+  return ref.current;
+}
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  const previousCount = usePrevious(count);
+
+  return (
+    &lt;div&gt;
+      &lt;button onClick={() =&gt; setCount(count + 1)}&gt;
+        Increment
+      &lt;/button&gt;
+      &lt;p&gt;Current count: {count}&lt;/p&gt;
+      &lt;p&gt;Previous count: {previousCount}&lt;/p&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<p>The key to understanding this hook is realizing there's a timing difference. When your component renders, the hook returns the current value of <code>ref.current</code>. After rendering, the effect runs and updates <code>ref.current</code> to the new value. On the next render, <code>ref.current</code> contains what was the value in the previous render.</p>
 <h4><code>ref</code> callback function</h4>
 <p>Instead of a ref object, you may pass a function to the ref attribute. When the <code>&lt;div&gt;</code> DOM node is added to the screen, React will call your <code>ref</code> callback with the DOM node as the argument. When that <code>&lt;div&gt;</code> DOM node is removed, React will call your <code>ref</code> callback with null. React will also call your <code>ref</code> callback whenever you pass a different <code>ref</code> callback.</p>
 <pre><code class="lang-tsx">const scroller = (node: HTMLDivElement | null) =&gt; {
@@ -178,6 +184,45 @@ const ChatWindow = () =&gt; {
 };
 </code></pre>
 <p>So if you need to interact with DOM nodes directly after they rendered, try not to jump to <code>useRef</code> + <code>useEffect</code> directly, but consider using <a href="https://tkdodo.eu/blog/ref-callbacks-react-19-and-the-compiler">callback refs</a> instead.</p>
+<h4><code>ref</code> as a prop in React 19</h4>
+<p>In React 19, <code>forwardRef</code> is no longer necessary. Pass <code>ref</code> as a prop instead.</p>
+<pre><code class="lang-jsx">export default function SearchInput({ inputRef }) {
+  return &lt;input ref={inputRef} /&gt;;
+}
+
+export default function App() {
+  const inputRef = React.useRef();
+  return (
+    &lt;&gt;
+      &lt;SearchInput inputRef={inputRef} /&gt;
+      &lt;button onClick={() =&gt; inputRef.current.focus()}&gt;Focus&lt;/button&gt;
+    &lt;/&gt;
+  );
+}
+</code></pre>
+<h3>batching and flushSync in rendering</h3>
+<p>In early versions (React 17 and earlier), React updated the DOM immediately after each state change. Multiple state updates within a single event cycle would cause multiple, unnecessary re-renders, affecting the application's responsiveness.</p>
+<pre><code class="lang-js">const handleUpdate = () =&gt; {
+  setCount(count + 1); // First update
+  setFlag(!flag);      // Second update
+  // In pre-batching React, this would cause two separate renders
+};
+</code></pre>
+<p>React 18 introduced batching to prevent these issues. Batching means that React groups multiple state updates into a single re-render cycle. This approach ensures that the UI is updated efficiently, reflecting all state changes in one go.</p>
+<p><code>flushSync</code> allows you to opt-out of batching for specific updates, forcing them to be processed immediately. This ensures that critical updates are executed in the correct order, even within a batched state update cycle. <em>(But, use it carefully and not too much, because using it too often can cancel out the performance advantages of batching.)</em></p>
+<pre><code class="lang-js">// https://tigerabrodi.blog/understanding-flushsync-mastering-batching-behavior-in-reactjs
+const receiveMessage = () =&gt; {
+  const newMessage = `Message ${messages.length + 1}`;
+
+  // Update messages and Forces re-render
+  flushSync(() =&gt; {
+    setMessages(prevMessages =&gt; [...prevMessages, newMessage]);
+  });
+
+  // Scroll to the bottom after messages update
+  endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
+};
+</code></pre>
 <h3>Higher Order Components</h3>
 <p>HOCs are wrapper components that help provide additional functionality to existing components. While hooks probably replaced most of shared logic concerns, there are still use cases where higher-order components could be useful. For example, you want to fire analytics event on every click of every button, dropdown and link everywhere.</p>
 <pre><code class="lang-js">export const withLoggingOnClick = (Component) =&gt; {
@@ -207,6 +252,7 @@ const ChatWindow = () =&gt; {
 <li><a href="https://react.dev/blog/2022/03/29/react-v18">https://react.dev/blog/2022/03/29/react-v18</a></li>
 <li><a href="https://www.youtube.com/watch?v=Z-NCLePa2x8">https://www.youtube.com/watch?v=Z-NCLePa2x8</a></li>
 <li><a href="https://www.youtube.com/watch?v=ytudH8je5ko">https://www.youtube.com/watch?v=ytudH8je5ko</a></li>
+<li><a href="https://tigerabrodi.blog/reacts-evolution-from-hooks-to-concurrent-react">https://tigerabrodi.blog/reacts-evolution-from-hooks-to-concurrent-react</a></li>
 </ul>
 <p>React 19:</p>
 <ul>

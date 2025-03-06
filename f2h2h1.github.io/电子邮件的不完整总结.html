@@ -114,127 +114,128 @@
 
 <h2>如何搭建一个邮件服务器</h2>
 <h3>单机的在不同用户间发送邮件</h3>
-<h3>在局域网里自娱自乐</h3>
-<h3>能收发外网的邮件</h3>
-<h2>使用命令行发送邮件</h2>
-<h3>交互式命令</h3>
-<ul>
-<li>适用于 nc telnet openssl</li>
-<li>大致分为五个步骤<ul>
-<li>连接到 smtp 服务器<ul>
-<li>nc smtp.qq.com 25</li>
-<li>telnet smtp.qq.com 25</li>
-<li>openssl s_client -connect smtp.qq.com:465</li>
-</ul>
-</li>
-<li>建立会话； helo</li>
-<li>身份认证； auth login<ul>
-<li>理论上不登录也可以的，但除了本地测试的smtp服务器，不会有不需要登录的</li>
-<li>账号密码需要转换成 base64</li>
-<li>AUTH LOGIN<ul>
-<li>输入 AUTH LOGIN 之后，按提示输入，转换成 base64 的账号密码</li>
-<li>用户转换账号密码的命令，用 echo 输出时要忽略行尾的空格<pre><code>  echo -n "bootstrap@example.com" | base64
-  echo -n "SendEmails" | base64
-</code></pre>
-</li>
-<li>例子<pre><code>  AUTH LOGIN
-  Ym9vdHN0cmFwQGV4YW1wbGUuY29t
-  U2VuZEVtYWlscw==
-</code></pre>
-</li>
-</ul>
-</li>
-<li>AUTH PLAIN 换行<ul>
-<li>AUTH PLAIN 之后，在下一行输入，转换成 base64 的账号密码</li>
-<li>用户转换账号密码的命令，账号和密码前面都有一个 <code>\0</code><pre><code>  printf "\0%s\0%s" "bootstrap@example.com" "SendEmails" | base64
-</code></pre>
-</li>
-<li>例子<pre><code>  AUTH PLAIN
-  AGJvb3RzdHJhcEBleGFtcGxlLmNvbQBTZW5kRW1haWxz
-</code></pre>
-</li>
-</ul>
-</li>
-<li>AUTH PLAIN 不换行<ul>
-<li>和 AUTH PLAIN 在同一行输入，转换成 base64 的账号密码</li>
-<li>用户转换账号密码的命令，账号和密码前面都有一个 <code>\0</code>，字符串要以 auth 开头<pre><code>  printf "auth\0%s\0%s" "bootstrap@example.com" "SendEmails" | base64
-</code></pre>
-</li>
-<li>例子<pre><code>  AUTH PLAIN YXV0aABib290c3RyYXBAZXhhbXBsZS5jb20AU2VuZEVtYWlscw==
-</code></pre>
-</li>
-</ul>
-</li>
-<li>AUTH LOGIN 大多数 smtp 服务器都支持， AUTH PLAIN 换行 这种方式 smtp.qq.com 就不支持了</li>
-</ul>
-</li>
-<li>发送邮件信封（发件人和收件人）； MAIL FROM 和 RCPT TO<ul>
-<li>MAIL FROM 只有一个</li>
-<li>RCPT TO 可以有很多个，包含 header 里的 to cc bcc 这些，只需要写地址就可以了，不用写用户名</li>
-</ul>
-</li>
-<li>发送邮件内容（邮件正文和附件）； 以 DATA 开始 以 . 结束</li>
-<li>关闭会话； QUIT</li>
-</ul>
-</li>
-<li><p>一个收件人的例子</p>
-<pre><code>  HELO example.com
-  AUTH LOGIN
-  MAIL FROM:&lt;alice@example.com&gt;
-  RCPT TO:&lt;bob@example.com&gt;
-  DATA
-  Date: Mon, 4 April 2022
-  From: Alice &lt;alice@example.com&gt;
-  Subject: Eggs benedict casserole
-  To: Bob &lt;bob@example.com&gt;
+<h3>收发局域网的邮件</h3>
+<h3>收发外网的邮件</h3>
+<h3>加密</h3>
+&lt;!--
+SMTPS 和 STARTTLS 是两种不一样的加密方式
+MTA-STS
 
-  Hi Bob,
-  I will bring the eggs benedict casserole recipe on Friday.
-  -Alice
-  .
-  QUIT
-</code></pre>
-</li>
-<li><p>多个个收件人的例子</p>
-<pre><code>  HELO example.com
-  AUTH LOGIN
-  MAIL FROM:&lt;alice@example.com&gt;
-  RCPT TO:&lt;bob1@example.com&gt;
-  RCPT TO:&lt;bob2@example.com&gt;
-  DATA
-  Date: Mon, 4 April 2022
-  From: Alice &lt;alice@example.com&gt;
-  Subject: Eggs benedict casserole
-  To: bob1 &lt;bob1@example.com&gt;, bob2 &lt;bob2@example.com&gt;
+--&gt;
+### SPF、DKIM 和 DMARC
+### 垃圾邮件 和 病毒
+## 使用命令行发送邮件
+### 交互式命令
+- 适用于 nc telnet openssl
+- 大致分为五个步骤
+    - 连接到 smtp 服务器
+        - nc smtp.qq.com 25
+        - telnet smtp.qq.com 25
+        - openssl s_client -connect smtp.qq.com:465
+    - 建立会话； helo
+    - 身份认证； auth login
+        - 理论上不登录也可以的，但除了本地测试的smtp服务器，不会有不需要登录的
+        - 账号密码需要转换成 base64
+        - AUTH LOGIN
+            - 输入 AUTH LOGIN 之后，按提示输入，转换成 base64 的账号密码
+            - 用户转换账号密码的命令，用 echo 输出时要忽略行尾的空格
+                ```
+                echo -n "bootstrap@example.com" | base64
+                echo -n "SendEmails" | base64
+                ```
+            - 例子
+                ```
+                AUTH LOGIN
+                Ym9vdHN0cmFwQGV4YW1wbGUuY29t
+                U2VuZEVtYWlscw==
+                ```
+        - AUTH PLAIN 换行
+            - AUTH PLAIN 之后，在下一行输入，转换成 base64 的账号密码
+            - 用户转换账号密码的命令，账号和密码前面都有一个 `\0`
+                ```
+                printf "\0%s\0%s" "bootstrap@example.com" "SendEmails" | base64
+                ```
+            - 例子
+                ```
+                AUTH PLAIN
+                AGJvb3RzdHJhcEBleGFtcGxlLmNvbQBTZW5kRW1haWxz
+                ```
+        - AUTH PLAIN 不换行
+            - 和 AUTH PLAIN 在同一行输入，转换成 base64 的账号密码
+            - 用户转换账号密码的命令，账号和密码前面都有一个 `\0`，字符串要以 auth 开头
+                ```
+                printf "auth\0%s\0%s" "bootstrap@example.com" "SendEmails" | base64
+                ```
+            - 例子
+                ```
+                AUTH PLAIN YXV0aABib290c3RyYXBAZXhhbXBsZS5jb20AU2VuZEVtYWlscw==
+                ```
+        - AUTH LOGIN 大多数 smtp 服务器都支持， AUTH PLAIN 换行 这种方式 smtp.qq.com 就不支持了
+    - 发送邮件信封（发件人和收件人）； MAIL FROM 和 RCPT TO
+        - MAIL FROM 只有一个
+        - RCPT TO 可以有很多个，包含 header 里的 to cc bcc 这些，只需要写地址就可以了，不用写用户名
+    - 发送邮件内容（邮件正文和附件）； 以 DATA 开始 以 . 结束
+    - 关闭会话； QUIT
+- 一个收件人的例子
+    ```
+    HELO example.com
+    AUTH LOGIN
+    MAIL FROM:&lt;alice@example.com&gt;
+    RCPT TO:&lt;bob@example.com&gt;
+    DATA
+    Date: Mon, 4 April 2022
+    From: Alice &lt;alice@example.com&gt;
+    Subject: Eggs benedict casserole
+    To: Bob &lt;bob@example.com&gt;
 
-  Hi Bob,
-  I will bring the eggs benedict casserole recipe on Friday.
-  -Alice
-  .
-  QUIT
-</code></pre>
-<pre><code>  HELO example.com
-  AUTH LOGIN
-  MAIL FROM:&lt;alice@example.com&gt;
-  RCPT TO:&lt;bob1@example.com&gt;
-  RCPT TO:&lt;bob2@example.com&gt;
-  DATA
-  Date: Mon, 4 April 2022
-  From: Alice &lt;alice@example.com&gt;
-  Subject: Eggs benedict casserole
-  To: bob1 &lt;bob1@example.com&gt;
-  Cc: bob2 &lt;bob2@example.com&gt;
+    Hi Bob,
+    I will bring the eggs benedict casserole recipe on Friday.
+    -Alice
+    .
+    QUIT
+    ```
+- 多个个收件人的例子
+    ```
+    HELO example.com
+    AUTH LOGIN
+    MAIL FROM:&lt;alice@example.com&gt;
+    RCPT TO:&lt;bob1@example.com&gt;
+    RCPT TO:&lt;bob2@example.com&gt;
+    DATA
+    Date: Mon, 4 April 2022
+    From: Alice &lt;alice@example.com&gt;
+    Subject: Eggs benedict casserole
+    To: bob1 &lt;bob1@example.com&gt;, bob2 &lt;bob2@example.com&gt;
 
-  Hi Bob,
-  I will bring the eggs benedict casserole recipe on Friday.
-  -Alice
-  .
-  QUIT
-</code></pre>
-</li>
-<li>smtp 命令
-  NOOP HELP RSET</li>
-</ul>
+    Hi Bob,
+    I will bring the eggs benedict casserole recipe on Friday.
+    -Alice
+    .
+    QUIT
+    ```
+
+    ```
+    HELO example.com
+    AUTH LOGIN
+    MAIL FROM:&lt;alice@example.com&gt;
+    RCPT TO:&lt;bob1@example.com&gt;
+    RCPT TO:&lt;bob2@example.com&gt;
+    DATA
+    Date: Mon, 4 April 2022
+    From: Alice &lt;alice@example.com&gt;
+    Subject: Eggs benedict casserole
+    To: bob1 &lt;bob1@example.com&gt;
+    Cc: bob2 &lt;bob2@example.com&gt;
+
+    Hi Bob,
+    I will bring the eggs benedict casserole recipe on Friday.
+    -Alice
+    .
+    QUIT
+    ```
+- smtp 命令
+    NOOP HELP RSET
+
 &lt;!--
 
 可以用 mailpit 作为测试用的服务器
@@ -596,16 +597,21 @@ $mailMessage.Body = "&lt;p&gt;中文mailMessage&lt;/p&gt;"</p>
   }
   // 理论上是可以在 message 里塞附件的，
   // 一些版本的 sendmail 可以在命令行里设置 smtp 地址和账号密码，这时就可以通过 additional_params 变量设置
-      // mail 函数里的 additional_params 参数可以设置 mat 的更多的命令行参数，
+      // mail 函数里的 additional_params 参数可以设置 mta 的更多的命令行参数，
       // 其实就类似于这样
       // echo "邮件正文" | sendmail -t -i additional_params
+      // 假设 sendmail 支持 -S -au -ap 三个参数，那么 $additional_params 可以设置成
+      // $additional_params = ' -S smtp.qq.com:465 -auxxx -apxxxx';
+      // 那么最后的命令类似于
+      // echo "邮件正文" | sendmail -t -i  -S smtp.qq.com:465 -auxxx -apxxxx
 </code></pre>
 </li>
 <li>个人感觉 php 原生的 mail 函数并不好用，至少没有区分 信封 和 消息</li>
 </ul>
 <h3>使用第三方库</h3>
 <ul>
-<li><p><a href="https://github.com/PHPMailer/PHPMailer">https://github.com/PHPMailer/PHPMailer</a></p>
+<li><a href="https://github.com/pear/Mail">https://github.com/pear/Mail</a></li>
+<li><p><a href="https://github.com/PHPMailer/PHPMailer">https://github.com/PHPMailer/PHPMailer</a> 6.9</p>
 <pre><code class="lang-php">  //Import PHPMailer classes into the global namespace
   //These must be at the top of your script, not inside a function
   use PHPMailer\PHPMailer\PHPMailer;
@@ -654,8 +660,30 @@ $mailMessage.Body = "&lt;p&gt;中文mailMessage&lt;/p&gt;"</p>
   }
 </code></pre>
 </li>
-<li><a href="https://github.com/symfony/mailer">https://github.com/symfony/mailer</a></li>
-<li><a href="https://github.com/laminas/laminas-mail">https://github.com/laminas/laminas-mail</a><pre><code class="lang-php">  require './vendor/autoload.php';
+<li><p><a href="https://github.com/symfony/mailer">https://github.com/symfony/mailer</a> 6.4</p>
+<pre><code class="lang-php">  require './vendor/autoload.php';
+  use Symfony\Component\Mailer\Transport;
+  use Symfony\Component\Mailer\Mailer;
+  use Symfony\Component\Mime\Email;
+
+  $transport = Transport::fromDsn('smtp://localhost');
+  $mailer = new Mailer($transport);
+
+  $email = (new Email())
+      -&gt;from('hello@example.com')
+      -&gt;to('you@example.com')
+      //-&gt;cc('cc@example.com')
+      //-&gt;bcc('bcc@example.com')
+      //-&gt;replyTo('fabien@example.com')
+      //-&gt;priority(Email::PRIORITY_HIGH)
+      -&gt;subject('Time for Symfony Mailer!')
+      -&gt;text('Sending emails is fun again!')
+      -&gt;html('&lt;p&gt;See Twig integration for better HTML integration!&lt;/p&gt;');
+
+  $mailer-&gt;send($email);
+</code></pre>
+</li>
+<li><a href="https://github.com/laminas/laminas-mail">https://github.com/laminas/laminas-mail</a> 2.22<pre><code class="lang-php">  require './vendor/autoload.php';
   use Laminas\Mail\Message;
   $message = new Message();
   $message-&gt;addFrom('matthew@example.org', 'Matthew Somelli');
@@ -686,14 +714,128 @@ $mailMessage.Body = "&lt;p&gt;中文mailMessage&lt;/p&gt;"</p>
   $transport-&gt;send($message);
 </code></pre>
 </li>
-<li><a href="https://github.com/zetacomponents/Mail">https://github.com/zetacomponents/Mail</a></li>
-</ul>
+<li><p><a href="https://github.com/zetacomponents/Mail">https://github.com/zetacomponents/Mail</a> 1.9</p>
+<pre><code>  安装命令
+  composer require zetacomponents/mail
+  这个库和其它的不一样，没有命名空间
+</code></pre>
+<pre><code class="lang-php">  require __DIR__ . '/vendor/autoload.php';
+
+  // 配置参数（根据实际情况修改）
+  $smtpHost = 'localhost';   // SMTP服务器地址
+  $smtpPort = 25;                  // 端口
+  $smtpUsername = 'user@example.com'; // 发件邮箱
+  $smtpPassword = 'your-password';   // 邮箱密码或应用专用密码
+  $fromEmail = 'sender@example.com'; // 发件人地址
+  $fromName = '系统发件人';          // 发件人名称
+  $toEmail = 'recipient@example.com';// 收件人地址
+  $toName = '收件人名称';           // 收件人名称
+
+  // 创建邮件对象
+  $mail = new ezcMail();
+  $mail-&gt;from = new ezcMailAddress($fromEmail, $fromName);
+  $mail-&gt;addTo(new ezcMailAddress($toEmail, $toName));
+  $mail-&gt;subject = '来自 Composer 示例的测试邮件';
+
+  // 发送纯文本
+  // $mail-&gt;body = new ezcMailText("这是一封通过 zetacomponents/mail 和 Composer 发送的邮件。", 'utf-8');
+
+  // 发送html
+  $textPart = new ezcMailText("&lt;h1&gt;这是一封通过 zetacomponents/mail 和 Composer 发送的邮件。&lt;/h1&gt;", 'utf-8');
+  $textPart-&gt;subType = 'html';
+  $mail-&gt;body = $textPart;
+
+  // 配置 SMTP 传输
+  $options = new ezcMailSmtpTransportOptions();
+  // $options-&gt;connectionType = ezcMailSmtpTransport::CONNECTION_TLS; // 使用 TLS 加密
+  $transport = new ezcMailSmtpTransport(
+      $smtpHost,
+      $smtpUsername,
+      $smtpPassword,
+      $smtpPort,
+      $options
+  );
+
+  // 发送邮件
+  try {
+      $transport-&gt;send($mail);
+      echo "邮件已成功发送至 {$toEmail}";
+  } catch (Exception $e) {
+      echo "发送失败: " . $e-&gt;getMessage();
+  }
+</code></pre>
 &lt;!--
 ## python 发送邮件
 https://docs.python.org/zh-cn/3.13/library/smtplib.html
 https://docs.python.org/zh-cn/3.13/library/email.html
 https://docs.python.org/zh-cn/3.13/library/email.examples.html
---&gt;
-
+--&gt;</li>
+</ul>
 <h2>如何在邮件里显示图片</h2>
+<ul>
+<li>外链</li>
+<li>base64硬编码</li>
+<li>multipart/mixed</li>
+</ul>
 <h2>名词</h2>
+<p>roundcube-framework-1.6.10.tar.gz
+roundcubemail-1.6.10-complete.tar.gz
+roundcubemail-1.6.10.tar.gz 
+&lt;!--</p>
+<p>docker run --name emailsystem --rm -it -p 8080:8080 php:8.1-bullseye /bin/bash</p>
+<p>cp /etc/apt/sources.list /etc/apt/sources.list_bak &amp;&amp; \
+sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list &amp;&amp; \
+apt update &amp;&amp; \
+apt install -y vim &amp;&amp; \
+apt install -y curl &amp;&amp; \
+apt install -y net-tools &amp;&amp; \
+apt install -y netcat &amp;&amp; \
+apt install -y procps &amp;&amp; \
+apt install -y dnsutils &amp;&amp; \
+apt install -y mailutils &amp;&amp; \
+apt install -y postfix &amp;&amp; \
+apt install -y bzip2 &amp;&amp; \
+apt install -y make &amp;&amp; \
+apt install -y gcc &amp;&amp; \
+apt install -y git &amp;&amp; \
+cd &amp;&amp; \
+curl -O "<a href="https://busybox.net/downloads/busybox-1.36.1.tar.bz2">https://busybox.net/downloads/busybox-1.36.1.tar.bz2</a>" &amp;&amp; \
+tar -xjf ./busybox-1.36.1.tar.bz2 &amp;&amp; \
+cd busybox-1.36.1 &amp;&amp; \
+make defconfig &amp;&amp; \
+make install &amp;&amp; \
+cp /root/busybox-1.36.1/busybox /bin/busybox &amp;&amp; \
+cd</p>
+<p>curl -sS -o composer.phar <a href="https://getcomposer.org/composer.phar">https://getcomposer.org/composer.phar</a> &amp;&amp; \
+        chmod 0755 composer.phar &amp;&amp; \
+        mv composer.phar /usr/local/bin/composer</p>
+<p>cp /usr/local/etc/php/php.ini-development /usr/local/etc/php/php.ini</p>
+<p>apt install -y libzip-dev unzip &amp;&amp; \
+docker-php-ext-install zip</p>
+<p>apt install -y libicu-dev &amp;&amp; \
+docker-php-ext-install intl</p>
+<p>docker-php-ext-install exif</p>
+<p>apt install -y \
+      libfreetype6-dev \
+      libjpeg62-turbo-dev \
+      libjpeg-dev \
+      libpng-dev \
+      libwebp-dev &amp;&amp; \
+docker-php-ext-configure gd --with-jpeg --with-freetype &amp;&amp; \
+docker-php-ext-install gd</p>
+<p>docker-php-ext-install opcache</p>
+<p>curl -L -o roundcubemail.tar.gz --connect-timeout 120 --max-time 3600 --retry 100 --retry-delay 5 <a href="https://github.com/roundcube/roundcubemail/releases/download/1.6.10/roundcubemail-1.6.10-complete.tar.gz">https://github.com/roundcube/roundcubemail/releases/download/1.6.10/roundcubemail-1.6.10-complete.tar.gz</a></p>
+<p>tar -zxf roundcubemail.tar.gz</p>
+<p>cd roundcubemail-1.6.10</p>
+<p>cp composer.json composer.json-bak
+cp composer.json-dist composer.json</p>
+<p>composer update</p>
+<p>PHP_CLI_SERVER_WORKERS="10" php -S 127.0.0.1:8080
+PHP_CLI_SERVER_WORKERS="10" php -S 0.0.0.0:8080</p>
+<p><a href="https://8080-cs-285386365050-default.cs-asia-east1-jnrc.cloudshell.dev/installer/index.php">https://8080-cs-285386365050-default.cs-asia-east1-jnrc.cloudshell.dev/installer/index.php</a></p>
+<p>touch roundcubemail.sqlite</p>
+<p>cat config/config.inc.php
+vi config/config.inc.php</p>
+<p>sqlite:///roundcubemail.sqlite</p>
+<p>chmod 777 roundcubemail.sqlite</p>
+<p>--&gt;</p>

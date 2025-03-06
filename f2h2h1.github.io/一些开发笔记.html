@@ -135,7 +135,8 @@
   }
 </code></pre>
   对应的文档 <a href="https://github.com/shadowsocks/shadowsocks-libev/blob/master/doc/ss-server.asciidoc">https://github.com/shadowsocks/shadowsocks-libev/blob/master/doc/ss-server.asciidoc</a></li>
-<li>作为客户端运行<pre><code>  ss-local -s host -p 61813 -k windows@163.qq -m aes-256-cfb -l 1080
+<li><p>作为客户端运行</p>
+<pre><code>  ss-local -s host -p 61813 -k windows@163.qq -m aes-256-cfb -l 1080
   或者
   ss-local -c config.json
   {
@@ -148,7 +149,16 @@
       "method": "aes-256-gcm"
   }
 </code></pre>
-  对应的文档 <a href="https://github.com/shadowsocks/shadowsocks-libev/blob/master/doc/ss-local.asciidoc">https://github.com/shadowsocks/shadowsocks-libev/blob/master/doc/ss-local.asciidoc</a></li>
+<p>对应的文档 <a href="https://github.com/shadowsocks/shadowsocks-libev/blob/master/doc/ss-local.asciidoc">https://github.com/shadowsocks/shadowsocks-libev/blob/master/doc/ss-local.asciidoc</a></p>
+<p>在命令行里加入这个环境变量</p>
+<pre><code>  export ALL_PROXY=socks5h://127.0.0.1:1080
+</code></pre>
+<p>检测代理是否有效</p>
+<pre><code>  curl -v -L www.baidu.com
+  curl -v -L www.cip.cc
+  curl -v -L ip-api.com
+</code></pre>
+</li>
 </ul>
 &lt;!--
 
@@ -176,6 +186,26 @@ Register-ScheduledTask -TaskName "ssserver-restart" -Trigger (New-ScheduledTaskT
 
 --&gt;
 
+<h2>使用 privoxy 将 socks5 转换为 http 代理</h2>
+<p>安装</p>
+<pre><code>sudo apt install privoxy
+</code></pre>
+<p>配置
+在这个文件 /etc/privoxy/config 的最后追加内容</p>
+<pre><code># 转发设置为本地socks代理
+forward-socks5  /  127.0.0.1:1080 .
+# 本地http代理监听端口
+listen-address  127.0.0.1:1081
+</code></pre>
+<p>重启</p>
+<pre><code>systemctl restart privoxy
+systemctl enable privoxy
+</code></pre>
+<p>在命令行里加入环境变量</p>
+<pre><code>export http_proxy=http://127.0.0.1:1081; \
+export HTTPS_PROXY=http://127.0.0.1:1081; \
+export ALL_PROXY=socks5h://127.0.0.1:1080
+</code></pre>
 <h2>VS 和 VC 库 的对应关系</h2>
 <table>
 <thead><tr>
@@ -1129,6 +1159,7 @@ nc 理论上也可以实现，但一行代码会写得非常长
 </ul>
 <h2>debian 一句命令安装 docker</h2>
 <p>因为要经常部署和重装系统，所以就整理了这样一句命令，可能会因为 docker 的更新而失效，要注意修命令里的版本号</p>
+<p>如果一直安装失败，可以先设置好代理，再安装 docker</p>
 <p>具体环境</p>
 <ul>
 <li>debian 11</li>
@@ -1169,6 +1200,29 @@ done
 sudo chmod +x /usr/local/bin/docker-compose
 docker-compose --version
 </code></pre>
+<h2>docker设置代理</h2>
+<h3>拉取镜像时的代理</h3>
+<p>必须要改环境变量，而且是启动时的环境变量
+<a href="https://docs.docker.com/engine/daemon/proxy/#environment-variables">https://docs.docker.com/engine/daemon/proxy/#environment-variables</a></p>
+<p>在这个文件里 /etc/systemd/system/docker.service.d/http-proxy.conf 追加以下内容</p>
+<pre><code>[Service]
+Environment="HTTP_PROXY=http://127.0.0.1:1081"
+Environment="HTTPS_PROXY=http://127.0.0.1:1081"
+Environment="NO_PROXY=localhost,127.0.0.1,.corp"
+</code></pre>
+<p>如果没有 http-proxy.conf 就自己新建一个</p>
+<pre><code>sudo mkdir -p /etc/systemd/system/docker.service.d
+vim /etc/systemd/system/docker.service.d/http-proxy.conf
+</code></pre>
+<p>修改完后的重启</p>
+<pre><code>sudo systemctl daemon-reload
+sudo systemctl restart docker
+</code></pre>
+<p>查看环境变量有没有设置成功</p>
+<pre><code>sudo systemctl show --property=Environment docker
+</code></pre>
+<h3>构建镜像时的代理</h3>
+<h3>运行容器时的代理</h3>
 <h2>生成用于测试的容器的命令</h2>
 <p>具体环境</p>
 <ul>
@@ -2060,6 +2114,9 @@ $variable | Get-Member
 </ul>
 &lt;!--
 
+修改 root 密码
+sudo passwd
+
 查看当前网桥网络
 docker network ls
 创建用户定义的网桥网络
@@ -2082,7 +2139,7 @@ docker pull php:7.4-apache
 docker run --name mysqld --restart always -d \
     -e TZ="Asia/Shanghai" \
     -e MYSQL_ROOT_PASSWORD="123456" \
-    -e MYSQL_DATABASE="magneto" \
+    -e MYSQL_DATABASE="magento" \
     -v ~/mysql-data:/var/lib/mysql \
     mysql:8.0
 
@@ -2118,20 +2175,24 @@ define( 'WP_SITEURL', 'https://8081-cs-285386365050-default.cs-asia-east1-cats.c
 
 在 cloud shell 重启后，镜像和容器都会消失
 
+vscode里安装这两个插件
+Extension Pack for Java
+Spring Boot Extension Pack
+
 maven 镜像里已经包含jdk了
 docker pull maven:3.9-eclipse-temurin-17-alpine
 这是对应的 jdk 镜像 eclipse-temurin:17-jdk-alpine
 
-docker run -it --rm --name my-maven-project -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.9-eclipse-temurin-17-alpine mvn clean install
+docker run -it --rm --name my-maven-project -p 8080:8080 -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.9-eclipse-temurin-17-alpine mvn clean install
 
 
-alias mvn='docker run -it --rm --name my-maven-project -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.9-eclipse-temurin-17-alpine mvn'
-
-mvn clean install
-mvn clean install -X
+alias mvn='docker run -it --rm --name my-maven-project -p 8080:8080 -v "$(pwd)":/usr/src/mymaven -w /usr/src/mymaven maven:3.9-eclipse-temurin-17-alpine mvn'
+使用这种别名的 mvn 就无法连贯地执行 mvn 命令
 
 https://start.spring.io/
 在这里选好 需要的组件，可以直接下载，也可以只复制 pom.xml 的内容
+    最好还是用下载的 zip文件
+    除了 pom.xml 还需要一些文件才能启动 springboot
 
 如果springboot项目里没有代码，那么 pom.xml 里要加上这句
                 &lt;configuration&gt;
@@ -2149,5 +2210,120 @@ https://start.spring.io/
             &lt;/plugin&gt;
         &lt;/plugins&gt;
     &lt;/build&gt;
+
+安装依赖
+mvn clean install
+mvn clean install -X
+    clean 清理项目构建目录
+    install 完成代码编译、测试、打包后，将生成的构建产物（如 JAR/WAR 文件）安装到本地 Maven 仓库
+    -X 是输出调试信息
+    运行这句之后会在 target 文件夹下生成一个 jar 文件
+        通过 jar 启动
+        java -jar target/exportSystem-0.0.1-SNAPSHOT.jar
+        使用指定端口号启动
+        java -jar target/exportSystem-0.0.1-SNAPSHOT.jar --server.port=8083
+        java -jar -Dserver.port=8083 target/exportSystem-0.0.1-SNAPSHOT.jar
+
+启动
+mvn spring-boot:run
+
+
+最简单的
+curl  -o demo.zip https://start.spring.io/starter.zip \
+    -d type=maven-project \
+    -d language=java \
+    -d groupId=com.example \
+    -d artifactId=demo \
+    -d name=demo \
+    -d packageName=com.example.demo \
+    -d dependencies=web \
+    -d javaVersion=17
+
+加上 jpa 依赖的
+curl  -o demo.zip https://start.spring.io/starter.zip \
+    -d type=maven-project \
+    -d language=java \
+    -d groupId=com.example \
+    -d artifactId=demo \
+    -d name=demo \
+    -d packageName=com.example.demo \
+    -d dependencies=web,data-jpa \
+    -d javaVersion=17
+
+这种命令的依赖名可以通过 https://start.spring.io 的 share 获取，share 在 ... 那个按钮里
+
+unzip demo.zip -d demo &amp;&amp; cd demo
+
+如果依赖里有 数据库 redis es 这类，要正确地填写好对应的配置，才能顺利启动 springboot
+
+demo/src/main/java/com/example/demo/HelloController.java
+    package com.example.demo;
+
+    import org.springframework.web.bind.annotation.*;
+
+    @RestController
+    public class HelloController {
+        @GetMapping("/hello")
+        public String hello(@RequestParam(defaultValue = "World") String name) {
+            return "Hello, " + name + "!";
+        }
+    }
+
+还差很多东西
+模板 认证和授权 会话管理 验证 orm 缓存 队列 命令行 全文搜索 邮件 日志 。。。。
+
+
+下载源码
+下载完后运行这句 git config core.filemode false
+新建auth.json
+新建文件夹docker
+    新建文件 touch dockerfile-php
+    新建文件 touch docker-compose.yml
+    新建文件 touch magento-site.conf
+    新建文件 touch init.sh
+    mkdir docker; \
+    cd docker; \
+    touch dockerfile-php; \
+    touch docker-compose.yml; \
+    touch magento-site.conf; \
+    touch init.sh; \
+    cd ..
+安装 composer 依赖
+    composer install
+    composer require swissup/module-search-mysql-legacy --prefer-source --ignore-platform-reqs
+运行安装命令
+
+    php bin/magento deploy:mode:set developer
+修改配置
+    php bin/magento module:enable Swissup_SearchMysqlLegacy Swissup_Core
+    php bin/magento config:set catalog/search/engine 'lmysql'
+
+    不是apache环境就不用运行这句
+    echo "SetEnv HTTPS on" &gt;&gt; pub/.htaccess
+
+    php bin/magento config:set web/secure/base_url https://cloudshell.dev/
+    php bin/magento config:set web/unsecure/base_url https://cloudshell.dev/
+    php bin/magento config:set admin/url/use_custom_path 0
+    php bin/magento config:set web/seo/use_rewrites 0
+    php bin/magento config:set web/cookie/cookie_domain cloudshell.dev
+运行构建命令
+    rm -rf var/di/* var/generation/* var/cache/* var/page_cache/* var/view_preprocessed/* var/composer_home/cache/*  var/tmp/* &amp;&amp; \
+    rm -rf generated/code/* generated/metadata/* pub/static/* ; \
+    php bin/magento setup:upgrade; \
+    php bin/magento setup:di:compile; \
+    php bin/magento setup:static-content:deploy -f; \
+    php bin/magento indexer:reindex; \
+    php bin/magento cache:flush; \
+    chown root:root -R /var/www/html/var &amp;&amp; chmod 777 -R /var/www/html/var
+修改文件
+    app/code/Magento/Backend/App/Area/FrontNameResolver.php isHostBackend 后台不要404
+    app/code/Magento/Store/Model/BaseUrlChecker.php execute 前台不要302
+    lib/internal/Magento/Framework/App/Router/Base.php _checkShouldBeSecure 前台不要302，
+        这是只有cli server才需要改的，这是因为 cli server 无法通过环境变量来修改 $_SERVER ，其实只要 $_SERVER['HTTPS']=on 就不用改这句了
+        原来可以直接修改 $_SERVER['HTTPS']=on;
+        可以在 phpserver/router.php 里直接加上 $_SERVER['HTTPS']=on;
+
+
+虽然没有redis，但速度并不慢
 
 --&gt;
