@@ -1,16 +1,23 @@
 <h2><a href="https://github.com/zsqk/news/blob/master/_posts/2022-02-23-deno-web-compress-br.md">仓库源文</a>，<a href="https://zsqk.github.io/2022/02/23/deno-web-compress-br">站点原文</a></h2>
-<p>在 9 个月之前, 我们在项目中创建了这则 issue, 今天, 伴随着 Deno 最近标准库的变动, 我们对此进行更加系统地说明.</p>
+<blockquote><p>:warning: 本文是 2022 年 2 月 23 日写的, 现在 Deno 已经有了变动,
+所以本文在部分地方可能已经过时.</p>
+</blockquote>
+<p>在 9 个月之前, 我们在项目中创建了这则 issue, 今天, 伴随着 Deno 最近标准库的变动,
+我们对此进行更加系统地说明.</p>
 <h2>Why &amp; What</h2>
-<p>之前, 我们的 Web 项目对 HTTP 返回 body 实现了 deflate 的压缩算法, 但使用的是 JS, 还是不够快. 我们考虑支持对此进行优化.</p>
+<p>之前, 我们的 Web 项目对 HTTP 返回 body 实现了 deflate 的压缩算法, 但使用的是 JS,
+还是不够快. 我们考虑支持对此进行优化.</p>
 <p>我们知道对于大多数浏览器来说, 都会发送这样的请求头 <code>Accept-Encoding: gzip, deflate, br</code>.</p>
 <p>其中 <code>br</code> 就是我们暂时不支持的 br 压缩, 即 Brotli 压缩算法.</p>
 <p>从发展来看, br 是更适合 HTTP 的压缩算法, 现代浏览器也都支持了.</p>
 <p><a href="https://hacks.mozilla.org/2015/11/better-than-gzip-compression-with-brotli/">https://hacks.mozilla.org/2015/11/better-than-gzip-compression-with-brotli/</a></p>
 <h2>在 Deno 项目中实现 br</h2>
 <p>但目前 Deno 仍未有对此的支持计划. (有 issue, 但还没计划去做)</p>
-<p>在 Node.js 中, 有标准库 zlab 去实现该压缩算法. <a href="https://nodejs.org/api/zlib.html#zlib_class_zlib_brotlicompress">https://nodejs.org/api/zlib.html#zlib_class_zlib_brotlicompress</a></p>
+<p>在 Node.js 中, 有标准库 zlab 去实现该压缩算法.
+<a href="https://nodejs.org/api/zlib.html#zlib_class_zlib_brotlicompress">https://nodejs.org/api/zlib.html#zlib_class_zlib_brotlicompress</a></p>
 <p>但在 Deno 中, 官方不支持.</p>
-<p>在 npm 中有这样的包 <a href="https://www.npmjs.com/package/brotli">https://www.npmjs.com/package/brotli</a> 来实现 br 算法压缩. 利用了 Emscripten(C++) 去实现.</p>
+<p>在 npm 中有这样的包 <a href="https://www.npmjs.com/package/brotli">https://www.npmjs.com/package/brotli</a> 来实现 br 算法压缩.
+利用了 Emscripten(C++) 去实现.</p>
 <p>npm 的包是不能在 Deno 上使用的. 在调用其他方式上, 是通过 WASM.</p>
 <p>虽然能看到 WASM 本体 <code>https://cdn.jsdelivr.net/npm/brotli@1.3.2/build/mem.js</code>
 但是现在还不能直接在 Deno 项目中用, 需要对包引用进行变动.</p>
@@ -18,7 +25,8 @@
 <p>正如所有 Deno 项目一样, deno_brotli 的使用非常简单,
 只需要 <code>import { compress } from 'https://deno.land/x/brotli@v0.1.4/mod.ts';</code> 即可.</p>
 <h2>在 Deno Web 项目中实施返回 body 的压缩</h2>
-<p>假设我们已经有了要返回的 body 和 headers, 并且知道了请求方支持的压缩方式 acceptEncoding, 那么我们可以简单进行如下操作:</p>
+<p>假设我们已经有了要返回的 body 和 headers, 并且知道了请求方支持的压缩方式 acceptEncoding,
+那么我们可以简单进行如下操作:</p>
 <pre><code class="lang-typescript">if (body !== null &amp;&amp; body.length &gt; 200) {
   if (acceptEncoding.includes('br')) {
     body = compress(new TextEncoder().encode(body));
