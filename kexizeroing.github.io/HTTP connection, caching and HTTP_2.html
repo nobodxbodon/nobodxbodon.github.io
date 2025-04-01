@@ -86,6 +86,11 @@ Cache-Control: stale-while-revalidate=&lt;seconds&gt;
 <p><code>s-maxage</code> is similar to <code>max-age</code> but it applies to proxies (CDN) instead of clients. Web proxy caches work on the same principle, but a much larger scale. Use <code>public</code> and <code>s-maxage</code> for general resources, which generate shared cache for every user, and only the first user needs to wait on response.</p>
 <p><code>max-age=600, stale-while-revalidate=30</code> indicates that it is fresh for 600 seconds, and it may continue to be served stale for up to an additional 30 seconds while an asynchronous validation is attempted. Revalidation will make the cache be fresh again. If no request happened during that period, the cache became stale and the next request will revalidate normally.</p>
 <p><code>stale-if-error=86400</code> indicates that the cache can reuse a stale response for an extra 1 day (86400s) when an error is encountered. Here, an error is considered any response with a status code of 500, 502, 503, or 504.</p>
+<h4><code>Cache-Control</code> as a Request Header</h4>
+<p>One thing we’re probably less used to is <code>Cache-Control</code>’s employment as a request header. It determines whether the browser retrieves content from the cache or forces a network request. The most common way you’re ever likely to see a <code>Cache-Control</code> request header is when you refresh or hard refresh a page.</p>
+<p>In Chrome, even if the page is still fresh, refreshing it will dispatch a request to the network with <code>Cache-Control: max-age=0</code> and <code>If-Modified-Since | If-None-Match</code>. All other subresources on the page are fetched as per their caching headers, so there is no specific behaviour here.</p>
+<p>A hard refresh causes both the main document and all of its subresources to be requested with the <code>Cache-Control: no-cache</code>.</p>
+<p>Note that <code>max-age=0</code> means the response is considered stale after zero seconds and therefore should be revalidated, and <code>no-cache</code> means don’t fetch this response from cache without revalidating it first. Where they differ is that <code>max-age=0</code> permits caches to reuse a response if revalidation isn’t possible (e.g. no network access); <code>no-cache</code> is much stricter—it means the cache must always revalidate before releasing a response, or return an error if revalidation fails.</p>
 <h3>Freshness and Cache validation</h3>
 <p>Before the expiration time, the resource is fresh; after the expiration time, the resource is stale. Stale responses are not immediately discarded. HTTP has a mechanism to transform a stale response into a fresh one by asking the origin server. This is called validation. Validation is done by using a conditional request that includes an <code>If-Modified-Since</code> or <code>If-None-Match</code> request header. The server will respond with <code>304 Not Modified</code> if the content has not changed. <strong>Since this response only indicates "no change", there is no response body — there's just a status code — so the transfer size is extremely small.</strong> The response can also include headers that update the expiration time of the cached resource.</p>
 <ul>
@@ -132,11 +137,11 @@ console.log(await getUserById(1));
 </code></pre>
 <h3>Refresh behaviors in Chrome</h3>
 <ul>
-<li><p>Enter from the address bar and press Enter key: You tell the browser to navigate to some page and apply normal resource caching behavior just like clicking a link.</p>
+<li><p>Press enter in URL bar: You tell the browser to navigate to some page and apply normal resource caching behavior just like clicking a link.</p>
 </li>
-<li><p>Normal reload (<code>F5</code>): This will use the cache but revalidate everything during page load, looking for "304 Not Modified" responses.</p>
+<li><p>Normal reload: This will use the cache but revalidate everything during page load, looking for "304 Not Modified" responses. <em>(browsers send <code>cache-control: max-age=0</code> - bypasses local cache)</em></p>
 </li>
-<li><p>Hard reload (<code>ctrl + F5</code>): Don't use anything in the cache and force the browser do re-download when making the request.</p>
+<li><p>Hard reload: Don't use anything in the cache and force the browser do re-download when making the request.</p>
 </li>
 <li><p>Empty Cache and Hard Reload: Right-click on the Network requests in DevTools, select "Clear browser cache" and then reload the page.</p>
 </li>
@@ -188,20 +193,22 @@ console.log(await getUserById(1));
 <li>It requires that both the client and server maintain and update an indexed list of previously seen header fields, which is then used as a reference to efficiently encode previously transferred values.</li>
 </ul>
 <p>In HTTP/2, <code>:method</code>, <code>:scheme</code>, <code>:authority</code>, and <code>:path</code> are pseudo-header fields. It tries to compress headers and strip headers that are equal to the headers sent in the previous request.</p>
+<blockquote><p>Clients that generate HTTP/2 requests directly should use the ":authority" pseudo-header field instead of the "Host" header field.</p>
+</blockquote>
 <pre><code># HTTP/1.x
 # the first request
 GET /resoure HTTP/1.1
-Host: https://example.com
+Host: www.example.com
 
 # and a consecutive request
 GET /new_resource HTTP/1.1
-Host: https://example.com
+Host: www.example.com
 
 # HTTP/2
 # the first request
 :method: GET
 :scheme: https
-:host: example.com
+:authority: www.example.com
 :path: /resource
 
 # and a consecutive request to the same server just requires

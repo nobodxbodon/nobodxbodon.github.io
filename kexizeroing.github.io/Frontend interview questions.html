@@ -435,47 +435,46 @@ function hasCircularReference(obj) {
 </ol>
 <blockquote><p>Key Term: Streaming breaks up a resource you want to send or receive over a network into smaller chunks. This is common for browsers when receiving media assets, such as video buffering or partial loading of images.</p>
 </blockquote>
-<pre><code class="lang-js">// Read from a stream and decode the chunks as UTF-8 text
-function streamAsyncIterator(reader: ReadableStreamDefaultReader&lt;Uint8Array&gt;) {
-  const decoder = new TextDecoder("utf-8");
-  return {
-    async *[Symbol.asyncIterator]() {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) return;
-          yield decoder.decode(value);
-        }
-      } finally {
-        // When call reader.read(), the reader acquires an exclusive lock on the stream
-        reader.releaseLock();
-      }
-    }
-  };
-}
-
-const messagesWithInput: Message[] = [
-  ...messages,
-  { role: "system", content: "You are a..." },
-  { role: "user", content: input },
-];
-
-const stream = await chatAPI({ messages: messagesWithInput });
-if (stream.body) {
-  let assistantResponse = "";
-  const reader = stream.body.getReader();
-
-  for await (const value of streamAsyncIterator(reader)) {
-    const { message: { content } } = JSON.parse(value);
-    assistantResponse += content;
-
-    setMessages([
-      ...messagesWithInput,
+<pre><code class="lang-js">// server
+app.get('/ask', async (req, res) =&gt; {
+  const { question } = req.query;
+  const anwser = await new OpenAI().chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
       {
-        role: "assistant",
-        content: assistantResponse,
-      },
-    ]);
+        role: "user",
+        content: `Answer the following question: ${question}`
+      }
+    ],
+    stream: true,
+  })
+
+  res.setHeader('Content-Type', 'text/event-stream');
+
+  for await (const chunk of anwser) {
+    res.write(chunk.choices[0].delta.content);
   }
+
+  res.end();
+});
+</code></pre>
+<pre><code class="lang-js">// client
+const handleSearch = async () =&gt; {
+  fetch(`/ask?question=${input}`).then((res) =&gt; {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();  // binary to text
+
+    const read = async () =&gt; {
+      const { done, value } = await reader.read();
+      if (done) {
+        return;
+      }
+      const chunk = decoder.decode(value, { stream: true });
+      elResult.textContent += chunk;  // setResult(prev =&gt; prev + chunk);
+      read();
+    };
+
+    read();
+  })
 }
 </code></pre>

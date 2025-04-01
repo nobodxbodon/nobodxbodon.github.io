@@ -1,0 +1,173 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-03-08-《Adventures in Rule-Based Programming》CLIPS入门笔记（一）.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/03/08/《Adventures-in-Rule-Based-Programming》CLIPS入门笔记（一）">站点原文</a></h2>
+<p>该书在逐渐实现一个文本冒险游戏的过程中介绍 CLIPS 规则编程语言工具。本笔记将 <a href="https://clipsrules.net/airbp.html">官网</a> 的例程源码中文化，在 mac 上安装 CLIPS 环境运行，也支持 Windows、Linux。此为第二章上部。</p>
+<h2>定义无条件规则</h2>
+<p>无条件显示旁白，规则直接排入议程。无需任何条件，运行即触发。规则运行后，议程为空。</p>
+<pre><code>         CLIPS (6.4 2/9/21)
+CLIPS&gt; (defrule 旁白
+   =&gt;
+   (println "被小妖抓住后，你被")
+   (println "丢进了巢穴的地牢里。"))
+CLIPS&gt; (agenda)
+0      旁白: *
+For a total of 1 activation.
+CLIPS&gt; (run)
+被小妖抓住后，你被
+丢进了巢穴的地牢里。
+CLIPS&gt; (agenda)
+CLIPS&gt;
+</code></pre>
+<p>语法还是 LISP 风格如下，不知名字里的 LIPS 是否也有此含义。</p>
+<pre><code>CLIPS&gt; (+ 3 19)
+22
+CLIPS&gt; (&lt; 3 (- 4 2))
+FALSE
+</code></pre>
+<h2>定义模版和事实</h2>
+<p>template 和 fact 类似于类型和个体，slot类似于属性。定义后可查询当前事实。不知语法设计时为何不用 deffact 而是 assert。</p>
+<pre><code>CLIPS&gt; (deftemplate 物
+   (slot id)
+   (slot 种类)
+   (slot 位置))
+CLIPS&gt; (assert (物 (id 冒险家)
+               (种类 主角)
+               (位置 地牢北面)))
+&lt;Fact-1&gt;
+CLIPS&gt; (facts)
+f-1     (物 (id 冒险家) (种类 主角) (位置 地牢北面))
+For a total of 1 fact.
+CLIPS&gt; (ppfact 1)
+(物 
+   (id 冒险家) 
+   (种类 主角) 
+   (位置 地牢北面))
+</code></pre>
+<p>像 <code>&lt;Fact-1&gt;</code> 和 f-1，很有上世纪的反馈信息风味。</p>
+<h2>定义条件规则</h2>
+<p>规则的条件可包含多个 Conditional Elements (CE)。此为模式（pattern）条件元素，即匹配某些模版属性。如果冒险家在地牢北面，则输出。规则名与位置名可相同。</p>
+<pre><code>CLIPS&gt; (defrule 地牢北面
+   (物 (id 冒险家)
+       (位置 地牢北面))
+   =&gt;
+   (println "你在地牢北角。")
+   (println "有个巨型蘑菇。")
+   (println "地上横七竖八，")
+   (println "都是探险者的尸首。"))
+CLIPS&gt; (agenda)
+0      地牢北面: f-1
+For a total of 1 activation.
+CLIPS&gt; (run)
+你在地牢北角。
+有个巨型蘑菇。
+地上横七竖八，
+都是探险者的尸首。
+CLIPS&gt; (agenda)
+CLIPS&gt;
+</code></pre>
+<h2>模版包含多词属性；多条件规则</h2>
+<p><code>行动</code> 支持以空格分隔的多个词如‘向上 爬’。<code>逃不出</code> 需两个条件触发。当前条件未完全符合，未排入议程。</p>
+<pre><code>CLIPS&gt; (deftemplate 命令
+   (multislot 行动))
+CLIPS&gt; (defrule 逃不出
+   (物 (id 冒险家)
+         (位置 地牢北面))
+   (命令 (行动 向上 爬))
+   =&gt;
+   (println "墙太滑了。"))
+CLIPS&gt; (agenda)
+CLIPS&gt;
+</code></pre>
+<h2>检查规则匹配条件的情况</h2>
+<p>反馈信息可读性很值得改进。满足条件的 f-1 即 <code>地牢北面</code>。CE 即 Conditional Element。加选项可略去细节，否则条件复杂时输出庞杂。</p>
+<pre><code>CLIPS&gt; (matches 逃不出)
+Matches for Pattern 1
+f-1
+Matches for Pattern 2
+ None
+Partial matches for CEs 1 - 2
+ None
+Activations
+ None
+(1 0 0)
+CLIPS&gt; (matches 逃不出 succinct)
+Pattern 1: 1
+Pattern 2: 0
+CEs 1 - 2: 0
+Activations: 0
+(1 0 0)
+CLIPS&gt; (matches 逃不出 terse)
+(1 0 0)
+</code></pre>
+<h2>添加事实后触发规则</h2>
+<pre><code>CLIPS&gt; (assert (命令 (行动 向上 爬)))
+&lt;Fact-2&gt;
+CLIPS&gt; (matches 逃不出)
+Matches for Pattern 1
+f-1
+Matches for Pattern 2
+f-2
+Partial matches for CEs 1 - 2
+f-1,f-2
+Activations
+f-1,f-2
+(2 1 1)
+CLIPS&gt; (agenda)
+0      逃不出: f-1,f-2
+For a total of 1 activation.
+CLIPS&gt; (run)
+墙太滑了。
+</code></pre>
+<h2>条件满足但规则已运行</h2>
+<p>议程为空。</p>
+<pre><code>CLIPS&gt; (matches 逃不出)
+Matches for Pattern 1
+f-1
+Matches for Pattern 2
+f-2
+Partial matches for CEs 1 - 2
+f-1,f-2
+Activations
+ None
+(2 1 0)
+CLIPS&gt; (agenda)
+CLIPS&gt;
+</code></pre>
+<h2>常见报错</h2>
+<h3>不允许此命名</h3>
+<pre><code>CLIPS&gt; (deftemplate 123
+   (slot id)
+   (slot category)
+   (slot location))
+
+[CSTRCPSR2] Missing name for deftemplate construct.
+
+ERROR:
+(deftemplate 123
+</code></pre>
+<h3>同名模版在使用中</h3>
+<pre><code>CLIPS&gt; (deftemplate 物
+   (slot id)
+   (slot 种类)
+   (slot 位置))
+
+[CSTRCPSR4] Cannot redefine deftemplate '物' while it is in use.
+
+ERROR:
+(deftemplate MAIN::物
+</code></pre>
+<h3>slot 仅支持单词，多词需用 multislot</h3>
+<pre><code>CLIPS&gt; (deftemplate 命令
+   (slot 行动))
+CLIPS&gt; (defrule 逃不出
+   (物 (id 冒险家)
+         (位置 地牢北面))
+   (命令 (行动 climb up))
+   =&gt;
+   (println "The walls are too slick."))
+
+[PRNTUTIL2] Syntax Error:  Check appropriate syntax for deftemplate patterns.
+
+ERROR:
+(defrule MAIN::逃不出
+   (物 (id 冒险家) (位置 地牢北面))
+   (命令 (行动 climb up
+</code></pre>

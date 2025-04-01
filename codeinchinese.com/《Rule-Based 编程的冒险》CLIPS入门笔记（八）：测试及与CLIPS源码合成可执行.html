@@ -1,0 +1,72 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-03-27-《Rule-Based 编程的冒险》CLIPS入门笔记（八）：测试及与CLIPS源码合成可执行.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/03/27/《Rule-Based-编程的冒险》CLIPS入门笔记（八）：测试及与CLIPS源码合成可执行">站点原文</a></h2>
+<p>如 <a href="https://zhuanlan.zhihu.com/p/1888591198966485493">上文</a> 打算，直接跳到最后第八章，代码量从第四章的 340 到一千行左右。不细看实现，仅对开发流程作一笔记。</p>
+<h2>测试</h2>
+<p>批命令输出到文件后，对比期望输出确认相同。</p>
+<pre><code>CLIPS&gt; (batch "northpit.bat")
+TRUE
+CLIPS&gt; (run)
+Captured by goblins, you've been
+tossed in a pit at their lair.
+
+You're at the pit's north end.
+A giant mushroom is here. The
+ground is littered with the
+bodies of dead adventurers.
+
+&gt; look at mushroom
+It's squished. I wouldn't
+try landing on it again.
+
+&gt; look at bodies
+Apparently this is what happens
+when you miss the mushroom.
+
+&gt; go up
+The walls are too slick.
+
+&gt; quit
+CLIPS&gt; (dribble-off)
+TRUE
+</code></pre>
+<h2>保存中间状态</h2>
+<p>交互退出时保存当前所有事实：<code>(bsave-facts "game.fct" visible)</code>；开始时 bload-facts。</p>
+<p>这个 b 前缀不知何意，batch 缩写？</p>
+<h2>导出业务逻辑</h2>
+<p>将所有规则等导出到二进制文件，在可执行文件启动时加载。</p>
+<pre><code>(batch* loadq.bat)
+(bsave escape.bin)
+</code></pre>
+<h2>和c代码集成</h2>
+<p>Chapter8B 的 source 下是 CLIPS 的源码，在此基础上集成。这点挺独特的！</p>
+<p>新添一个入口代码 adventure.c，其中加载二进制导出文件 <code>Bload(theEnv,"escape.bin")</code>。</p>
+<p>将原本 CLIPS（为确认，用最新的 6.4.2 版本源码复现了一遍）的 makefile 添加几项相关。基本就是把编译 CLIPS 时的入口 main 改为了 adventure：</p>
+<pre><code>all: game
+
+game : CC = gcc
+game : CFLAGS = -std=c99 -O0 -g
+game : LDLIBS = -lm
+game : adventure
+
+...
+adventure : adventure.o libclips.a
+    $(CC) -o escape adventure.o -L. -lclips $(LDLIBS)
+
+adventure.o: adventure.c 【后同main.o部分】
+</code></pre>
+<p>make后，将 escape 拷贝到 escape.bin 所在目录。运行 ./escape。修改了部分源码包括中文化标识符以确认有效：</p>
+<pre><code>./escape
+被小妖抓住后，你被
+丢进了巢穴的地牢里。
+
+You're at the pit's north end.
+A giant mushroom is here. The
+ground is littered with the
+bodies of dead adventurers.
+
+&gt; go south
+You're at the pit's south end.
+A large pile of rubble has
+collapsed from the wall above.
+</code></pre>
+<h2>接下来</h2>
+<p>用 CLIPS 改写 <a href="https://www.zhihu.com/question/324139125/answer/104602791942">生态模拟</a> 体会一下。</p>

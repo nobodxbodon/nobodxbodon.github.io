@@ -1,0 +1,136 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-03-18-伪猜数字探索 CLIPS 调试功能.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/03/18/伪猜数字探索-CLIPS-调试功能">站点原文</a></h2>
+<p><a href="https://zhuanlan.zhihu.com/p/30909201553">昨天</a> 的调试信息有点迷惑，写个简单例程再体验一下：</p>
+<pre><code>(deftemplate 猜的
+   (slot 数))
+
+(defrule 旁白
+   =&gt;
+   (println "想了个数，猜是几？"))
+
+(defrule 猜数
+  (declare (salience -5))
+   (not (猜的))
+   =&gt;
+   (print "猜吧：")
+   (assert (猜的 (数 (string-to-field (readline))))))
+
+(defrule 猜中
+  ?所猜 &lt;- (猜的 (数 ?数))
+  (test (= 5 ?数))
+  =&gt;
+  (retract ?所猜)
+  (print "猜中了！")
+  (halt))
+
+(defrule 没猜中
+  ?所猜 &lt;- (猜的 (数 ?数))
+  (test (&lt;&gt; 5 ?数))
+  =&gt;
+  (retract ?所猜))
+</code></pre>
+<h2>运行效果：</h2>
+<pre><code>CLIPS&gt; (run)
+想了个数，猜是几？
+猜吧：3
+猜吧：4
+猜吧：5
+猜中了！
+</code></pre>
+<h2>调试</h2>
+<p>matches 两个条件相反的规则，输出里除了 Activations 以外一样。看来 test 条件不算在模式列表中。</p>
+<pre><code>CLIPS&gt; (run)
+想了个数，猜是几？
+猜吧：4
+Breaking on rule 没猜中.
+CLIPS&gt; (matches 没猜中)
+Matches for Pattern 1
+f-1
+Activations
+f-1
+(1 0 1)
+CLIPS&gt; (ppfact 1)
+(猜的 
+   (数 4))
+CLIPS&gt; (matches 猜中)
+Matches for Pattern 1
+f-1
+Activations
+ None
+(1 0 0)
+</code></pre>
+<p>把匹配条件合并为这样的话：</p>
+<pre><code>?所猜 &lt;- (猜的 (数 ?数&amp;:(= 5 ?数)))
+
+?所猜 &lt;- (猜的 (数 ?数&amp;:(&lt;&gt; 5 ?数)))
+</code></pre>
+<p>调试时看到 Pattern 1 匹配不同：</p>
+<pre><code>CLIPS&gt; (matches 猜中)
+Matches for Pattern 1
+ None
+Activations
+ None
+(0 0 0)
+CLIPS&gt; (matches 没猜中)
+Matches for Pattern 1
+f-3
+Activations
+f-3
+(1 0 1)
+</code></pre>
+<h2>not 模式</h2>
+<p>将此规则改写为：</p>
+<pre><code>(defrule 没猜中
+  ?所猜 &lt;- (猜的 (数 ?数))
+  (not (猜的 (数 5)))
+  =&gt;
+  (retract ?所猜))
+</code></pre>
+<p>match 调试时，第二个模式的匹配居然是 None，看来这里的 Pattern 2 指的是 <code>(猜的 (数 5))</code> 而非 <code>(not (猜的 (数 5)))</code>？</p>
+<pre><code>CLIPS&gt; (run)
+猜吧：3
+Breaking on rule 没猜中.
+CLIPS&gt; (matches 没猜中)
+Matches for Pattern 1
+f-4
+Matches for Pattern 2
+ None
+Partial matches for CEs 1 - 2
+f-4,*
+Activations
+f-4,*
+(1 1 1)
+</code></pre>
+<p>翻 <a href="https://zhuanlan.zhihu.com/p/30376496619">之前</a> 的 <code>获取命令</code>，输出也类似。</p>
+<p>希望有 ppfact 那样显示某个 Pattern 的命令，但手册里没找到。</p>
+<h2>常见报错</h2>
+<h3>条件格式</h3>
+<p>开始用这样判断相等：</p>
+<pre><code>(defrule 猜中
+  ?猜 &lt;- (猜的 (数 ?猜的数))
+  (= 猜的数 5)
+</code></pre>
+<p>报错：</p>
+<pre><code>[PRNTUTIL2] 介绍.clp, Line 18: Syntax Error:  Check appropriate syntax for the field field of a pattern.
+
+ERROR:
+(defrule MAIN::猜中
+   ?猜 &lt;- (猜的 (数 ?猜的数))
+   (=
+
+FALSE
+</code></pre>
+<p>加 (test )后解决。</p>
+<h3>类型错误</h3>
+<pre><code>[ARGACCES2] Function '=' expected argument #1 to be of type integer or float.
+
+[DRIVE1] This error occurred in the join network.
+   Problem resides in associated join
+      Of pattern #1 in rule 猜中
+
+[PRCCODE4] WARNING: Execution halted during the actions of defrule '猜数'.
+</code></pre>
+<p>看语言手册后，找到字符串转符号函数：</p>
+<pre><code>CLIPS&gt; (= 4 (string-to-field (readline)))
+4
+TRUE
+</code></pre>

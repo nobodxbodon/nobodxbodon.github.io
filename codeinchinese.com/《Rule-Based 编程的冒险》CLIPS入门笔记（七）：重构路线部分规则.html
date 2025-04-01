@@ -1,0 +1,142 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-03-26-《Rule-Based 编程的冒险》CLIPS入门笔记（七）：重构路线部分规则.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/03/26/《Rule-Based-编程的冒险》CLIPS入门笔记（七）：重构路线部分规则">站点原文</a></h2>
+<p>在 <a href="https://zhuanlan.zhihu.com/p/31196536807">自己摸索</a> 后，在 CLIPS 论坛提了问，通过以下例程得到确认，not conditional element 包含了 pattern conditional element。即模式不包括 not。而且没有输出规则的某个模式的调试命令：</p>
+<pre><code>CLIPS&gt; (defrule 例规则
+   (not (and (一)
+             (二)
+             (not (三))))
+    =&gt;)
+CLIPS&gt; (assert (一) (三))
+&lt;Fact-18&gt;
+CLIPS&gt; (matches 例规则)
+Matches for Pattern 1   &lt;--- 对应 (一)
+f-17
+Matches for Pattern 2   &lt;--- (二)
+ None
+Matches for Pattern 3   &lt;---- (三)
+f-18
+Partial matches for CEs 1 - 2
+ None
+Partial matches for CEs 1 - 3
+ None
+Partial matches for CEs 1 (P1 - P3)
+*
+Activations
+*
+(2 1 1)
+CLIPS&gt; (facts)
+f-17    (一)
+f-18    (三)
+For a total of 2 facts.
+CLIPS&gt; (ppdefrule 例规则)
+(defrule MAIN::例规则
+   (not (and (一)
+             (二)
+             (not (三))))
+   =&gt;)
+</code></pre>
+<h2>事实化</h2>
+<p>继续重构路线部分，类似 <a href="https://zhuanlan.zhihu.com/p/30909201553">之前</a> 将数据事实化：</p>
+<pre><code class="lang-lisp">(deftemplate 路线
+  (multislot 方向)
+  (multislot 起点)
+  (slot 终点 (default 虚空))
+  (slot 受阻 (default FALSE))
+  (slot 受阻反馈 (default "此路不通。")))
+
+(deffacts 所有路线
+   (路线 (方向 向南)
+         (起点 地牢北面)
+         (终点 地牢南面))
+   (路线 (方向 向北)
+         (起点 地牢南面)
+         (终点 地牢北面))
+   (路线 (方向 向上)
+         (起点 地牢北面 地牢南面)
+         (受阻 TRUE)
+         (受阻反馈
+            "墙太滑了。")))
+</code></pre>
+<h2>对应规则</h2>
+<pre><code class="lang-lisp">(defrule 走得通
+
+   ?令 &lt;- (命令 (行动 ?方向 走))
+   ?位 &lt;- (物 (id 冒险家)
+         (位置 ?位置))
+   (路线 (方向 $? ?方向 $?)
+         (起点 $? ?位置 $?)
+         (终点 ?新位置)
+         (受阻 FALSE))  &lt;--- 未受阻
+
+   =&gt;
+   (retract ?令)
+   (modify ?位 (位置 ?新位置))
+   (assert (命令 (行动 看))))
+
+(defrule 走不通
+
+   ?令 &lt;- (命令 (行动 ?方向 走))
+   ?位 &lt;- (物 (id 冒险家)
+                (位置 ?位置))
+
+   (路线 (方向 $? ?方向 $?)
+         (起点 $? ?位置 $?)
+         (终点 ?新位置)
+         (受阻 TRUE)   &lt;-- 受阻，且有反馈
+         (受阻反馈 ?文本))
+
+   =&gt;
+
+   (retract ?令)
+   (println ?文本))
+
+(defrule 不是路
+
+   ?令 &lt;- (命令 (行动 ?方向 走))
+   ?位 &lt;- (物 (id 冒险家)
+                (位置 ?位置))
+
+   (not (路线 (方向 $? ?方向 $?)
+             (起点 $? ?位置 $?)))
+
+   =&gt;
+
+   (retract ?令)
+   (println "没路。"))
+
+(defrule 向上爬
+   ?令 &lt;- (命令 (行动 向上 爬))
+
+   =&gt;
+
+   ;; 转换命令
+
+   (modify ?令 (行动 向上 走)))
+</code></pre>
+<p><code>$?</code> 含义暂未细看解释，实话是动力下降了。考虑直接跳到此书最后，看看森林先。</p>
+<h2>运行效果</h2>
+<pre><code>CLIPS&gt; (batch* runq.bat)
+被小妖抓住后，你被
+丢进了巢穴的地牢里。
+
+你在地牢北角。
+有个巨型蘑菇。
+地上横七竖八，
+都是探险者的尸首。
+
+&gt; 向南 走
+你在地牢南角。
+一大堆瓦砾从
+墙壁上垮了下来。
+
+&gt; 向南 走
+没路。
+
+&gt; 向上 爬
+墙太滑了。
+
+&gt; 向上 走
+墙太滑了。
+
+&gt; 退出
+TRUE
+</code></pre>

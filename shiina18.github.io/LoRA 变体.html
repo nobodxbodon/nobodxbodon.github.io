@@ -1,0 +1,72 @@
+<h2><a href="https://github.com/shiina18/shiina18.github.io/blob/master/_posts/2024-08-18-lora.md">仓库源文</a>，<a href="https://shiina18.github.io/machine%20learning/2024/08/18/lora">站点原文</a></h2>
+&lt;!-- more --&gt;
+
+<h2>LoRA</h2>
+<ul>
+<li>Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., ... &amp; Chen, W. (2021). <a href="https://arxiv.org/abs/2106.09685">Lora: Low-rank adaptation of large language models</a>. <em>arXiv preprint arXiv:2106.09685</em>.</li>
+</ul>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/119092411258878.png"/></p>
+<p>众所周知了, 略 (可以参考 <a href="https://zhuanlan.zhihu.com/p/623543497">这里</a>).</p>
+<blockquote><p>We hypothesize that the change in weights during model adaptation also has a low “intrinsic rank”.</p>
+<p>We limit our study to <strong>only adapting the attention weights</strong> for downstream tasks and freeze the MLP modules</p>
+<p>QLoRA paper: "We find that the most critical LoRA hyperparameter is how many LoRA adapters are used in total and that LoRA on all linear transformer block layers is required to match full finetuning performance."</p>
+</blockquote>
+<p>初始化时 A 或 B 其中一个为零保证加了 AB 之后一开始的输出和原输出相同, 另一个非零保证优化过程中梯度不会恒为零.</p>
+<p><strong>注意</strong> LoRA 并不省计算量, 只是大幅度节省了优化器需要存的参数, 可参考 <a href="https://zhuanlan.zhihu.com/p/666000885">这里</a> 和 <a href="https://www.reddit.com/r/MachineLearning/comments/15ogvp4/d_how_does_lora_save_memory_footprint_for/">这里</a>.</p>
+<h2>GaLore</h2>
+<ul>
+<li>Zhao, J., Zhang, Z., Chen, B., Wang, Z., Anandkumar, A., &amp; Tian, Y. (2024). <a href="https://arxiv.org/abs/2403.03507">Galore: Memory-efficient llm training by gradient low-rank projection</a>. <em>arXiv preprint arXiv:2403.03507</em>.</li>
+</ul>
+<blockquote><p>Gradient Low-Rank Projection (GaLore), a training strategy that allows <strong>full-parameter</strong> learning but is <strong>more memory efficient</strong> than common low-rank adaptation methods such as LoRA.</p>
+<p>Our key idea is to leverage the slow changing low-rank structure of the gradient of the weight matrix, rather than trying to approximate the weight matrix itself as low rank.</p>
+</blockquote>
+<p>微调和预训练都可以用. 问题是全量微调的话多个任务不方便部署吧.</p>
+<pre><code class="lang-python">for weight in model.parameters():
+    grad = weight.grad
+    # original space -&gt; compact space
+    lor_grad = project(grad)
+    # update by Adam, Adafactor, etc.
+    lor_update = update(lor_grad)
+    # compact space -&gt; original space
+    update = project_back(lor_update)
+    weight.data += update
+</code></pre>
+<p>At time step $t$, $G_t \in \mathbb R^{m\times n}$ is the negative gradient matrix of weight $W_t$. The regular update is</p>
+<p>$$
+W_T = W<em>0 + \eta \sum</em>{t=0}^{T-1}\tilde G_t = W<em>0 + \eta \sum</em>{t=0}^{T-1}\rho_t(G_t),
+$$</p>
+<p>where $eta$ is the learning rate, and $\rho_t$ is an entry-wise stateful gradient regularizer (e.g., Adam).</p>
+<p>In GaLore, the $\tilde G_t$ in update becomes</p>
+<p>$$
+\tilde G_t = P_t \rho_t(P_t'G_tQ_t)Q_t',
+$$</p>
+<p>where $P_t \in \mathbb R^{m\times r}$ and $Q_t \in \mathbb R^{n\times r}$. They are derived from SVD:</p>
+<p>$$
+\begin{align<em>}
+G<em>t &amp;= USV' \approx \sum</em>{i=1}^r s_i u_i v_i', \
+P_t &amp;= (u_1, \dots, u_r) , \quad Q_t = (v_1, \dots, v_r).
+\end{align</em>}
+$$</p>
+<p>另外可参考</p>
+<ul>
+<li><a href="https://zhuanlan.zhihu.com/p/686870782">锐评 GaLore</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/687295733">GaLore can be a Scalable Pretraining Algorithm</a></li>
+</ul>
+<h2>LoRA+</h2>
+<ul>
+<li>Hayou, S., Ghosh, N., &amp; Yu, B. (2024). <a href="https://arxiv.org/abs/2402.12354">LoRA+: Efficient Low Rank Adaptation of Large Models</a>. <em>arXiv preprint arXiv:2402.12354</em>.</li>
+<li>苏剑林. (Feb. 27, 2024). 《配置不同的学习率，LoRA还能再涨一点？ 》[Blog post]. Retrieved from <a href="https://spaces.ac.cn/archives/10001">https://spaces.ac.cn/archives/10001</a></li>
+</ul>
+<blockquote><p>LoRA 中 B 的学习率应该大于 A.</p>
+</blockquote>
+<p>简单易用.</p>
+<h2>DoRA</h2>
+<ul>
+<li>Liu, S. Y., Wang, C. Y., Yin, H., Molchanov, P., Wang, Y. C. F., Cheng, K. T., &amp; Chen, M. H. (2024). <a href="https://arxiv.org/abs/2402.09353">DoRA: Weight-Decomposed Low-Rank Adaptation</a>. <em>arXiv preprint arXiv:2402.09353</em>.</li>
+</ul>
+<p><img alt="" src="https://shiina18.github.io/assets/posts/images/458563514240453.png"/></p>
+<blockquote><p>Our intuitions are two-fold. Firstly, we believe that limiting LoRA to concentrate exclusively on directional adaptation while also allowing the magnitude component to be tunable simplifies the task compared to the original approach, decomposition
+where LoRA is required to learn adjustments in both magnitude and direction. Secondly, the process of optimizing directional updates is made more stable through weight decomposition, which we delve into more thoroughly in Section.4.2.</p>
+</blockquote>
+<p>第一点感觉没什么道理, 第二点还没仔细看过.</p>
+<p>其他还有些很无聊的变种, 就略了.</p>

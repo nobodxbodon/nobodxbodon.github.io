@@ -1,0 +1,170 @@
+<h2><a href="https://github.com/xieguanglei/xieguanglei.github.io/blob/master/source/2019-06-03/TypeScript Mixin 实践/index.md">仓库源文</a>，<a href="https://xieguanglei.github.io/blog/post/2019-06-03/TypeScript Mixin 实践.html">站点原文</a></h2>
+<h1>TypeScript Mixin 实践</h1>
+<p>类和类的继承（基类与派生类），是面向对象编程领域中的概念。有时，我们可能会希望一个类继承自多个基类，这种行为又称「多重继承」。但是由于多重继承使编程语言和语义表达变得更加复杂和易出错（如同名成员函数冲突和继承顺序的问题），并不是所有编程语言都支持多重继承机制。</p>
+<blockquote><p>多重继承必要性的例子（参考<a href="https://medium.com/flutter-community/dart-what-are-mixins-3a72344011f3">这篇文章</a>）：</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2019-06-03/TypeScript Mixin 实践/TB1JdcSbmWD3KVjSZSgXXcCxVXa-774-278.png"/></p>
+<p>动物（Animal）是基类，哺乳动物类（Mamaml）、鸟类（Bird）和鱼类（Fish）是继承自动物的派生类，各自又派生出一些更具体的派生类。但是从另一个维度上，这些动物又具有会飞（CanFly），会跑（CanWalk）和会游水（CanSwim）的特征，而这些特征与之前的分类是完全正交（互相独立）的。此情况下，多重继承就会方便地帮助我们定义派生类——作为鸟类的鸭子，即会飞，也会跑，也有游水。</p>
+</blockquote>
+<p>Mixin 模式，是那些仅支持单继承的面向对象语言（如 Java、Dart、TypeScript），对多重继承机制的一种补充。具体的，mixin 模式允许类从非父类的其他类（或对象）上继承方法和属性。</p>
+<blockquote><p>在这个例子中，我们可以把会飞、会跑和会游水三种行为定义为 mixin，并混入到具体的动物类中去。</p>
+</blockquote>
+<p>之前一段时间，我从事了一些与 TypeScript 和 Dart 相关的编程工作，并需要在 TypeScript 中模拟 Dart 中的 mixin 机制。由于 TypeScript 几乎没有 mixin 机制（它的官方 mixin 解决方案极为孱弱），因此我不得不手写了大量语义差、维护难、易出错的「胶水代码」。最近，在对 TypeScript 的类型系统有了一些相对深入的了解后，我实践出了一套虽然远远谈不上优雅，但还算基本可用的 TypeScript Mixin 解决方案。</p>
+<p>先看 Dart 的 Mixin 的写法：</p>
+<pre><code class="lang-dart">abstract class Animal {
+  bool isAlive = true;
+  bool isHealthy(){
+    return isAlive;
+  }
+}
+
+abstract class Mammal extends Animal {
+  num temperature;
+  Mammal(this.temperature);
+  bool isInFever();
+  bool isHealth(){
+    return super.isHealthy() &amp;&amp; this.isInFever();
+  }
+}
+
+mixin CanWalk on Animal {
+  walk(){
+    if(isAlive){
+      if(isHealthy()){
+        print('Walking as usual.');
+      }else{
+        print('Walking slowly.');
+      }
+    }
+  }
+}
+
+class Cat extends Mammal with CanWalk {
+  Cat(): super(ST_TEMPERATURE);
+  isInFever(){
+    return temperature - ST_TEMPERATURE &gt; 1;
+  }
+  walk(){
+    if(isAlive){
+      super.walk();
+      print('Walking quietly.');
+    }
+  }
+
+  static const num ST_TEMPERATURE = 38;
+}
+</code></pre>
+<p>Mixin 的能力，具体的：</p>
+<ol>
+<li>Mixin 类（例子中的 <code>CanWalk</code>）可以被指定 <strong>mix（混入）</strong>到特定基类（<code>Animal</code>）上：Mixin 类可调用基类的成员变量和方法（例子中 <code>CanWalk</code> 类的 <code>walk</code> 方法访问到基类的 <code>isAlive</code> ），或重写基类的成员变量（此时可使用 <code>super</code> 关键字来调用基类中的同名方法）。</li>
+<li>被混入的派生类可以访问 Mixin 中的成员变量和方法，也可以重写方法（使用 <code>super</code> 调用基类中的同名方法）。</li>
+</ol>
+<p>看一下 TypeScript 官方的 mixin 方案：</p>
+<pre><code class="lang-typescript">function applyMixins(derivedCtor: any, baseCtors: any[]) {
+    baseCtors.forEach(baseCtor =&gt; {
+        Object.getOwnPropertyNames(baseCtor.prototype)
+          .forEach(name =&gt; {
+            Object.defineProperty(derivedCtor.prototype, name, 
+              Object.getOwnPropertyDescriptor(baseCtor.prototype, name));
+        });
+    });
+}
+</code></pre>
+<p>这个方案的原理是，在运行时，为派生类构造函数的 prototype 上手动注入基类中的对应。使用起来大概是这样的：</p>
+<pre><code class="lang-typescript">// 官方用法
+abstract class Animal {
+  isAlive: boolean = true;
+  isHealthy(): boolean {
+    return this.isAlive;
+  }
+}
+
+abstract class Mammal extends Animal {
+  temperature: number;
+  constructor(t: number) {
+    super();
+    this.temperature = t;
+  };
+  abstract isInFever(): boolean;
+  isHealthy(): boolean {
+    return super.isHealthy() &amp;&amp; this.isInFever();
+  }
+}
+
+class CanWalk extends Animal{
+  walk(): void {
+    super.isHealthy(); // 将调用 Animal 而非 Mammal 中的方法
+  }
+}
+
+class Cat extends Mammal {
+  constructor() {
+    super(38.2)
+  }
+  isInFever(): boolean { }
+}
+
+applyMixin(Dov, [CanWalk]);
+</code></pre>
+<p>这个方案有很多问题：</p>
+<ol>
+<li>只能混入方法而不能混入成员变量：由于混入的源和目标都是 prototype，所以 Mixin 类中的成员变量无法被混入。</li>
+<li>编译器无法知道被 Mixin 后，派生类上多出了哪些方法，不管是在 Dove 内部还是在 Dov 的实例上，都无法访问到 Mixin 中的方法。</li>
+<li>其次，Mixin 类内部的 <code>super</code> 关键字无法正确地指向正确的基类，如这个例子中，<code>CanWalk#walk</code> 方法被混入 <code>Cat</code> 后，其中的 super 仍然指向的是 <code>Animal</code> 而不是 <code>Mammal</code>。</li>
+</ol>
+<p>因此，官方给出的解决方案使用的场景是较为简单、有限的。如果要完成 Dart 中的 Mixin 所作的工作，需要进行重新设计。</p>
+<p>我们知道，TypeScript 的「编译」过程其实只是做了类型检查，并没有做什么真正有意义的预处理（比如宏替换），所以将 Mixin 类中的成员混入到目标派生类的这项工作，仍然需要在运行时完成。下面直接给出我解决方案：</p>
+<pre><code class="lang-typescript">type ClassType&lt;T&gt; = { new(...args: any): T };
+
+interface CanWalkInterface {
+  walk(): void;
+}
+
+function mixCanWalk&lt;T extends Animal&gt;(
+  TargetClass: ClassType&lt;Animal&gt;
+): ClassType&lt;T &amp; CanWalkInterface&gt; {
+
+  class CanWalkAnimal extends TargetClass implements CanWalkInterface {
+    walk() {
+      if (super.isHealthy()) {
+        console.log('Walking as usual.');
+      } else {
+        console.log('Walking slowly.');
+      }
+    }
+  }
+
+  Object.defineProperty(CanWalkAnimal.prototype.constructor, 'name', {
+    value: TargetClass.prototype.constructor.name
+  });
+
+  return CanWalkAnimal as any;
+}
+</code></pre>
+<p>定义一个泛型函数 <code>mixCanWalk</code>，接收一个泛型参数和一个实际参数。虽然这样做显得冗余，但确实是必须的。泛型类型 <code>ClassType</code> 通过接收一个 <code>Class</code> 返回此 <code>Class</code> <strong>自身</strong>（而非实例）的类型。然后，我们声明一个借口 <code>CanWalkInterface</code>，以描述被混入的方法。</p>
+<p>在 <code>mixCanWalk</code> 中，基于传入的 <code>TargetClass</code>（<strong>类类型的实例</strong>，而非类的实例）派生出一个新类，在其中实现 <code>walk</code> 方法，最后将新的派生类返回。</p>
+<blockquote><p>返回之前，更改派生类的 <code>prototype.constructor</code> 的 <code>name</code>，可以使此派生类保持原有的名字，改善调试时代码的可读性。</p>
+</blockquote>
+<p>此方案的用法如下所示：</p>
+<pre><code>class Cat extends mixCanWalk&lt;Mammal&gt;(Mammal as ClassType&lt;Mammal&gt;) {
+  constructor() {
+    super(Cat.ST_TEMPERATURE)
+  }
+  isInFever(): boolean {
+    return this.temperature - Cat.ST_TEMPERATURE &gt; 1;
+  }
+  walk() {
+    if (this.isAlive) {
+      super.walk();
+      console.log('Walking quietly.');
+    }
+  }
+  static ST_TEMPERATURE: number = 38;
+}
+</code></pre>
+<p>可见，在此方案下，通过泛型指定返回的类型，使编译器能够得知被混入成员的类型、签名；Mixin 类可通过 <code>super</code> 访问到基类的成员，被混入的派生类也可通过 <code>super</code> 访问 Mixin 类的成员。基本满足了 Dart 中 Mixin 的特性。</p>
+<p>同时，这个方案还有两处瑕疵：</p>
+<ol>
+<li>Mix 函数（例子中的<code>mixCanWalk</code>）返回时需要使用 <code>as any</code> 进行一次类型断言，这是因为 TargetClass 的具体类型无法在运行时使用。</li>
+<li>调用使用 Mix 函数时，如果传入的类是抽象类（比如例子中的 <code>Mammal</code> 即是抽象类），也需要用 <code>as any</code> 进行一次断言。因为抽象类是无法被实例化的，严格来说是不符合 <code>ClassType&lt;T&gt;</code> 的表述的。</li>
+</ol>
+<p>以上即是类 Dart 风格的 TypeScript Mixin 方案。</p>

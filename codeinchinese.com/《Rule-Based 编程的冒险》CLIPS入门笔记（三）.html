@@ -1,0 +1,220 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-03-13-《Rule-Based 编程的冒险》CLIPS入门笔记（三）.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/03/13/《Rule-Based-编程的冒险》CLIPS入门笔记（三）">站点原文</a></h2>
+<p>接 <a href="https://zhuanlan.zhihu.com/p/29862551017">上文</a>。开始第三章，源码文件组织。</p>
+<h2>中文化后例程文件（utf8编码）</h2>
+<h3>definition.clp</h3>
+<pre><code>(deftemplate 物
+   (slot id)
+   (slot 种类)
+   (slot 位置))
+
+(deftemplate 命令
+   (multislot 行动))
+</code></pre>
+<h3>game.clp</h3>
+<pre><code>;;; ***************
+;;; Adventure Start
+;;; ***************
+
+(defrule 旁白
+   =&gt;
+   (println "被小妖抓住后，你被")
+   (println "丢进了巢穴的地牢里。"))
+
+;;; **************
+;;; Location Rules
+;;; **************
+
+(defrule 地牢北面
+   (物 (id 冒险家)
+       (位置 地牢北面))
+   =&gt;
+   (println "你在地牢北角。")
+   (println "有个巨型蘑菇。")
+   (println "地上横七竖八，")
+   (println "都是探险者的尸首。"))
+
+(defrule 地牢南面
+   (物 (id 冒险家)
+         (位置 地牢南面))
+   =&gt;
+   (println "你在地牢南角。")
+   (println "一大堆瓦砾从")
+   (println "墙壁上垮了下来。"))
+
+;;; **************
+;;; Movement Rules
+;;; **************
+
+(defrule 由北往南
+   ?位 &lt;- (物 (id 冒险家)
+         (位置 地牢北面))
+   ?令 &lt;- (命令 (行动 向南 走))
+   =&gt;
+   (retract ?令)
+   (modify ?位 (位置 地牢南面)))
+
+(defrule 由南往北
+   ?位 &lt;- (物 (id 冒险家)
+         (位置 地牢南面))
+   ?令 &lt;- (命令 (行动 向北 走))
+   =&gt;
+   (retract ?令)
+   (modify ?位 (位置 地牢北面)))
+
+(defrule 从北无法行进
+   (物 (id 冒险家)
+      (位置 地牢北面))
+   ?令 &lt;- (命令 (行动 ~向南&amp;~向上 走))
+   =&gt;
+   (retract ?令)
+   (println "走不了。"))
+
+(defrule 从南无法行进
+   (物 (id 冒险家)
+      (位置 地牢南面))
+   ?令 &lt;- (命令 (行动 ~向北&amp;~向上 走))
+   =&gt;
+   (retract ?令)
+   (println "走不了。"))
+
+(defrule 逃不出
+   (物 (id 冒险家)
+         (位置 地牢北面 | 地牢南面))
+   ?c &lt;- (命令 (行动 向上 走 | 爬))
+   =&gt;
+   (retract ?c)
+   (println "墙太滑了。"))
+</code></pre>
+<p>分号用来标明注释，这也与 Lisp 类似。而且作者还沿用了根据层次决定分号数量的风格。</p>
+<h2>加载源码文件</h2>
+<p>需在 CLIPS IDE 设置当前目录，或者 load 文件路径。另两个文件为空。</p>
+<pre><code>CLIPS&gt; (unwatch all)
+CLIPS&gt; (clear)
+CLIPS&gt; (load definitions.clp)
+%%
+TRUE
+CLIPS&gt; (load data.clp)
+
+TRUE
+CLIPS&gt; (load kernel.clp)
+
+TRUE
+CLIPS&gt; (load game.clp)
+********
+TRUE
+CLIPS&gt; (run)
+Captured by goblins, you've been
+tossed in a pit at their lair.
+CLIPS&gt; (reset)
+CLIPS&gt; (run)
+Captured by goblins, you've been
+tossed in a pit at their lair.
+</code></pre>
+<p>reset 与 clear 的区别微妙，不如 unwatch all 那么易读。但 clear facts and rules with no condition 又太长。更重要的是，完全没有反馈信息，无法直接看到运行效果。另外，输出的 %% 和 <strong><em>**</em></strong> 不知从何而来。</p>
+<h2>指令写入批处理文件</h2>
+<p>将这些指令写到 loadq.bat （bat文件名大概就源自batch？）中，并且后面加 * 以隐藏输出。</p>
+<pre><code>(unwatch all)
+(clear)
+(load* definitions.clp)
+(load* kernel.clp)
+(load* data.clp)
+(load* game.clp)
+(reset)
+</code></pre>
+<p>留意最后一个空行，是为了 (reset) 后需要回车以执行，这点比较费神。</p>
+<p>继续嵌套，<code>静默运行.bat</code>：</p>
+<pre><code>(batch* loadq.bat)
+(run)
+</code></pre>
+<p>运行单指令即得输出：</p>
+<pre><code>CLIPS&gt; (batch* 静默运行.bat)
+被小妖抓住后，你被
+丢进了巢穴的地牢里。
+TRUE
+</code></pre>
+<h2>reset 后位置事实会清除</h2>
+<p>即便之前有 assert。</p>
+<pre><code>CLIPS&gt; (reset)
+CLIPS&gt; (facts)
+CLIPS&gt; (agenda)
+0      旁白: *
+For a total of 1 activation.
+</code></pre>
+<h2>定义由 reset 触发的事实声明</h2>
+<p>果然有 deffacts，命名用复数因为可跟几条事实。</p>
+<pre><code>CLIPS&gt; (deffacts 玩家
+   (物 (id 冒险家)
+               (种类 主角)
+               (位置 地牢北面)))
+CLIPS&gt; (watch facts)
+CLIPS&gt; (reset)
+==&gt; f-1     (物 (id 冒险家) (种类 主角) (位置 地牢北面))
+CLIPS&gt; (agenda)
+0      地牢北面: f-1
+0      旁白: *
+For a total of 2 activations.
+CLIPS&gt; (run)
+你在地牢北角。
+有个巨型蘑菇。
+地上横七竖八，
+都是探险者的尸首。
+被小妖抓住后，你被
+丢进了巢穴的地牢里。
+</code></pre>
+<p>从议程输出和运行结果可见旁白顺序颠倒了。</p>
+<h2>规则执行优先级</h2>
+<p>salience 范围 -10000 到 10000。越高则越优先。默认为 0，如相同则由触发规则的事实先后决定，越后发生的优先。</p>
+<pre><code>CLIPS&gt; (defrule 旁白
+   (declare (salience 10))
+   =&gt;
+   (println "被小妖抓住后，你被")
+   (println "丢进了巢穴的地牢里。")
+   (println))
+</code></pre>
+<h2>reset 重置触发</h2>
+<p>为何删除时 <code>&lt;== Activation 10     旁白: *</code> 的优先级是 10？</p>
+<pre><code>CLIPS&gt; (watch activations)
+CLIPS&gt; (reset)
+&lt;== Activation 10     旁白: *
+&lt;== f-1     (物 (id 冒险家) (种类 主角) (位置 地牢北面))
+==&gt; Activation 10     旁白: *
+==&gt; f-1     (物 (id 冒险家) (种类 主角) (位置 地牢北面))
+==&gt; Activation 0      地牢北面: f-1
+</code></pre>
+<p>尝试重新设置优先级后，看起来 defrule 后就改了：</p>
+<pre><code>CLIPS&gt; (defrule 旁白
+   (declare (salience 20))
+   =&gt;
+   (println "被小妖抓住后，你被")
+   (println "丢进了巢穴的地牢里。")
+   (println))
+==&gt; Activation 20     旁白: *
+</code></pre>
+<h2>议程里优先级高的在先</h2>
+<p>规则复杂了之后，调试是个挑战。</p>
+<pre><code>CLIPS&gt; (agenda)
+10     旁白: *
+0      地牢北面: f-1
+For a total of 2 activations.
+CLIPS&gt; (run)
+被小妖抓住后，你被
+丢进了巢穴的地牢里。
+
+你在地牢北角。
+有个巨型蘑菇。
+地上横七竖八，
+都是探险者的尸首。
+</code></pre>
+<h2>常见报错</h2>
+<h3>加载源码文件出错定位</h3>
+<p>比如：</p>
+<pre><code>CLIPS&gt; (batch* runq.bat)
+
+[PRNTUTIL2] game.clp, Line 6: Syntax Error:  Check appropriate syntax for defrule.
+
+ERROR:
+(defrule MAIN::旁白
+   =
+TRUE
+</code></pre>
+<p>【待续】</p>

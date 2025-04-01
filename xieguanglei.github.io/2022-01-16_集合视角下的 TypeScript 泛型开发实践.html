@@ -1,0 +1,474 @@
+<h2><a href="https://github.com/xieguanglei/xieguanglei.github.io/blob/master/source/2022-01-16/集合视角下的 TypeScript 泛型开发实践/index.md">仓库源文</a>，<a href="https://xieguanglei.github.io/blog/post/2022-01-16/集合视角下的 TypeScript 泛型开发实践.html">站点原文</a></h2>
+<h1>集合视角下的 TypeScript 泛型开发实践</h1>
+<p>前段时间我钻研了 <a href="https://www.freecodecamp.org/news/typescript-curry-ramda-types-f747e99744ab/">《How to master advanced TypeScript patterns》</a> 这篇文章，这是 <a href="https://github.com/millsp/ts-toolbelt">ts-toolbelt</a> 的作者 <a href="https://github.com/millsp">Pierre-Antoine Mills</a> 的一篇早期博客文章。文章提出了一个很有挑战的题目：<strong>TS 如何为柯里化函数编写类型支持？</strong></p>
+<p>我参考原文进行了一些实践，然后似乎领悟到一些关于 TS 泛型的<strong>更接近实质</strong>的知识 —— 从集合的视角。基于这些知识，我发现原文中的大部分泛型都有更严密的写法。我认为这次实践和思考的过程值得记录下来，因此有了本文。</p>
+<p>和原文一样，本文不展开讨论柯里化或函数式编程的问题，柯里化只是用以讨论 TS 泛型开发的<strong>素材</strong>。本文的线索是我的这份完整实现中，每一个泛型的作用，但这不是重点，重点是背后的领悟 —— 在文章前半部分，我常常会围绕一条简单的泛型讨论较长篇幅，请不要直接跳过。</p>
+<h3>命题</h3>
+<p>柯里化是函数式编程领域的一个重要概念，它表示这样的过程：把一个多参数的函数转化成「一次接收一个参数」的函数，比如把 <code>f(a,b,c)</code> 转化为 <code>f(a)(b)(c)</code>。举个更详细的例子：</p>
+<pre><code class="lang-typescript">// toCurry 函数为待柯里化的普通函数
+declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4) =&gt; 0;
+
+// curry 是柯里化转换函数，接收普通函数 toCurry，返回转换后的函数（先用 unknown 类型表示）
+declare const curry: (toCurry: Function) =&gt; unknown;
+
+// curried 是柯里化转换后的函数，调用者按次序每次传入一个参数，所有参数传入后，得到最终的返回值
+const curried = curry(toCurry);
+curried(1)(2)(3)(4);            // =&gt; 0
+</code></pre>
+<p>最简单的柯里化，一次仅能接收一个参数。</p>
+<p>高级的柯里化，一次可以接收不定项个参数：</p>
+<pre><code class="lang-typescript">// 调用 curried 一次传入多个参数
+curried(1)(2,3)(4);             // =&gt; 0
+</code></pre>
+<p>甚至还可以支持剩余参数和占位符：</p>
+<pre><code class="lang-typescript">// toCurry 中包含剩余参数
+declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4, ...args: 5[]) =&gt; 0;
+const curried = curry(toCurry);
+
+// 调用 curried 时也可以传入剩余参数
+curried(1)(2, 3)(4, 5, 5, 5, 5);    // =&gt; 0
+
+// 调用 curried 时通过传入占位符把参数 2 移到了 3 之后
+curried(1)(__, 3)(2, 4, 5);     // =&gt; 0
+</code></pre>
+<p>柯里化转换函数 <code>curry</code> 是柯里化的核心。转换函数接收一个普通函数 <code>toCurry</code> —— 暂时用 <code>Function</code> 类型来表示；并返回柯里化转换后的函数 <code>curried</code>（后面也称<strong>柯里化的函数</strong>或<strong>柯里化函数</strong>）—— 暂时用 <code>unknown</code> 类型来表示。如何写出它的合法的类型表达，就是这篇文章的主线。</p>
+<h3>CurriedV1：最简单的柯里化</h3>
+<p>最简单的，一次只接收一个参数的柯里化，我的实现如下：</p>
+<pre><code class="lang-typescript">type Length&lt;T extends unknown[]&gt; = T['length'];
+
+type Head&lt;T extends unknown[]&gt; = T extends [] ? never : T[0];
+
+type Tail&lt;T extends unknown[]&gt; = T extends [] ? 
+  never : T extends [unknown, ...infer R] ? R : T;
+
+type CurriedV1&lt;P extends unknown[], R&gt; = P extends [] ? 
+  R : (arg: Head&lt;P&gt;) =&gt; CurriedV1&lt;Tail&lt;P&gt;, R&gt;;
+
+type Curry = &lt;P extends unknown[], R&gt;(fn: (...args: P) =&gt; R) 
+  =&gt; CurriedV1&lt;P, R&gt;;
+
+declare const curry: Curry;
+declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4) =&gt; 0;
+
+const curried = curry(toCurry);
+curried(1)(2)(3)(4); // =&gt; 0
+</code></pre>
+<h3>泛型 <code>Length</code></h3>
+<p>第一条泛型 <code>Length</code> 返回元组的长度。</p>
+<pre><code class="lang-typescript">type Length&lt;T extends unknown[]&gt; = T['length'];
+</code></pre>
+<p>首先需要领悟的是，<strong>类型是对象的集合</strong>。比如，类型 <code>number</code> 是所有数字的集合，类型 <code>1</code> 表示由数值 <code>1</code> 组成的单一元素集合，类型 <code>string[]</code> 是所有「每一项都是字符串的数组」的集合。</p>
+<p><strong>泛型</strong>，从形式上看，是类型的函数（把一种类型转化为另一种类型）；从集合的角度看，是<strong>集合的映射</strong>（把一个集合变为另一个集合）。</p>
+<p>集合的映射，必须基于作用于<strong>集合内元素</strong>的<strong>规则</strong>。假设有集合 A 和 B，只有当 A 中的任意元素，按照<strong>某种规则</strong>，可以转化为 B 中的一个元素，我们才能说 A 和 B 之间存在映射关系。</p>
+<blockquote><p>既然映射只能从<strong>一个</strong>集合映射到另一个集合，如何理解多个泛型参数的情况？回答：把多个泛型参数看作一个元组类型。</p>
+</blockquote>
+<p>以 <code>Length</code> 为例：</p>
+<pre><code class="lang-typescript">type Length_Test1 = Length&lt;[unknown]&gt;;          // =&gt; 1
+type Length_Test2 = Length&lt;unknown[]&gt;;          // =&gt; number
+</code></pre>
+<p>将类型 <code>[unknown]</code> 传递给 <code>Length</code> 得到类型 <code>1</code>，描述了这样的事实：属于类型 <code>[unknown]</code> 的无数个元素中任意一个，不管是 <code>[1]</code> 还是 <code>['foo']</code> 还是 <code>[{foo: true}]</code>，<strong>对它求取长度</strong>，得到的结果都是 <code>1</code>。这些元素经过 <code>Length</code> 这条规则，都被转化成了数值 <code>1</code> 这个元素；换言之，类型 <code>[unknown]</code> 所代表的集合通过 <code>Length</code> 这条规则映射为只包含一个元素（也就是 <code>1</code> 这个数值）的单元素集合，这个集合对应的类型就是类型 <code>1</code>。</p>
+<p>将类型 <code>unknown[]</code> 传递给 <code>Length</code> 得到类型 <code>number</code>，这是因为：属于类型 <code>unknown[]</code> 的无数个元素中的任意一个，不管是 <code>[]</code> 还是 <code>[1]</code> 还是 <code>['foo', true]</code>，<strong>对它求取长度</strong>，得到的结果 <code>0</code>，<code>1</code> 或 <code>2</code> 等等，都是 <code>number</code> 类型。注意，<code>Length</code> 不能保证经过规则转换后的值<strong>占满</strong>映射得到的集合：因为没有什么数组的长度是 <code>0.5</code> 或 <code>-1</code>。所以，泛型运算 <code>Length&lt;unknown[]&gt;</code> 的结果 <code>number</code> 其实是真实世界中映射得到的结果集的<strong>超集</strong>。</p>
+<p>泛型返回「真实结果集」的超集，时常比我们预期的集合要宽泛，这是不可避免的。从集合的角度看，编写泛型的目的，就是提供「真实结果集」的<strong>可以用类型规则描述</strong>的，同时<strong>尽可能小</strong>的超集。理解这一点很重要。</p>
+<blockquote><p>如果 JS 支持无符号整数类型，<code>Length&lt;unknown[]&gt;</code>，似乎就可以得到完美的结果集，但这其实只是巧合。更多场合是无法得到完美结果集的：比如 <code>Length&lt;[unknown, ...unknown[]]&gt;</code> 需要返回「由大于 1 的整数」构成的集合。</p>
+</blockquote>
+<h3>JavaScript：先验性的知识</h3>
+<p>TS 是如何知道 <code>Length&lt;unknown[]&gt;</code> 的结果是 <code>number</code> 的呢？在 <code>Length&lt;unknown[]&gt;</code> 和 <code>number</code> 之间，是否还存在某种<strong>原理</strong>可以被理解呢？我认为：已经<strong>没有</strong>什么原理性的内容了，TS <strong>仅仅</strong>是根据<strong>先验性</strong>（公理性）的知识来直接<strong>给出答案</strong>。</p>
+<p>TS 的类型系统是为 JS 量身定制的：任意 JS 字面量都是 TS 的单元素类型；JS 的基础类型如 <code>number</code> 或 <code>string</code> 也构成了 TS 的基础类型；通过类似定义数组、JSON 对象、函数的语法，我们可以创建数组类型和元组类型、对象类型、函数类型，来表示包含符合条件的数组元素、对象元素或函数元素的集合。TS 当然熟悉 JS 里所有对象类型的<strong>习性</strong> —— 它们有什么成员属性，它们之间如何转化等等 —— 这些知识对 TS 来说是先验性的，所以 TS 才能轻易且正确地进行基础类型的运算。</p>
+<pre><code class="lang-typescript">// 基础类型间的运算
+type T1 = number['toFix'];                      // =&gt; () =&gt; string
+type T2 = [number, string][1];                  // =&gt; string
+type T3 = keyof { foo: number, bar: string };   // =&gt; 'foo' | 'bar'
+</code></pre>
+<h3>泛型 <code>Head</code></h3>
+<p>第二条泛型 <code>Head</code> 取出元组 <code>T</code> 中的第一个元素的类型。</p>
+<pre><code class="lang-typescript">type Head&lt;T extends unknown[]&gt; = T extends [] ? never : T[0];
+</code></pre>
+<p><code>Head</code> 首先判断是否满足 <code>T extends []</code>，如果满足，说明 <code>T</code> 是只包含空数组的单元素集，返回 <code>never</code>；否则，说明 <code>T</code> 不是空数组单元素集，可能有第一个元素，返回 <code>T[0]</code>。</p>
+<p>为什么条件泛型里只有 <code>extends</code> 关键字，而没有 <code>equals</code> 关键字或 <code>==</code> 运算符？我的领悟是：在集合运算中，只有<strong>包含运算</strong>才能产生「是」或「否」的结果，而集合的其他运算：交集、并集、补集、映射，他们的运算结果都是另一个集合。在集合的语境下，A 包含于 B，意味着 A 是 B 的子集；切换到类型语境下，即 A 是 B 的子类，也就是 A 继承自 B。</p>
+<blockquote><p>如何判断两个类型完全相同？只需判断它们互相包含（互相继承）。</p>
+</blockquote>
+<p>对 <code>Head</code> 进行一些测试：</p>
+<pre><code class="lang-typescript">type Head_Test1 = Head&lt;[1, number]&gt;;    // =&gt; 1
+type Head_Test2 = Head&lt;string[]&gt;;       // =&gt; string
+type Head_Test3 = Head&lt;unknown&gt;;        // ts error
+type Head_Test4 = Head&lt;[]&gt;;             // =&gt; never
+</code></pre>
+<p>前三条测试的结果是符合直觉的。第四条，当我们把<strong>包含空数组的单元素集</strong>传递给 <code>Head</code>，得到的结果是 <code>never</code> 类型，表示空集，也没有什么问题。</p>
+<p>让我们再看一眼第二条测试：请问空数组是不是 <code>string[]</code> 集合的元素？当然是了。那么，在真实世界的 <code>Head</code> 映射中，空数组被映射为了什么元素？</p>
+<p>集合论中，映射的前提是，映射规则对源集合内的所有元素都生效。我们应该如何理解 <code>Head</code>？</p>
+<p>我的理解是：TS 中存在一个<strong>写不出来</strong>（JS 中没有）的 <strong><code>never</code> 对象</strong>，而<strong>能写出来</strong>的 <strong><code>never</code> 类型</strong>表示包含 <code>never</code> 对象的单元素集。同时，TS 中任何能写出来的类型都隐式包含了 <code>never</code> 对象，这使得任何类型与 <code>never</code> 类型求并集得到的都是自身，从而使本来是单元素集的 <code>never</code> 类型在<strong>概念</strong>上变成了空集。</p>
+<p>从这个角度理解 <code>Head&lt;string[]&gt;</code> 就说得通了：<code>string[]</code> 集合中的空数组元素被映射为了 <code>never</code>，而其他元素被映射为了 <code>string</code>；因为 <code>string | never</code> 依然是 <code>string</code>，所以最终返回 <code>string</code>。</p>
+<h3>泛型 <code>Tail</code></h3>
+<p>第三条泛型 <code>Tail</code> 提取元组 <code>T</code> 的<strong>尾项</strong>（即除去第一项后剩余的那些项）的类型。</p>
+<pre><code class="lang-typescript">type Tail&lt;T extends unknown[]&gt; = T extends [] ?
+  never : T extends [unknown, ...infer R] ? R : T;
+</code></pre>
+<p>有点复杂。</p>
+<p>让我们先来看一个简易版本：</p>
+<pre><code class="lang-typescript">type SimpleTail&lt;T extends unknown[]&gt; = T extends [unknown, ...infer R] ? R : never;
+</code></pre>
+<p><code>SimpleTail</code> 在形式上和 JS 代码很像：使用剩余参数运算符，把元组中除去第一项的剩余部分提取出来。简单的测试也没有问题：</p>
+<pre><code class="lang-typescript">type SimpleTail_Test1 = SimpleTail&lt;[]&gt;;                    // =&gt; never
+type SimpleTail_Test2 = SimpleTail&lt;[1, 2, string]&gt;;        // =&gt; [2, string]
+type SimpleTail_Test3 = SimpleTail&lt;[1, 2, ...string[]]&gt;;   // =&gt; [2, ...string[]]
+</code></pre>
+<p>但是，如果用 <code>string[]</code> 测试一下，得到了 <code>never</code>。这就不太对劲了：</p>
+<pre><code class="lang-typescript">type SimpleTail_Test3 = SimpleTail&lt;string[]&gt;;              // =&gt; never
+</code></pre>
+<p>在真实世界中，<code>string[]</code> 集合中的几乎所有元素（除空数组对象外），取尾项操作都是有意义的。事实上，如果我们举一些例子进行归纳的话，一定可以得出结论：对 <code>string[]</code> 取尾项的结果<strong>就</strong>是 <code>string[]</code>。但是，根据 <code>SimpleTail</code> 的实现：<code>string[]</code> 又确实不是 <code>[unknown, ...unknown[]]</code> 的子集，我们只能返回 <code>never</code>。</p>
+<p>再来看正式版本的 <code>Tail</code>：</p>
+<pre><code class="lang-typescript">type Tail&lt;T extends unknown[]&gt; = T extends [] ?
+  never : T extends [unknown, ...infer R] ? R : T;
+</code></pre>
+<ol>
+<li>分支 1：如果 <code>T</code> 是空数组单元素集的子集，我们可以断定：<code>T</code> 只能是空数组单元素集或 <code>never</code>，此时返回 <code>never</code>；</li>
+<li>分支 2：如果 <code>T</code> 是「由所有「拥有第一项的数组」组成的集合」的子集，我们可以断定：<code>T</code> 不可能包含空数组元素，此时用类似 <code>SimpleTail</code> 中的形式提取出尾项类型。</li>
+<li>分支 3：如果上述两者都不满足，我们直接返回 <code>T</code>。</li>
+</ol>
+<p>传入 <code>string[]</code> 测试一下，通过分支 3，得到了预期的类型：<code>string[]</code>。</p>
+<pre><code class="lang-typescript">type Tail_Test4 = Tail&lt;string[]&gt;;                           // =&gt; string[]
+</code></pre>
+<p>你真的笃定吗？如果 <code>T</code> 即不满足分支 1 也不满足分支 2，就一定是类似于 <code>string[]</code> 或 <code>number[]</code> 这种纯粹的数组类型，而不可能是<strong>其他</strong>类型吗？</p>
+<p>让我们归纳一下数组（包括元组）类型的<strong>写法</strong>：（我们不关心数组项的具体类型，全部用 <code>unknown</code> 代替）</p>
+<ol>
+<li>空数组：<code>[]</code>；</li>
+<li>纯粹的数组：<code>unknown[]</code>；</li>
+<li>元组：<code>[unknownA, unknownB, unknownC]</code>；</li>
+<li>带剩余项的元组：<code>[unknownA, unknownB, ...unknownC[]]</code>。</li>
+</ol>
+<p>经过归纳，我们发现定义数组类型的写法<strong>只有</strong>上面这 4 种，<strong>没有</strong>其他的了！能够<strong>写出来</strong>的数组类型，能够<strong>算出来</strong>（其他泛型返回）的数组类型，最后都能归纳到其中。这 4 种写法就是 TS 处理数组类型的<strong>边界</strong>，换言之 TS 无法产生「无法用这 4 种写法组合出来」的数组类型。</p>
+<p>正是基于对以上知识的理解，我们确信只有第 2 种写法（纯粹的数组类型）才能走到分支 3。才能够放心地在分支 3 里返回直接 <code>T</code>。</p>
+<p>注意，这里还有一个陷阱。考虑传入并集的情况：</p>
+<pre><code class="lang-typescript">type Tail_Test5 = Tail&lt;[] | string[] | [1, 2, 3]&gt;;          // string[] | [2, 3]
+</code></pre>
+<p>根据集合论，并集的映射，应由组成并集的<strong>每个</strong>单个集合，分别映射之后，再对<strong>多个结果集</strong>取并集，作为最终的结果。</p>
+<p><code>Tail</code> 没有令我们失望，它正确地返回了预期的类型。但这是有条件的，泛型中的分支条件必须满足<strong>分发条件类型</strong>的约束：即条件必须是泛型参数<strong>直接</strong> <code>extends</code> 某个类型（形如 <code>T extends SOMETYPE</code>），如果我们把 <code>Tail</code> 实现中的第一个条件 <code>T extends []</code> 换成 <code>Length&lt;T&gt; extends 0</code>，分发条件类型的约束失效，命题「<code>T</code> 只可能是这 4 种写法之一」不复存在，—— 大厦由此坍塌。</p>
+<pre><code class="lang-typescript">type BrokenTail&lt;T extends unknown[]&gt; = Length&lt;T&gt; extends 0 ?
+  never : T extends [unknown, ...infer R] ? R : T;
+
+type BrokenTail_Test6 = BrokenTail&lt;[] | [1, 3] | string[]&gt;;  // =&gt; [] | [3] | string[]
+</code></pre>
+<p>你是否已经体会到泛型编程的某种<strong>笨拙</strong>之处？集合映射的规则（即泛型的语义）是基于<strong>集合内元素</strong>的，但泛型的实现者必须基于<strong>集合本身</strong>的运算来回答「映射之后是什么集合」的问题。这需要从真实世界的角度切实地归纳总结，才能保障映射的<strong>正确性</strong>和<strong>最小性</strong>。</p>
+<h3>转换函数的类型</h3>
+<p>目前，柯里化转换函数 <code>curry</code> 的类型定义如下：接收一个任意函数，返回 <code>unknown</code>。</p>
+<pre><code class="lang-typescript">type Curry = (toCurry: Function) =&gt; unknown;
+
+declare const curry: Curry;
+</code></pre>
+<p>我们要把 <code>unknown</code> 换成一个<strong>更精巧的类型</strong>，这样用户在使用 <code>curry</code> 返回的结果（即柯里化函数）时，就能够获得正确的类型提示了。</p>
+<p>显然，这个「更精巧的类型」具体是什么，取决于调用 <code>curry</code> 时传入的那个函数。我们使用<strong>泛型约束</strong>把传入函数的参数 <code>P</code> 和返回类型 <code>R</code> 提取出来：</p>
+<pre><code class="lang-typescript">type Curry = &lt;P extends unknown[], R&gt;(toCurry: (...args: P) =&gt; R) =&gt; Curried&lt;P, R&gt;;
+</code></pre>
+<p>然后，将 <code>P</code> 和 <code>R</code> 传递 <code>Curried</code> 泛型，作为柯里化函数的类型（即前述的「更精巧的类型」）。</p>
+<blockquote><p>注意，<code>Curry</code> 不是泛型映射，只是一个具有泛型约束的函数类型。</p>
+</blockquote>
+<h3>泛型 <code>CurriedV1</code></h3>
+<p><code>CurriedV1</code> 是 <code>Curried</code> 泛型的第一版实现，它支持最简单的柯里化（每次只消费一个参数）。</p>
+<pre><code class="lang-typescript">type CurriedV1&lt;P extends unknown[], R&gt; = P extends [] ?
+  R : (arg: Head&lt;P&gt;) =&gt; CurriedV1&lt;Tail&lt;P&gt;, R&gt;;
+</code></pre>
+<p>泛型是可以递归调用的，<code>CurriedV1</code> 就是这样，当它每次递归地调用自己，元组 <code>P</code> 的规模就减一，直到其变为空数组，结束递归。</p>
+<p>测试一下，很完美：</p>
+<pre><code class="lang-typescript">type CurriedV1_Test1 = CurriedV1&lt;[1, 2, 3], 0&gt;; // =&gt; (arg: 1) =&gt; (arg: 2) =&gt; (arg: 3) =&gt; 0
+</code></pre>
+<p>你可能会问：如果传入一个无限（未知）长度的数组类型，比如 <code>number[]</code>，TS 会不会陷入死循环？让我们试一试：</p>
+<pre><code class="lang-typescript">type CurriedV1_Test2 = CurriedV1&lt;number[], 0&gt;; // =&gt; (arg: number) =&gt; ...
+</code></pre>
+<p>TS 没有报错或陷入死循环，而是仍然映射出了一种可以无穷调用下去的函数类型。所以，我们可以得出结论：递归时逐渐缩减规模并不是泛型递归的必要条件。</p>
+<p>事实上，泛型的某种<strong>惰性</strong>机制允许我们去为诸如 JS 中的<strong>循环引用对象</strong>或<strong>返回自身的函数</strong>定义类型：</p>
+<pre><code class="lang-typescript">type Foo&lt;T&gt; = { foo: Foo&lt;T&gt; };
+declare const foo: Foo&lt;number&gt;;
+foo.foo.foo.foo.foo.foo;            // =&gt; 属性 foo 可以无限取下去
+
+type Bar&lt;T extends () =&gt; number&gt; = () =&gt; Bar&lt;T&gt;;
+declare const bar: Bar&lt;() =&gt; 1&gt;;
+bar()()()()();                      // =&gt; 函数 bar 可以无限调用下去
+</code></pre>
+<blockquote><p>讲到这里，其实大部分「从集合视角看泛型」的领悟已经陈述完毕了。接下来，我会加快一些速度，把更高级的柯里化的类型实现讲完。</p>
+</blockquote>
+<h3>CurriedV2：允许不定项参数</h3>
+<p>如果柯里化函数可以接收不定项参数（形如 <code>curried(1)(2,3)(4)</code>），就会更易用一些。我的实现是：</p>
+<pre><code class="lang-typescript">type Prepend&lt;E, T extends unknown[]&gt; = [E, ...T];
+
+type Drop&lt;N extends number, P extends unknown[], T extends unknown[] = []&gt; =
+    Length&lt;T&gt; extends N ? P : Drop&lt;N, Tail&lt;P&gt;, Prepend&lt;unknown, T&gt;&gt;;
+
+type PartialTuple&lt;T extends unknown[]&gt; = Partial&lt;T&gt; &amp; unknown[];
+
+type CurriedV2&lt;P extends unknown[], R&gt; =
+    Length&lt;P&gt; extends 0
+    ? R
+    : &lt;T extends PartialTuple&lt;P&gt;&gt;(...args: T) =&gt; CurriedV2&lt;Drop&lt;Length&lt;T&gt;, P&gt;, R&gt;;
+
+type Curry = &lt;P extends unknown[], R&gt;(fn: (...args: P) =&gt; R) =&gt; CurriedV2&lt;P, R&gt;;
+
+declare const curry: Curry;
+declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4) =&gt; 0;
+
+const curried = curry(toCurry);
+curried(1, 2)(3, 4); // =&gt; 0
+</code></pre>
+<h3>泛型 <code>Prepend</code></h3>
+<p>泛型 <code>Prepend</code> 在元组类型前加上一项。</p>
+<pre><code class="lang-typescript">type Prepend&lt;E, T extends unknown[]&gt; = [E, ...T];
+
+type Prepend_Test1 = Prepend&lt;1, [2]&gt;;                   // ==&gt; [1, 2]
+type Prepend_Test2 = Prepend&lt;1, [2, ...3[]]&gt;;           // ==&gt; [1, 2, ...3[]]
+type Prepend_Test3 = Prepend&lt;1 | 2, 3[]&gt;;               // ==&gt; [1 | 2, ...3[]]
+</code></pre>
+<p>注意，<code>Prepend</code> 不是条件类型，自然不满足分发条件类型，所以 <code>Prepend_Test3</code> 是 <code>[1 | 2, ...3[]]</code> 而不是 <code>[1, ...3[]] | [2, ...3[]]</code>。如果你想要得到后者，可以将 <code>Prepend</code> 的实现放在条件类型内，如下所示：</p>
+<pre><code class="lang-typescript">type DistributedPrepend&lt;E extends unknown, T extends&gt; = E extends unknown ?
+  [E, ...T] : never;
+
+type DistributedPrepend_Test1 =
+  DistributedPrepend&lt;1 | 2, 3[]&gt;;    // ==&gt; [1, ...3[]] | [2, ...3[]]
+</code></pre>
+<blockquote><p>本文后续讨论假设所有传入的类型都是不分散的（即非并集的形式），也不再讨论分发条件类型的问题。</p>
+</blockquote>
+<h3>泛型 <code>Drop</code></h3>
+<p>泛型 <code>Drop</code> 负责从元组中删掉头部的 <code>N</code> 个元素。<code>Drop</code> 也是递归的，每次递归删掉一个元素，同时放置一个 <code>unknown</code> 到元组 <code>T</code> 中。当元组 <code>T</code> 的长度与 <code>N</code> 相等时，说明已经删掉了足够多的元素，把剩下的元素返回即可。</p>
+<pre><code class="lang-typescript">type Drop&lt;N extends number, P extends unknown[], T extends unknown[] = []&gt; =
+    Length&lt;T&gt; extends N ? P : Drop&lt;N, Tail&lt;P&gt;, Prepend&lt;unknown, T&gt;&gt;;
+</code></pre>
+<p>简单地测试，没有问题。</p>
+<pre><code class="lang-typescript">type Drop_Test1 = Drop&lt;2, [1, 2, 3, 4]&gt;;    // =&gt; [3, 4]
+type Drop_Test2 = Drop&lt;5, [1, 2, 3, 4]&gt;;    // =&gt; never
+type Drop_Test3 = Drop&lt;5, [1, 2, ...3[]]&gt;;  // =&gt; 3[]
+</code></pre>
+<p><code>Drop</code> 的关键在于，使用了一个空数组，也就是第三个泛型参数 <code>T</code> 来进行计数。</p>
+<blockquote><p>有趣的是，类似的机制可以用来实现整数的加减法：</p>
+<pre><code class="lang-typescript">type FromLength&lt;N extends number, P extends unknown[] = []&gt; = 
+    Length&lt;P&gt; extends N ? P : FromLength&lt;N, Prepend&lt;unknown, P&gt;&gt;;
+
+type Add&lt;
+  A extends number, 
+  B extends number, 
+  Res extends unknown[] = FromLength&lt;A&gt;, Count extends unknown[] = []
+&gt; = Length&lt;Count&gt; extends B ? 
+      Length&lt;Res&gt; : 
+      Add&lt;A, B, Prepend&lt;unknown, Res&gt;, Prepend&lt;unknown, Count&gt;&gt;;
+
+type Sub&lt;
+  A extends number,
+  B extends number,
+  Res extends unknown[] = [], Count extends unknown[] = FromLength&lt;B&gt;
+&gt; = Length&lt;Count&gt; extends A ? 
+      Length&lt;Res&gt; : 
+      Sub&lt;A, B, Prepend&lt;unknown, Res&gt;, Prepend&lt;unknown, Count&gt;&gt;;
+
+type Eight = Add&lt;3, 5&gt;;     // =&gt; 8
+type Four = Sub&lt;9, 5&gt;;      // =&gt; 4
+</code></pre>
+</blockquote>
+<h3>泛型 <code>PartialTuple</code></h3>
+<p>泛型 <code>PartialTuple</code> 的故事要从 TS 的官方泛型 <code>Partial</code> 开始讲。我们知道 <code>Partial</code> 泛型可以将一个对象类型的所有属性都变得可选。当它作用于数组时，会使数组的每一项变成可选，比如 <code>Partial&lt;[number, string]&gt;</code> 可以得到<strong>类似</strong>于 <code>[number?, string?]</code> 的类型。</p>
+<p>我们期望 <code>CurriedV2</code> 支持不定项参数，因此需要从定项参数元组中抽取出「元组的前任意项」类型：比如定项参数是类型 <code>[1, 2, 3]</code>，那么不定项参数可以是 <code>[1]</code>，<code>[1, 2]</code> 或者 <code>[1, 2, 3]</code>。然而，TS 目前的类型运算没办法实现「元组的前任意项」这样的映射规则，而 <code>Partial</code> 是最接近的实现（最小超集）。</p>
+<p>为什么又需要 <code>PartialTuple</code> 呢？因为被 <code>Partial</code> 转换后的类型已经不再是元组了：诸如 <code>length</code>，<code>map</code> 等属性也成了可选属性，这使得形如 <code>{0: 'Hello'}</code> 这样的对象也在 <code>Partial&lt;[string]&gt;</code> 的集合内。<code>PartialTuple</code> 将这部分不属于元组的元素剔除在外。</p>
+<pre><code class="lang-typescript">type PartialTuple&lt;T extends unknown[]&gt; = Partial&lt;T&gt; &amp; unknown[];
+</code></pre>
+<p>原文直接使用 <code>Partial</code> 而不报错，这是 TS 的一个 bug：对于 <code>Partial</code> 传入元组类型后，究竟还是不是元组，在不同的条件下判断不一致。我提交了 <a href="https://github.com/microsoft/TypeScript/issues/47128">issue</a> 和<a href="https://www.typescriptlang.org/play?ts=4.1.5#code/C4TwDgpgBAIgjAHgAoD4oF4pKhAHsCAOwBMBnKAV0IGtCB7Ad0IG0BdKAfigAoA6fgIYAuLAIBOwAJYCANshQBKDGgBudScSgjCEFRDEBuKAHpjOMWLpiAsACg7oSLABMyHPiJlKNekzZpMPkERJHEpWXkldFV1YiNTKFIKAGNkiFJSOzsEgBUAC2hgBjp3AQBbMBloUjy6ChlNACM6YDzElLSMiE0rKAAzAUkq4izbIA">最简复现</a>。</p>
+<h3>泛型 <code>CurriedV2</code></h3>
+<p><code>CurriedV2</code> 与 <code>CurriedV1</code> 在框架上有点类似：</p>
+<pre><code class="lang-typescript">type CurriedV1&lt;P extends unknown[], R&gt; = 
+  P extends [] ? R : 
+    (arg: Head&lt;P&gt;) =&gt; CurriedV1&lt;Tail&lt;P&gt;, R&gt;;
+
+type CurriedV2&lt;P extends unknown[], R&gt; =
+  P extends [] ? R : 
+    &lt;T extends PartialTuple&lt;P&gt;&gt;(...args: T) 
+      =&gt; CurriedV2&lt;Drop&lt;Length&lt;T&gt;, P&gt;, R&gt;;
+</code></pre>
+<p>最重要的一点区别是，<code>CurriedV2</code> 为柯里化函数引入了泛型约束，这样每次调用时，就能动态提取出传入参数的数量，并据此计算此次调用应该返回的类型。</p>
+<pre><code class="lang-typescript">type CurriedV1_Test1 = CurriedV1&lt;[1, 2, 3], 0&gt;; 
+// =&gt; (arg: 1) =&gt; (arg: 2) =&gt; (arg: 3) =&gt; 0
+
+type CurriedV2_Test1 = CurriedV2&lt;[1, 2, 3], 0&gt;;
+// =&gt; &lt;T extends PartialTuple&lt;[1, 2, 3]&gt;&gt;(...args: T)
+//   =&gt; CurriedV2&lt;Drop&lt;Length&lt;T&gt;, [1, 2, 3], []&gt;, 0&gt;
+</code></pre>
+<p>简单测试，我们发现 <code>CurriedV2_Test1</code> 无法直白给出柯里化函数的类型，因为每一步调用后得到类型，只有调用的时候才能（根据参数）确定。</p>
+<h3>CurriedV3：支持剩余参数</h3>
+<p>有些函数的参数分为两个部分：固定参数和剩余参数。比如这样的 <code>toCurry</code>：在前四个固定参数之后，你可以传入任意个类型为 <code>5</code> 的剩余参数：</p>
+<pre><code class="lang-typescript">declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4, ...args: 5[]) =&gt; 0;
+
+// 必须在最后一次调用时一次性传入所有剩余参数
+curry(toCurry)(1, 2, 3)(4, 5, 5);
+</code></pre>
+<p>如果柯里化可以支持这种函数，无疑会更好：这就是 <code>CurriedV3</code> 的目标。我的实现是：</p>
+<pre><code class="lang-typescript">type CurriedV3&lt;P extends unknown[], R&gt; =
+    P extends [unknown, ...unknown[]]
+    ? &lt;T extends PartialTuple&lt;P&gt;&gt;(...args: T) =&gt; CurryV3&lt;Drop&lt;Length&lt;T&gt;, P&gt;, R&gt;
+    : R;
+
+type Curry = &lt;P extends unknown[], R&gt;(fn: (...args: P) =&gt; R) =&gt; CurriedV3&lt;P, R&gt;;
+
+declare const curry: Curry;
+declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4, ...args: 5[]) =&gt; 0;
+
+const curried = curry(toCurry);
+const result = curried(1, 2, 3)(4，5，5);
+</code></pre>
+<p><code>CurriedV3</code> 与 <code>CurriedV2</code> 的区别<strong>仅仅</strong>在于递归结束条件不同：<code>CurriedV3</code> 通过判断满足 <code>P extends [unknown, ...unknown[]]</code> 推断出 <code>P</code> 仍然包含固定项，此时继续递归；不满足此条件说明 <code>P</code> 中只有剩余参数了，结束递归。</p>
+<p>得益于严密的 <code>Drop</code> 以及背后的 <code>Tail</code> —— 它们妥善处理了纯粹数组和包含剩余项元组的情况 —— <code>CurriedV3</code> 的递归部分和 <code>CurriedV2</code> 是完全一致的。</p>
+<pre><code class="lang-typescript">type Drop_Test3 = Drop&lt;5, [1, 2, ...3[]]&gt;;  // =&gt; 3[]
+type Tail_Test5 = Tail&lt;1[]&gt;;                // =&gt; 1[]
+</code></pre>
+<p>如果 <code>Drop</code> 和 <code>Tail</code> 对上述较为边缘的处理不够完善（比如直接返回 <code>never</code> 或 <code>[]</code>），<code>CurriedV1</code> 和 <code>CurriedV2</code> 并不会受什么影响，但是 <code>CurriedV3</code> 的实现就没那么容易了。</p>
+<h3>CurriedV4: 支持占位符</h3>
+<p>柯里化中的占位符，能够帮助我们延迟传入参数的时机。比如：</p>
+<pre><code class="lang-typescript">// 普通的调用
+curried(1, 2, 3)(4, 5);
+// 占位符调用
+curried(1, __, 3)(2, 4, 5);
+// 甚至
+curried(1, __, 3)(__, 4)(2, 5);
+</code></pre>
+<p>这就是 <code>CurriedV4</code> 的目标。我的实现是：</p>
+<pre><code class="lang-typescript">type Equal&lt;X, Y&gt; = X extends Y ? Y extends X ? true : false : false;
+
+type Item&lt;T extends unknown[]&gt; = T extends (infer R)[] ? R : never;
+
+type PlaceholderTuple&lt;T extends unknown[], M extends unknown&gt; =
+  { [P in keyof T]?: T[P] | M } &amp; unknown[];
+
+type Reverse&lt;T extends unknown[], R extends unknown[] = []&gt; =
+    Equal&lt;Length&lt;T&gt;, number&gt; extends true
+    ? Item&lt;T&gt;[]
+    : T extends [unknown, ...unknown[]]
+    ? Reverse&lt;Tail&lt;T&gt;, Prepend&lt;Head&lt;T&gt;, R&gt;&gt;
+    : R;
+
+type Join&lt;P extends unknown[], T extends unknown[]&gt; = 
+    P extends [unknown, ...unknown[]] ? Join&lt;Tail&lt;P&gt;, Prepend&lt;Head&lt;P&gt;, T&gt;&gt; : T;
+
+type Concat&lt;P extends unknown[], T extends unknown[]&gt; = Join&lt;Reverse&lt;P&gt;, T&gt;;
+
+type PlaceholderMatched&lt;
+  T extends unknown[], S extends unknown[], M extends unknown, R extends unknown[] = []
+&gt; = T extends [unknown, ...unknown[]] ?
+      PlaceholderMatched&lt;Tail&lt;T&gt;, Tail&lt;S&gt;, M, Head&lt;T&gt; extends M ? Prepend&lt;Head&lt;S&gt;, R&gt; : R&gt;
+      : Reverse&lt;R&gt;;
+
+type __ = '__';
+type CurriedV4&lt;P extends unknown[], R&gt; =
+    P extends [unknown, ...unknown[]]
+    ? &lt;T extends PlaceholderTuple&lt;P, __&gt;&gt;(...args: T) =&gt;
+        CurriedV4&lt;Concat&lt;PlaceholderMatched&lt;T, P, __&gt;, Drop&lt;Length&lt;T&gt;, P&gt;&gt;, R&gt;
+    : R;
+
+type Curry = &lt;P extends unknown[], R&gt;(fn: (...args: P) =&gt; R) =&gt; CurriedV4&lt;P, R&gt;;
+
+declare const curry: Curry;
+declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4, ...args: 5[]) =&gt; 0;
+declare const __: __;
+
+const curried = curry(toCurry);
+curried(1, __, 3)(2, 4, 5, 5);          // =&gt; 0
+curried(1, __, 3)(__, 4)(2);            // =&gt; 0
+</code></pre>
+<h3>泛型 <code>Equal</code></h3>
+<p>泛型 <code>Equal</code> 判断两个类型是不是完全相等（注意，仍然是集合运算，<code>true</code> 和 <code>false</code> 表示包含布尔值的单元素集合）。</p>
+<pre><code class="lang-typescript">type Equal&lt;X, Y&gt; = X extends Y ? Y extends X ? true : false : false;
+
+type Equal_Test1 = Equal&lt;number, 1&gt;;            // =&gt; false
+type Equal_Test2 = Equal&lt;number, number&gt;;       // =&gt; true
+</code></pre>
+<h3>泛型 <code>Item</code></h3>
+<p>泛型 <code>Item</code> 从数组类型中提取出数组项的可能类型。</p>
+<pre><code class="lang-typescript">type Item&lt;T extends unknown[]&gt; = T extends (infer R)[] ? R : never;
+
+type Item_Test1 = Item&lt;string[]&gt;; // =&gt; string
+type Item_Test2 = Item&lt;[string, ...1[]]&gt;; // =&gt; string | 1
+</code></pre>
+<h3>泛型 <code>PlaceholderTuple</code></h3>
+<p>泛型 <code>PlaceholderTuple</code> 与 <code>PartialTuple</code> 很类似，它不仅使元组的每一项变成可选，而且使每一项都可能是传入的类型 <code>M</code>。</p>
+<pre><code class="lang-typescript">type PlaceholderTuple&lt;T extends unknown[], M extends unknown&gt; =
+  { [P in keyof T]?: T[P] | M } &amp; unknown[];
+</code></pre>
+<h3>泛型 <code>Reverse</code></h3>
+<p>泛型 <code>Reverse</code> 将元组头尾翻转。</p>
+<pre><code class="lang-typescript">type Reverse&lt;T extends unknown[], R extends unknown[] = []&gt; =
+    Equal&lt;Length&lt;T&gt;, number&gt; extends true
+    ? Item&lt;T&gt;[]
+    : T extends [unknown, ...unknown[]]
+    ? Reverse&lt;Tail&lt;T&gt;, Prepend&lt;Head&lt;T&gt;, R&gt;&gt;
+    : R;
+</code></pre>
+<p>泛型 <code>Reverse</code> 值得稍作展开。先看核心部分（从 <code>T extends</code> 开始）：接收数组类型 <code>T</code>，递归地调用自己，每次递归将 <code>T</code> 的头元素取下来，从头部推入 <code>R</code> 中。当 <code>T</code> 消耗殆尽，<code>R</code> 自然就是翻转后的数组。</p>
+<p>对于固定长度的元组类型，这样做没问题。但是，如果想要翻转不固定长度的数组类型呢？</p>
+<p>通过真实世界中的简单的归纳，我们知道 <code>Reverse&lt;string[]&gt;</code> 应该是 <code>string[]</code>，映射仍然是完美的；对于 <code>Reverse&lt;[string, ...number[]]&gt;</code>，我们只能将其映射为 <code>Array&lt;string | number&gt;</code> —— 我们之前说过，泛型的返回时常比我们预期的类型要宽泛，这不可避免。</p>
+<p><code>Reverse</code> 实现的前两行（非核心部分），就是用来处理上述两种不固定长度数组类型的。</p>
+<p>测试一下：</p>
+<pre><code class="lang-typescript">type Reverse_Test1 = Reverse&lt;[1, 2, 3]&gt;;                // =&gt; [3, 2, 1]
+type Reverse_Test2 = Reverse&lt;unknown[]&gt;;                // =&gt; unknown[]
+type Reverse_Test3 = Reverse&lt;[string, ...number[]]&gt;;    // =&gt; Array&lt;string | number&gt;
+</code></pre>
+<h3>泛型 <code>Join</code></h3>
+<p>泛型 <code>Join</code> 将两个元组类型「头对头连接起来」。注意，第一个参数必须是固定项的元组类型。</p>
+<pre><code class="lang-typescript">type Join&lt;P extends unknown[], T extends unknown[]&gt; =
+  P extends [unknown, ...unknown[]] ? Join&lt;Tail&lt;P&gt;, Prepend&lt;Head&lt;P&gt;, T&gt;&gt; : T;
+
+type Join_Test1 = Join&lt;[1, 2], [3, 4]&gt;;         // =&gt; [2, 1, 3, 4]
+type Join_Test2 = Join&lt;[1, 2], [3, ...4[]]&gt;;    // =&gt; [2, 1, 3, ...4[]]
+type Join_Test3 = Join&lt;[1, ...2[]], [3, 4]&gt;;    // =&gt; ts error
+</code></pre>
+<h3>泛型 <code>Concat</code></h3>
+<p>泛型 <code>Concat</code> 将两个元组类型顺序连接起来。同理，第一个参数也必须是固定项的元组类型。</p>
+<pre><code class="lang-typescript">type Concat&lt;P extends unknown[], T extends unknown[]&gt; = Join&lt;Reverse&lt;P&gt;, T&gt;;
+
+type Concat_Test1 = Concat&lt;[1, 2], [3, 4]&gt;;         // =&gt; [1, 2, 3, 4]
+type Concat_Test2 = Concat&lt;[1, 2], [3, ...4[]]&gt;;    // =&gt; [1, 2, 3, ...4[]]
+type Concat_Test3 = Concat&lt;[1, ...2[]], [3, 4]&gt;;    // =&gt; ts error
+</code></pre>
+<h3>泛型 <code>PlaceholderMatched</code></h3>
+<p>泛型 <code>PlaceholderMatched</code> 将元组 <code>T</code> 中的类型为 <code>M</code> 的项找出来，然后从元组 <code>S</code> 中提取出对应位置的项，顺序存放在一个新的元组里 <code>R</code>，并最终返回。</p>
+<pre><code class="lang-typescript">type PlaceholderMatched&lt;
+  T extends unknown[], S extends unknown[], M extends unknown, R extends unknown[] = []
+&gt; = T extends [unknown, ...unknown[]] ? 
+      PlaceholderMatched&lt;Tail&lt;T&gt;, Tail&lt;S&gt;, M, Head&lt;T&gt; extends M ? Prepend&lt;Head&lt;S&gt;, R&gt; : R&gt;
+      : Reverse&lt;R&gt;;
+</code></pre>
+<p>有一点拗口。简单看一下测试就知道 <code>PlaceholderMatched</code> 的具体作用了：</p>
+<pre><code class="lang-typescript">type __ = '__';
+type PlaceholderMatched_Test1 = 
+  PlaceholderMatched&lt;[1, __, __, 4], [1, 2, 3, 4, 5], __&gt;; // =&gt; [2, 3]
+</code></pre>
+<h3>泛型 <code>CurriedV4</code></h3>
+<p>最后来看柯里化后函数类型的完全体 <code>CurriedV4</code>：</p>
+<pre><code class="lang-typescript">type __ = '__';
+
+type CurriedV4&lt;P extends unknown[], R&gt; =
+    P extends [unknown, ...unknown[]]
+    ? &lt;T extends PlaceholderTuple&lt;P, __&gt;&gt;(...args: T) =&gt;
+        CurriedV4&lt;Concat&lt;PlaceholderMatched&lt;T, P, __&gt;, Drop&lt;Length&lt;T&gt;, P&gt;&gt;, R&gt;
+    : R;
+</code></pre>
+<p><code>CurriedV4</code> 与 <code>CurriedV3</code> 的区别在递归部分。我们用 <code>PlaceholderTuple&lt;P, __&gt;</code> 约束柯里化函数的入参，这样调用者就可以传入占位符常量 <code>__</code> 了。</p>
+<p>单次递归中，我们将「被占位的元素」构成的元组类型提取出来（即 <code>PlaceholderMatched&lt;T, P, __&gt;</code>），然后与此次调用消耗参数后剩余的参数（即 <code>Drop&lt;Length&lt;T&gt;, P&gt;&gt;</code>）连接起来，作为新的参数 <code>P</code>，传入下一次递归。</p>
+<p>测试一下，完美。</p>
+<pre><code class="lang-typescript">type Curry = &lt;P extends unknown[], R&gt;(fn: (...args: P) =&gt; R) =&gt; CurriedV4&lt;P, R&gt;;
+
+declare const curry: Curry;
+declare const toCurry: (a1: 1, a2: 2, a3: 3, a4: 4, ...args: 5[]) =&gt; 0;
+declare const __: __;
+
+const curried = curry(toCurry);
+
+curried(1, __, 3)(2, 4, 5, 5);          // =&gt; 0
+// =&gt; CurriedV4&lt;[1, 2, 3, 4, ...5[]], 0&gt; =&gt; CurriedV4&lt;[2, 4, ...5[]], 0&gt;
+
+curried(1, __, 3)(__, 4)(2);            // =&gt; 0
+// =&gt; CurriedV4&lt;[1, 2, 3, 4, ...5[]], 0&gt; =&gt; CurriedV4&lt;[2, 4, ...5[]], 0&gt; 
+//    =&gt; CurriedV4&lt;[2, ...5[]], 0&gt;
+</code></pre>
+<h3>小结</h3>
+<p>虽然本文中，对集合的讨论主要集中在前半部分，但是促使我去思考的，其实是对后面几个更高级的场景的实践。我发现，把这些实践的领悟套用在最开始的几个简单泛型上进行陈述，似乎更加清晰。</p>
+<p>原文中，一开始的基础泛型就不是很严密，比如 <code>Head</code> 泛型是这样的：</p>
+<pre><code class="lang-typescript">type Head&lt;T extends any[]&gt; = T extends [any, ...any[]] ? T[0] : never;
+</code></pre>
+<p>这导致 <code>Head&lt;string[]&gt;</code> 返回的是 <code>never</code>，明显与从集合视角看上去的情形不符。</p>
+<p>原文的很多基础类型，都存在没有处理妥善的边缘用例，所以当问题越来越复杂之时，泛型实现就会越来越不可控。后来原作者开始引入 <code>Cast</code> 泛型，把推导到边缘的不准确的类型强行转换回来。</p>
+<pre><code class="lang-typescript">type Cast&lt;X, Y&gt; = X extends Y ? X : Y;
+</code></pre>
+<p>这引发了我的思考，这些基础泛型究竟<strong>应该</strong>实现成什么样？在反复的实践中，我发现凭借直觉写出来的代码往往不够准确，有那么一刻，我领悟到我缺少的其实是一种集合的视角；而一旦从集合的视角理解了泛型运算的实质，似有一种豁然开朗之感：什么能做，什么不能做，哪里可以妥协，哪里只能放弃，就都可以确定地分析出来了。</p>
+<p>（完）</p>

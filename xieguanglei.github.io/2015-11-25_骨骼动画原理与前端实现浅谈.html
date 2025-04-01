@@ -1,0 +1,104 @@
+<h2><a href="https://github.com/xieguanglei/xieguanglei.github.io/blob/master/source/2015-11-25/骨骼动画原理与前端实现浅谈/index.md">仓库源文</a>，<a href="https://xieguanglei.github.io/blog/post/2015-11-25/骨骼动画原理与前端实现浅谈.html">站点原文</a></h2>
+<h1>骨骼动画原理与前端实现浅谈</h1>
+<p>人的运动——走，跑，跳，是由骨骼带动躯干和四肢完成的。「骨骼动画」，顾名思义，就是模拟骨骼运动的机制而制作的动画。比如下面这条奔跑的小龙。参考 <a href="http://jsbin.com/seyita/1/edit?html,output">Demo</a>。</p>
+<p><img alt="奔跑的小龙" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2015-11-25/骨骼动画原理与前端实现浅谈/TB15qLcKFXXXXceXpXXXXXXXXXX-310-270.gif"/></p>
+<blockquote><p>素材来自开源骨骼动画编辑器 <a href="http://dragonbones.github.io/">Dragonbones</a></p>
+</blockquote>
+<p>用到的素材，额，其实是他大卸八块后的样子。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2015-11-25/骨骼动画原理与前端实现浅谈/TB1rZG9KFXXXXX3XFXXXXXXXXXX-369-272.jpg"/></p>
+<p>骨骼动画主要被用游戏场景中，做 Logo 、彩蛋也不错（比如 2014 年双 11 的喵喵舞就是天猫的同学基于骨骼动画原理实现的）。其实，在 CSS <code>transform</code> 或 Canvas 的帮助下，Web 前端播放骨骼动画，可谓举手之劳矣。</p>
+<h2>组装骨骼</h2>
+<p>骨骼当然不是随便排列的，它们需要以树状结构组织起来。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2015-11-25/骨骼动画原理与前端实现浅谈/TB17XvsKFXXXXXoXXXXXXXXXXXX-500-400.png"/></p>
+<p>光有树状的结构还是远远不够的，每片骨骼还需要描述 <strong>自身的位移是多少（x，y），旋转的角度是多少（θ）</strong> 。注意， <strong>骨骼的位移和角度是相对「父骨骼」（的坐标系）而言的</strong> 。</p>
+<p>举个例子，左臂的位移是（78，-40），角度是 -30°，表示左臂在躯干的基础上，沿 X 轴平移 78，沿 Y 轴平移 -40，然后旋转 -30°，才是左臂目前的位置。同样，左前臂的位移是（-45，100），角度是 55°，表示左前臂在左臂的基础上，沿 X 轴平移 -45，沿 Y 轴平移 100，然后旋转 55°，才是左前臂的位置。依此类推。</p>
+<p><img alt="躯干-左臂-左前臂 骨骼系统" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2015-11-25/骨骼动画原理与前端实现浅谈/TB1umjqKFXXXXXeXFXXXXXXXXXX-439-514.png"/></p>
+<p>位移和角度统称「变换参数」。用相对于父骨骼（而非全局）的变换参数描述子骨骼本身，其好处在于。当右臂（父骨骼）运动起来（变换参数变化起来）的时候，右前臂（子骨骼）自身即使不动（变换参数不变），它实际上还能够 <strong>随着</strong> 右臂运动。</p>
+<p>先不论如何使骨骼动起来，我们先研究下，如何把组装好的静态骨骼渲染/展示出来。这里分两种情况讨论：</p>
+<h3>DOM元素：</h3>
+<p>很容易想到，用固定尺寸且绝对定位的 <code>div</code>，配合 CSS <code>transform</code> 属性实现。比如：</p>
+<pre><code>&lt;div class=“躯干” style=“transform:躯干的位移和角度; position: absolute; …”&gt;
+  &lt;div class=“左臂” style=“transform:左臂的位移和角度; position: absolute; …”&gt;
+    &lt;div class=“左前臂” style=“..”&gt;
+      &lt;div class=“左爪” style=“..”&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;!—其余部分—&gt;
+&lt;/div&gt;
+</code></pre>
+<p>你看，DOM 元素被 CSS <code>transform</code> 作用时，所有子元素随之被 <code>transform</code> 了，和骨骼动画完美契合！</p>
+<p>想法固然不错， <strong>但是</strong> ，请考虑一下这样一种情况：</p>
+<ul>
+<li>骨骼A：div A （z=1）<ul>
+<li>骨骼B：div B （z=4：B显示在D前面） </li>
+</ul>
+</li>
+<li>骨骼C：div C （z=2：C显示在A前面）<ul>
+<li>骨骼D：div D （z=3）</li>
+</ul>
+</li>
+</ul>
+<p>我们知道，在 <code>position:absolute</code> 时，DOM 元素会创建自己的 Stack Context。也就是说，只要 div A 的 <code>z-index</code> 值小于了 div C，那么作为 A 的子元素 B，即使 <code>z-index</code> 大过天，也不可能覆盖 C 及其子元素。</p>
+<p>所以，我们只能将所有骨骼平铺下来：</p>
+<ul>
+<li>骨骼A （z=1）</li>
+<li>骨骼B （z=4）</li>
+<li>骨骼C （z=2）</li>
+<li>骨骼D （z=3）</li>
+</ul>
+<p>这带来了新的问题：我们所具有的 B 的变换参数，是相对其父骨骼 A 的，而在渲染时，我们需要的是 B 直接相对于最外层骨骼的位移和角度。</p>
+<h3>Canvas：</h3>
+<p>对使用 Canvas 的情况，我们知道 <code>context.transform</code> 方法会变换当前画笔坐标系，于是很容易想到这么做。</p>
+<pre><code>context.transform(躯干位置)
+context.save();  // 1
+  context.transform(左臂位置)
+  context.draw(左臂)
+    context.transform(在左臂左前臂位置)
+    context.draw(左前臂)
+      context.transform(左爪位置)
+      context.draw(左爪)
+context.restore() // 回到了 1 状态
+// 继续绘制其他部分
+</code></pre>
+<p>这样做也存在问题。实际上，这种方法是按照深度优先的原则，遍历了以最外层骨骼为根的骨骼树，绘制了树上的每个节点（骨骼）。 <strong>这限制了我们绘制 Canvas 对象的顺序。</strong></p>
+<p>Canvas 2D 绘图没有 3D 绘图的「深度缓存」机制，所以在 2D 绘图中，对某一个像素而言，后绘制的内容一定会覆盖（至少影响）之前绘制的内容。但是，每片骨骼的 Z 值是定义好的，它们的前后关系可不能随便乱来，要使绘制的效果和定义的相同，就先得对骨骼进行深度排序，先画后面的，再画前面的。</p>
+<blockquote><p>深度缓存机制，可以这样理解：我「画」了，但由于这个像素之前已经画过，而且 z 值比我大，所以我硬是没「画」上去。</p>
+</blockquote>
+<pre><code>context.setTransform(躯干的绝对位置)
+context.draw(躯干)
+context.setTransform(左臂的绝对位置)
+context.draw(左臂)
+//  按照深度顺序进行绘制
+</code></pre>
+<p>这时，我们需要的位移和角度，便不再是相对于父骨骼的了，而是相对于最外层骨骼的。遇到的问题和使用 DOM 时一模一样。</p>
+<h2>从相对到绝对</h2>
+<p>仍然以躯干-左臂-左前臂系统为例。我们知道，左臂（相对躯干）的变换参数是（78，-40，-30°），左前臂（相对左臂）的变换参数是（-45，100，55°）。那么，左前臂相对躯干的变换参数如何求算呢？</p>
+<blockquote><p>躯干也是有变换参数的，它的「父骨骼」是 Root ——一个「隐形」、「固定」的最外层骨骼，所以实际上我们需要求算相对 Root 的变换参数。不过原理是完全一致的。</p>
+</blockquote>
+<p>也许你会猜：左前臂相对躯干的变换参数是（78-45=33，-40+100=60，-30°+55°=25°）。这是错误的。</p>
+<p>实际上，位移和旋转会相互影响，不能直接加和。这里。我们需要使用「变换矩阵」来求算（还记得 <code>transform: matrix(…)</code> 的形式吗）。对于不了解图形学基础的同学，这也许有点难，不过没关系，我们只需要知道，通过一个 3x3 的矩阵，有办法算出左前臂相对躯干的变换参数。</p>
+<p>算出来的结果是 （89，69，25°）。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2015-11-25/骨骼动画原理与前端实现浅谈/TB159_dKFXXXXcgXVXXXXXXXXXX-439-514.png"/></p>
+<p>这样，我们就能在不依赖左臂的情况下，把左前臂的位置确定下来了。所有的骨骼都按照这种方式处理，万事大吉了！</p>
+<h2>动起来</h2>
+<p>骨骼拼装好的对象，当然是要动起来的。而骨骼动画最重要的特征，就是「父骨骼」的运动带动了所有「后代骨骼」（手臂挥舞的时候，巴掌当然要跟着动咯），所以骨骼动画才比较精致。</p>
+<p>一个完整的骨骼动画的 <strong>动作</strong> ，可以分解到每片骨骼上。而每一片骨骼的动作，则由关键帧所定义。举个例子，一个跑步的动作，分解到各个骨骼上，无非包括：</p>
+<ul>
+<li>躯干：上下起伏。</li>
+<li>腿部：抬起和落下。</li>
+<li>手臂：前后摆动。</li>
+<li>手前臂：肘部的弯曲变化。</li>
+</ul>
+<p>如果还想做细腻一些，自然还有头部的摆动，毛发颤动，眼珠转动等等……而每一片骨骼的变化，只需要三五个关键帧。比如，示例骨骼动画（小龙跑步）的关键帧定义如下图所示。每个关键帧包含的信息包括：关键帧在动画周期中的位置，以及骨骼的变换参数。</p>
+<p><img alt="关键帧" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2015-11-25/骨骼动画原理与前端实现浅谈/TB1BqHDKFXXXXaEXXXXXXXXXXXX-546-633.png"/></p>
+<p>接下来，还有什么好说的呢？动画最基本的原理，就是随着时间更新对象的视觉状态。那么，对骨骼动画而言，就是在每一帧的时候，根据当前帧在一个动画周期内的位置，线性内插出每一片骨骼的位移和角度，然后算出全局的位移和角度，再画出来。</p>
+<blockquote><p>内插，就是根据离散的值求取中间值的过程。最简单是线性内插，中间值仅与左右两个离散值，和中间值的位置有关。比如，当中间值位置为 0.5，左右两侧的值为 1 和 2，那么内插值就是 1.5，即 f(1, 2, 0.5) = 1.5；同理，f(1, 2, 0.7) = 1.7，f(1, 2, 0.3) = 1.3。</p>
+</blockquote>
+<p>如上图所示，一个动画周期的长度是 6 个单位（这里是 DragonBones 定义的长度单位，默认是 1/24 秒，实际播放时可以随意改变），那么在任意时刻（比如播放到 1 个单位时长之时），都需要根据左右最近的关键帧，内插出一个变换参数值，然后根据这个参数值，按照前一节所述的方法渲染或更新动画的状态。</p>
+<p>这样，我们就能看到下面的情形了：参考 <a href="http://jsbin.com/seyita/1/edit?html,output">Demo</a>。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/xieguanglei.github.io/source/2015-11-25/骨骼动画原理与前端实现浅谈/TB15qLcKFXXXXceXpXXXXXXXXXX-310-270.gif"/></p>
+<h2>其他</h2>
+<p>开源软件 DragonBones 是设计 2D 骨骼动画的不二之选，它支持将动画数据导出成 JSON 格式。DragonBones 中有 bone（骨骼）、slot（插槽）、skin（皮肤）的概念。骨骼本身不包含实体，只有变换（位移、旋转等）的数据，骨骼包含一些插槽，Z 值定义在插槽上，而插槽里可以插入皮肤，皮肤除了描述对应哪张图（甚至图上的某个区域），还具有变换数据（但不会变化）。这些设计即方便了设计师在软件中的操作和编辑，也方便开发者使用这份数据来播放精灵动画。</p>
+<p>最后广告一下吧，<a href="http://gama.taobao.net">Gama</a> 现在也已经有了骨骼动画模块 <a href="http://gama.taobao.net/3/detail.html?name=skeleton">Gama Skeleton</a>，接入方便，使用简单，开箱即用，立等可取。</p>
+<p>（完）</p>

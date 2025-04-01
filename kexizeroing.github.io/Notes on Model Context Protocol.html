@@ -1,0 +1,118 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/notes-on-mcp.md">仓库源文</a>，<a href="https://kexizeroing.github.io/notes-on-mcp">站点原文</a></h2>
+<h3>Historical context: The Path to MCP</h3>
+<p>Early AI assistants were limited to text generation, unable to interact with external tools or real-time data. The introduction of function calling and plugins in 2023 allowed models to execute code, browse the web, and interact with APIs, marking the shift toward AI agents. However, each integration was fragmented, requiring custom implementations for different tools, making scaling difficult.</p>
+<p>MCP, introduced by Anthropic in late 2024, solves this problem by providing a unified protocol for AI-tool interactions. Instead of custom adapters for each tool, MCP allows developers to expose functionality once, making it accessible to any AI supporting MCP. It also eliminates the inefficiencies of tool-specific APIs by offering a structured, self-describing interface. This enables seamless, scalable AI-tool connectivity, much like how USB standardized device connections.</p>
+<h3>MCP is not magic</h3>
+<p>MCP isn't magic — it's a standard way for AI to discover and use tools without learning every API's specific details. An MCP server is like a menu of tools. Each tool has a name, a description, a schema defining what info it needs, and the actual code that makes the API calls. AI applications (like Claude or Cline) can dynamically query these servers to execute tasks such as reading files, querying databases, or creating new integrations.</p>
+<blockquote><p>How similar is this to tool calling? Tool calling lets LLMs invoke functions to interact with the real world, typically within the same process. MCP enables tool execution in a separate process, either locally or remotely, fully decoupling the server from the client.</p>
+</blockquote>
+<h3>MCP server and client</h3>
+<p>MCP uses a client-server design where applications can connect to multiple resources. The system has three main parts:</p>
+<ul>
+<li>The Client Side: Making Requests</li>
+<li>The Communication Layer: The Standard Protocol</li>
+<li>The Server Side: Providing Resources</li>
+</ul>
+<p>The <strong>MCP client</strong> is the program that's going to access the MCP servers. This might be Claude Desktop, Cursor, Windsurf, or any other application that supports MCP. This host probably uses an LLM of some kind. That LLM will be able to call tools that are defined in the MCP server.</p>
+<p>The <strong>MCP server</strong> is the server that's going to be running the tools that the host wants to call. This server could be running locally, or it could be running on a remote server.</p>
+<p>The client connects to its server using a <strong>transport</strong>. This transport is responsible for sending messages between the client and the server. There are currently two supported transports. You can communicate via <code>stdio</code> - in other words, via the terminal. Or you can communicate through HTTP via server-sent events. This is useful if you want to run your server on a remote machine.</p>
+<p>The <strong>protocol</strong> defines JSON message formats, based on JSON-RPC 2.0, for communication between client and server.</p>
+<pre><code class="lang-json">// Client sends...
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "createGitHubIssue",
+    "arguments": {
+      "title": "My Issue",
+      "body": "This is the body of my issue",
+      "labels": ["bug"]
+    }
+  }
+}
+
+// Server sends back...
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "content": [
+    {
+      "type": "text",
+      "text": "Issue 143 created successfully!"
+    }
+  ],
+  "isError": false
+}
+</code></pre>
+<h3>The simplest MCP server</h3>
+<pre><code class="lang-ts">import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+const server = new McpServer({
+  name: "Weather Service",
+  version: "1.0.0",
+});
+
+server.tool(
+  "getWeather",
+  "Get the weather in a city",
+  { city: z.string() },
+  async ({ city }) =&gt; {
+    // await fetch('wheather API') 
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `The weather in ${city} is sunny!`,
+        },
+      ],
+    };
+  },
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+</code></pre>
+<p>Connecting to Claude Code: <code>claude mcp add "weather-example" npx tsx "/path-to-the-file.ts"</code></p>
+<h3>MCP servers over HTTP</h3>
+<p>The server can be hosted on the cloud, and the client can communicate with it via an HTTP connection.</p>
+<pre><code class="lang-js">// Still use the server we had in the previous example
+
+import express from "express";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+
+const app = express();
+
+let transport: SSEServerTransport | undefined =
+  undefined;
+
+app.get("/sse", async (req, res) =&gt; {
+  transport = new SSEServerTransport("/messages", res);
+  await server.connect(transport);
+});
+
+app.post("/messages", async (req, res) =&gt; {
+  if (!transport) {
+    res.status(400);
+    res.json({ error: "No transport" });
+    return;
+  }
+  await transport.handlePostMessage(req, res);
+});
+
+app.listen(3000, () =&gt; {
+  console.log("Server started on port 3000");
+});
+</code></pre>
+<p>Run the server: <code>npx tsx ./path-to-file.ts</code></p>
+<h3>References and further reading</h3>
+<ul>
+<li><a href="https://www.aihero.dev/model-context-protocol-tutorial">https://www.aihero.dev/model-context-protocol-tutorial</a></li>
+<li><a href="https://glama.ai/blog/2024-11-25-model-context-protocol-quickstart">https://glama.ai/blog/2024-11-25-model-context-protocol-quickstart</a></li>
+<li><a href="https://github.com/modelcontextprotocol/servers">https://github.com/modelcontextprotocol/servers</a></li>
+<li><a href="https://github.com/punkpeye/awesome-mcp-servers">https://github.com/punkpeye/awesome-mcp-servers</a></li>
+<li><a href="https://www.pulsemcp.com/use-cases">https://www.pulsemcp.com/use-cases</a></li>
+</ul>

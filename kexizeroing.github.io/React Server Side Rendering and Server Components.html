@@ -75,6 +75,14 @@ ReactDOM.hydrate(&lt;App /&gt;, document.getElementById('ssr-app'));
 <blockquote><p>For Vue server-side rendering, check out <a href="https://vuejs.org/guide/scaling-up/ssr.html">https://vuejs.org/guide/scaling-up/ssr.html</a></p>
 <p>Vite provides built-in support for Vue <a href="https://vite.dev/guide/ssr.html">server-side rendering</a>, but it is intentionally low-level <em>(for library and framework authors)</em>. If you wish to go directly with Vite, check out <a href="https://vite-plugin-ssr.com">vite-plugin-ssr</a>, a community plugin that abstracts away many challenging details for you.</p>
 </blockquote>
+<h3>Where to deploy</h3>
+<p>Hosting static resources is extremely cheap. But now, I need to have a server. There are two most common solutions here.</p>
+<ul>
+<li>We can use the serverless functions of the hosting provider that serve the static resources: Cloudflare Workers, Netlify Functions, Vercel Functions, Amazon Lambdas.</li>
+<li>Another option is to keep it as an actual tiny Node server and deploy it to any cloud platform, from AWS to Azure to Digital Ocean.</li>
+</ul>
+<p>If it’s deployed as one of the Serverless Functions, then there is a chance that it's not that bad. Some of the providers can run those functions “on Edge.” I.e., those functions are distributed to different servers that are closer to the end user. In this case, the latency will be minimal, and the performance degradation will be minimal.</p>
+<p>If, however, I went with the self-managed server, I don’t have the advantages of a distributed network. I’d have to deploy it to one particular region. So, users on the opposite side of the planet from this region have a chance to really feel the impact of the performance degradation.</p>
 <h3>React hydration error</h3>
 <p>While rendering your application, there was a difference between the React tree that was pre-rendered from the server and the React tree that was rendered during the first render in the browser (hydration).</p>
 <p>When the React app runs on the client for the first time, it builds up a mental picture of what the DOM should look like, by mounting all of your components. Then it squints at the DOM nodes already on the page, and tries to fit the two together. We're rendering one thing on the server, but then telling React to expect something else on the client.</p>
@@ -108,6 +116,15 @@ const ClientOnly: React.FC&lt;ClientOnlyProps&gt; = ({
 
 export default ClientOnly;
 </code></pre>
+<blockquote><p>Fix Next.js error: <code>window</code> is not defined:</p>
+<ol>
+<li>Keep it as server component, and use <code>if (typeof window !== 'undefined')</code> to check first.</li>
+<li>Add <code>use client</code> and have a <code>useEffect</code> run when mounting the component.</li>
+<li>Use Next <code>next/dynamic</code> to dynamic import the component and disable SSR: <code>dynamic(() =&gt; import('./MyComponent'), { ssr: false })</code>. (use Suspense under the hood)</li>
+</ol>
+<p>Fix Next.js error: Event handlers cannot be passed to client component:<br/>
+You use <code>&lt;Card onClick={() =&gt; console.log(1)} /&gt;</code> to pass a function from the server to the client. The issue here is the function is not serializable. The workaround is to make both of them client components.</p>
+</blockquote>
 <h3>Understand the "children pattern"</h3>
 <p>React components re-render themselves and all their children when the state is updated. In this case, on every mouse move the state of <code>MovingComponent</code> is updated, its re-render is triggered, and as a result, <code>ChildComponent</code> will re-render as well.</p>
 <pre><code class="lang-jsx">const MovingComponent = () =&gt; {

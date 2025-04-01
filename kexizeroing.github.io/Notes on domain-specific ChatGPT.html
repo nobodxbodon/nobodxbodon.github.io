@@ -32,6 +32,7 @@ print(decoded_text)
 <li>It ensures that the most common words are represented as a single token while the rare words are broken down into two or more subword tokens. (Looking for the most frequent pairing, merge them, and perform the same iteration again and again until we reach our token limit or iteration limit.)</li>
 </ul>
 </blockquote>
+<p>&lt;img alt="BPE-tokenize" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/BPE-tokenize.png" width="450" /&gt;</p>
 <p>Token IDs are a straightforward numerical representation of tokens. It is a basic form of vectorization. They do not capture any deeper relationships or patterns between the tokens.</p>
 <p>Embeddings are advanced vector representations of tokens. They try to capture the most nuance, connections, and semantic meanings between tokens. Each embedding is generally a series of real numbers on a vector space computed by a neural network. They are the “real inputs” of LLMs.</p>
 <p>Embeddings are, in fact, a subset of the model’s weights. They are the weights associated with the input layer (in the case of feedforward networks) or the embedding layer (in models like Transformers).</p>
@@ -43,26 +44,37 @@ embedded_query = embeddings.embed_query("Who is Mary's sister?")
 print(f"Embedding length: {len(embedded_query)}") # Embedding length: 1536
 print(embedded_query) # [-0.0013594045786472937, -0.03437049808954925, ...]
 </code></pre>
-<pre><code class="lang-js">import { embed } from 'ai'
-import { openai } from '@ai-sdk/openai'
-
-const { embedding } = await embed({
-  model: openai.embedding('text-embedding-3-small'),
-  value: 'sunny day at the beach',
-})
-</code></pre>
-<pre><code class="lang-js">const { Configuration, OpenAIApi } = require("openai")
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
-const openai = new OpenAIApi(configuration)
-const response = await openai.createEmbedding({
-  model: "text-embedding-ada-002",
-  input: "The food was delicious and the waiter...",
-})
-</code></pre>
 <p>In data analysis, <em>cosine similarity</em> is a measure of similarity between two non-zero vectors defined in an inner product space. Cosine similarity is the cosine of the angle between the vectors; that is, it is the dot product of the vectors divided by the product of their lengths.</p>
+<h3>Word2Vec - Continuous Bag of Words</h3>
+<p>Watch this: <a href="https://www.youtube.com/watch?v=hVM8qGRTaOA">https://www.youtube.com/watch?v=hVM8qGRTaOA</a></p>
+<pre><code>The quick brown fox jumps over the lazy dog.
+
+e.g. Context word: fox, over. Target word: jumps
+window size = 3
+</code></pre>
+<ol>
+<li>One-hot encoding for each word. Context words are the input features.</li>
+<li>The hidden layer contains neurons equal to the # of dimensions in the embedding space. The output layer contains neurons equal to the size of the vocabulary.</li>
+<li>The target word act as the label. We calculate the loss between the predicted and actual target word. Backpropagation is used to adjust the model weights.</li>
+<li>Slide the window across the text to train with the next set of context words and target words.</li>
+<li>After training the model, we can use the weights matrix as the embedding matrix. This 8x3 matrix becomes a lookup table for the embeddings. (# of rows = vocabulary size, # of columns = embedding dimensions)</li>
+<li>Take the dot product of the one-hot encoding vector with the embedding matrix to get the embedding vector for each word.</li>
+<li>The transformer architecture processes all words in parallel. We need to inform the model about the position of each word in the sentence. This is done by adding positional vectors to the word embeddings. This positional information can either be another trainable layer or a static numerical representation unique to each word.</li>
+</ol>
+<p>&lt;img alt="embedding-layer" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/embedding-layer.png" width="600" /&gt;</p>
+<p>&lt;br&gt;
+&lt;img alt="embedding-matrix" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/embedding-matrix.png" width="600" /&gt;</p>
+<h3>Self Attention Mechanism</h3>
+<p>Tokenaizer -&gt; Embedding (capture semantic meaning) -&gt; Attention (capture contextual meaning)</p>
+<p>Embeddings alone don't distinguish between words with multiple meanings. Embedding table assigns a signle vector regardless of the context. This is where self-attention comes in. Self attention mechanism transforms semantic representations into context-aware representations making words are understood in the context of the sentence.</p>
+<ul>
+<li>Query: Do you have anything useful for me</li>
+<li>Key: Here is what I can offer</li>
+<li>Value: Here is the actual information if we match</li>
+</ul>
+<p>&lt;img alt="self-attention" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/self-attention.png" width="600" /&gt;</p>
+<p>&lt;br&gt;
+&lt;img alt="embedding-matrix" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/self-attention-qkv.png" width="600" /&gt;</p>
 <h2>Storing embeddings in Postgres with pgvector</h2>
 <p>How can I retrieve K nearest embedding vectors quickly? For searching over many vectors quickly, we recommend using a vector database.</p>
 <p><a href="https://github.com/pgvector/pgvector">pgvector</a> is an open-source vector similarity search for Postgres. Once we have generated embeddings on multiple texts, it is trivial to calculate how similar they are using vector math operations like cosine distance. A perfect use case for this is search. Your process might look something like this:</p>
@@ -319,20 +331,24 @@ scores = model.predict([
 <li>JinaAI Reranker (1 million free tokens): <a href="https://jina.ai/reranker">https://jina.ai/reranker</a></li>
 <li>Cohere offers an API for reranking documents: <a href="https://cohere.com/blog/rerank">https://cohere.com/blog/rerank</a></li>
 </ul>
+<blockquote><p>Jina AI Search Foundation Models:</p>
+<ul>
+<li>Embedding Models: <code>jina-embeddings-v3</code></li>
+<li>Reranker Models: <code>jina-reranker-v2-base-multilingual</code></li>
+<li>Small Language Models (SLMs): <code>ReaderLM-v2</code></li>
+</ul>
+</blockquote>
 <h3>Query Transformation</h3>
-<pre><code class="lang-py">multi_query_prompt = ChatPromptTemplate.from_template(
-  """
-  You are an intelligent assistant. Your task is to generate 5 questions based on the provided question in different wording and different perspectives to retrieve relevant documents from a vector database. By generating multiple perspectives on the user question, your goal is to help the user overcome some of the limitations of the distance-based similarity search. Provide these alternative questions separated by newlines. Original question: {question}
-  """
-)
-
-decompostion_prompt = ChatPromptTemplate.from_template(
-  """
-  You are a helpful assistant that can break down complex questions into simpler parts. \n
-  Your goal is to decompose the given question into multiple sub-questions that can be answerd in isolation to answer the main question in the end. \n
-  Provide these sub-questions separated by the newline character. \n
-  Original question: {question}\n
-  Output (3 queries): 
-  """
-)
-</code></pre>
+<p>RAG systems often face challenges in retrieving the most relevant information, especially when dealing with complex or ambiguous queries. These <a href="https://github.com/NirDiamant/RAG_Techniques/blob/main/all_rag_techniques/query_transformations.ipynb">query transformation techniques</a> address this issue by reformulating queries to better match relevant documents or to retrieve more comprehensive information.</p>
+<ol>
+<li>Query Rewriting: Reformulates queries to be more specific and detailed.</li>
+<li>Step-back Prompting: Generates broader queries for better context retrieval.</li>
+<li>Sub-query Decomposition: Breaks down complex queries into simpler sub-queries.</li>
+</ol>
+<h3>DeepSearch and DeepResearch</h3>
+<p><a href="https://jina.ai/news/a-practical-guide-to-implementing-deepsearch-deepresearch/">https://jina.ai/news/a-practical-guide-to-implementing-deepsearch-deepresearch/</a></p>
+<ul>
+<li>DeepSearch runs through an iterative loop of searching, reading, and reasoning until it finds the optimal answer.</li>
+<li>DeepResearch builds upon DeepSearch by adding a structured framework for generating long research reports.</li>
+</ul>
+<p>RAG is about answering questions that fall outside of the knowledge baked into a model. The DeepSearch pattern offers a tools-based alternative to classic RAG: we give the model extra tools for running multiple searches and run it for several steps in a loop to try to find an answer.</p>

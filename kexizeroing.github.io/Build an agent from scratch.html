@@ -1,0 +1,307 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/build-an-agent-from-scratch.md">仓库源文</a>，<a href="https://kexizeroing.github.io/build-an-agent-from-scratch">站点原文</a></h2>
+<blockquote><p>This post is organized using an LLM based on <a href="https://kamlasater.com/talks/agents-2025">Kam Lasater's talk</a> and <a href="https://github.com/mfdtrade/agent-talk-2025">the accompanying code</a>.</p>
+</blockquote>
+<p>At its core, an agent can be defined with this simple equation:</p>
+<pre><code>agent = llm + memory + planning + tools + while loop
+</code></pre>
+<p>Let's explore how each component works by building a minimalist but functional agent system from scratch.</p>
+<h2>The Core Components</h2>
+<h3>1. The LLM: The Agent's Brain</h3>
+<p>Everything starts with a language model. Here's a simple OpenAI API call that forms our foundation:</p>
+<pre><code class="lang-javascript">async function main() {
+  const completion = await openai.chat.completions.create({
+    messages: [
+      { role: "developer", content: "You are a helpful assistant..."},
+      { role: "user", content: "What is your name?" }
+    ],
+    model: "gpt-4o",
+  });
+
+  console.log(completion.choices[0]);
+}
+</code></pre>
+<p>By itself, this is just a chat completion - not yet an agent.</p>
+<h3>2. The Tool Ecosystem</h3>
+<p>Tools allow an agent to interact with the world beyond just generating text. Here's how we define our tools:</p>
+<pre><code class="lang-javascript">export const functions = {
+  searchGoogle,
+  addTodos,
+  markTodoDone,
+  checkTodos,
+  checkGoalDone,
+  browseWeb
+}
+
+// import { zodFunction } from "openai/helpers/zod";
+// zodFunction({
+//   name: "...",
+//   description: "...",
+//   parameters: z.xx
+// })
+export const configsArray = [
+  searchGoogleToolConfig,
+  addTodosToolConfig,
+  markTodoDoneToolConfig,
+  checkTodosToolConfig,
+  checkGoalDoneToolConfig,
+  browseWebToolConfig
+]
+</code></pre>
+<p>Each tool has an implementation function and a configuration that describes it to the LLM. Let's look at a specific tool example:</p>
+<pre><code class="lang-javascript">export async function browseWeb({url}) {
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0...',
+      'Accept': 'text/html,application/xhtml+xml...'
+    }
+  });
+
+  const html = await response.text();
+  const $ = cheerio.load(html);
+
+  // Clean up HTML by removing unnecessary elements
+  $("script, style, nav, footer, iframe, .ads").remove();
+
+  // Extract title and main content and convert to markdown
+  const title = $("title").text().trim() || $("h1").first().text().trim();
+  const mainContent = $("article, main, .content, #content, .post").first().html() 
+    || $("body").html();
+  const content = turndown.turndown(mainContent || "");
+
+  return `---\ntitle: '${title}'\n---\n\n${content}`;
+}
+
+export const browseWebToolConfig = zodFunction({
+  name: "browseWeb",
+  description: "Visit a URL and return a markdown version of the browsed page content.",
+  parameters: z.object({
+    url: z.string().describe("The url of the web page to go get and return as markdown.")
+  })
+})
+</code></pre>
+<p>This setup gives the LLM a rich description of what the tool does and the parameters it needs, while also enforcing type safety through Zod schemas.</p>
+<h3>3. The Execution Loop</h3>
+<p>The heart of our agent is this recursive function that creates the execution loop:</p>
+<pre><code class="lang-javascript">export async function completeWithTools(args) {
+  const completion = await openai.chat.completions.create(args)
+
+  if (completion.choices[0].message.tool_calls) {
+    const toolCalls = completion.choices[0].message.tool_calls;
+    args.messages.push(completion.choices[0].message);
+
+    await Promise.all(toolCalls.map(async (toolCall) =&gt; {
+      const toolArgs = JSON.parse(toolCall.function.arguments);
+      const result = await tools.functions[toolCall.function.name](toolArgs);
+
+      args.messages.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        content: result
+      });
+    }))
+
+    return completeWithTools(args)
+  }
+
+  return completion
+}
+</code></pre>
+<p>This function:</p>
+<ol>
+<li>Calls the LLM with the current conversation state</li>
+<li>If the LLM decides to use tools, it:<ul>
+<li>Executes each tool with its arguments</li>
+<li>Adds both the tool call and results to the conversation context</li>
+<li>Recursively calls itself again</li>
+</ul>
+</li>
+<li>If no tools are called, it returns the final completion</li>
+</ol>
+<p>This recursion creates a natural "while" loop that continues until the LLM decides it has completed the task.</p>
+<h3>4. Planning Through Todo Lists</h3>
+<p>Our agent uses a simple todo list system for planning:</p>
+<pre><code class="lang-javascript">let todos = []
+const done = []
+
+export function addTodos({newTodos}) {
+  todos.push(...newTodos)
+  const delim = '\n  - '
+  console.log(`Todo list:${delim}${todos.join(delim)}`)
+  return `Added ${newTodos.length} to todo list. Now have ${todos.length} todos.`
+}
+
+export function markTodoDone({todo}) {
+  if (todos.includes(todo)) {
+    todos = todos.filter(item =&gt; item !== todo)
+    done.push(todo)
+    return `Marked the following todo as done:\n  ${todo}`
+  } else {
+    return `Todo list doesn't include todo:\n  ${todo}`
+  }
+}
+
+export function checkTodos({}) {
+  if (todos.length &gt; 0) {
+    return JSON.stringify(todos)
+  } else {
+    return "The todo list is empty."
+  }
+}
+</code></pre>
+<p>This creates external state that persists across LLM calls, giving the agent a way to track progress.</p>
+<h3>5. Self-Evaluation With LLM-as-Judge</h3>
+<p>The final key piece is the agent's ability to evaluate its own success:</p>
+<pre><code class="lang-javascript">import { z } from 'zod'
+import { zodResponseFormat } from 'openai/helpers/zod';
+
+export async function checkGoalDone({goal, answer}) {
+  const resp = await completeWithTools({
+    model: "gpt-4o",
+    messages: [{
+      role: "developer",
+      content: prompt
+    },{
+      role: "user",
+      content: `## Request: ${goal}\n\n## Answer: ${answer}`,
+    }],
+    response_format: zodResponseFormat(
+      z.object({
+        done: z.boolean().describe('Does the answer satisfies the request?'),
+        feedback: z.array(z.string()).describe('If not done, an array of specific actionable todos that are needed to be done to complete the request')
+      }
+    ), "doneResponseSchema")
+  })
+
+  const check = JSON.parse(resp.choices[0].message.content)
+  return JSON.stringify(check)
+}
+</code></pre>
+<p>This function uses another LLM call to judge whether the goal has been met, returning both a completion status and specific feedback if the task isn't done.</p>
+<h2>Putting It All Together</h2>
+<p>Here's how we wire all these components into a complete agent system:</p>
+<pre><code class="lang-javascript">const prompt = `
+You are a helpful assistant working for a busy executive.
+Your tone is friendly but direct, they prefer short clear and direct writing.
+You try to accomplish the specific task you are given.
+You can use any of the tools available to you.
+Before you do any work you always make a plan using your Todo list.
+You can mark todos off on your todo list after they are complete.
+
+You summarize the actions you took by checking the done list then create a report.
+You always ask your assistant to checkGoalDone. If they say you are done you send the report to the user.
+If your assistant has feedback you add it to your todo list.
+`
+
+async function main() {
+  const completion = await completeWithTools({
+    messages: [
+      { role: "developer", content: prompt },
+      { role: "user", content: goal}
+    ],
+    model: "gpt-4o",
+    tool_choice: "auto",
+    tools: tools.configsArray,
+    store: false
+  });
+
+  const answer = completion.choices[0].message.content
+  console.log(`Answer: ${answer}`);
+}
+</code></pre>
+<p>The system prompt instructs the LLM to:</p>
+<ol>
+<li>Make a plan using the todo list</li>
+<li>Check the current todo list</li>
+<li>Use tools to accomplish the tasks</li>
+<li>Mark tasks as done</li>
+<li>Check if the goal is complete</li>
+<li>Either report back or add new todos based on feedback</li>
+</ol>
+<p>This creates a complete agent lifecycle:</p>
+<pre><code>                        +-------------------+
+                        |  User Input Goal  |
+                        +--------+----------+
+                                 |
+                                 v
+                   +------------------------------+
+                   |      System Initialization   |
+                   | (Load prompt, configure LLM) |
+                   +-------------+----------------+
+                                 |
+                                 v
+              +------------------------------------+
+              |           Planning Phase           |
+              | Process goal → addTodos() → Create |
+              |            task list               |
+              +---------------+--------------------+
+                              |
+                              v
+              +-------------------------------------+
+              |          Begin Execution Loop       |
++------------&gt;|   checkTodos() → Select next task   |&lt;--------------+
+|             +---------------+---------------------+               |
+|                             |                                     |
+|                             v                                     |
+|             +-------------------------------------+               |
+|             |           Tool Selection            |               |
+|             | Choose appropriate tool for task    |               |
+|             +---------------+---------------------+               |
+|                             |                                     |
+|                             v                                     |
+|             +-------------------------------------+               |
+|             |        Tool Execution (LLM Call)    |               |
+|             | completeWithTools() → Execute tool  |               |
+|             +---------------+---------------------+               |
+|                             |                                     |
+|                             v                                     |
+|             +-------------------------------------+               |
+|             |       Process Tool Results          |               |
+|             | Add to conversation, update context |               |
+|             +---------------+---------------------+               |
+|                             |                                     |
+|                             v                                     |
+|             +-------------------------------------+               |
+|             |         Task Completion             |               |
+|             |   markTodoDone() → Update status    |               |
+|             +---------------+---------------------+               |
+|                             |                                     |
+|                             v                                     |
+|            +----------------------------------------+             |
+|            | All Tasks Done? ------&gt;  No -----------+-------------+
+|            |                    |                   |
+|            |                    v                   |
+|            |                   Yes                  |
+|            |                    |                   |
+|            +--------------------+-------------------+
+|                                 |
+|                                 v
+|            +----------------------------------------+
+|            |          Self-Evaluation               |
+|            |   Summarize actions → Create report    |
+|            |   checkGoalDone() → Evaluate success   |
+|            +------------------+-------------------+
+|                               |
+|                               v
+|            +------------------+-------------------+
++------------+     Goal Complete? ---&gt; No           |
+             |                    |                 |
+             |                    v                 |
+             |                   Yes                |
+             |                    |                 |
+             +--------------------+-----------------+
+                                  |
+                                  v
+                          +------------------+
+                          |  Deliver Report  |
+                          |    to User       |
+                          +------------------+
+</code></pre>
+<h2>Conclusion</h2>
+<p>Understanding the fundamental components of agents helps demystify what's happening when you use more complex agent frameworks. At their core, agents are simply:</p>
+<ul>
+<li>An LLM that can make decisions</li>
+<li>Tools that extend its capabilities</li>
+<li>A planning mechanism to organize work</li>
+<li>A loop that continues until goals are met</li>
+<li>Memory to track state and progress</li>
+</ul>

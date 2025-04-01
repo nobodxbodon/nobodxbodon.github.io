@@ -1,0 +1,148 @@
+<h2><a href="https://github.com/luyuhuang/luyuhuang.github.io/blob/master/source/_posts/2025-03-30-clang.md">仓库源文</a>，<a href="https://luyuhuang.github.io/2025/03/30/clang">站点原文</a></h2>
+<p>Clang 是一个基于 LLVM 的 C/C++ 编译器，与 GCC 相比有一些优势</p>
+<ul>
+<li>编译速度比 GCC 快</li>
+<li>内存占用更小</li>
+<li>编译报错信息更友好</li>
+<li>工具链丰富：ASan, clangd, clang-tidy, clang-doc 等</li>
+</ul>
+<p>如果 Linux 发行版比较新，可以直接用包管理器安装；但如果发行版比较老旧，就只能编译安装了。本文介绍一些编译安装 clang 的方法。</p>
+<h2>直接编译安装</h2>
+<p>Clang 是 LLVM 项目的一部分。LLVM 是一个编译器基础设施，它定义一种中间代码 (IR)，并且能够将这种中间代码编译成各个平台 (x86, ARM, ...) 的机器码。这在 LLVM 中称为<em>编译器后端</em>。而 clang 则是 C/C++ 的<em>编译器前端</em>，负责将 C/C++ 代码编译成 LLVM 中间代码。因此要编译安装 clang，我们就要编译 LLVM。</p>
+<p>我们进入 LLVM 官网的下载页面 <a href="https://releases.llvm.org/">https://releases.llvm.org/</a> 下载 LLVM 源码。LLVM 10.0.0 之后提供整合包 &lt;ruby&gt;llvm-project&lt;rt&gt;LLVM 全家桶&lt;/rt&gt;&lt;/ruby&gt; 下载，包含 clang 在内的各种 LLVM 组件。以最新的 20.1.0 为例，我们直接下载 LLVM 20.1.0 并解压</p>
+<pre><code class="lang-bash">curl -LO https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0/llvm-project-20.1.0.src.tar.xz
+unxz llvm-project-20.1.0.src.tar.xz
+tar -xf llvm-project-20.1.0.src.tar
+</code></pre>
+<p>LLVM 使用 CMake 构建，要求版本至少为 3.20.0。进入 llvm-project 目录，接着创建 build 目录，然后执行 cmake</p>
+<pre><code class="lang-bash">cd llvm-project-20.1.0.src
+mkdir build &amp;&amp; cd build
+cmake ../llvm -DCMAKE_BUILD_TYPE=Release \
+              -DLLVM_ENABLE_PROJECTS='clang' \
+              -DLLVM_ENABLE_RUNTIMES='compiler-rt;libcxx;libcxxabi;libunwind'
+</code></pre>
+<p>CMake 这一步可以传入各种参数，这里介绍一些常用的参数</p>
+<ul>
+<li><code>CMAKE_BUILD_TYPE</code> 构建类型，可以为 <code>Debug</code>, <code>Release</code>, <code>RelWithDebInfo</code>, 或 <code>MinSizeRel</code>。默认为 <code>Debug</code>，一般设置为 <code>Release</code>。</li>
+<li><p><code>DLLVM_ENABLE_PROJECTS</code> 启用的组件。llvm-project 中有很多组件，除了 <code>clang</code>，常用的还有</p>
+<ul>
+<li><code>clang-tools-extra</code> 额外工具集。包含 clangd, clang-tidy, clang-doc, clang-include-fixer 等。</li>
+<li><code>lldb</code> 调试器。Clang 编译的程序用 gdb 调试可能会遇到各种问题，最好用 lldb 调试。</li>
+<li><p><code>lld</code> 链接器，可替代 ld。</p>
+<p>此外还有 <code>bolt</code>, <code>polly</code>, <code>libclc</code> 等组件，具体可参见 LLVM 文档。多个组件之间用分号 <code>;</code> 分隔。</p>
+</li>
+</ul>
+</li>
+<li><p><code>DLLVM_ENABLE_RUNTIMES</code> 启用的运行时组件。常用的组件有</p>
+<ul>
+<li><code>compiler-rt</code> 编译器运行时。如果要用 Sanitizer 系列工具（如 ASan），则必选。</li>
+<li><code>libcxx</code> 和 <code>libcxxabi</code> 是 LLVM 的 C++ 标准库实现。Clang 默认将程序链接到系统的 libstdc++，但如果要链接到 LLVM 的标准库 libc++，这两个必选</li>
+<li><p><code>libunwind</code> 实现堆栈展开的库。如果要链接到 libc++，则必选。</p>
+<p>此外还有 <code>libc</code>, <code>llvm-libgcc</code>, <code>offload</code> 等组件，具体可参见 LLVM 文档。多个组件之间用分号 <code>;</code> 分隔。</p>
+</li>
+</ul>
+</li>
+<li><code>CMAKE_INSTALL_PREFIX</code> 安装路径前缀，默认为 <code>/usr/local</code>。</li>
+<li><code>CMAKE_C_COMPILER</code> 和 <code>CMAKE_CXX_COMPILER</code> 分别指定 C 和 C++ 的编译器，默认为 <code>gcc</code> 和 <code>g++</code>。后面我们会用到这两个参数。</li>
+<li><code>LLVM_ENABLE_LIBCXX</code> 是否链接到 libc++。默认链接到 libstdc++。后面我们会用到这个参数。</li>
+</ul>
+<p>如果 LLVM 的各个依赖项都没有问题、这一步成功后，便可执行 <code>make</code> 开始构建</p>
+<pre><code class="lang-bash">make -j8 # 根据机器情况调整线程数
+</code></pre>
+<p>如果一切顺利，执行 <code>sudo make install</code> 即可完成安装。安装前可以执行 <code>make check-clang</code> 执行 clang 的测试用例，确认没有问题。</p>
+<h2>老旧发行版编译</h2>
+<p>要成功构建 LLVM 20.1.0，GCC 版本至少为 7.4。然而在一些老旧发行版（如 CentOS 7）中，GCC 版本并不能满足要求。为此我们需要先用系统的老版编译器编译一个新版编译器，再用新版编译器编译 LLVM。</p>
+<pre><code class="lang-bash"># 下载 gcc-9.1.0
+curl -LO https://ftp.gnu.org/gnu/gcc/gcc-9.1.0/gcc-9.1.0.tar.xz
+unxz gcc-9.1.0.tar.xz
+tar -xf gcc-9.1.0.tar
+
+cd gcc-9.1.0
+
+# 安装依赖
+./contrib/download_prerequisites
+./configure --prefix=${HOME}/toolchains # 安装到 ~/toolchains
+make -j8
+make install
+</code></pre>
+<p>这里我们编译的 gcc-9.1.0 是用于构建 LLVM 的“临时”编译器，我们不把它安装到系统目录 (<code>/usr/local/</code>)，而是安装到 <code>~/toolchains</code>。GCC 是系统编译器，不可随意升级，否则可能导致系统其它软件出现兼容性问题。</p>
+<p>接着我们用刚刚编译的 gcc-9.1.0 构建 LLVM。</p>
+<pre><code class="lang-bash">cd llvm-project-20.1.0.src
+mkdir build &amp;&amp; cd build
+cmake ../llvm -DCMAKE_C_COMPILER=${HOME}/toolchains/bin/gcc \
+              -DCMAKE_CXX_COMPILER=${HOME}/toolchains/bin/g++ \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLLVM_ENABLE_PROJECTS='clang' \
+              -DLLVM_ENABLE_RUNTIMES='compiler-rt;libcxx;libcxxabi;libunwind'
+
+LD_LIBRARY_PATH=${HOME}/toolchains/lib:${HOME}/toolchains/lib64 make -j8
+</code></pre>
+<p>这里我们用 <code>-DCMAKE_C_COMPILER</code> 和 <code>-DCMAKE_CXX_COMPILER</code> 指定 C/C++ 编译器的完整路径，也就是 gcc-9.1.0 的安装路径 <code>~/toolchains/</code> 下的 <code>bin/gcc</code> 和 <code>bin/g++</code>。LLVM 构建过程中会执行编译出来的工具，这些工具都依赖于 gcc-9.1.0 的 C++ 运行库。因此我们要用环境变量 <code>LD_LIBRARY_PATH</code> 指定动态库路径，确保它们能正常运行。</p>
+<p>因为这样构建的 LLVM 工具链都依赖于 gcc-9.1.0 的运行库，我们要设置好 <code>LD_LIBRARY_PATH</code> 才能正常运行它们。</p>
+<pre><code class="lang-bash">$ bin/clang --version # 直接运行通常会出现 libstdc++ 不兼容的报错
+bin/clang: /lib64/libstdc++.so.6: version `GLIBCXX_3.4.26' not found (required by bin/clang)
+
+$ LD_LIBRARY_PATH=${HOME}/toolchains/lib:${HOME}/toolchains/lib64 bin/clang --version # 需要指定 gcc-9.1.0 的动态库路径
+clang version 20.1.0
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /home/luyuhuang/llvm-project-20.1.0.src/build/bin
+
+$ LD_LIBRARY_PATH=${HOME}/toolchains/lib:${HOME}/toolchains/lib64 ldd bin/clang
+        linux-vdso.so.1 =&gt;  (0x00007fffe95c9000)
+        libpthread.so.0 =&gt; /lib64/libpthread.so.0 (0x00007f470cbbb000)
+        librt.so.1 =&gt; /lib64/librt.so.1 (0x00007f470c9b3000)
+        libdl.so.2 =&gt; /lib64/libdl.so.2 (0x00007f470c7af000)
+        libz.so.1 =&gt; /lib64/libz.so.1 (0x00007f470c599000)
+        libstdc++.so.6 =&gt; /home/luyuhuang/toolchains/lib64/libstdc++.so.6 (0x00007f470c1c0000)
+        libm.so.6 =&gt; /lib64/libm.so.6 (0x00007f470bebe000)
+        libgcc_s.so.1 =&gt; /home/luyuhuang/toolchains/lib64/libgcc_s.so.1 (0x00007f470bca6000)
+        libc.so.6 =&gt; /lib64/libc.so.6 (0x00007f470b8e2000)
+        /lib64/ld-linux-x86-64.so.2 (0x00007f470cdd7000)
+</code></pre>
+<h2>Bootstrap</h2>
+<p>前面使用 gcc-9.1.0 编译的 LLVM 工具链虽然可以运行，但是却依赖于 gcc-9.1.0 的运行库。由于系统的 C++ 运行库不能随意升级，我们不便将 gcc-9.1.0 的运行库安装到系统中。这里比较合适的做法是让 clang 做一次 bootstrap（自举），用 gcc-9.1.0 编译的 clang 构建 LLVM，并链接到 LLVM 的 C++ 运行库（也就是 libc++）。</p>
+<pre><code>cd llvm-project-20.1.0.src
+mkdir build1 &amp;&amp; cd build1 # 创建一个新的构建目录
+cmake ../llvm -DCMAKE_C_COMPILER= $(realpath ../build)/bin/clang \      # 使用 ../build 目录下，用 gcc-9.1.0 编译的 clang 构建
+              -DCMAKE_CXX_COMPILER= $(realpath ../build)/bin/clang++ \
+              -DLLVM_ENABLE_LIBCXX=ON \                                 # 使用 LLVM 的 libc++
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLLVM_ENABLE_PROJECTS='clang' \
+              -DLLVM_ENABLE_RUNTIMES='compiler-rt;libcxx;libcxxabi;libunwind'
+
+LD_LIBRARY_PATH=${HOME}/toolchains/lib:${HOME}/toolchains/lib64:$(realpath ../build)/lib/x86_64-unknown-linux-gnu make -j8
+</code></pre>
+<p>这里我们则是将编译器路径设置成前面用 gcc-9.1.0 编译的 clang 的路径。同时设置 <code>-DLLVM_ENABLE_LIBCXX=ON</code> 链接到 LLVM 的 libc++。最后注意环境变量 <code>LD_LIBRARY_PATH</code> 除了需要指定 gcc-9.1.0 的运行库路径之外，还需要指定前面 gcc-9.1.0 编译的 LLVM 的运行库路径。</p>
+<p>构建完成后，执行 <code>sudo make install</code> 安装即可。由于 LLVM 20.1.0 的 C++ 运行库位于 <code>lib/x86_64-unknown-linux-gnu/</code>（更老版本的 LLVM 则直接在 <code>lib/</code> 里），我们通常需要再配置下动态库搜索路径。</p>
+<pre><code class="lang-bash">echo /usr/local/lib/x86_64-unknown-linux-gnu &gt;&gt; /etc/ld.so.conf
+ldconfig
+</code></pre>
+<p>这样安装的 clang 就能正常运行了。</p>
+<pre><code class="lang-bash">$ clang --version
+clang version 20.1.0
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /usr/local/bin
+
+$ ldd /usr/local/bin/clang
+        linux-vdso.so.1 =&gt;  (0x00007ffc6d57c000)
+        libpthread.so.0 =&gt; /lib64/libpthread.so.0 (0x00007fca001ae000)
+        librt.so.1 =&gt; /lib64/librt.so.1 (0x00007fc9fffa6000)
+        libdl.so.2 =&gt; /lib64/libdl.so.2 (0x00007fc9ffda2000)
+        libm.so.6 =&gt; /lib64/libm.so.6 (0x00007fc9ffaa0000)
+        libz.so.1 =&gt; /lib64/libz.so.1 (0x00007fc9ff88a000)
+        libc++.so.1 =&gt; /usr/local/lib/x86_64-unknown-linux-gnu/libc++.so.1 (0x00007fc9ff583000)
+        libc++abi.so.1 =&gt; /usr/local/lib/x86_64-unknown-linux-gnu/libc++abi.so.1 (0x00007fc9ff33b000)
+        libunwind.so.1 =&gt; /usr/local/lib/x86_64-unknown-linux-gnu/libunwind.so.1 (0x00007fc9ff12e000)
+        libgcc_s.so.1 =&gt; /lib64/libgcc_s.so.1 (0x00007fc9fef18000)
+        libc.so.6 =&gt; /lib64/libc.so.6 (0x00007fc9feb54000)
+        /lib64/ld-linux-x86-64.so.2 (0x00007fca0ad52000)
+        libatomic.so.1 =&gt; /lib64/libatomic.so.1 (0x00007fc9fe94c000)
+</code></pre>
+<hr/>
+<p><strong>参考资料:</strong></p>
+<ul>
+<li><a href="https://llvm.org/docs/CMake.html">https://llvm.org/docs/CMake.html</a></li>
+<li><a href="https://llvm.org/docs/GettingStarted.html">https://llvm.org/docs/GettingStarted.html</a></li>
+</ul>
