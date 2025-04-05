@@ -1,0 +1,1502 @@
+<h2><a href="https://github.com/imjiaoyuan/imjiaoyuan.github.io/blob/master/content/posts/alphafold3-usage.md">仓库源文</a>，<a href="https://yuanj.top/alphafold3-usage">站点原文</a></h2>
+<p>AlphaFold3 是 DeepMind 推出的新一代结构预测工具，也是今年的诺贝尔化学奖的成果之一。AlphaFold3 不仅支持蛋白质，还能预测 RNA、DNA 和小分子配体的复合体结构。本文将详细介绍 Alphafold3 的安装与使用。</p>
+&lt;!--more--&gt;
+
+<h2>环境配置与依赖安装</h2>
+<h3>1. 配置要求</h3>
+<ul>
+<li><strong>系统</strong>：仅支持 Linux（推荐 Ubuntu 22.04 LTS）</li>
+<li><strong>GPU</strong>：NVIDIA GPU（显存 ≥80GB，如 A100/H100）</li>
+<li><strong>存储</strong>：至少 1TB SSD（用于存储遗传数据库）</li>
+<li><strong>内存</strong>：≥64GB（处理长序列时需更高）</li>
+</ul>
+<h3>2. 安装步骤</h3>
+<h4>2.1 基础依赖</h4>
+<pre><code class="lang-bash"># 更新系统
+sudo apt-get update &amp;&amp; sudo apt-get upgrade -y
+
+# 安装必要工具
+sudo apt-get install -y ca-certificates curl git wget zstd
+</code></pre>
+<h4>2.2 安装 Docker 和 N 卡驱动</h4>
+<pre><code class="lang-bash"># 安装 Docker
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER  # 将当前用户加入 Docker 组
+newgrp docker  # 刷新用户组
+
+# 安装 NVIDIA 驱动
+sudo ubuntu-drivers autoinstall
+sudo reboot  # 重启生效
+
+# 验证 GPU
+nvidia-smi  # 应显示 GPU 信息
+</code></pre>
+<h4>2.3 配置 NVIDIA 容器工具包</h4>
+<pre><code class="lang-bash"># 添加仓库
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/ubuntu22.04/amd64 /" | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+# 安装工具包
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+
+# 验证容器 GPU 支持
+docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi
+</code></pre>
+<hr/>
+<h2>准备预测任务</h2>
+<p>AlphaFold3 使用 <strong>JSON</strong> 格式定义预测任务，支持蛋白质、RNA、DNA 和配体的复合体结构预测。以下是详细的输入文件说明。</p>
+<h3>1. 输入文件格式</h3>
+<p>输入文件是一个 JSON 文件，包含以下主要字段：</p>
+<ul>
+<li><strong>name</strong>：任务名称</li>
+<li><strong>modelSeeds</strong>：随机种子列表</li>
+<li><strong>sequences</strong>：定义蛋白质、RNA、DNA 和配体</li>
+<li><strong>bondedAtomPairs</strong>：定义共价键</li>
+<li><strong>userCCD</strong> 或 <strong>userCCDPath</strong>：自定义配体结构</li>
+<li><strong>dialect</strong>：必须设置为 <code>alphafold3</code></li>
+<li><strong>version</strong>：输入格式版本（1、2 或 3）</li>
+</ul>
+<h3>2. 蛋白质输入</h3>
+<p>蛋白质链的定义包括序列、修饰和 MSA（多序列比对）。</p>
+<pre><code class="lang-json">{
+  "protein": {
+    "id": "A",  // 链 ID
+    "sequence": "MADEEVQALVVDNGSGMCKAGFAGDDAPRAVFPSIVGRPRHQGVMVGMGQKDSYVGDEAQSKRGILTLKYPIEHGIITNWDDMEKIWHHTFYNELRVAPEEHPTLLTEAPLNPKANREKMTQIMFETFNTPAMYVAIQAVLSLYASGRTTGIVMDSGDGVTHTVPIYEGYALPHAILRLDLAGR",
+    "modifications": [
+      {"ptmType": "HY3", "ptmPosition": 1},  // 修饰类型和位置
+      {"ptmType": "P1L", "ptmPosition": 5}
+    ],
+    "unpairedMsaPath": "/path/to/msa.a3m"  // 自定义 MSA 文件路径
+  }
+}
+</code></pre>
+<h3>3. RNA 输入</h3>
+<p>RNA 链的定义包括序列和修饰。</p>
+<pre><code class="lang-json">{
+  "rna": {
+    "id": "B",  // 链 ID
+    "sequence": "AGCU",
+    "modifications": [
+      {"modificationType": "2MG", "basePosition": 1},  // 修饰类型和位置
+      {"modificationType": "5MC", "basePosition": 4}
+    ],
+    "unpairedMsaPath": "/path/to/rna_msa.a3m"  // 自定义 MSA 文件路径
+  }
+}
+</code></pre>
+<h3>4. DNA 输入</h3>
+<p>DNA 链的定义包括序列和修饰。</p>
+<pre><code class="lang-json">{
+  "dna": {
+    "id": "C",  // 链 ID
+    "sequence": "GACCTCT",
+    "modifications": [
+      {"modificationType": "6OG", "basePosition": 1},  // 修饰类型和位置
+      {"modificationType": "6MA", "basePosition": 2}
+    ]
+  }
+}
+</code></pre>
+<h3>5. 配体输入</h3>
+<p>配体可以通过 CCD 代码、SMILES 或自定义结构定义。</p>
+<h4>5.1 使用 CCD 代码</h4>
+<pre><code class="lang-json">{
+  "ligand": {
+    "id": "D",  // 配体 ID
+    "ccdCodes": ["ATP"]  // CCD 代码
+  }
+}
+</code></pre>
+<h4>5.2 使用 SMILES</h4>
+<pre><code class="lang-json">{
+  "ligand": {
+    "id": "E",
+    "smiles": "CC(=O)OC1C[NH+]2CCC1CC2"  // SMILES 字符串
+  }
+}
+</code></pre>
+<h4>5.3 使用自定义结构（User CCD）</h4>
+<p>如果配体不在 CCD 中，可以使用自定义结构。</p>
+<pre><code class="lang-json">{
+  "ligand": {
+    "id": "F",
+    "ccdCodes": ["LIG-1"]  // 自定义配体代码
+  }
+}
+</code></pre>
+<p>在输入文件的顶层添加 <code>userCCD</code> 或 <code>userCCDPath</code> 字段，定义自定义配体结构。</p>
+<pre><code class="lang-json">{
+  "userCCD": "data_MY-LIG\n_chem_comp.id MY-LIG\n_chem_comp.name 'My Custom Ligand'\n_chem_comp.type non-polymer\n_chem_comp.formula 'C10 H6 O4'\n_chem_comp.mon_nstd_parent_comp_id ?\n_chem_comp.pdbx_synonyms ?\n_chem_comp.formula_weight 190.152\nloop_\n_chem_comp_atom.comp_id\n_chem_comp_atom.atom_id\n_chem_comp_atom.type_symbol\n_chem_comp_atom.charge\n_chem_comp_atom.pdbx_leaving_atom_flag\n_chem_comp_atom.pdbx_model_Cartn_x_ideal\n_chem_comp_atom.pdbx_model_Cartn_y_ideal\n_chem_comp_atom.pdbx_model_Cartn_z_ideal\nMY-LIG C02 C 0 N -1.418 -1.260 0.018\nMY-LIG C03 C 0 N -0.665 -2.503 -0.247\nMY-LIG C04 C 0 N 0.677 -2.501 -0.235\nMY-LIG C05 C 0 N 1.421 -1.257 0.043\nMY-LIG C06 C 0 N 0.706 0.032 0.008\nMY-LIG C07 C 0 N -0.706 0.030 -0.004\nMY-LIG C08 C 0 N -1.397 1.240 -0.037\nMY-LIG C10 C 0 N -0.685 2.443 -0.057\nMY-LIG C11 C 0 N 0.679 2.445 -0.045\nMY-LIG C12 C 0 N 1.394 1.243 -0.013\nMY-LIG O01 O 0 N -2.611 -1.301 0.247\nMY-LIG O09 O 0 N -2.752 1.249 -0.049\nMY-LIG O13 O 0 N 2.750 1.257 -0.001\nMY-LIG O14 O 0 N 2.609 -1.294 0.298\nMY-LIG H1 H 0 N -1.199 -3.419 -0.452\nMY-LIG H2 H 0 N 1.216 -3.416 -0.429\nMY-LIG H3 H 0 N -1.221 3.381 -0.082\nMY-LIG H4 H 0 N 1.212 3.384 -0.062\nMY-LIG H5 H 0 N -3.154 1.271 0.830\nMY-LIG H6 H 0 N 3.151 1.241 -0.880\nloop_\n_chem_comp_bond.atom_id_1\n_chem_comp_bond.atom_id_2\n_chem_comp_bond.value_order\n_chem_comp_bond.pdbx_aromatic_flag\nO01 C02 DOUB N\nO09 C08 SING N\nC02 C03 SING N\nC02 C07 SING N\nC03 C04 DOUB N\nC08 C07 DOUB Y\nC08 C10 SING Y\nC07 C06 SING Y\nC10 C11 DOUB Y\nC04 C05 SING N\nC06 C05 SING N\nC06 C12 DOUB Y\nC11 C12 SING Y\nC05 O14 DOUB N\nC12 O13 SING N\nC03 H1 SING N\nC04 H2 SING N\nC10 H3 SING N\nC11 H4 SING N\nO09 H5 SING N\nO13 H6 SING N\n"
+}
+</code></pre>
+<h3>6. 共价键定义</h3>
+<p>使用 <code>bondedAtomPairs</code> 字段定义共价键。</p>
+<pre><code class="lang-json">{
+  "bondedAtomPairs": [
+    [["A", 78, "NZ"], ["D", 1, "O3B"]],  // 蛋白质链 A 的第 78 个残基与配体 D 的第 1 个原子
+    [["D", 1, "O6"], ["D", 2, "C1"]]    // 配体 D 内部的共价键
+  ]
+}
+</code></pre>
+<hr/>
+<h2>结果输出</h2>
+<h3>1. 输出目录结构</h3>
+<pre><code>myprotein_ligand_complex/
+├── seed-42_sample-0/
+│   ├── model.cif           # 预测结构（mmCIF 格式）
+│   ├── confidences.json    # 详细置信度指标
+│   └── summary_confidences.json  # 摘要指标
+├── ranking_scores.csv      # 所有预测的排名
+├── TERMS_OF_USE.md         # 使用条款
+└── myprotein_ligand_complex_model.cif  # 最优预测结构
+</code></pre>
+<h3>2. 核心置信度指标</h3>
+<ul>
+<li><strong>pLDDT</strong>（0-100）：原子级置信度，越高表示局部结构越可靠</li>
+<li><strong>PAE</strong>（0-∞）：预测对齐误差，值越小说明两个区域的相对位置越准确</li>
+<li><strong>pTM/ipTM</strong>（0-1）：整体结构（pTM）和界面（ipTM）的模板建模分数<ul>
+<li>ipTM &gt; 0.8：高质量预测</li>
+<li>ipTM &lt; 0.6：可能失败</li>
+</ul>
+</li>
+</ul>
+<h3>3. 结果筛选技巧</h3>
+<ul>
+<li><strong>ranking_scores.csv</strong>：按 <code>ranking_score</code> 排序（综合 pTM、ipTM 和冲突检测）</li>
+<li><strong>chain_pair_pae_min</strong>：链间最低 PAE 值，用于判断相互作用（如抗原-抗体）</li>
+</ul>
+<hr/>
+<h2>运行示例</h2>
+<h3>1. 下载数据库与模型参数</h3>
+<pre><code class="lang-bash"># 克隆仓库
+git clone https://github.com/google-deepmind/alphafold3.git
+cd alphafold3
+
+# 下载遗传数据库（约 630GB）
+./fetch_databases.sh ~/alphafold3_databases
+
+# 模型参数需单独申请：
+# 访问 https://forms.gle/svvpY4u2jsHEwWYS6 提交申请
+</code></pre>
+<h3>2. 构建 Docker 镜像</h3>
+<pre><code class="lang-bash">docker build -t alphafold3 -f docker/Dockerfile .
+</code></pre>
+<h3>3. 运行预测</h3>
+<pre><code class="lang-bash">docker run -it \
+  --gpus all \
+  -v ~/input.json:/root/input.json \
+  -v ~/output:/root/output \
+  -v ~/alphafold3_databases:/root/databases \
+  -v ~/model_params:/root/models \
+  alphafold3 \
+  python run_alphafold.py \
+  --json_path=/root/input.json \
+  --output_dir=/root/output \
+  --model_dir=/root/models \
+  --db_dir=/root/databases
+</code></pre>
+<h2>Flask 对接 Alphafold3</h2>
+<p>如果自己部署 Alphafold3 的话，总是通过 json 提交高低有点麻烦，而且对于大部分人来说也不够友好，那么我们可以写一个 Web 平台，通过图形化操作提交 Alphafold3 任务，用起来要方便不少。我使用的是 Flask 作为后端，下面几个关键的路由。</p>
+<h3>1. 任务提交路由 (<code>/submit</code>)</h3>
+<p>这是处理用户提交任务的核心路由，负责接收用户输入、验证数据、创建输入文件、启动 Docker 容器并更新任务状态。</p>
+<pre><code class="lang-python">@alphafold3_bp.route('/submit', methods=['POST'])
+@login_required
+def submit():
+    try:
+        # 获取当前用户
+        user = User.query.get(session['user_id'])
+        if not user:
+            return jsonify({'error': '用户未登录'}), 401
+
+        data = request.get_json()
+        logger.info(f"接收到的数据：{json.dumps(data, indent=2, ensure_ascii=False)}")
+
+        # 验证输入数据
+        validate_input_data(data)
+
+        job_name = data.get('jobName', 'AF3_Job')
+        unique_suffix = str(uuid.uuid4())[:4]
+        task_id = f"{job_name}_{unique_suffix}".lower()
+
+        # 处理实体
+        processed_entities = []
+        for entity in data['entities']:
+            logger.info(f"处理实体：{json.dumps(entity, indent=2, ensure_ascii=False)}")
+            if entity['type'] in ['protein', 'dna', 'rna']:
+                if entity.get('modifications'):
+                    try:
+                        entity['sequence'] = process_modifications(
+                            entity['sequence'],
+                            entity['modifications']
+                        )
+                    except ValueError as e:
+                        return jsonify({"message": str(e), "error": True}), 400
+            elif entity['type'] == 'ligand':
+                try:
+                    logger.info(f"处理配体：{json.dumps(entity, indent=2, ensure_ascii=False)}")
+                    # 直接传入 entity，不需要包装成 {'ligand': entity}
+                    processed_ligand = LigandProcessor.process_ligand_input(entity)
+                    logger.info(f"处理后的配体：{json.dumps(processed_ligand, indent=2, ensure_ascii=False)}")
+                    entity.update(processed_ligand)
+                except ValueError as e:
+                    logger.error(f"配体处理错误：{str(e)}")
+                    return jsonify({"message": str(e), "error": True}), 400
+
+            processed_entities.append(entity)
+
+        data['entities'] = processed_entities
+
+        # 创建输入文件
+        try:
+            create_input_json(task_id, data)
+        except Exception as e:
+            logger.error(f"创建输入文件失败：{str(e)}")
+            return jsonify({"message": f"创建输入文件失败：{str(e)}", "error": True}), 500
+
+        # 修改任务记录创建部分，添加用户 ID
+        task = Task(
+            id=task_id,
+            module_name='alphafold3',
+            model_name='alphafold3',
+            status='PENDING',
+            result_url=f'/alphafold3/download/{task_id}',
+            user_id=user.id  # 添加用户 ID
+        )
+        db.session.add(task)
+        db.session.commit()
+
+        # 启动预测任务
+        try:
+            container_id = run_alphafold3(task_id)
+            update_task_status(task, 'RUNNING', pid=f'DOCKER:{container_id}', error_message='-')
+            return jsonify({
+                "message": "任务提交成功",
+                "task_id": task_id,
+                "container_id": container_id
+            })
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"启动 AlphaFold3 预测失败：{error_msg}")
+            update_task_status(task, 'FAILED', error_message=error_msg)
+            return jsonify({
+                "message": f"启动 AlphaFold3 预测失败：{error_msg}",
+                "error": True
+            }), 500
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"处理任务失败：{str(e)}", exc_info=True)
+        return jsonify({
+            "message": f"处理任务失败：{str(e)}",
+            "error": True
+        }), 500
+</code></pre>
+<h3>2. 输入数据验证 (<code>validate_input_data</code>)</h3>
+<p>验证用户提交的输入数据是否符合 AlphaFold3 的要求。</p>
+<pre><code class="lang-python">def validate_input_data(data):
+    """验证输入数据"""
+    try:
+        # 基本字段验证
+        if not isinstance(data, dict):
+            raise ValueError("输入数据必须是字典格式")
+
+        if not data.get('entities'):
+            raise ValueError("缺少 entities 字段")
+
+        if not isinstance(data.get('entities'), list):
+            raise ValueError("entities 必须是列表格式")
+
+        # 验证 model seeds
+        if 'modelSeeds' in data:
+            try:
+                seeds = [int(seed) for seed in data['modelSeeds'].split(',')]
+                if not all(isinstance(seed, int) for seed in seeds):
+                    raise ValueError("modelSeeds 必须是逗号分隔的整数")
+            except (ValueError, AttributeError):
+                raise ValueError("modelSeeds 格式无效")
+
+        # 验证每个实体
+        for entity in data['entities']:
+            if not isinstance(entity, dict):
+                raise ValueError("每个实体必须是字典格式")
+
+            if 'type' not in entity:
+                raise ValueError("实体缺少 type 字段")
+
+            if entity['type'] not in ['protein', 'ligand', 'dna', 'rna']:
+                raise ValueError(f"不支持的实体类型：{entity['type']}")
+
+            if 'id' not in entity:
+                raise ValueError("实体缺少 id 字段")
+
+            # 验证序列类型实体
+            if entity['type'] in ['protein', 'dna', 'rna']:
+                # 验证序列
+                sequence = entity.get('sequence', '').strip()
+                if not sequence:
+                    raise ValueError(f"{entity['type']} 序列不能为空")
+
+                # 验证修饰
+                if 'modifications' in entity:
+                    if not isinstance(entity['modifications'], list):
+                        raise ValueError("modifications 必须是列表格式")
+                    for mod in entity['modifications']:
+                        if not isinstance(mod, dict):
+                            raise ValueError("每个修饰必须是字典格式")
+                        if not all(k in mod for k in ['type', 'position']):
+                            raise ValueError("修饰必须包含 type 和 position")
+                        if not isinstance(mod['position'], int) or mod['position'] &lt;= 0:
+                            raise ValueError("修饰位置必须是正整数")
+                        if mod['position'] &gt; len(sequence):
+                            raise ValueError(f"修饰位置 {mod['position']} 超出序列长度")
+
+                # 验证 MSA
+                if 'unpairedMsa' in entity:
+                    validate_msa_format(entity['unpairedMsa'])
+                if entity['type'] == 'protein' and 'pairedMsa' in entity:
+                    validate_paired_msa_format(entity['pairedMsa'])
+
+                # 验证 Templates
+                if entity['type'] == 'protein' and 'templates' in entity:
+                    validate_templates_format(entity['templates'])
+
+            elif entity['type'] == 'ligand':
+                if 'source' not in entity:
+                    raise ValueError("配体必须指定来源")
+                if entity['source'] == 'smiles':
+                    if not entity.get('smiles'):
+                        raise ValueError("SMILES 字符串不能为空")
+                elif entity['source'] == 'ccd':
+                    if not entity.get('ccdCode'):
+                        raise ValueError("CCD 代码不能为空")
+                    if len(entity['ccdCode']) != 3:
+                        raise ValueError("CCD 代码必须是 3 个字符")
+                else:
+                    raise ValueError(f"不支持的配体来源：{entity['source']}")
+
+        # 验证 Bonded Atom Pairs
+        if 'bondedAtomPairs' in data:
+            validate_bonded_atom_pairs(data['bondedAtomPairs'])
+
+        # 验证 User CCD
+        if 'userCCD' in data:
+            validate_user_ccd(data['userCCD'])
+
+        return True
+    except ValueError as e:
+        raise ValueError(f"数据验证失败：{str(e)}")
+</code></pre>
+<h3>3. 创建输入文件 (<code>create_input_json</code>)</h3>
+<p>该函数用于根据用户输入生成 AlphaFold3 的输入 JSON 文件。</p>
+<pre><code class="lang-python">def create_input_json(task_id, data):
+    """创建输入 JSON 文件"""
+    try:
+        # 创建基础输入数据结构
+        input_data = {
+            "name": task_id,
+            "dialect": "alphafold3",
+            "version": 1,
+            "modelSeeds": [int(seed) for seed in data['modelSeeds'].split(',')]
+        }
+
+        # 处理序列数据
+        input_data['sequences'] = []
+
+        for entity in data['entities']:
+            if entity['type'] == 'protein':
+                protein_data = {
+                    "protein": {
+                        "id": entity['id'],
+                        "sequence": entity['sequence'].strip()
+                    }
+                }
+
+                # 处理修饰
+                if 'modifications' in entity:
+                    modified_sequence = list(entity['sequence'].strip())
+                    for mod in entity['modifications']:
+                        pos = mod['position'] - 1
+                        residue = modified_sequence[pos].upper()
+                        if residue in MODIFICATION_TO_RESIDUE[mod['type']]:
+                            modified_sequence[pos] = MODIFICATION_TO_RESIDUE[mod['type']][residue]
+                    protein_data['protein']['sequence'] = ''.join(modified_sequence)
+                    logger.info(f"应用修饰后的序列：{protein_data['protein']['sequence']}")
+
+                input_data['sequences'].append(protein_data)
+
+            elif entity['type'] in ['dna', 'rna']:
+                sequence_data = {
+                    entity['type']: {
+                        "id": entity['id'],
+                        "sequence": entity['sequence'].strip()
+                    }
+                }
+                input_data['sequences'].append(sequence_data)
+
+            elif entity['type'] == 'ligand':
+                # 处理配体。..
+                pass
+
+        # 保存到文件
+        output_path = os.path.join(AF_INPUT_DIR, f'{task_id}.json')
+        with open(output_path, 'w') as f:
+            json.dump(input_data, f, indent=2)
+
+        logger.info(f"生成的输入文件内容：{json.dumps(input_data, indent=2)}")
+        return True
+
+    except Exception as e:
+        logger.error(f"创建输入文件失败：{str(e)}")
+        raise ValueError(f"创建输入文件失败：{str(e)}")
+</code></pre>
+<h3>4. 启动 AlphaFold3 任务 (<code>run_alphafold3</code>)</h3>
+<p>负责启动 Docker 容器并运行 AlphaFold3 预测任务。</p>
+<pre><code class="lang-python">def run_alphafold3(job_name_unique):
+    # 构建 Docker 命令
+    docker_command = [
+        'docker', 'run', '-d',
+        '--volume', f'{AlphaFold3Config.AF_INPUT_DIR}:/root/af_input',
+        '--volume', f'{AlphaFold3Config.AF_OUTPUT_DIR}:/root/af_output',
+        '--volume', f'{AlphaFold3Config.MODEL_PATH}:/root/models',
+        '--volume', f'{AlphaFold3Config.DATABASE_PATH}:/root/public_databases',
+        '--gpus', 'all',
+        AlphaFold3Config.DOCKER_IMAGE,
+        'python', 'run_alphafold.py',
+        '--json_path', f'/root/af_input/{job_name_unique}.json',
+        '--model_dir', '/root/models',
+        '--output_dir', '/root/af_output'
+    ]
+
+    try:
+        # 首先检查输入文件是否存在
+        input_file = os.path.join(AlphaFold3Config.AF_INPUT_DIR, f'{job_name_unique}.json')
+        if not os.path.exists(input_file):
+            logger.error(f"输入文件不存在：{input_file}")
+            raise FileNotFoundError(f"输入文件不存在：{input_file}")
+
+        # 检查目录权限
+        for path in [AlphaFold3Config.AF_INPUT_DIR, AlphaFold3Config.AF_OUTPUT_DIR]:
+            if not os.access(path, os.W_OK):
+                logger.error(f"目录无写入权限：{path}")
+                raise PermissionError(f"目录无写入权限：{path}")
+
+        # 运行 Docker 命令
+        process = subprocess.Popen(
+            docker_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        # 获取输出
+        stdout, stderr = process.communicate()
+
+        # 记录详细输出
+        logger.info("=== Docker 命令执行结果 ===")
+        logger.info(f"标准输出：{stdout}")
+        if stderr:
+            logger.error(f"标准错误：{stderr}")
+
+        # 检查进程返回码
+        if process.returncode != 0:
+            error_msg = f"Docker 命令执行失败 （返回码 {process.returncode})"
+            if stderr:
+                error_msg += f": {stderr}"
+            logger.error(f"Docker 命令执行失败：{error_msg}")
+            raise subprocess.CalledProcessError(
+                returncode=process.returncode,
+                cmd=docker_command,
+                output=stdout,
+                stderr=stderr
+            )
+
+        # 获取容器 ID
+        container_id = stdout.strip()
+        if not container_id:
+            logger.error("未能获取到容器 ID")
+            raise RuntimeError("未能获取到容器 ID")
+
+        # 验证容器是否正在运行
+        docker_client = docker.from_env()
+        try:
+            container = docker_client.containers.get(container_id)
+            logger.info(f"容器状态：{container.status}")
+            if container.status != 'running':
+                logger.error(f"容器状态异常：{container.status}")
+                raise RuntimeError(f"容器状态异常：{container.status}")
+        except docker.errors.NotFound:
+            logger.error(f"无法找到已创建的容器：{container_id}")
+            raise RuntimeError(f"无法找到已创建的容器：{container_id}")
+
+        logger.info(f"=== AlphaFold3 任务启动成功 ===")
+        logger.info(f"任务 ID: {job_name_unique}")
+        logger.info(f"容器 ID: {container_id}")
+        return container_id
+
+    except Exception as e:
+        error_msg = f"启动 AlphaFold3 预测失败：{str(e)}"
+        logger.error("=== AlphaFold3 任务启动失败 ===")
+        logger.error(error_msg)
+        logger.error(f"当前工作目录：{os.getcwd()}")
+        logger.error(f"输入目录内容：{os.listdir(AlphaFold3Config.AF_INPUT_DIR)}")
+        logger.error(f"输出目录内容：{os.listdir(AlphaFold3Config.AF_OUTPUT_DIR)}")
+        raise RuntimeError(error_msg)
+</code></pre>
+<h2>Web 前端逻辑</h2>
+<p>可以使用 vue 来写，也可以直接写 javascript，这里我使用的是 vue3。</p>
+<pre><code class="lang-vue">&lt;template&gt;
+  &lt;form @submit.prevent="submitForm" class="card bg-white p-8 rounded-2xl shadow-lg mb-6"&gt;
+    &lt;!-- Job Information --&gt;
+    &lt;div class="flex justify-between items-center mb-6"&gt;
+      &lt;h2 class="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"&gt;
+        Job Information
+      &lt;/h2&gt;
+      &lt;button type="button" @click="toggleFormContent" 
+        class="text-secondary-light hover:text-primary transition-colors duration-200"&gt;
+        &lt;i class="fas" :class="formContentVisible ? 'fa-chevron-up' : 'fa-chevron-down'"&gt;&lt;/i&gt;
+      &lt;/button&gt;
+    &lt;/div&gt;
+
+    &lt;div v-if="formContentVisible" class="space-y-6"&gt;
+      &lt;!-- Job Name and Model Seeds --&gt;
+      &lt;div class="grid grid-cols-1 md:grid-cols-2 gap-6"&gt;
+        &lt;div&gt;
+          &lt;label class="block text-sm font-medium text-secondary-light mb-2"&gt;Job Name&lt;/label&gt;
+          &lt;input v-model="formData.name" type="text" 
+            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg
+                   focus:ring-2 focus:ring-primary focus:border-primary
+                   outline-none transition duration-200" /&gt;
+        &lt;/div&gt;
+        &lt;div&gt;
+          &lt;label class="block text-sm font-medium text-secondary-light mb-2"&gt;Model Seeds&lt;/label&gt;
+          &lt;input v-model="formData.modelSeeds" type="text" 
+            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg
+                   focus:ring-2 focus:ring-primary focus:border-primary
+                   outline-none transition duration-200"
+            placeholder="e.g., 1,2,3" /&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;!-- Entities Section --&gt;
+      &lt;div class="space-y-4"&gt;
+        &lt;h3 class="text-xl font-semibold text-secondary-dark"&gt;Entities&lt;/h3&gt;
+        &lt;div v-for="(entity, index) in formData.sequences" :key="index" 
+          class="p-6 bg-gray-50 rounded-xl border border-gray-200"&gt;
+          &lt;!-- Entity Header --&gt;
+          &lt;div class="flex justify-between items-center mb-4"&gt;
+            &lt;div class="flex space-x-4"&gt;
+              &lt;select v-model="entity.type" 
+                class="px-4 py-2 bg-white border border-gray-200 rounded-lg
+                       focus:ring-2 focus:ring-primary focus:border-primary"&gt;
+                &lt;option value="protein"&gt;Protein&lt;/option&gt;
+                &lt;option value="rna"&gt;RNA&lt;/option&gt;
+                &lt;option value="dna"&gt;DNA&lt;/option&gt;
+                &lt;option value="ligand"&gt;Ligand&lt;/option&gt;
+              &lt;/select&gt;
+              &lt;div class="relative w-full"&gt;
+                &lt;input v-model="entity.id" type="text" 
+                  placeholder="Chain ID (e.g., A or [A,B])"
+                  class="px-4 py-2 bg-white border border-gray-200 rounded-lg
+                         focus:ring-2 focus:ring-primary focus:border-primary w-full" /&gt;
+                &lt;div class="text-xs text-gray-500 mt-1"&gt;
+                  单链请输入单个字母（如：A)，多链请使用方括号（如：[A,B])
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+            &lt;button type="button" @click="removeEntity(index)"
+              class="text-red-500 hover:text-red-600 transition-colors duration-200"&gt;
+              Remove
+            &lt;/button&gt;
+          &lt;/div&gt;
+
+          &lt;!-- Entity Content --&gt;
+          &lt;div v-if="entity.type === 'ligand'" class="space-y-4"&gt;
+            &lt;!-- 输入方式选择 --&gt;
+            &lt;div class="mb-4"&gt;
+              &lt;label class="block text-sm font-medium text-gray-700 mb-2"&gt;输入方式&lt;/label&gt;
+              &lt;div class="flex space-x-4"&gt;
+                &lt;label class="inline-flex items-center"&gt;
+                  &lt;input type="radio" v-model="entity.inputType" value="smiles" class="form-radio"&gt;
+                  &lt;span class="ml-2"&gt;SMILES&lt;/span&gt;
+                &lt;/label&gt;
+                &lt;label class="inline-flex items-center"&gt;
+                  &lt;input type="radio" v-model="entity.inputType" value="ccd" class="form-radio"&gt;
+                  &lt;span class="ml-2"&gt;CCD Code&lt;/span&gt;
+                &lt;/label&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;!-- SMILES 输入 --&gt;
+            &lt;div v-if="entity.inputType === 'smiles'" class="mb-4"&gt;
+              &lt;label class="block text-sm font-medium text-gray-700 mb-2"&gt;SMILES&lt;/label&gt;
+              &lt;input v-model="entity.smiles" type="text" 
+                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+                placeholder="输入 SMILES 字符串，如 CC(=O)OC1=CC=CC=C1C(=O)O" /&gt;
+              &lt;div class="text-xs text-gray-500 mt-1"&gt;
+                请输入标准 SMILES 格式的分子结构。例如：&lt;br&gt;
+                - 阿司匹林：CC(=O)OC1=CC=CC=C1C(=O)O&lt;br&gt;
+                - 咖啡因：CN1C=NC2=C1C(=O)N(C(=O)N2C)C&lt;br&gt;
+                - ATP：C1=NC(=C2C(=N1)N(C=N2)C3C(C(C(O3)COP(=O)(O)OP(=O)(O)OP(=O)(O)O)O)N
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;!-- CCD Code 输入 --&gt;
+            &lt;div v-if="entity.inputType === 'ccd'" class="space-y-2"&gt;
+              &lt;label class="block text-sm font-medium text-gray-700"&gt;CCD Code&lt;/label&gt;
+
+              &lt;!-- CCD 代码选择器 --&gt;
+              &lt;div class="relative mt-2"&gt;
+                &lt;select v-model="entity.selectedOption" 
+                  class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+                  @change="updateCcdCodes(entity)"&gt;
+                  &lt;option value=""&gt;选择 CCD 代码。..&lt;/option&gt;
+                  &lt;optgroup v-for="(group, groupName) in ccdOptions" :key="groupName" :label="groupName"&gt;
+                    &lt;option v-for="option in group" :key="option.id" :value="option.id"&gt;
+                      {{ option.name }}
+                    &lt;/option&gt;
+                  &lt;/optgroup&gt;
+                &lt;/select&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div v-else&gt;
+            &lt;div class="mb-4"&gt;
+              &lt;label class="block text-gray-700 mb-1"&gt;序列&lt;/label&gt;
+              &lt;textarea v-model="entity.sequence" 
+                class="w-full mt-1 p-2 border border-gray-300 rounded-md"
+                rows="3"
+                :placeholder="getSequencePlaceholder(entity.type)"&gt;&lt;/textarea&gt;
+              &lt;div class="text-xs text-gray-500 mt-1" v-html="getSequenceHint(entity.type)"&gt;&lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;!-- Add Details Section --&gt;
+            &lt;div class="mt-2"&gt;
+              &lt;button type="button" @click="toggleDetails(index)" 
+                class="text-blue-500 hover:text-blue-700 flex items-center"&gt;
+                &lt;span&gt;{{ entity.showDetails ? 'Hide Details' : 'Add Details' }}&lt;/span&gt;
+                &lt;i class="fas" :class="entity.showDetails ? 'fa-chevron-up' : 'fa-chevron-down'"&gt;&lt;/i&gt;
+              &lt;/button&gt;
+            &lt;/div&gt;
+
+            &lt;div v-if="entity.showDetails" class="mt-4 space-y-6"&gt;
+              &lt;!-- Modifications --&gt;
+              &lt;div class="modifications"&gt;
+                &lt;label class="flex items-center mb-2"&gt;
+                  &lt;input type="checkbox" v-model="entity.hasModifications" class="mr-2"&gt;
+                  &lt;span class="text-gray-700 font-medium"&gt;Add Modifications&lt;/span&gt;
+                &lt;/label&gt;
+                &lt;div class="text-xs text-gray-500 mb-2"&gt;
+                  用于指定序列中的特定修饰，如磷酸化、甲基化等
+                &lt;/div&gt;
+                &lt;div v-if="entity.hasModifications" class="space-y-2"&gt;
+                  &lt;div v-for="(mod, modIndex) in entity.modifications" :key="modIndex" 
+                    class="flex space-x-2 items-start"&gt;
+                    &lt;div class="flex-1"&gt;
+                      &lt;select v-model="mod.type" class="w-full p-2 border border-gray-300 rounded-md text-sm"&gt;
+                        &lt;option value="phosphorylation"&gt;磷酸化 (Phosphorylation)&lt;/option&gt;
+                        &lt;option value="methylation"&gt;甲基化 (Methylation)&lt;/option&gt;
+                        &lt;option value="acetylation"&gt;乙酰化 (Acetylation)&lt;/option&gt;
+                      &lt;/select&gt;
+                    &lt;/div&gt;
+                    &lt;div class="w-32"&gt;
+                      &lt;input v-model.number="mod.position" type="number" 
+                        min="1"
+                        :max="entity.sequence.length"
+                        placeholder="位置"
+                        class="w-full p-2 border border-gray-300 rounded-md text-sm"
+                        @input="updateModificationResidue(entity, mod)" /&gt;
+                      &lt;div class="text-xs text-gray-500 mt-1"&gt;
+                        从 1 开始的序列位置
+                      &lt;/div&gt;
+                      &lt;div v-if="mod.residue" class="text-xs text-blue-500 mt-1"&gt;
+                        残基：{{ mod.residue }}
+                      &lt;/div&gt;
+                    &lt;/div&gt;
+                    &lt;button type="button" @click="removeModification(index, modIndex)"
+                      class="text-red-500 hover:text-red-700 mt-2"&gt;
+                      &lt;i class="fas fa-times"&gt;&lt;/i&gt;
+                    &lt;/button&gt;
+                  &lt;/div&gt;
+                  &lt;button type="button" @click="addModification(index)"
+                    class="text-blue-500 hover:text-blue-700 text-sm"&gt;
+                    添加修饰
+                  &lt;/button&gt;
+                &lt;/div&gt;
+                &lt;div v-if="errorMessage" class="text-red-500 text-sm mt-2"&gt;
+                  {{ errorMessage }}
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              &lt;!-- Unpaired MSA --&gt;
+              &lt;div v-if="entity.type !== 'ligand'" class="mt-4"&gt;
+                &lt;label class="flex items-center mb-2"&gt;
+                  &lt;input type="checkbox" v-model="entity.hasUnpairedMsa" class="mr-2"&gt;
+                  &lt;span class="text-gray-700 font-medium"&gt;Add Unpaired MSA (Optional)&lt;/span&gt;
+                &lt;/label&gt;
+                &lt;div v-if="entity.hasUnpairedMsa"&gt;
+                  &lt;textarea v-model="entity.unpairedMsa"
+                    class="w-full mt-1 p-2 border border-gray-300 rounded-md"
+                    rows="4"
+                    placeholder="&gt;seq1&amp;#10;MVKVGVNG&amp;#10;&gt;seq2&amp;#10;MVKVGVNA"&gt;&lt;/textarea&gt;
+                  &lt;div class="text-xs text-gray-500 mt-1"&gt;
+                    请使用 FASTA 格式输入多序列比对数据，每个序列需要包含标识符和序列内容。
+                    &lt;br&gt;示例：
+                    &lt;pre class="bg-gray-50 p-1 mt-1"&gt;
+&gt;P1
+MVKVGVNGFGRIGRLVTRAAF
+&gt;P2
+MVKVGVNGFGRIGRLVTQAAF
+&gt;P3
+MVKVGVNGFGRIGRLVTKAAF&lt;/pre&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              &lt;!-- Paired MSA --&gt;
+              &lt;div v-if="entity.type === 'protein'" class="mt-4"&gt;
+                &lt;label class="flex items-center mb-2"&gt;
+                  &lt;input type="checkbox" v-model="entity.hasPairedMsa" class="mr-2"&gt;
+                  &lt;span class="text-gray-700 font-medium"&gt;Add Paired MSA (Optional)&lt;/span&gt;
+                &lt;/label&gt;
+                &lt;div v-if="entity.hasPairedMsa"&gt;
+                  &lt;textarea v-model="entity.pairedMsa"
+                    class="w-full mt-1 p-2 border border-gray-300 rounded-md"
+                    rows="4"
+                    placeholder="&gt;pair1_A&amp;#10;MVKVGVNG&amp;#10;&gt;pair1_B&amp;#10;KLNPQRS"&gt;&lt;/textarea&gt;
+                  &lt;div class="text-xs text-gray-500 mt-1"&gt;
+                    请使用 FASTA 格式输入配对的多序列比对数据，每对序列应使用相同的标识符前缀。
+                    &lt;br&gt;示例：
+                    &lt;pre class="bg-gray-50 p-1 mt-1"&gt;
+&gt;complex1_A
+MVKVGVNGFGRIGRLVTRAAF
+&gt;complex1_B
+KLNPQRSTWVMHYHVKLSQN
+&gt;complex2_A
+MVKVGVNGFGRIGRLVTQAAF
+&gt;complex2_B
+KLNPQRSTWVMHYHVKLSQN&lt;/pre&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              &lt;!-- Templates --&gt;
+              &lt;div v-if="entity.type === 'protein'" class="mt-4"&gt;
+                &lt;label class="flex items-center mb-2"&gt;
+                  &lt;input type="checkbox" v-model="entity.hasTemplates" class="mr-2"&gt;
+                  &lt;span class="text-gray-700 font-medium"&gt;Add Templates (Optional)&lt;/span&gt;
+                &lt;/label&gt;
+                &lt;div v-if="entity.hasTemplates"&gt;
+                  &lt;textarea v-model="entity.templates"
+                    class="w-full mt-1 p-2 border border-gray-300 rounded-md"
+                    rows="4"
+                    placeholder='[{"mmcif": "ATOM...", "queryIndices": [1,2,3], "templateIndices": [1,2,3]}]'&gt;&lt;/textarea&gt;
+                  &lt;div class="text-xs text-gray-500 mt-1"&gt;
+                    请使用 JSON 格式输入模板数据，包含 mmcif 结构数据和序列对应关系。
+                    &lt;br&gt;示例：
+                    &lt;pre class="bg-gray-50 p-1 mt-1"&gt;
+[{
+  "mmcif": "ATOM      1  N   MET A   1     27.340  24.430   2.614  1.00  0.00           N",
+  "queryIndices": [1, 2, 3, 4, 5],
+  "templateIndices": [1, 2, 3, 4, 5]
+}]&lt;/pre&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;button type="button" @click="addEntity"
+          class="btn-secondary"&gt;
+          Add Entity
+        &lt;/button&gt;
+      &lt;/div&gt;
+
+      &lt;!-- Advanced Options --&gt;
+      &lt;div class="mt-8 space-y-6"&gt;
+        &lt;h2 class="text-xl font-bold text-secondary-dark"&gt;Advanced Options&lt;/h2&gt;
+
+        &lt;!-- Bonded Atom Pairs --&gt;
+        &lt;div class="space-y-2"&gt;
+          &lt;div class="flex items-center"&gt;
+            &lt;input type="checkbox" v-model="formData.hasBondedAtomPairs" class="form-checkbox" id="hasBondedAtomPairs"&gt;
+            &lt;label for="hasBondedAtomPairs" class="ml-2 text-sm font-medium text-gray-700"&gt;Add Bonded Atom Pairs&lt;/label&gt;
+          &lt;/div&gt;
+          &lt;div v-if="formData.hasBondedAtomPairs" class="space-y-2"&gt;
+            &lt;textarea v-model="formData.bondedAtomPairs" 
+              class="w-full h-32 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+              placeholder='[
+  [["A", 1, "SG"], ["L", 1, "C1"]],  // Chain A residue 1 SG to Ligand residue 1 C1
+  [["B", 1, "SG"], ["L", 1, "C2"]]   // Chain B residue 1 SG to Ligand residue 1 C2
+]'&gt;&lt;/textarea&gt;
+            &lt;div class="text-xs text-gray-500"&gt;
+              指定共价键连接。每个键由两个原子指定，每个原子由 [chain_id, residue_number, atom_name] 表示。
+            &lt;/div&gt;
+            &lt;div class="mt-2"&gt;
+              &lt;button type="button" @click="loadBondedAtomPairsExample" 
+                class="text-blue-600 hover:text-blue-800 text-sm"&gt;
+                加载示例数据
+              &lt;/button&gt;
+              &lt;pre class="mt-2 text-xs bg-gray-50 p-2 rounded"&gt;
+示例 1 - 蛋白质-配体共价键：
+[
+  [["A", 145, "SG"], ["L", 1, "C1"]], // 蛋白质 A 链 145 号残基的 SG 原子与配体的 C1 原子
+  [["B", 23, "N"], ["L", 1, "C2"]]    // 蛋白质 B 链 23 号残基的 N 原子与配体的 C2 原子
+]
+
+示例 2 - 蛋白质-蛋白质二硫键：
+[
+  [["A", 22, "SG"], ["B", 88, "SG"]], // A 链与 B 链之间的二硫键
+  [["A", 30, "SG"], ["A", 115, "SG"]] // A 链内部的二硫键
+]&lt;/pre&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;!-- User CCD --&gt;
+        &lt;div class="space-y-2"&gt;
+          &lt;div class="flex items-center"&gt;
+            &lt;input type="checkbox" v-model="formData.hasUserCCD" class="form-checkbox" id="hasUserCCD"&gt;
+            &lt;label for="hasUserCCD" class="ml-2 text-sm font-medium text-gray-700"&gt;Add User CCD (Chemical Component Dictionary)&lt;/label&gt;
+          &lt;/div&gt;
+          &lt;div v-if="formData.hasUserCCD" class="space-y-2"&gt;
+            &lt;textarea v-model="formData.userCCD" 
+              class="w-full h-48 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+              placeholder='{
+  "UNK": {
+    "atoms": [
+      {
+        "name": "N",
+        "element": "N",
+        "x": 1.458, "y": 0.0, "z": 0.0
+      },
+      {
+        "name": "CA",
+        "element": "C",
+        "x": 0.0, "y": 0.0, "z": 0.0
+      }
+    ],
+    "bonds": [
+      {
+        "atom1": "N",
+        "atom2": "CA",
+        "type": "single"
+      }
+    ]
+  }
+}'&gt;&lt;/textarea&gt;
+            &lt;div class="text-xs text-gray-500"&gt;
+              自定义化学组分字典。每个组分需要指定：&lt;br&gt;
+              1. 残基名称 (3 字符代码）&lt;br&gt;
+              2. 原子列表（包含名称、元素类型和 3D 坐标）&lt;br&gt;
+              3. 键列表（定义原子间的连接）
+            &lt;/div&gt;
+            &lt;div class="mt-2"&gt;
+              &lt;button type="button" @click="loadUserCCDExample" 
+                class="text-blue-600 hover:text-blue-800 text-sm"&gt;
+                加载示例数据
+              &lt;/button&gt;
+              &lt;pre class="mt-2 text-xs bg-gray-50 p-2 rounded"&gt;
+示例 - 自定义氨基酸：
+{
+  "UNK": {
+    "atoms": [
+      {"name": "N", "element": "N", "x": 1.458, "y": 0.0, "z": 0.0},
+      {"name": "CA", "element": "C", "x": 0.0, "y": 0.0, "z": 0.0},
+      {"name": "C", "element": "C", "x": -1.516, "y": -0.0, "z": 0.0},
+      {"name": "O", "element": "O", "x": -2.241, "y": 0.0, "z": 1.0},
+      {"name": "CB", "element": "C", "x": 0.0, "y": 1.526, "z": 0.0}
+    ],
+    "bonds": [
+      {"atom1": "N", "atom2": "CA", "type": "single"},
+      {"atom1": "CA", "atom2": "C", "type": "single"},
+      {"atom1": "C", "atom2": "O", "type": "double"},
+      {"atom1": "CA", "atom2": "CB", "type": "single"}
+    ]
+  }
+}&lt;/pre&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;!-- Submit Button --&gt;
+      &lt;div class="mt-6"&gt;
+        &lt;button type="submit" class="btn-primary w-full"
+          :disabled="isSubmitting"&gt;
+          &lt;span v-if="!isSubmitting"&gt;Submit&lt;/span&gt;
+          &lt;span v-else class="flex items-center justify-center"&gt;
+            &lt;span class="mr-2"&gt;提交中。..&lt;/span&gt;
+            &lt;span class="animate-spin"&gt;⌛&lt;/span&gt;
+          &lt;/span&gt;
+        &lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+
+    &lt;!-- 添加错误提示组件 --&gt;
+    &lt;div v-if="errorMessage" class="fixed top-4 right-4 max-w-md bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"&gt;
+      &lt;strong class="font-bold"&gt;错误：&lt;/strong&gt;
+      &lt;span class="block sm:inline"&gt;{{ errorMessage }}&lt;/span&gt;
+      &lt;span class="absolute top-0 bottom-0 right-0 px-4 py-3" @click="errorMessage = ''"&gt;
+        &lt;svg class="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"&gt;
+          &lt;title&gt;关闭&lt;/title&gt;
+          &lt;path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/&gt;
+        &lt;/svg&gt;
+      &lt;/span&gt;
+    &lt;/div&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;script&gt;
+import axios from 'axios';
+
+export default {
+  data() {
+    return {
+      formContentVisible: true,
+      isSubmitting: false,
+      // 预设的 CCD 代码选项
+      ccdOptions: {
+        "核苷酸和辅酶": [
+          { id: "ATP", name: "ATP - 腺苷三磷酸", codes: ["ATP"] },
+          { id: "ADP", name: "ADP - 腺苷二磷酸", codes: ["ADP"] },
+          { id: "AMP", name: "AMP - 腺苷一磷酸", codes: ["AMP"] },
+          { id: "GTP", name: "GTP - 鸟苷三磷酸", codes: ["GTP"] },
+          { id: "GDP", name: "GDP - 鸟苷二磷酸", codes: ["GDP"] },
+          { id: "NAD", name: "NAD - 烟酰胺腺嘌呤二核苷酸", codes: ["NAD", "NAI"] },
+          { id: "NADP", name: "NADP - 烟酰胺腺嘌呤二核苷酸磷酸", codes: ["NAP", "NDP"] },
+          { id: "FAD", name: "FAD - 黄素腺嘌呤二核苷酸", codes: ["FAD"] }
+        ],
+        "辅因子和辅基": [
+          { id: "HEM", name: "HEM - 血红素", codes: ["HEM"] },
+          { id: "SF4", name: "SF4 - [4Fe-4S] 簇", codes: ["SF4"] },
+          { id: "FES", name: "FES - [2Fe-2S] 簇", codes: ["FES"] },
+          { id: "F3S", name: "F3S - [3Fe-4S] 簇", codes: ["F3S"] }
+        ],
+        "金属离子": [
+          { id: "MG", name: "MG - 镁离子", codes: ["MG"] },
+          { id: "ZN", name: "ZN - 锌离子", codes: ["ZN"] },
+          { id: "CA", name: "CA - 钙离子", codes: ["CA"] },
+          { id: "FE", name: "FE - 铁离子", codes: ["FE2", "FE"] },
+          { id: "MN", name: "MN - 锰离子", codes: ["MN"] },
+          { id: "CU", name: "CU - 铜离子", codes: ["CU"] }
+        ],
+        "其他常见配体": [
+          { id: "SAM", name: "SAM - S-腺苷甲硫氨酸", codes: ["SAM"] },
+          { id: "SAH", name: "SAH - S-腺苷高半胱氨酸", codes: ["SAH"] },
+          { id: "GSH", name: "GSH - 谷胱甘肽", codes: ["GSH"] },
+          { id: "PLP", name: "PLP - 吡哆醛磷酸", codes: ["PLP"] },
+          { id: "TPP", name: "TPP - 硫胺素焦磷酸", codes: ["TPP"] },
+          { id: "BTN", name: "BTN - 生物素", codes: ["BTN"] }
+        ]
+      },
+      formData: {
+        name: this.generateJobName(),
+        modelSeeds: [1, 2, 3],
+        sequences: [],
+        hasBondedAtomPairs: false,
+        bondedAtomPairs: '',
+        hasUserCCD: false,
+        userCCD: ''
+      },
+      errorMessage: '',
+    }
+  },
+  methods: {
+    toggleFormContent() {
+      this.formContentVisible = !this.formContentVisible
+    },
+    getNextChainId() {
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const usedChains = new Set(this.formData.sequences.map(e =&gt; e.id));
+      for (let letter of alphabet) {
+        if (!usedChains.has(letter)) {
+          return letter;
+        }
+      }
+      return null; // 如果所有字母都被使用了
+    },
+    addEntity() {
+      const chainId = this.getNextChainId();
+      if (!chainId) {
+        alert('已达到最大链数量限制（26 个）');
+        return;
+      }
+      this.formData.sequences.push({
+        type: 'protein',
+        id: chainId,
+        sequence: '',
+        showDetails: false,
+        hasModifications: false,
+        modifications: [],  // 确保初始化为空数组
+        hasUnpairedMsa: false,
+        unpairedMsa: '',
+        hasPairedMsa: false,
+        pairedMsa: '',
+        hasTemplates: false,
+        templates: '',
+        smiles: '',
+        selectedOption: '',
+        ccdCodes: [],
+        inputType: 'smiles'
+      })
+    },
+    removeEntity(index) {
+      this.formData.sequences.splice(index, 1)
+    },
+    toggleDetails(index) {
+      this.formData.sequences[index].showDetails = !this.formData.sequences[index].showDetails
+    },
+    addModification(entityIndex) {
+      const entity = this.formData.sequences[entityIndex];
+
+      // 确保 modifications 数组存在
+      if (!Array.isArray(entity.modifications)) {
+        this.$set(entity, 'modifications', []);
+      }
+
+      // 添加修饰前的验证
+      if (!entity.sequence) {
+        this.errorMessage = '请先输入序列再添加修饰';
+        return;
+      }
+
+      // 添加一个新的修饰
+      entity.modifications.push({
+        type: 'phosphorylation',
+        position: '',
+        residue: ''
+      });
+    },
+    removeModification(entityIndex, modIndex) {
+      this.formData.sequences[entityIndex].modifications.splice(modIndex, 1);
+    },
+    getSequencePlaceholder(type) {
+      const placeholders = {
+        'protein': 'MVKVGVNG...',
+        'rna': 'AUGCUAAG...',
+        'dna': 'ATGCTAAG...'
+      }
+      return placeholders[type] || ''
+    },
+    getSequenceHint(type) {
+      const hints = {
+        'protein': 'Please enter standard single-letter amino acid codes&lt;br&gt;Example: MVKVGVNGFGRIGRLVTRAAF (Human GAPDH fragment)',
+        'rna': 'Please enter RNA sequence using A, U, G, C only&lt;br&gt;Example: AUGCUAAGUCG (Start codon and following sequence)',
+        'dna': 'Please enter DNA sequence using A, T, G, C only&lt;br&gt;Example: ATGCTAAGTCG'
+      }
+      return hints[type] || ''
+    },
+    validateSequence(sequence, type) {
+      if (!sequence) return false;
+
+      // 如果有 userCCD，获取自定义残基代码
+      let customResidues = '';
+      if (this.formData.hasUserCCD) {
+        try {
+          const userCCD = JSON.parse(this.formData.userCCD);
+          customResidues = Object.keys(userCCD).join('');
+        } catch (e) {
+          console.warn('解析 userCCD 失败：', e);
+        }
+      }
+
+      const validationRules = {
+        // 在标准氨基酸序列中加入自定义残基代码
+        'protein': new RegExp(`^[ACDEFGHIKLMNPQRSTVWY${customResidues}]+$`, 'i'),
+        'rna': /^[AUGC]+$/i,
+        'dna': /^[ATGC]+$/i
+      }
+
+      const rule = validationRules[type];
+      if (!rule) return false;
+
+      // 移除空格和换行符后再验证
+      const cleanSequence = sequence.replace(/[\s\n]/g, '');
+      return rule.test(cleanSequence);
+    },
+    validateChainId(id) {
+      // 验证单个链 ID
+      if (/^[A-Z]$/.test(id)) return true
+      // 验证多链 ID 数组
+      try {
+        const arr = JSON.parse(id)
+        return Array.isArray(arr) &amp;&amp; arr.every(chain =&gt; /^[A-Z]$/.test(chain))
+      } catch {
+        return false
+      }
+    },
+    validateLigand(entity) {
+      if (entity.inputType === 'smiles') {
+        if (!entity.smiles) {
+          throw new Error('请输入 SMILES 字符串')
+        }
+        if (!/^[A-Za-z0-9()[\]=#@+-]+$/.test(entity.smiles)) {
+          throw new Error('SMILES 格式不正确')
+        }
+      }
+
+      if (entity.inputType === 'ccd') {
+        if (!entity.selectedOption) {
+          throw new Error('请选择 CCD 代码')
+        }
+      }
+    },
+    // 添加 MSA 格式验证
+    validateMsa(msaText) {
+      if (!msaText.trim()) return false;
+
+      const lines = msaText.trim().split('\n');
+      if (lines.length &lt; 2) return false;  // 至少需要一个序列和标识符
+
+      let hasHeader = false;
+      let hasSequence = false;
+
+      for (const line of lines) {
+        if (line.startsWith('&gt;')) {
+          hasHeader = true;
+        } else if (line.match(/^[A-Za-z]+$/)) {
+          hasSequence = true;
+        }
+      }
+
+      return hasHeader &amp;&amp; hasSequence;
+    },
+
+    // 添加 Paired MSA 格式验证
+    validatePairedMsa(msaText) {
+      if (!msaText.trim()) return false;
+
+      const lines = msaText.trim().split('\n');
+      if (lines.length &lt; 4) return false;  // 至少需要两对序列
+
+      const pairs = new Map();
+      let currentPrefix = null;
+
+      for (const line of lines) {
+        if (line.startsWith('&gt;')) {
+          const match = line.match(/^&gt;(\w+)_[AB]$/);
+          if (!match) return false;
+          currentPrefix = match[1];
+          if (!pairs.has(currentPrefix)) {
+            pairs.set(currentPrefix, new Set());
+          }
+          pairs.get(currentPrefix).add(line.slice(-1));  // 添加 A 或 B
+        }
+      }
+
+      // 检查每个前缀是否都有 A 和 B
+      for (const chains of pairs.values()) {
+        if (chains.size !== 2 || !chains.has('A') || !chains.has('B')) {
+          return false;
+        }
+      }
+
+      return true;
+    },
+
+    // 添加 Templates 格式验证
+    validateTemplates(templatesText) {
+      try {
+        const templates = JSON.parse(templatesText);
+        if (!Array.isArray(templates)) return false;
+
+        return templates.every(template =&gt; {
+          return (
+            typeof template === 'object' &amp;&amp;
+            typeof template.mmcif === 'string' &amp;&amp;
+            Array.isArray(template.queryIndices) &amp;&amp;
+            Array.isArray(template.templateIndices) &amp;&amp;
+            template.queryIndices.length === template.templateIndices.length &amp;&amp;
+            template.queryIndices.every(i =&gt; Number.isInteger(i)) &amp;&amp;
+            template.templateIndices.every(i =&gt; Number.isInteger(i))
+          );
+        });
+      } catch {
+        return false;
+      }
+    },
+    // 验证 Bonded Atom Pairs 格式
+    validateBondedAtomPairs(pairsText) {
+      try {
+        const pairs = JSON.parse(pairsText);
+        if (!Array.isArray(pairs)) return false;
+
+        return pairs.every(pair =&gt; {
+          if (!Array.isArray(pair) || pair.length !== 2) return false;
+
+          return pair.every(atom =&gt; {
+            if (!Array.isArray(atom) || atom.length !== 3) return false;
+            const [chainId, resNum, atomName] = atom;
+            return (
+              typeof chainId === 'string' &amp;&amp;
+              Number.isInteger(resNum) &amp;&amp;
+              typeof atomName === 'string'
+            );
+          });
+        });
+      } catch {
+        return false;
+      }
+    },
+
+    // 验证 User CCD 格式
+    validateUserCCD(ccdText) {
+      try {
+        const ccd = JSON.parse(ccdText);
+        if (typeof ccd !== 'object' || ccd === null) return false;
+
+        return Object.entries(ccd).every(([resName, ccdData]) =&gt; {
+          return (
+            typeof resName === 'string' &amp;&amp;
+            typeof ccdData === 'object' &amp;&amp;
+            ccdData !== null
+          );
+        });
+      } catch {
+        return false;
+      }
+    },
+    async submitForm() {
+      if (this.isSubmitting) return;
+      this.errorMessage = ''; // 清除之前的错误消息
+
+      try {
+        this.isSubmitting = true;
+
+        // 表单验证
+        if (!this.formData.name.trim()) {
+          throw new Error('请输入任务名称');
+        }
+        if (!this.formData.sequences.length) {
+          throw new Error('请至少添加一个序列');
+        }
+
+        // 验证每个序列
+        for (const entity of this.formData.sequences) {
+          if (!this.validateChainId(entity.id)) {
+            throw new Error(`Chain ID "${entity.id}" 格式不正确`)
+          }
+
+          if (entity.type === 'ligand') {
+            if ((entity.inputType === 'smiles' &amp;&amp; !entity.smiles) || 
+                (entity.inputType === 'ccd' &amp;&amp; !entity.selectedOption)) {
+              throw new Error('Ligand 需要提供 SMILES 或 CCD Codes')
+            }
+            this.validateLigand(entity)
+          } else {
+            if (!entity.sequence) {
+              throw new Error(`${entity.type} 需要提供序列`)
+            }
+            if (!this.validateSequence(entity.sequence, entity.type)) {
+              throw new Error(`${entity.type} 序列格式不正确`)
+            }
+          }
+        }
+
+        // 验证 MSA 和 Templates
+        for (const entity of this.formData.sequences) {
+          if (entity.type !== 'ligand') {
+            if (entity.hasUnpairedMsa &amp;&amp; !this.validateMsa(entity.unpairedMsa)) {
+              throw new Error('Unpaired MSA 格式不正确');
+            }
+
+            if (entity.type === 'protein') {
+              if (entity.hasPairedMsa &amp;&amp; !this.validatePairedMsa(entity.pairedMsa)) {
+                throw new Error('Paired MSA 格式不正确');
+              }
+
+              if (entity.hasTemplates &amp;&amp; !this.validateTemplates(entity.templates)) {
+                throw new Error('Templates 格式不正确');
+              }
+            }
+          }
+        }
+
+        // 验证 Bonded Atom Pairs 和 User CCD
+        if (this.formData.hasBondedAtomPairs &amp;&amp; !this.validateBondedAtomPairs(this.formData.bondedAtomPairs)) {
+          throw new Error('Bonded Atom Pairs 格式不正确');
+        }
+
+        if (this.formData.hasUserCCD &amp;&amp; !this.validateUserCCD(this.formData.userCCD)) {
+          throw new Error('User CCD 格式不正确');
+        }
+
+        // 构建提交数据
+        const submitData = {
+          name: this.formData.name,
+          job_name: this.formData.name,
+          model_name: 'alphafold3',
+          modelSeeds: Array.isArray(this.formData.modelSeeds) 
+            ? this.formData.modelSeeds 
+            : String(this.formData.modelSeeds).split(',').map(Number),
+          sequences: this.formData.sequences.map(entity =&gt; {
+            const sequence = {}
+            if (entity.type === 'ligand') {
+              const ligandData = {
+                id: this.parseId(entity.id),
+                smiles: entity.inputType === 'smiles' ? entity.smiles : undefined,
+                ccdCodes: entity.inputType === 'ccd' &amp;&amp; entity.ccdCodes ? entity.ccdCodes : undefined
+              }
+              return { ligand: ligandData }
+            } else {
+              sequence[entity.type] = {
+                id: this.parseId(entity.id),
+                sequence: entity.sequence,
+                modifications: entity.hasModifications ? entity.modifications.map(mod =&gt; ({
+                  type: mod.type,
+                  position: parseInt(mod.position, 10),
+                  residue: mod.residue
+                })) : undefined,
+                unpairedMsa: entity.hasUnpairedMsa ? entity.unpairedMsa : undefined,
+                pairedMsa: entity.type === 'protein' &amp;&amp; entity.hasPairedMsa ? entity.pairedMsa : undefined,
+                templates: entity.type === 'protein' &amp;&amp; entity.hasTemplates ? JSON.parse(entity.templates) : undefined
+              }
+            }
+            return sequence
+          }),
+          // 确保正确传递 userCCD
+          userCCD: this.formData.hasUserCCD ? JSON.parse(this.formData.userCCD) : undefined,
+          bondedAtomPairs: this.formData.hasBondedAtomPairs ? JSON.parse(this.formData.bondedAtomPairs) : undefined,
+          dialect: 'alphafold3',
+          version: 2
+        }
+
+        // 发送请求到后端
+        const response = await axios.post('/api/alphafold3/submit', submitData);
+
+        if (response.data.error) {
+          this.errorMessage = response.data.error;
+          return;
+        }
+
+        // 显示成功消息
+        alert('任务提交成功！');
+
+        // 清空表单
+        this.resetForm();
+
+        // 触发提交成功事件
+        this.$emit('submit-success', response.data);
+
+      } catch (error) {
+        // 只显示错误消息，不输出到控制台
+        this.errorMessage = error.response?.data?.error || error.message || '提交表单时发生错误';
+      } finally {
+        this.isSubmitting = false;
+      }
+    },
+    resetForm() {
+      this.formData = {
+        name: this.generateJobName(),
+        modelSeeds: [1, 2, 3],
+        sequences: [],
+        hasBondedAtomPairs: false,
+        bondedAtomPairs: '',
+        hasUserCCD: false,
+        userCCD: ''
+      };
+      this.sequenceInput = '';
+    },
+    parseId(id) {
+      try {
+        if (id.startsWith('[') &amp;&amp; id.endsWith(']')) {
+          return JSON.parse(id)
+        }
+        return id
+      } catch {
+        return id
+      }
+    },
+    generateJobName() {
+      const date = new Date().toISOString().split('T')[0];
+      const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+      return `AF3_Job_${date}_${randomStr}`;
+    },
+    removeCcdCode(entity, index) {
+      entity.ccdCodes.splice(index, 1);
+    },
+    addSelectedCcd(entity) {
+      if (this.selectedCcd &amp;&amp; !entity.ccdCodes.includes(this.selectedCcd)) {
+        entity.ccdCodes.push(this.selectedCcd);
+      }
+      this.selectedCcd = ''; // 重置选择
+    },
+    updateCcdCodes(entity) {
+      if (entity.selectedOption) {
+        // 查找选中的选项
+        for (const group of Object.values(this.ccdOptions)) {
+          const option = group.find(opt =&gt; opt.id === entity.selectedOption);
+          if (option) {
+            // 更新 ccdCodes
+            entity.ccdCodes = option.codes;
+            break;
+          }
+        }
+      } else {
+        entity.ccdCodes = [];
+      }
+    },
+    loadBondedAtomPairsExample() {
+      this.formData.bondedAtomPairs = JSON.stringify([
+        [["A", 145, "SG"], ["L", 1, "C1"]],
+        [["B", 23, "N"], ["L", 1, "C2"]]
+      ], null, 2);
+    },
+    loadUserCCDExample() {
+      this.formData.userCCD = JSON.stringify({
+        "UNK": {
+          "atoms": [
+            {"name": "N", "element": "N", "x": 1.458, "y": 0.0, "z": 0.0},
+            {"name": "CA", "element": "C", "x": 0.0, "y": 0.0, "z": 0.0},
+            {"name": "C", "element": "C", "x": -1.516, "y": -0.0, "z": 0.0},
+            {"name": "O", "element": "O", "x": -2.241, "y": 0.0, "z": 1.0},
+            {"name": "CB", "element": "C", "x": 0.0, "y": 1.526, "z": 0.0}
+          ],
+          "bonds": [
+            {"atom1": "N", "atom2": "CA", "type": "single"},
+            {"atom1": "CA", "atom2": "C", "type": "single"},
+            {"atom1": "C", "atom2": "O", "type": "double"},
+            {"atom1": "CA", "atom2": "CB", "type": "single"}
+          ]
+        }
+      }, null, 2);
+    },
+    // 验证修饰位置
+    validateModification(entity, modification) {
+      if (!modification.position) return false;
+
+      const pos = parseInt(modification.position, 10);
+      if (isNaN(pos) || pos &lt; 1 || pos &gt; entity.sequence.length) return false;
+
+      const residue = entity.sequence[pos - 1];
+      const validResidues = {
+        'phosphorylation': ['S', 'T', 'Y'],
+        'methylation': ['K', 'R'],
+        'acetylation': ['K']
+      };
+
+      return validResidues[modification.type]?.includes(residue) || false;
+    },
+    // 更新修饰残基信息
+    updateModificationResidue(entity, modification) {
+      if (modification.position) {
+        const pos = parseInt(modification.position, 10);
+        if (!isNaN(pos) &amp;&amp; pos &gt; 0 &amp;&amp; pos &lt;= entity.sequence.length) {
+          modification.residue = entity.sequence[pos - 1];
+        }
+      }
+    }
+  }
+}
+&lt;/script&gt;
+
+&lt;style scoped&gt;
+.error-message {
+  transition: all 0.3s ease;
+}
+&lt;/style&gt;
+</code></pre>
