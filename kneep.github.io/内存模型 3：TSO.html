@@ -1,0 +1,107 @@
+<h2><a href="https://github.com/kneep/kneep.github.io/blob/master/content/posts/memory-model/total-store-order/index.md">仓库源文</a>，<a href="https://kneep.github.io/posts/memory-model/total-store-order/">站点原文</a></h2>
+<h2>介绍</h2>
+<p>从<a href="posts/memory-model/sequential-consistency/">本系列第二篇文章</a>中我们可以看出，SC 这种内存模型，优点是符合直觉，符合直觉非常重要，它意味着写代码不容易犯错。但是，它同时又束缚了处理器设计者的手脚，无法运用可能的优化手段来提升处理器性能。</p>
+<p>本文中，我们来给 SC 稍微松松绑。什么情况下需要松绑呢？先来看下面的场景。
+<img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/kneep.github.io/content/posts/img/tso1.svg"/></p>
+<p>在这个场景中，core 0 将数据写入内存中，core 1 将数据从内存中读出。略有不同的是，在 core 0 和内存之间加了一个 write buffer。为什么要加这个缓冲？我们可以注意到，图中的内存系统写的是 Cache-Coherent Memory System，因为缓存的存在，多核处理器的缓存之间需要通过某种协议来确保<strong>所有处理器通过缓存看到的内存内容是一致且有效的</strong>，只有被写的地址的内容出于缓存一致（Cache-Coherent）的状态，写指令才能被执行。而实施这种缓存一致性协议是需要花费时间的，所以写指令经常需要等待。加了这个缓冲，处理器可以先把写指令提交到缓存中，等到它对应的地址处于一致状态时，再把写指令取出执行，提升了写的性能。</p>
+<p>但是，这也带来了副作用。因为数据从进入 write buffer 到出来，也是需要时间的。Core 1 同时在读内存的内容，如果它读取的内容与 core 0 写的内容无关，那么皆大欢喜。但如果 core 1 必须读到 core 0 刚刚写入的内容呢？这就有点复杂了。从图上可以看到，假设从上到下代表了时间轴，那么 core 0 的写操作虽然发生在 core 1 的读操作之前，但它写的内容真正进入内存，却发生在读操作之后。也就是说，core 1 没有读到它想要的值。更糟糕的是，程序员通常很难意识到这里有问题，因为它违反了直觉。</p>
+<p>同时，当读和写是操作同一地址的时候，无论写指令是否还在缓冲中，后面的读指令都能读到最新的值，这种现象称为 bypassing。</p>
+<p>Total Store Order（TSO），我们要介绍的第二种内存模型，它和 SC 的主要区别就是允许上面这种特性带来的乱序。</p>
+<h2>场景分析</h2>
+<p>因为 TSO 的大部分特性和 SC 相同，我们仅仅讨论差别的两个特性：写读乱序、bypassing。</p>
+<h3>场景一</h3>
+<p>写读乱序我们继续使用<a href="posts/memory-model/sequential-consistency/">本系列第二篇文章</a>中的例子，再次把伪代码列如下：</p>
+<pre><code class="lang-c">// Core C1
+S1: x = NEW;
+L1: r1 = y;
+</code></pre>
+<pre><code class="lang-c">// Core C2
+S2: y = NEW;
+L2: r2 = x;
+</code></pre>
+<p>在场景四中，我们构造了如下的执行序列：
+<img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/kneep.github.io/content/posts/img/sc4.svg"/>
+我们之前提到，因为<code>S2 &lt;p L2</code>，但是同时<code>L2 &lt;m S2</code>，所以它是不符合 SC 的。它造成了<code>(r1, r2) == (0, 0)</code>这个非常不符合直觉的结果。</p>
+<p>现在我们知道它的出处了，它就是我们上面分析的 write buffer 的场景，虽然不符合 SC，但它是符合 TSO 的。<code>S2: y = NEW;</code>这个写操作虽然是最早发生（更准确地应该称为「提交」），但因为 write buffer 的存在，它的生效发生了延迟。</p>
+<h3>场景二</h3>
+<p>下面我们为 TSO 构造了一个更复杂点的例子来说明 bypassing：</p>
+<pre><code class="lang-c">// Core C1
+S1: x = NEW;
+L1: r1 = x;
+L2: r2 = y;
+</code></pre>
+<pre><code class="lang-c">// Core C2
+S2: y = NEW;
+L3: r3 = y;
+L4: r4 = x;
+</code></pre>
+<p>{{&lt; alert "triangle-exclamation" &gt;}}
+程序运行后，有没有可能<code>(r1, r3) == (NEW, NEW)</code>且<code>(r2, r4) == (0, 0)</code>？
+{{&lt; /alert &gt;}}</p>
+<p>答案是<strong>有可能</strong>。
+<img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/kneep.github.io/content/posts/img/tso2.svg"/></p>
+<p>从这个执行序列可以看出，<code>r1</code>能得到<code>NEW</code>值，哪怕<code>NEW</code>尚未实际进入<code>x</code>的内存位置，原因就是这两条指令操作的是同一地址，存在 bypassing 效应，红点即为 bypassing 发生处。同理<code>r3</code>也一样。</p>
+<p>bypassing 是符合直觉的，因为我们直观上认为，同一处理器写出去的值，无论是否真正进入内存，处理器自己理应知道最新的值。就像你可以欺骗别人，但骗不了自己。</p>
+<h2>形式化定义</h2>
+<p>我们在 SC 的形式化定义基础之上，看看 TSO 的定义有什么区别。</p>
+<hr/>
+<ul>
+<li>所有处理器按照它们的<code>&lt;p</code>把读（<code>Load</code>）写（<code>Store</code>）指令插入到<code>&lt;m</code>中，不管这些指令是否针对同一内存地址（<code>a == b</code> 或 <code>a != b</code> 都适用），具体包括四种情况：<ol>
+<li>如果 <code>L(a) &lt;p L(b)</code>，则 <code>L(a) &lt;m L(b)</code>（<code>Load -&gt; Load</code>）</li>
+<li>如果 <code>L(a) &lt;p S(b)</code>，则 <code>L(a) &lt;m S(b)</code>（<code>Load -&gt; Store</code>）</li>
+<li>如果 <code>S(a) &lt;p L(b)</code>，则 <code>S(a) &lt;m L(b)</code>（<code>Store -&gt; Store</code>）</li>
+<li><del>如果 <code>S(a) &lt;p L(b)</code>，则 <code>S(a) &lt;m L(b)</code>（<code>Store -&gt; Load</code>）</del></li>
+</ol>
+</li>
+</ul>
+<p>{{&lt; alert "triangle-exclamation" &gt;}}
+变更一：Write Buffer 效应，使 <code>Store -&gt; Load</code> 的顺序无法保证
+{{&lt; /alert &gt;}}</p>
+<hr/>
+<ul>
+<li>针对同一内存地址，读（<code>Load</code>）会得到 <code>&lt;m</code> 中最近一次写（<code>Store</code>）的值，或者同一处理器上一个尚位于 Write Buffer 中的值：<pre><code>L(a) = Max&lt;m { S(a) | S(a) &lt;m L(a) } 或 S(a) &lt;p L(a)
+</code></pre>
+{{&lt; katex &gt;}}
+$$
+{L(a) = MAX_{&lt;m} { S(a)\ |\ S(a) \text{  &lt;m  } L(a)} \text{ or } S(a) \text{  &lt;p  } L(a)}
+$$</li>
+</ul>
+<p><code>S(a) &lt;p L(a)</code>是指针对同一地址的最新一个写指令。
+{{&lt; alert "triangle-exclamation" &gt;}}
+变更二：对地址<code>a</code>的<code>Load</code>，要么读到<code>&lt;m</code>中的最新值，要么读到<code>&lt;p</code>中的最新值，而且后者优先。
+{{&lt; /alert &gt;}}</p>
+<hr/>
+<ul>
+<li>引入新的<code>FENCE</code>指令，其特性满足以下规则：<ol>
+<li>如果 <code>L(a) &lt;p FENCE</code>，则 <code>L(a) &lt;m FENCE</code> （<code>Load -&gt; FENCE</code>）</li>
+<li>如果 <code>S(a) &lt;p FENCE</code>，则 <code>S(a) &lt;m FENCE</code> （<code>Store -&gt; FENCE</code>）</li>
+<li>如果 <code>FENCE &lt;p FENCE</code>，则 <code>FENCE &lt;m FENCE</code> （<code>FENCE -&gt; FENCE</code>）</li>
+<li>如果 <code>FENCE &lt;p L(a)</code>，则 <code>FENCE &lt;m L(a)</code> （<code>FENCE -&gt; Load</code>）</li>
+<li>如果 <code>FENCE &lt;p S(a)</code>，则 <code>FENCE &lt;m S(a)</code> （<code>FENCE -&gt; Store</code>）</li>
+</ol>
+</li>
+</ul>
+<p><code>FENCE</code>的原意是「栅栏」，这是一个非常形象的词汇，它的作用是代码执行序列分割成上下两部分，上半部内部，顺序无法保证，下半部内部，顺序也无法保证。但是，上半部的指令一定会在下半部的指令之前生效。</p>
+<p>由于 TSO 只破坏了一条 SC 的规则，它实际只需要规则 2 和 4 就可以了。但为了方便后续学习更多的内存模型，我们把完整的 FENCE 规则都放在这里。
+|             | Load 2 | Store 2 | RMW 2 | FENCE 2 |
+|:-----------:|:------:|:-------:|:-----:|:-------:|
+| <strong>Load 1</strong>  | Yes    | Yes     | Yes   | <strong>Yes</strong> |
+| <strong>Store 1</strong> | <strong>B</strong>  | Yes     | Yes   | <strong>Yes</strong> |
+| <strong>RMW 1</strong>   | Yes    | Yes     | Yes   | <strong>Yes</strong> |
+| <strong>FENCE 1</strong> |<strong>Yes</strong> | <strong>Yes</strong> |<strong>Yes</strong>| <strong>Yes</strong> |</p>
+<p>粗体的字代表了 TSO 相对 SC 变化的点，其中 <strong>B</strong> 代表了：针对同一内存地址的<code>Store-&gt;Load</code>的需要 bypassing，其他情况则顺序无法保证。</p>
+<p>在第一个场景中，我们看到结果可能出现<code>(r1, r2) == (0, 0)</code>，现在我们来看下，有了<code>FENCE</code>指令后，如何确保这个有违直觉的结果不再出现。</p>
+<pre><code class="lang-c">// Core C1
+S1: x = NEW;
+FENCE;
+L1: r1 = y;
+</code></pre>
+<pre><code class="lang-c">// Core C2
+S2: y = NEW;
+FENCE;
+L2: r2 = x;
+</code></pre>
+<p>在这里，<code>FENCE</code>强制了<code>S1-&gt;L1</code>和<code>S2-&gt;L2</code>的顺序，使得<code>(r1, r2) == (0, 0)</code>不会再出现。</p>
+<h2>总结</h2>
+<p>SC 是最符合直觉的内存模型，TSO 也接近直觉，它能提供更好的性能，代价是无法保证<code>Store-&gt;Load</code>的顺序，程序员必须意识到这里需要<code>FENCE</code>，没有系统学习过这个主题的程序员很容易在这里犯错。</p>
+<p><a href="https://dl.acm.org/doi/10.1145/1785414.1785443">据信</a>，Intel 和 AMD 的 x86 处理器用的内存模型是 TSO。</p>
