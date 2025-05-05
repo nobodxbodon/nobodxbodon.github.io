@@ -11,7 +11,7 @@
 <p>上面的标签搜索效果还不错，只是有些关键词搜完之后有点难发现。我搜索出来之后怎么证明搜到的内容里面一定有对应的关键词呢？虽然从程序的角度来说这是理所应当的事情，一定是有的数据才可能被搜到，但有时候不用Ctrl+F看一眼都不知道是哪里搜到了……所以我觉得应该像其他网站一样对搜到的内容用高亮进行标记。标记应该用什么呢？用样式也许不错，不过现在的H5标签里有一个叫mark的标签可以直接用，用这个标签包裹的内容背景颜色就会变成黄色，就像用荧光笔标记了一样，这样就不需要写样式了。<br/>
   至于关键词用查询字符串传过去就好了，那我该怎么做呢？我用的搜索脚本叫<a href="https://github.com/christian-fei/Simple-Jekyll-Search">Simple-Jekyll-Search</a>，它的文档其实根本没有写怎么把搜索的请求传到模版里，还好它有个<a href="https://github.com/christian-fei/Simple-Jekyll-Search/blob/master/tests/Templater.test.js">关于模版的测试脚本</a>里面有写，有个query关键词可以把搜索内容给模版渲染出来，既然做了这个功能怎么不写在文档里😅，不过这个项目已经停止，也没法提出什么建议了……<br/>
   这个功能听起来相当简单，我都懒得写了，这种简单的功能直接让AI写才对！于是我把需求告诉它，让它给我实现一份，于是这就是让AI给我写的高亮关键词的JS代码（经过了一点修改）：</p>
-<pre><code class="lang-javascript">$(function() {
+<pre><code class="lang-javascript">$(function () {
     const urlParams = new URLSearchParams(window.location.search);
     const keyword = urlParams.get('kw')?.trim();
 
@@ -23,11 +23,20 @@
     const regex = new RegExp(`(${escapedKeyword})`, 'gi');
 
     // 递归遍历并高亮文本节点
+    const escapeHTML = str =&gt; str.replace(/[&amp;&lt;&gt;"']/g, 
+        tag =&gt; ({
+            '&amp;': '&amp;amp;',
+            '&lt;': '&amp;lt;',
+            '&gt;': '&amp;gt;',
+            '"': '&amp;quot;',
+            "'": '&amp;#39;'
+        }[tag] || tag));
     function highlightTextNodes(element) {
-        $(element).contents().each(function() {
+        $(element).contents().each(function () {
             if (this.nodeType === Node.TEXT_NODE) {
                 const $this = $(this);
-                const text = $this.text();
+                const text = escapeHTML($this.text());
+
                 // 使用正则替换并保留原始大小写
                 if (regex.test(text)) {
                     const replaced = text.replace(regex, '&lt;mark&gt;$1&lt;/mark&gt;');
@@ -42,12 +51,13 @@
         });
     }
 
-    $('section').each(function() {
+    $('section').each(function () {
         highlightTextNodes(this);
     });
 });
 </code></pre>
-<p>我测试了一下，非常符合我的需求，各种情况都能按照我的预期工作，虽然说功能非常简单，但是能正常运行，AI写的还是挺不错的。</p>
+<p>（2025.04.28更新：解决了一个潜在的解析问题）<br/>
+  我测试了一下，非常符合我的需求，各种情况都能按照我的预期工作，虽然说功能非常简单，但是能正常运行，AI写的还是挺不错的。</p>
 <h1>近期的其他修改</h1>
 <p>除了对搜索功能的优化，我还做了些别的功能：</p>
 <h2>随机跳转文章</h2>
