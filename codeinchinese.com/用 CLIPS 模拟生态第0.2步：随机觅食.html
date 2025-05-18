@@ -1,0 +1,51 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-04-25-用 CLIPS 模拟生态第0.2步：随机觅食.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/04/25/用-CLIPS-模拟生态第0.2步：随机觅食">站点原文</a></h2>
+<p>刚开始用随机函数增减能量时，就发现 <a href="https://groups.google.com/g/clipsesg/c/-TwdcWHruUg">这个费解问题</a>。</p>
+<p>简言之，使用 modify 时，如果新值和旧值相等，则无任何操作、原事实不变且不再次触发匹配的规则，即不等于 retract加assert。以后要小心这个坑。</p>
+<p>于是暂时用只增加能量<code>(+ ?能量 (random 1 3))</code>，来规避<code>(+ ?能量 (random -3 3))</code>时随机到增量为0导致停止觅食的情况。</p>
+<p>之后添加规则：当能量大于某值时，能量重置为0并产生新个体。但发现仅有新生成的个体进行觅食，之前的个体停止更新能量，应该是觅食规则一直被新个体对应的事实激活的缘故。</p>
+<p>想到 <a href="https://groups.google.com/g/clipsesg/c/12LkIPQKm7M/m/DqOn4eWPCQAJ">之前请教的回复</a>，把之前的<code>出生时间</code>改为了<code>经历时间</code>并让所有个体同步‘觅食’。</p>
+<pre><code>(deftemplate 某种
+  (slot 编号)
+  (slot 能量)
+  (slot 经历时间))
+
+(deftemplate 世界
+  (slot 时间)
+)
+
+(defrule 开始
+  =&gt;
+  (println "开天辟地")
+  (assert (世界 (时间 0)))
+  (assert (某种 (编号 0) (能量 0) (经历时间 0))))
+
+; 当无优先级声明时，规则编写顺序决定了执行的优先级！
+
+(defrule 时间流逝
+  ?环境 &lt;- (世界 (时间 ?时间))
+  =&gt;
+  (modify ?环境 (时间 (+ ?时间 1)))
+)
+
+(defrule 觅食
+  (declare (salience 5))
+  (世界 (时间 ?时间))
+  ?个体 &lt;- (某种 (能量 ?能量) (经历时间 ?经历时间&amp;:(&lt; ?经历时间 ?时间)))
+  =&gt;
+  (modify ?个体 (能量 (+ ?能量 (random 1 3))) (经历时间 (+ 1 ?经历时间)))
+)
+
+; 待解决：新生命的 fact index 从2跳到几千
+(defrule 繁衍
+  (declare (salience 10))
+  (世界 (时间 ?时间))
+  ?长辈 &lt;- (某种 (编号 ?编号) (能量 ?能量&amp;:(&gt; ?能量 10000)))
+  =&gt;
+  (modify ?长辈 (能量 0))
+  ; 编号可能重复
+  (assert (某种 (编号 (+ 1 ?编号)) (能量 0) (经历时间 ?时间)))
+)
+</code></pre>
+<p>感觉<code>(世界 (时间 ?时间))</code>这种写法有点累赘。考虑在命名上作些改进。</p>
+<p>写文章的时候发现有<code>经历时间</code>属性的修改，即便能量加0也不会和原事实相同，于是改为<code>(random -3 3)</code>后，果然可行，但仍有个体消失的情况发生如下（能量阈值改用 1000）。也许是编号重复后与其他事实内容完全相同导致的，但为何事实会消失呢？待研究。</p>
+<p>腾出3G内存后，screenshot app录屏产生mov，<a href="https://cloudconvert.com/mov-to-gif">https://cloudconvert.com/mov-to-gif</a> 生成gif</p>
