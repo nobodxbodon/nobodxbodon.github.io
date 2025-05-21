@@ -57,6 +57,35 @@ el.style.display = 'none'
 
 // No. All this code takes place before a rendering is ever triggered.
 </code></pre>
+<h3>A simple FPS meter</h3>
+<ol>
+<li>Calculates the current FPS by dividing 1000 (milliseconds in a second) by the time elapsed since the last frame. e.g. <code>1000 / 16.67 = 60 fps</code></li>
+<li>Maintains a rolling window of FPS measurements and calculates the average FPS across these measurements.</li>
+<li>If the average FPS falls below 45, it calls a callback function.</li>
+<li>It uses requestAnimationFrame to continue measuring with each new frame.</li>
+</ol>
+<pre><code class="lang-js">// https://github.com/wesbos/fps-meter
+const measureFrame = (timestamp: number) =&gt; {  
+  // Calculate FPS
+  const currentFPS = 1000 / (timestamp - this.lastFrameTime);
+  this.lastFrameTime = timestamp;
+
+  // Add current FPS to history and maintain size limit
+  this.frames.push(currentFPS);
+  if (this.frames.length &gt; this.maxFrames) {
+    this.frames.shift();
+  }
+
+  // Check if average FPS is below threshold
+  const avgFPS = this.getAverageFPS();
+  if (avgFPS &amp;&amp; avgFPS &lt; 45 &amp;&amp; this.lowFPSCallback) {
+    this.lowFPSCallback(avgFPS);
+  }
+
+  // Continue measuring
+  requestAnimationFrame(measureFrame);
+};
+</code></pre>
 <h2>requestIdleCallback</h2>
 <p>The <code>window.requestIdleCallback()</code> method queues a function to be called during a browser's idle periods. This enables developers to perform background and low priority work on the main event loop, without impacting latency-critical events such as animation and input response. Functions are generally called in first-in-first-out order; however, callbacks which have a timeout specified may be called out-of-order if necessary in order to run them before the timeout elapses.</p>
 <p><a href="https://github.com/astoilkov/main-thread-scheduling">main-thread-scheduling</a> lets you run computationally heavy tasks on the main thread while ensuring your app's UI doesn't freeze.</p>
@@ -88,6 +117,73 @@ el.style.display = 'none'
 <li>Imagine you want to add two vectors, a simple implementation iterates over the vector, adding each pair of elements on each iteration sequentially. But the addition of the <em>ith</em> pair of elements does not rely on any other pair. So, what if we could execute these operations concurrently, adding all of the pairs of elements in parallel? That’s when the GPUs come into action. Modern GPUs can run millions of threads simultaneously, enhancing performance of these mathematical operations on massive vectors.</li>
 </ol>
 </blockquote>
+<h3>Infinite scrolling performance analysis</h3>
+<p>Our goal is to create an infinite vertical scroll of two divs (each <code>100vh</code> tall) that continuously loop, with <code>div 1</code> smoothly following <code>div 2</code> to create a seamless experience.</p>
+<pre><code class="lang-js">const scrollContent = (timestamp) =&gt; {
+  if (!lastTimestamp) lastTimestamp = timestamp;
+  const elapsed = timestamp - lastTimestamp;
+  lastTimestamp = timestamp;
+
+  const totalHeight = scrollContainer.scrollHeight - window.innerHeight;
+  scrollContainer.scrollTop += scrollSpeed * elapsed;
+
+  if (scrollContainer.scrollTop &gt;= totalHeight - 10) {
+    scrollContainer.scrollTop = 0;
+  }
+
+  requestAnimationFrame(scrollContent);
+};
+</code></pre>
+<p>Performance Issues:</p>
+<ul>
+<li>Each frame requires DOM writes (<code>scrollTop +=</code>), which can trigger layout recalculations.</li>
+<li>The <code>scrollTop</code> manipulation can cause browser repaints, especially with large content.</li>
+<li>If the main thread is busy, <code>requestAnimationFrame</code> callbacks may be delayed.</li>
+</ul>
+<pre><code class="lang-html">&lt;style&gt;
+  .container {
+    height: 100vh;
+    overflow: hidden;
+  }
+  .scroll-wrapper {
+    animation: scroll 10s linear infinite;
+    will-change: transform;
+  }  
+  .div-box {
+    height: 100vh;
+  }
+  .div1 { background-color: #3498db; }
+  .div2 { background-color: #e74c3c; }
+
+  @keyframes scroll {
+    0% {
+      transform: translateY(0);
+    }
+    100% {
+      transform: translateY(-200vh); /* Total height of all original divs */
+    }
+  }
+&lt;/style&gt;
+
+&lt;body&gt;
+  &lt;div class="container"&gt;
+    &lt;div class="scroll-wrapper"&gt;
+      &lt;!-- Original divs --&gt;
+      &lt;div class="div-box div1"&gt;1&lt;/div&gt;
+      &lt;div class="div-box div2"&gt;2&lt;/div&gt;
+
+      &lt;!-- Cloned divs for smooth infinite scrolling --&gt;
+      &lt;div class="div-box div1"&gt;1&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;
+</code></pre>
+<p>Advantages of CSS Solution:</p>
+<ul>
+<li>CSS transforms (<code>translateY</code>) are hardware-accelerated by default.</li>
+<li><code>will-change: transform</code> further optimizes by offloading animation to GPU.</li>
+<li>No layout recalculations during animation.</li>
+</ul>
 <h2>Best practice for font units</h2>
 <ul>
 <li><code>1px</code> is equal to whatever the browser is treating as a single pixel (even if it’s not literally a pixel on the hardware screen).</li>

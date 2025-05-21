@@ -80,45 +80,141 @@ var App = React.render(Component);
   {count: 2, text: "pear"}`
 */
 </code></pre>
-<h3>Simple React custom renderer</h3>
-<pre><code class="lang-jsx">const React = {
-  createElement: (tag, props, ...children) =&gt; {
-    if (typeof tag === "function") {
-      return tag(props);
+<h3>Simplified version of virtual DOM diffing and rendering</h3>
+<p><a href="https://gist.github.com/developit/2038b141b31287faa663f410b6649a87">https://gist.github.com/developit/2038b141b31287faa663f410b6649a87</a></p>
+<pre><code class="lang-js">// JSX constructor, similar to createElement()
+// Use /** @jsx h */ comment
+export const h = (type, props, ...children) =&gt; ({
+  type,
+  props,
+  children,
+  key: props &amp;&amp; props.key
+});
+
+export const render = (
+  newVNode,
+  dom,
+  oldVNode = dom._vnode || (dom._vnode = {}),
+  currentChildIndex
+) =&gt; {
+  if (Array.isArray(newVNode)) {
+    return newVNode.map((child, i) =&gt; render(child, dom, oldVNode._normalizedChildren?.[i]));
+  }
+  // Handle components
+  // Here components have a different signature compared to React:
+    // (props, state, updateFn) =&gt; VNode;
+  else if (typeof newVNode.type === 'function') {
+    newVNode.state = oldVNode.state || {};
+    const props = { ...newVNode.props, children: newVNode.children };
+    const renderResult = newVNode.type(
+      props,
+      newVNode.state,
+      nextState =&gt; {
+        Object.assign(newVNode.state, nextState);
+        render(newVNode, dom, newVNode);
+    });
+
+    render(renderResult, dom, oldVNode.rendered || {});
+  }
+  // Handle DOM elements and text nodes
+  else {
+    // assumes the types match here
+    newVNode.dom = oldVNode.dom || (newVNode.type ? document.createElement(newVNode.type) : new Text(newVNode.props));
+
+    // Update props
+    if (newVNode.type) {
+      for (const name in newVNode.props || {}) {
+        const value = newVNode.props[name];
+        if (value !== (oldVNode.props?.[name])) {
+          // DOM Properties like value, checked, className
+          name in newVNode.dom ? (newVNode.dom[name] = value) : newVNode.dom.setAttribute(name, value);
+        }
+      }
+    } else if (newVNode.props !== oldVNode.props) {
+      // document.createTextNode("Hello").data
+      newVNode.dom.data = newVNode.props;
     }
-    let element = { tag, props: { ...props, children } };
-    return element;
+
+    // Newly created node won’t have a parentNode and needs to be inserted
+    if (!newVNode.dom.parentNode) {
+      dom.insertBefore(newVNode.dom, dom.childNodes[currentChildIndex] || null);
+    }
+
+    // Diff children
+    const newChildren = newVNode.children.flat();
+    const oldChildren = oldVNode._normalizedChildren || [];
+    newVNode._normalizedChildren = newChildren.map((child, i) =&gt; {
+      const nextNewChild = typeof child === 'string' ? h('', child) : child;
+      // Find oldChild with matching key
+      const matchingOldChild = oldChildren.find(oldChild =&gt; oldChild?.key === nextNewChild.key) || {};
+      return render(nextNewChild, newVNode.dom, matchingOldChild, i);
+    });
+
+    // Remove old children if there are any
+        if (oldVNode._normalizedChildren) {
+            oldVNode._normalizedChildren.map(oldChild =&gt; {
+                oldChild &amp;&amp; oldChild.dom.remove();
+            });
+        }
+
+    Object.assign(oldVNode, newVNode);
   }
+};
+</code></pre>
+<h3>How reconciliation works</h3>
+<p>If we had two components of the same type:</p>
+<pre><code class="lang-jsx">{isEditing ? (
+  &lt;input
+    type="text"
+    placeholder="Enter your name"
+    className="edit-input"
+  /&gt;
+) : (
+  &lt;input
+    type="text"
+    placeholder="Enter your name"
+    disabled
+    className="view-input"
+  /&gt;
+)}
+</code></pre>
+<p>React preserves the DOM element and its state because both elements are of the same type (<code>input</code>) at the same position in the element tree. React simply updates the props of the existing element rather than recreating it.</p>
+<p>Note that here React still re-renders the component, but the DOM node for the <code>&lt;input&gt;</code> is preserved (not re-created). <strong>"DOM reuse" is not equivalent to "component render skip"</strong> — you can render a component again, and still reuse DOM nodes.</p>
+<p>Read this article: <a href="https://cekrem.github.io/posts/react-reconciliation-deep-dive">https://cekrem.github.io/posts/react-reconciliation-deep-dive</a></p>
+<h3>What is Fiber</h3>
+<p>React Fiber was introduced in React 16, which is a reimplementation of React's core algorithm. At it's core, Fiber is a JavaScript object that represents a unit of work. It's a lightweight representation of a component tree that React can work on.</p>
+<p>React processes Fibers and when done, it commits the changes to the DOM. This happens in two phases:</p>
+<ol>
+<li><p><strong>Render phase:</strong> During this phase, React does asynchronous work behind the scenes. It processes all Fibers. Because it happens asynchronously, work can be prioritized, paused, resumed, and aborted. Internal functions like <code>beginWork()</code> and <code>completeWork()</code> are called during this process.</p>
+</li>
+<li><p><strong>Commit phase:</strong> Once the render phase is complete, React commits the changes to the DOM by calling <code>commitWork()</code>. This is synchronous and can't be interrupted.</p>
+</li>
+</ol>
+<p>Fiber nodes are organized in a tree structure that mirrors the component tree. Each Fiber has a reference to its parent, child, and sibling Fibers. This allows React to traverse the tree efficiently and perform updates.</p>
+<p>When React starts rendering, it creates a work-in-progress tree that mirrors the current tree. As React processes the work, it updates the work-in-progress tree. Once the work is complete, React swaps the current tree with the work-in-progress tree.</p>
+<pre><code class="lang-js">// React's Commit Phase
+// This runs on the main thread
+function commitToDOM() {
+ // React calls DOM APIs
+ // Each call gets added to the call stack
+ mutateDOM() {
+   document.createElement()
+   element.setAttribute()
+   element.appendChild()
+   // ...
+ }
+
+ // remember useLayoutEffect?
+ // Now we'll run all the layout effects
+ // this is synchronous
+ // the code in here gets added to the call stack too
+ runLayoutEffects()
+
+ // Queue useEffect for later
+ queueMicrotask(() =&gt; {
+   runEffects()
+ })
 }
-
-const render = (reactElementOrText, container) =&gt; {
-  if (['string', 'number'].includes(typeof reactElementOrText)) {
-    container.appendChild(document.createTextNode(String(reactElementOrText)));
-    return;
-  }
-
-  let actualElement = document.createElement(reactElementOrText.tag);
-  if (reactElementOrText.props) {
-    Object.keys(reactElementOrText.props).filter(p =&gt; p !== children).forEach(p =&gt; {
-      actualElement.setAttribute(p, reactElementOrText.props[p])
-    })
-  }
-  if (reactElementOrText.props.children) {
-    reactElementOrText.props.children.forEach(child =&gt; {
-      render(child, actualElement)
-    })
-  }
-  container.appendChild(actualElement);
-}
-
-const App = () =&gt; (
-  &lt;div className="react-div"&gt;
-    &lt;h1&gt;Hello&lt;/h1&gt;
-    &lt;p&gt;Some text here&lt;/p&gt;
-  &lt;/div&gt;
-)
-
-render(&lt;App /&gt;, document.querySelector("#app"));
 </code></pre>
 <h3>You Might Not Need an Effect</h3>
 <blockquote><p>Whenever you think of writing <code>useEffect</code>, the only sane thing is to NOT do it. Instead, go to the react docs and re-read the page about why you don't need an effect. You really don't. -@TkDodo</p>
@@ -168,6 +264,11 @@ function Counter() {
 <p>The key to understanding this hook is realizing there's a timing difference. When your component renders, the hook returns the current value of <code>ref.current</code>. After rendering, the effect runs and updates <code>ref.current</code> to the new value. On the next render, <code>ref.current</code> contains what was the value in the previous render.</p>
 <h4><code>ref</code> callback function</h4>
 <p>Instead of a ref object, you may pass a function to the ref attribute. When the <code>&lt;div&gt;</code> DOM node is added to the screen, React will call your <code>ref</code> callback with the DOM node as the argument. When that <code>&lt;div&gt;</code> DOM node is removed, React will call your <code>ref</code> callback with null. React will also call your <code>ref</code> callback whenever you pass a different <code>ref</code> callback.</p>
+<ul>
+<li>Called immediately when the element is attached to the DOM. </li>
+<li>It runs before <code>useLayoutEffect</code>.</li>
+<li>It's best for immediate DOM measurements or setup.</li>
+</ul>
 <pre><code class="lang-tsx">const scroller = (node: HTMLDivElement | null) =&gt; {
   node?.scrollIntoView({ behavior: "smooth" });
 };
@@ -202,25 +303,22 @@ export default function App() {
 </code></pre>
 <h3>batching and flushSync in rendering</h3>
 <p>In early versions (React 17 and earlier), React updated the DOM immediately after each state change. Multiple state updates within a single event cycle would cause multiple, unnecessary re-renders, affecting the application's responsiveness.</p>
-<pre><code class="lang-js">const handleUpdate = () =&gt; {
+<pre><code class="lang-js">// React 17
+const handleUpdate = () =&gt; {
   setCount(count + 1); // First update
   setFlag(!flag);      // Second update
-  // In pre-batching React, this would cause two separate renders
+  // In pre-batching React, this would cause two separate re-renders
 };
 </code></pre>
 <p>React 18 introduced batching to prevent these issues. Batching means that React groups multiple state updates into a single re-render cycle. This approach ensures that the UI is updated efficiently, reflecting all state changes in one go.</p>
 <p><code>flushSync</code> allows you to opt-out of batching for specific updates, forcing them to be processed immediately. This ensures that critical updates are executed in the correct order, even within a batched state update cycle. <em>(But, use it carefully and not too much, because using it too often can cancel out the performance advantages of batching.)</em></p>
-<pre><code class="lang-js">// https://tigerabrodi.blog/understanding-flushsync-mastering-batching-behavior-in-reactjs
-const receiveMessage = () =&gt; {
-  const newMessage = `Message ${messages.length + 1}`;
+<pre><code class="lang-js">import { flushSync } from "react-dom";
 
-  // Update messages and Forces re-render
+const handleClick = () =&gt; {
   flushSync(() =&gt; {
-    setMessages(prevMessages =&gt; [...prevMessages, newMessage]);
+    setCount(count + 1); // Triggers an immediate re-render
   });
-
-  // Scroll to the bottom after messages update
-  endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
+  setFlag(!flag); // Queued state update
 };
 </code></pre>
 <h3>Higher Order Components</h3>
@@ -257,7 +355,8 @@ const receiveMessage = () =&gt; {
 <p>React 19:</p>
 <ul>
 <li><a href="https://react.dev/blog/2024/12/05/react-19">https://react.dev/blog/2024/12/05/react-19</a></li>
-<li><a href="https://shrutikapoor.dev/posts/react-react19">https://shrutikapoor.dev/posts/react-react19</a></li>
+<li><a href="https://www.epicreact.dev/react-19-cheatsheet">https://www.epicreact.dev/react-19-cheatsheet</a></li>
+<li><a href="https://shrutikapoor.dev/posts/React-React19">https://shrutikapoor.dev/posts/React-React19</a></li>
 <li><a href="https://www.youtube.com/watch?v=AJOGzVygGcY">https://www.youtube.com/watch?v=AJOGzVygGcY</a></li>
 <li><a href="https://www.youtube.com/watch?v=O3ZtlTwDnbk">https://www.youtube.com/watch?v=O3ZtlTwDnbk</a></li>
 </ul>

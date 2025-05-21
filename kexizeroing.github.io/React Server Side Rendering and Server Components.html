@@ -1,14 +1,7 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/react-server-side-rendering.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-server-side-rendering">站点原文</a></h2>
 <h2>Adding Server-Side Rendering</h2>
 <p>SSR focuses on initial page load, sending pre-rendered HTML to the client that must then be hydrated with downloaded JavaScript before it behaves as a typical React app. SSR also only happens one time: when directly navigating to a page.</p>
-<blockquote><p>Debunking the Myth: SSR Isn't Expensive: <a href="https://t3.gg/blog/post/ssr-is-not-expensive">https://t3.gg/blog/post/ssr-is-not-expensive</a></p>
-<ul>
-<li>SSR Overhead Is Minimal</li>
-<li>SSR Can Actually Reduce Other Cloud Costs</li>
-<li>SSR Delivers a Better User Experience</li>
-</ul>
-</blockquote>
-<p>Let’s create a simple React component App. We will render this component on the server-side and hydrate it on the client-side.</p>
+<p>Let’s create a simple React component App. We will render this component on the server-side and hydrate it on the client-side. <em>(The HTML React creates on the server must perfectly match what React tries to create in the browser.)</em></p>
 <pre><code class="lang-js">// client/components/App/index.js
 
 import React from 'react'
@@ -36,7 +29,7 @@ const cdnHost = `http://localhost:5000`;
 
 app.get('/', (req, res) =&gt; {
   // This turns the React component App into an HTML string
-  const jsx = ReactDOMServer.renderToString(&lt;App /&gt;)
+  const jsx = ReactDOMServer.renderToString(&lt;App initialData={someData} /&gt;)
   const clientBundleStyle = `&lt;link rel="stylesheet" href="${cdnHost}/styles/bundle.css"&gt;`
   // This loads the JS code to “hydrate” the markup with interactivity.
   const clientBundleScript = `&lt;script src="${cdnHost}/scripts/bundle.js"&gt;&lt;/script&gt;`
@@ -52,6 +45,7 @@ app.get('/', (req, res) =&gt; {
       &lt;/head&gt;
       &lt;body&gt;
         &lt;div id='ssr-app'&gt;${jsx}&lt;/div&gt;
+        &lt;script&gt;window.__INITIAL_DATA__ = ${JSON.stringify(someData)}&lt;/script&gt;
         ${clientBundleScript}
       &lt;/body&gt;
     &lt;/html&gt;
@@ -62,6 +56,8 @@ app.listen(port, () =&gt; {
   console.log(`App listening on http://localhost:${port}`)
 })
 </code></pre>
+<blockquote><p>The <code>window.__INITIAL_DATA__</code> is used for hydration. When React "hydrates" the server-rendered HTML on the client, it needs the same data that was used on the server. The client doesn't need to re-fetch the same data that the server already used.</p>
+</blockquote>
 <p>In the client-side entry point, we will “hydrate” the React component that was SSR-ed into the root DOM container with the ID "ssr-app".</p>
 <pre><code class="lang-js">// ./client/index.js
 
@@ -243,22 +239,32 @@ app.listen(3000, () =&gt; {
 });
 </code></pre>
 <h2>Write React Server Components from Scratch</h2>
+<p>Server Components are a new type of Component that renders ahead of time, before bundling, in an environment separate from your client app or SSR server.</p>
 <p>Before React Server Components, all React components are “client” components — they are all run in the browser. RSC makes it possible for some components to be rendered by the server, and some components to be rendered by the browser. Server Components are not a replacement for SSR. They render exclusively on the server. Their code isn't included in the JS bundle, and so they never hydrate or re-render. With only SSR, we haven't been able to do server-exclusive work within our components (e.g. access database), because that same code would re-run in the browser.</p>
 <ul>
 <li>Server Component: Fetch data; Access backend resources directly; Keep large dependencies on the server.</li>
 <li>Client Component: Add interactivity and event listeners (<code>onClick()</code>); Use State and Lifecycle Effects (<code>useState()</code>, <code>useEffect()</code>); Use browser-only APIs.</li>
 </ul>
 <p>A common misconception here is that components with <code>"use client"</code> only run in browser. Client components still get pre-rendered to the initial HTML on the server (SSR). The <code>"use client"</code> doesn't mean the component is "client only", it means that we send the code for this component to the client and hydrate it.</p>
-<p>Btw, wrapping your root layout in the client component does not automatically turn your entire app into a client rendering. The client component gets hydrated on the client. The children can stay server components (do not hydrate on the client).</p>
-<pre><code class="lang-jsx">"use client";
+<p>Also note that wrapping your root layout in the client component does not automatically turn your entire app into a client rendering. The children can stay server components. (It's about the structure of the import, not the rendering.) So if you want to have server components inside a client component, you need to use the children pattern to pass them down.</p>
+<pre><code class="lang-jsx">// layout.tsx
+return (
+  &lt;body&gt;
+    &lt;ThemeContextProvider&gt;{children}&lt;/ThemeContextProvider&gt;
+  &lt;/body&gt;
+)
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const theme = ...
-  return &lt;ThemeProvider theme={theme}&gt;{children}&lt;/ThemeProvider&gt;
+// ThemeContext.tsx
+"use client";
+
+export default function ThemeContextProvider(
+  { children }: { children: React.ReactNode }
+) {
+  return &lt;div&gt;{children}&lt;/div&gt;;
 }
 </code></pre>
 <blockquote><p>What is RSC wire format?<br/>
-The server sends a serialized tree (similar to JSON but with “holes”) to the browser, and the browser can do the work of deserializing it, filling the client placeholders with the actual client components, and rendering the end result.</p>
+The server sends a serialized tree (similar to JSON but with “holes”) to the browser, and the browser can do the work of deserializing it, filling the client placeholders with the actual client components, and rendering the end result. <strong>RSCs don’t output HTML.</strong></p>
 <p>Essentially, we're telling React “Hey, I know you're missing the server component code, but don't worry: here's what it rendered”. We send along the rendered value, the virtual representation that was generated by the server. When React loads on the client, it re-uses that description instead of re-generating it.</p>
 <p>How is the Next.js App Router related to Server Components?<br/>
 If a page uses server-side rendering, the page HTML is generated on each request. Next.js used to allow us to do so by using <code>getServerSideProps</code>, which will be called by the server on every request.</p>

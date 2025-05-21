@@ -146,6 +146,22 @@ export function useTimeout = (fn, delay, options) =&gt; {
 <li>The callback function receives a special function called <code>onCleanup</code> as its first argument. You can use this function to register a cleanup callback that will be called before the watcher is re-executed.</li>
 <li>A confusing caveat is that <code>watchEffect</code> only tracks dependencies during its synchronous execution. When using it with an async callback, only properties accessed before the first <code>await</code> tick will be tracked. Everything after the <code>await</code> will NOT be tracked.</li>
 </ol>
+<h3>Watchers callback flush timing</h3>
+<p>Similar to component updates, user-created watcher callbacks are batched to avoid duplicate invocations.</p>
+<p>By default, a watcher's callback is called after parent component updates (if any), and <strong>before</strong> the owner component's DOM updates. This means if you attempt to access the owner component's own DOM inside a watcher callback, the DOM will be in a pre-update state.</p>
+<pre><code class="lang-js">const count = ref(0);
+const countRef = useTemplateRef('countRef'); // Vue 3.5+
+const logs = ref([]);
+
+const watchFn = (type) =&gt; () =&gt; {
+  logs.value.push('Watcher type ' + type + ': Count is ' + CountRef.value.innerText);
+}
+
+watch(count, watchFn('pre')); // default, Count is 0
+watch(count, watchFn('post'), { flush: 'post' }); // Count is 1
+// 'sync' runs first, fires synchronously, before any Vue-managed updates
+watch(count, watchFn('sync'), { flush: 'sync' }); // Count is 0
+</code></pre>
 <h3>Write better Vue composables</h3>
 <p>Passing props and events back and forth through the component hierarchy creates a lot of complexity. A more straightforward solution is to create a shared data store that any component can import:</p>
 <pre><code class="lang-js">import { reactive, toRefs } from 'vue'
@@ -384,6 +400,19 @@ const myGlobalVariable = inject('myGlobalVariable')
 </code></pre>
 <blockquote><p><a href="https://alexop.dev/posts/solving-prop-drilling-in-vue">Solving Prop Drilling in Vue</a>: Instead of event buses, use Pinia for state, composables for logic, and provide/inject for component trees.</p>
 </blockquote>
+<h3>How to Use Provide/Inject</h3>
+<p>Vue’s Provide/Inject API is a powerful feature that allows components to share data without prop drilling. It is not meant for global state management but rather for local component hierarchies.</p>
+<pre><code class="lang-js">// parent component to make data available to its descendants
+const message = ref('Hello from parent');
+provide('sharedMessage', message);
+
+// child component consume the provided data
+const sharedMessage = inject('sharedMessage');
+</code></pre>
+<ol>
+<li>Provide/Inject is best suited for sharing dependencies like form contexts, themes, or service instances, rather than global state management. If multiple components rely on the same data structure, consider Vuex or Pinia.</li>
+<li>Since <code>provide</code> passes values by reference, you may need to use <code>ref()</code> or <code>reactive()</code> to ensure reactivity.</li>
+</ol>
 <h3>Vue router and Suspense</h3>
 <pre><code class="lang-vue">&lt;template&gt;
   &lt;nav&gt;
@@ -559,10 +588,3 @@ export function unmount(vnode) {
   vnode.el.parentNode.removeChild(vnode.el)
 }
 </code></pre>
-<ul>
-<li>Demystifying the Art of SFC Compilation: <a href="https://vueconf19-compiler.surge.sh">https://vueconf19-compiler.surge.sh</a></li>
-<li>Vue template explorer: <a href="https://template-explorer.vuejs.org">https://template-explorer.vuejs.org</a></li>
-<li>Vue SFC Playground: <a href="https://play.vuejs.org">https://play.vuejs.org</a></li>
-<li>Understanding Vue SFC Compiler: <a href="https://jinjiang.dev/slides/understanding-vue-compiler">https://jinjiang.dev/slides/understanding-vue-compiler</a></li>
-<li>Compile Vue SFC into plain JavaScript &amp; CSS: <a href="https://github.com/Jinjiang/vue-simple-compiler">https://github.com/Jinjiang/vue-simple-compiler</a></li>
-</ul>

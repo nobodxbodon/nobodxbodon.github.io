@@ -166,6 +166,8 @@ An <code>idealTree</code> is the tree of package data that we intend to install.
 <ul>
 <li><p>The <code>npm install</code> command will install both <em>devDependencies</em> and <em>dependencies</em>. With the <code>--production</code> flag or when the <code>NODE_ENV</code> environment variable is set to production <code>NODE_ENV=production npm install</code>, npm will not install modules listed in devDependencies.</p>
 </li>
+<li><p>When you install a package, npm automatically installs its dependencies but not its devDependencies. This is because you are consuming it as a dependency and don’t need its development tools.</p>
+</li>
 <li><p>Many applications use different configuration settings when <code>NODE_ENV</code> is set to <code>production</code>. This also makes the Node.js process more efficient. If you set <code>NODE_ENV=testing</code> which means the devDependencies will be installed and it is more like development than it is like production.</p>
 </li>
 <li><p>Using the <code>npm uninstall --no-save</code> will tell npm not to remove the package from your <code>package.json</code> or <code>package-lock.json</code> files.</p>
@@ -257,6 +259,30 @@ npm i https://pkg.pr.new/tinylibs/tinybench/tinybench@a832a55
 <h4>pnpm <code>shamefully-hoist=true</code> configuration</h4>
 <p>pnpm organizes <code>node_modules</code> differently from npm, exposing only the dependencies explicitly declared in <code>package.json</code>. Transitive dependencies are installed in <code>node_modules/.pnpm/registry.npmjs.org/</code>, rather than the flat structure for <code>node_modules</code> as npm.</p>
 <p>In simple terms, if there is a module A that depends on module B, and module A is depended on in the project's <code>package.json</code>, module A can access module B, but the project cannot. When <code>shamefully-hoist=true</code> is set, module B will be hoisted, making it accessible in the project.</p>
+<h4>pnpm Catalogs</h4>
+<p>pnpm Catalogs is a feature allowing monorepo workspaces to share dependency versions across different packages via a centralized management location. Basically, you add <code>catalog</code> or <code>catalogs</code> fields to your <code>pnpm-workspace.yaml</code> file and reference them using <code>catalog:&lt;name&gt;</code> in your <code>package.json</code>. For the default catalog only, a special <code>catalog:</code> shorthand can also be used. Think of <code>catalog:</code> as a shorthand that expands to <code>catalog:default</code>.</p>
+<pre><code class="lang-yaml"># pnpm-workspace.yaml
+# create a catalog named default
+catalog:
+  react: ^18.2.0
+  react-dom: ^18.2.0
+
+# create arbitrarily named catalogs
+catalogs:
+  react18:
+    react: ^18.2.0
+    react-dom: ^18.2.0
+</code></pre>
+<pre><code class="lang-json">// package.json
+"dependencies": {
+  "react": "catalog:",
+}
+
+"dependencies": {
+  "react": "catalog:react18",
+  "react-dom": "catalog:react18",
+}
+</code></pre>
 <h4>corepack</h4>
 <p>Instead of installing <code>yarn</code> or <code>pnpm</code> globally, Corepack manages them for you behind the scenes. When you run a package manager command, Corepack intercepts it, checks what version you need, downloads it if necessary, and runs your command with the correct version.</p>
 <p>Corepack makes sure you're using the correct package manager for your project. Since v16.13, Node.js is shipping Corepack for managing package managers. This is an experimental feature, so you need to enable it by running <code>corepack enable pnpm</code>. To configure the package manager for your project, add the <code>packageManager</code> field to your <code>package.json</code>:</p>
@@ -342,3 +368,17 @@ console.log(process.env.npm_package_name, process.env.npm_package_version);
 <li>By running <code>cat $(which npm)</code>, you will find npm CLI is a standard JavaScript file. The only special thing is the first line <code>#!/usr/bin/env node</code> which tells your shell the current file can be executed with <code>node</code>.</li>
 <li>Because it's just a js file, we can rely on all the usual ways to generate a profile. My favorite one is node’s <code>--cpu-prof</code> argument. Combine that knowledge together and we can generate a profile from an npm script via <code>node --cpu-prof $(which npm) run myscript</code>. Loading that profile into <a href="https://www.speedscope.app">speedscope</a> reveals quite a bit about how npm is structured. The majority of time is spent on loading all the modules that compose the npm cli. The time of the script that we’re running pales in comparison.</li>
 </ol>
+<h3>What is JSR</h3>
+<p>The JavaScript Registry (JSR) is a modern package registry (not a package manager). JSR works with many runtimes (Node.js, Deno, Bun, browsers, and more) and is backwards compatible with npm. JSR is designed for TypeScript. You publish TypeScript source, and JSR handles generating API docs, <code>.d.ts</code> files, and transpiling your code for cross-runtime compatibility. Check out: <a href="https://jsr.io/docs/why">https://jsr.io/docs/why</a></p>
+<pre><code class="lang-sh"># deno
+deno add jsr:@luca/cases
+
+# npm (use any of npx, yarn dlx, pnpm dlx, or bunx)
+npx jsr add @luca/cases
+
+# starting with pnpm v10.9
+pnpm add jsr:&lt;scope&gt;/&lt;pkg_name&gt;
+
+# since Yarn v4.9.0
+yarn add jsr:&lt;scope&gt;/&lt;pkg_name&gt;
+</code></pre>

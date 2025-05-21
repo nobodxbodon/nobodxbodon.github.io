@@ -1,0 +1,47 @@
+<h2><a href="https://github.com/jerkwin/jerkwin.github.io//blob/master/_posts/2025-04-17-分析每个水分子的氢键.md">仓库源文</a>，<a href="https://jerkwin.github.io/2025/04/17/分析每个水分子的氢键">站点原文</a></h2>
+<ul>
+<li>2025-04-17 08:18:55</li>
+</ul>
+<p>运行gmx分析命令没有必要并行, 因为大部分分析命令都不支持并行, 而且分析耗时也不大. 如果有些分析确实需要运行很长时间, 可以将整个分析脚本作为作业提交.</p>
+<p>如果只需要简单地分析一下每个水分子的氢键, 而不关心每个水分子的其他性质, 因为每个水分子的索引号是固定的, 不需要使用<code>gmx select</code>重选, 提前做好 <code>index.ndx</code> 文件即可. 如果还需要每个水分子的其他信息, 方便后面对氢键数作图, 就需要借助<code>gmx select</code>.</p>
+<p><code>gmx select</code>的选区语句需要放在引号中, 但需要注意bash脚本中单引号和双引号的区别. 单引号中的内容都是字面值, 不会进行变量替换, 所以 <code>$i</code> 还是 <code>$i</code>; 双引号中内容会进行变量替换, 还要注意内容中的双引号要转义, 否则出错. 当然, 更保险的作法是将选区语句放到一个文本文件中使用 <code>gmx -select -sf sel.txt</code>.</p>
+<p>下面让我们来分析一下每个水分子与其他水分子形成的氢键数目随时间的变化.</p>
+<p>先假定我们只处理一帧轨迹. 体系中有 216 个水分子, 我们每次选择一个水分子作为选中组, 其余水分子作为非选中组, 创建相应的索引文件, 然后调用<code>hbond</code>计算两个组之间的氢键, 然后对得到的数据进行整理, 输出到需要的文件.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;hb.bsh&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; i in &lt;span style="color: #666666"&gt;{&lt;/span&gt;1..216&lt;span style="color: #666666"&gt;}&lt;/span&gt;; &lt;span style="color: #AA22FF; font-weight: bold"&gt;do&lt;/span&gt;
+    gmx &lt;span style="color: #AA22FF; font-weight: bold"&gt;select&lt;/span&gt; -quiet -s -on index.ndx &amp;&gt;/dev/null &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+        -select &lt;span style="color: #BB4444"&gt;"Wsel = resnr &lt;/span&gt;&lt;span style="color: #B8860B"&gt;$i&lt;/span&gt;&lt;span style="color: #BB4444"&gt;; Wexc = not Wsel;\"Wsel\" Wsel; \"Wexc\" Wexc"&lt;/span&gt;
+
+    &lt;span style="color: #AA22FF"&gt;echo&lt;/span&gt; &lt;span style="color: #666666"&gt;0&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; | gmx hbond -quiet -f traj.xtc -s -n -num hbnum~&lt;span style="color: #B8860B"&gt;$i&lt;/span&gt;.xvg &amp;&gt;/dev/null
+
+    rm -f index.ndx
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;done&lt;/span&gt;
+
+awk &lt;span style="color: #BB4444"&gt;'&lt;/span&gt;/^ *&lt;span style="color: #666666"&gt;[&lt;/span&gt;0-9&lt;span style="color: #666666"&gt;]&lt;/span&gt;/ &lt;span style="color: #666666"&gt;{&lt;/span&gt;print &lt;span style="color: #B8860B"&gt;$1&lt;/span&gt;, &lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;&lt;span style="color: #666666"&gt;}&lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; hbnum~1.xvg &gt; hb~num.xvg
+
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; i in &lt;span style="color: #666666"&gt;{&lt;/span&gt;2..216&lt;span style="color: #666666"&gt;}&lt;/span&gt;; &lt;span style="color: #AA22FF; font-weight: bold"&gt;do&lt;/span&gt;
+    awk &lt;span style="color: #BB4444"&gt;'&lt;/span&gt;/^ *&lt;span style="color: #666666"&gt;[&lt;/span&gt;0-9&lt;span style="color: #666666"&gt;]&lt;/span&gt;/ &lt;span style="color: #666666"&gt;{&lt;/span&gt;print &lt;span style="color: #B8860B"&gt;$2&lt;/span&gt;&lt;span style="color: #666666"&gt;}&lt;/span&gt;&lt;span style="color: #BB4444"&gt;'&lt;/span&gt; hbnum~&lt;span style="color: #B8860B"&gt;$i&lt;/span&gt;.xvg &gt;_tmp.xvg
+    paste hb~num.xvg _tmp.xvg &gt;_num.xvg
+    mv _num.xvg  hb~num.xvg
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;done&lt;/span&gt;
+
+rm -f _tmp.xvg&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<p>获得了数据之后, 我们就可以考虑如何绘制数据了.</p>
+<p>根据自己熟悉的程序与软件, 绘制成相应的图.</p>
+<p><img alt="" src="https://jerkwin.github.io/pic/hb-wat216.png"/></p>

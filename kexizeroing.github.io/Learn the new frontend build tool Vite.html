@@ -49,6 +49,38 @@
 <li>Rewrite the imports to valid URLs like <code>/node_modules/.vite/deps/my-dep.js?v=f3sf2ebd</code> so that the browser can import them properly.</li>
 <li>Vite caches dependency requests via HTTP headers.</li>
 </ul>
+<blockquote><p>Why bundle a dependency and become dependency free?</p>
+<ol>
+<li>Dependency is CommonJS and you're targeting browsers. (convert dependencies that are shipped as CommonJS or UMD into ESM first)</li>
+<li>Using only a small part of the dependency. (converts dependencies with many internal modules into a single module), also reduce the number of requests to the server for better performance.</li>
+</ol>
+</blockquote>
+<p>To better understand how it works, you can open the browser DevTools and check the "Network" panel. You will see all the requests to the Vite dev server. And some of them point to the <code>node_modules/.vite/deps</code> folder.</p>
+<pre><code class="lang-js">// originally 'react'
+import react from "/node_modules/.vite/deps/react.js?v=&lt;hash&gt;";
+// originally 'react-dom/client'
+import reactDom_client from "/node_modules/.vite/deps/react-dom_client.js?v=&lt;hash&gt;";
+</code></pre>
+<p>Whatever the source of a package import is in CJS or ESM, the eventual requested content will always be in ESM. For CJS package import (with <code>exports.xxx</code> in it), Vite will transform the package code (<code>node_module/foo/foo-cjs.cjs</code>) into ESM via default export. And it will be eventually imported as default in the importer file.</p>
+<pre><code class="lang-js">// import cjs file
+import { foo as fooCjs } from 'foo/foo-cjs.cjs'
+
+// The above import has been resolved into this
+import foo_fooCjs from "/node_modules/.vite/deps/foo_foo-cjs__cjs.js?v=&lt;hash&gt;";
+const fooCjs = foo_fooCjs["foo"];
+
+// What is node_modules/.vite/deps/foo_foo-cjs__cjs.js under the hood
+// It imports a builtin helper `__commonJS` to wrap the CJS code into ESM
+import { __commonJS } from "/node_modules/.vite/deps/chunk-&lt;hash1&gt;.js?v=&lt;hash2&gt;";
+
+var require_foo_cjs = __commonJS({
+  "node_modules/foo/foo-cjs.cjs"(exports) {
+    exports.foo = "foo-cjs";
+  }
+});
+export default require_foo_cjs();
+</code></pre>
+<p>By default, Vite will automatically analyze the project and draw a "optimization boundary" around all the package imports. The "optimization boundary" is used to pre-bundle the dependencies into ESM and put them into <code>node_modules/.vite/deps</code>. Option <code>optimizeDeps.include</code> and <code>optimizeDeps.exclude</code> are used to opt-in/opt-out certain package imports to/from the "optimization boundary". Never exclude CJS package imports, otherwise the import will not resolved into <code>node_modules/.vite/deps/xxx</code> anymore, and will be pointed to the original package imports.</p>
 <h3>TypeScript</h3>
 <ul>
 <li>Vite supports importing <code>.ts</code> files out of the box.</li>
@@ -56,6 +88,11 @@
 <li>Vite uses esbuild to transpile TypeScript into JavaScript which is about 20~30x faster than vanilla <code>tsc</code>.</li>
 </ul>
 <blockquote><p>While Vite and other tools handle the actual transpilation of TypeScript to JavaScript, they don't provide type checking out of the box. This means that you could introduce errors into your code and Vite would continue running the dev server without telling you. Fortunately, we can configure TypeScript's CLI to allow for type checking without interfering with our other tools. By setting <code>noEmit</code> to true, this makes TypeScript act more like a linter than a transpiler.</p>
+<p>Linters such as ESLint and type checkers such as TypeScript are both valuable assets for developers. They are two kinds of static analysis tooling that analyze code and report on detected issues.</p>
+<ul>
+<li>ESLint checks that code adheres to best practices and is consistent, enforcing what you should write.</li>
+<li>TypeScripts checks that code is “type-safe”, enforcing what you can write.</li>
+</ul>
 </blockquote>
 <h3>CSS</h3>
 <ul>
@@ -89,7 +126,7 @@
 <h2>Dynamic Image URL</h2>
 <p><code>import.meta.url</code> is a native ESM feature that exposes the current module's URL. Combining it with the native <a href="https://developer.mozilla.org/en-US/docs/Web/API/URL">URL constructor</a>, we can obtain the full, resolved URL of a static asset using relative path from a JavaScript module.</p>
 <blockquote><p>The <code>import.meta</code> meta-property exposes context-specific metadata to a JavaScript module. It contains information about the module, such as the module's URL. <code>import.meta</code> is available in JavaScript modules; using it outside of a module is a syntax error.</p>
-<p><code>import.meta.glob</code> to import multiple modules from the file system is a Vite-only feature and is not a web or ES standard.</p>
+<p><code>import.meta.glob</code> to import multiple modules from the file system is a Vite-only feature and is not a web or ES standard. It is a way to import many files at once using glob patterns to find matching file paths.</p>
 </blockquote>
 <pre><code class="lang-js">import fs from "node:fs/promises";
 

@@ -35,6 +35,12 @@ Chrome                                         Server
 </code></pre>
 <p><strong>Note that the data being sent from the server is only a small chunk, even though the <code>Range</code> header has value “bytes=0-”.</strong> Chrome and FireFox ask for ranges like <code>bytes=300-</code>, can server side return a smaller-range part, other than part from offset 300 to end of file? The answer is yes. When you play the video, browser will send range request for remaining bytes. Both Chrome and FireFox send range request using byte range (i.e <code>bytes=1867776-</code>) with last-byte-pos value absent. (The server sends TCP Keep-Alive to keep this TCP connection connected.)</p>
 <p>If you skip ahead in the video, the browser will cancel the currently on-going response for the video content. It will then use the the video file’s metadata to map your desired new position to a byte offset and use it for a new range request (<code>byte=offset-</code>). When the buffer is full and the browser stops the server from sending more data, the request is technically still on-going, just no data is being sent.</p>
+<p>Browsers will automatically pause playback if decoding fails. If <code>video.error.code === 3</code>, it typically means a media decode failure, often related to corrupted video or unsupported codecs.</p>
+<pre><code class="lang-js">const video = document.querySelector('video');
+video.addEventListener('error', () =&gt; {
+  console.error('Playback error:', video.error);
+});
+</code></pre>
 <h2>MP4 and WebM</h2>
 <p>MP4 and WebM formats are what we would call pseudo-streaming or "progressive download”. These formats do not support adaptive bitrate streaming (adjusts video quality based on network conditions). If you have ever taken an HTML video element and added a "src” attribute that points to an mp4, most players will progressively download the file. The good thing about progressive downloads is that you don’t have to wait for the player to download the entire file before you start watching. You can click play and start watching while the file is being downloaded in the background. Most players will also allow you to drag the playhead to specific places in the video timeline and the player will use byte-range requests to estimate which part of the file you are attempting to seek. What makes MP4 and WebM playback problematic is the lack of adaptive bitrate support. Every user who watches your content must have enough bandwidth available to download the file faster than it can playback the file.</p>
 <h2>M3U8</h2>
@@ -130,6 +136,31 @@ fetchSegment("http://server.com/video/segment0.mp4")
 <li>DASH (Dynamic Adaptive Streaming over HTTP): Used by YouTube, Netflix or Amazon Prime Video and many others. DASH manifest is called the Media Presentation Description (or MPD).</li>
 </ul>
 <p>For both HLS and DASH, players can adapt to the different renditions in real-time on a segment-by-segment basis.</p>
+<h3>HLS video streaming example</h3>
+<pre><code>#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:4
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXTINF:4.000000,
+0000.ts
+#EXTINF:4.000000,
+0001.ts
+#EXTINF:4.000000,
+0002.ts
+</code></pre>
+<p>The TARGETDURATION says that each segment should be 4 seconds, and the PLAYLIST-TYPE indicates VOD, meaning video on demand. Each segment is listed with the EXTINF 4.0000, indicating the length of the segment, followed by the filename.</p>
+<p>In reality, it is rare to just have one video stream inside your HLS video. You often have many different versions of the same video (360p, 480p, 720p, 1080p...). Each of these formats will have a manifest file as above. But how do you differentiate between each version of the video?</p>
+<pre><code>#EXTM3U
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=880000,RESOLUTION=202x360,CODECS="avc1.66.30,mp4a.40.2"
+360/manifest.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1540000,RESOLUTION=270x480,CODECS="avc1.66.30,mp4a.40.2"
+480/manifest.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=2860000,RESOLUTION=404x720,CODECS="avc1.66.30,mp4a.40.2"
+720/manifest.m3u8
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=4840000,RESOLUTION=608x1080,CODECS="avc1.66.30,mp4a.40.2"
+1080/manifest.m3u8
+</code></pre>
+<p>The first file of the video delivered to the video player is the master manifest. It is the "menu" that lists all of the streams available to consume. Each version of stream gets its own entry, and they are typically ordered from lowest quality to highest.</p>
 <pre><code>./audio/
   ├── ./128kbps/
   |     ├── segment0.mp4
@@ -176,6 +207,45 @@ const ffmpeg = createFFmpeg({ log: true });
 </blockquote>
 <p>A <strong><a href="https://api.video/what-is/codec">codec</a></strong> is a hardware or software tool that is used to compress (and decompress) video files. Codec is a blend of coder/decoder. Common video codecs include h.264, h.265, VP8, VP9 and AV1. An efficient codec can deliver high-quality video at lower bitrates.</p>
 <p>The <strong>bitrate</strong> of a file is measured by the number of bits being transmitted over a period of time. For video it is typically measured in kilobytes per second (kbps) or megabytes per second (mbps). Video bitrate is often confused with video resolution terms like 720p, 1080p, 4K, etc. Video resolution is the number of pixels that make up an image on your screen; video bitrate is the amount of information per second in video. A higher bitrate results in better quality but also larger file sizes.</p>
+<table>
+<thead><tr>
+<th>Resolution</th>
+<th>Typical Bitrate</th>
+<th>Good for…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>360p</td>
+<td>0.5–1 Mbps</td>
+<td>Low-end mobile</td>
+</tr>
+<tr>
+<td>480p (SD)</td>
+<td>1–2 Mbps</td>
+<td>Mobile/tablet streaming</td>
+</tr>
+<tr>
+<td>720p (HD)</td>
+<td>2.5–4 Mbps</td>
+<td>Web HD</td>
+</tr>
+<tr>
+<td>1080p (Full HD)</td>
+<td>5–8 Mbps</td>
+<td>Standard desktop/TV</td>
+</tr>
+<tr>
+<td>4K (UHD)</td>
+<td>15–25 Mbps</td>
+<td>High-end devices</td>
+</tr>
+</tbody>
+</table>
+<blockquote><p>You can estimate file size from bitrate: 
+File Size (MB) = (Bitrate in Mbps × Duration in seconds) ÷ 8<br/>
+For example, a 10-minute 1080p video at 5 Mbps → 5 × 10 × 7.5 = 375 MB</p>
+</blockquote>
 <p><strong>VOD(Video on Demand)</strong> is videos that can be accessed on viewer request. Unlike live streaming, VODs are prerecorded programs. With VOD, viewers can watch content they enjoy as frequently as they like. They can also pause, rewind, and view additional content that was not previously available. Streaming is one of two ways to access Video On Demand. The other way is to permanently download video files to a device’s memory. VOD systems typically distribute media using internet connections, so good bandwidth is important for best results for viewers. Popular platforms include Netflix, Hulu, Disney, Amazon Prime Video and many others.</p>
 <p>Some of the most popular <strong>streaming protocols include RTMP, HLS, and WebRTC</strong>:</p>
 <ul>

@@ -1,10 +1,10 @@
-<h2><a href="https://github.com/yuanj82/yuanj.top/blob/master/content/posts/ATAC-seq分析流程.md">仓库源文</a>，<a href="https://yuanj.top/posts/w6k1s9n5">站点原文</a></h2>
-<p>ATAC-Seq 是“Assay for Transposase-Accessible Chromatin with high-throughput Sequencing”的缩写。 ATAC-Seq 方法依赖于使用高活性转座酶 Tn5 的下一代测序（NGS）文库的构建。将 NGS 接头连接到转座酶上，该转座酶可以使染色质断裂并同时将这些接头整合到开放的染色质区域中。构建的文库可通过 NGS 测序，并使用生物信息学分析具有可及或可访问染色质的基因组区域。</p>
+<h2><a href="https://github.com/imjiaoyuan/imjiaoyuan.github.io/blob/master/content/p/atac-seq-analysis-workflow.md">仓库源文</a>，<a href="https://yuanj.top/atac-seq-analysis-workflow">站点原文</a></h2>
+<p>ATAC-Seq 技术是"Assay for Transposase-Accessible Chromatin with high-throughput Sequencing"的缩写。 ATAC-Seq 方法依赖于使用高活性转座酶 Tn5 的下一代测序（NGS）文库的构建。将 NGS 接头连接到转座酶上，该转座酶可以使染色质断裂并同时将这些接头整合到开放的染色质区域中。构建的文库通过 NGS 测序，并使用生物信息学分析具有可及或可访问染色质的基因组区域。</p>
 &lt;!--more--&gt;
 
 <h2>ATAC-seq 概述</h2>
-<p>尽管 ATAC-seq 实验方法相对简单且稳定，但是专门为 ATAC-seq 测序数据开发的生物信息学分析软件却非常少。由于 ATAC-seq 和 ChIP-seq 数据的相似性较高，ChIP-seq 分析使用的软件一般也可用于 ATAC-seq 的分析，但是使用 ChIP-seq 软件分析得到的 ATAC-seq 结果尚未得到系统性的评估。</p>
-<p><img alt="" src="/images/202405031339613.png"/></p>
+<p>虽然 ATAC-seq 实验方法操作相对简单且结果稳定，但是专门为 ATAC-seq 测序数据开发的生物信息学分析软件却非常少。由于 ATAC-seq 和 ChIP-seq 数据的相似性较高，ChIP-seq 分析使用的软件一般也可用于 ATAC-seq 的分析，但是使用 ChIP-seq 软件分析得到的 ATAC-seq 结果尚未得到系统性的评估。</p>
+<p><img alt="" src="/images/20240503133961.jpg"/></p>
 <ul>
 <li>step1：质控</li>
 <li>step2：比对</li>
@@ -13,7 +13,7 @@
 <li>step5：差异分析</li>
 <li>step6：基序分析、通路分析、核小体占据率分析、和其他组学分析的整合</li>
 </ul>
-<p>上游的预处理部分与 RNA-seq 的差不多，可以参考我之前的文章：<a href="https://yuanj.top/posts/z6q5z7s5/">https://yuanj.top/posts/z6q5z7s5/</a></p>
+<p>上游的预处理部分与 RNA-seq 的差不多，可以参考我之前的文章：<a href="https://yuanj.top/p/rna-seq-analysis-learning/">https://yuanj.top/p/rna-seq-analysis-learning/</a></p>
 <h2>版本信息</h2>
 <ul>
 <li>成都理工大学超算平台 Red Hat 4.8.5-36</li>
@@ -50,21 +50,21 @@
 <li>macs2：进行 Peak Calling</li>
 <li>deeptools：计算基因组区段 reads 覆盖度</li>
 </ul>
-<p>先创建 conda 虚拟环境，安装所需要的软件，可以自行手动安装，也可以直接导入我的 conda 环境：</p>
-<pre><code class="lang-bash">git clone https://github.com/catuncle4/NGS-analysis.git
-cd NGS-analysis/environment
-cp .condarc ~/
-conda env create --file atac-seq-env.yml   # ATAC-seq
-</code></pre>
-<p>创建完成后激活环境就可以使用了：</p>
-<pre><code class="lang-bash">conda activate atac-seq
-</code></pre>
+<p>先创建 conda 虚拟环境，安装所需要的软件。</p>
 <h2>数据获取与预处理</h2>
 <p>从 NCBI SRA 数据库下载 SRR_Acc_List.txt 文件：</p>
-<p><img alt="" src="/images/202405031349988.png"/></p>
+<p><img alt="" src="/images/20240503134998.jpg"/></p>
 <p>后面的分析都可以基于这个文件进行批处理。</p>
-<p>使用 sratools 进行批量下载，下载比较慢，就用 nohup 挂在后台下载，自己可以做点别的事：</p>
-<pre><code class="lang-bash">nohup prefetch -O . $(&lt;SRR_Acc_List.txt) &amp;
+<p>使用 sra-tools 工具批量下载测序数据，下载比较慢，就用 nohup 挂在后台下载，自己可以做点别的事：</p>
+<pre><code class="lang-bash">#!/bin/bash
+mkdir -p sra fastqgz
+cat ./SRR_Acc_List.txt | while read id; do
+    mv -f "${id}/${id}.sra" ./sra/
+    rm -rf "${id}"
+done
+
+cd sra
+nohup fastq-dump --gzip --split-3 ./*.sra --outdir ../fastqgz
 </code></pre>
 <p>下载后的数据是放在一个个 SRRXXXXX 的文件夹里面的，我们用一个小脚本把它全部移动到一个 sra 文件夹便于处理：</p>
 <pre><code class="lang-bash">mkdir sra
@@ -156,7 +156,7 @@ done
 </code></pre>
 <ul>
 <li>-t INT：线程数，默认是 1</li>
-<li>-M：将 shorter split hits 标记为次优，以兼容 Picard’s markDuplicates 软件</li>
+<li>-M：将 shorter split hits 标记为次优，以兼容 Picard's markDuplicates 软件</li>
 <li>-p：若无此参数：输入文件只有 1 个，则进行单端比对；若输入文件有 2 个，则作为 paired reads 进行比对。若加入此参数：则仅以第 1 个文件作为输入（输入的文件若有 2 个，则忽略之），该文件必须是 read1.fq 和 read2.fa 进行 reads 交叉的数据</li>
 <li>-R STR：完整的 read group 的头部，可以用 '\t' 作为分隔符， 在输出的 SAM 文件中被解释为制表符 TAB. read group 的 ID，会被添加到输出文件的每一个 read 的头部</li>
 <li>-T INT：当比对的分值比 INT 小时，不输出该比对结果，这个参数只影响输出的结果，不影响比对的过程</li>
@@ -167,9 +167,14 @@ done
 <pre><code class="lang-bash">bwa index -a bwtsw Oryza_sativa.IRGSP-1.0.dna.toplevel.fa Oryza_sativa
 </code></pre>
 <p>批量进行比对：</p>
-<pre><code class="lang-bash">cat ./SRR_Acc_List.txt | while read id;
-do
-    bwa mem -v 3 -t 4 ./Oryza_sativa/Oryza_sativa.IRGSP-1.0.dna.toplevel.fa ./clean/${id}_1.fastq.gz ./clean/${id}_2.fastq.gz -o ./compared/${id}.sam
+<pre><code class="lang-bash">cat ./SRR_Acc_List.txt | while read id; do
+    bwa mem \
+        -v 3 \
+        -t 4 \
+        ./Oryza_sativa/Oryza_sativa.IRGSP-1.0.dna.toplevel.fa \
+        ./clean/${id}_1.fastq.gz \
+        ./clean/${id}_2.fastq.gz \
+        -o ./compared/${id}.sam
 done
 </code></pre>
 <p>比对后的结果会输出到 compared 文件夹。</p>
@@ -226,13 +231,13 @@ done
 </ul>
 <h2>deeptools 计算基因组区段 reads 覆盖度</h2>
 <p>deeptools 包含了很多的工具：</p>
-<p><img alt="" src="/images/202405031438011.png"/></p>
+<p><img alt="" src="/images/20240503143801.jpg"/></p>
 <p>这里我们主要使用的是 bamCoverage 和 computeMatrix。</p>
 <h3>bamCoverage</h3>
 <p>bamCoverage 利用测序数据比对结果转换为基因组区域 reads 覆盖度结果。可以自行设定覆盖度计算的窗口大小 (bin)。</p>
 <pre><code class="lang-bash">bamCoverage -b reads.bam -o coverage.bw
 </code></pre>
-<p><img alt="" src="/images/202405031445555.png"/></p>
+<p><img alt="" src="/images/20240503144555.jpg"/></p>
 <p>必须的参数：</p>
 <ul>
 <li>--bam, -b：要处理的 BAM 文件</li>
@@ -260,7 +265,7 @@ done
 done
 </code></pre>
 <p>这里就需要我们前面给 bam 文件创建的 samtools 索引，不然的话会报错。完成之后会输出一系列 bw 文件，这个文件可以导入到 <a href="https://igv.org/app/">IGV</a> 进行可视化：</p>
-<p><img alt="" src="/images/202405031501956.png"/></p>
+<p><img alt="" src="/images/20240503150195.jpg"/></p>
 <h3>computeMatrix</h3>
 <pre><code class="lang-bash">computeMatrix [-h] [--version]  ...
 </code></pre>
@@ -275,7 +280,7 @@ done
 </ul>
 <p>输出参数：</p>
 <ul>
-<li>--outFileName, -out, -o：用于保存“plotHeatmap”和“plotProfile”工具所需的 gzip 压缩矩阵文件的文件名</li>
+<li>--outFileName, -out, -o：用于保存"plotHeatmap"和"plotProfile"工具所需的 gzip 压缩矩阵文件的文件名</li>
 <li>--outFileNameMatrix：指定热图矩阵的名称</li>
 <li>--outFileSortedRegions：跳过零或最小/最大阈值后保存区域的文件名，文件中区域的顺序遵循所选的排序顺序</li>
 </ul>
@@ -315,7 +320,7 @@ done
 <p>计算完成之后绘制多个样本的折线图在同一个图内：</p>
 <pre><code class="lang-bash">plotProfile --dpi 720 -m TSS.gz -out TSS.pdf --plotFileFormat pdf --perGroup
 </code></pre>
-<p><img alt="" src="/images/202405031522518.png"/></p>
+<p><img alt="" src="/images/20240503152251.jpg"/></p>
 <p>这个图左边是前面绘制的两个热图+折线图，右边是前面绘制多个样本折线图在同一图内。</p>
 <h2>Chipseek 可视化 peak</h2>
 <p>R 包 ChIPseeker 主要是为了能对 ChIP-seq 数据进行注释与可视化，主要对 peak 位置及 peak 邻近基因的注释。然而，在之后对 ChIPseeker 的应用中，发现它不局限于 ChIP-seq，可用于其他的 peak（如 ATAC-seq，DNase-seq 等富集得到的）注释，甚至还可用于 long intergenic non-coding RNAs (lincRNAs) 的注释。该包功能强大之处还是在于可视化上。</p>
@@ -353,7 +358,7 @@ plotAnnoPie(RSV_peakAnno)
 peakAnno &lt;- lapply(peaks, annotatePeak, tssRegion = c(-3000, 3000), TxDb = spombe)
 plotAnnoBar(peakAnno)
 </code></pre>
-<p><img alt="" src="/images/202405031544179.png"/></p>
+<p><img alt="" src="/images/20240503154417.jpg"/></p>
 <h2>在染色体上可视化 peaks 的位置</h2>
 <p>这个使用 TBtools 来进行，先制作一个染色体长度文件：</p>
 <pre><code class="lang-txt">1   43270923
@@ -370,7 +375,7 @@ plotAnnoBar(peakAnno)
 12  27531856
 </code></pre>
 <p>然后使用 TBtools 的 circos 绘图工具，只把染色体长度文件导入：</p>
-<p><img alt="" src="/images/202405031547937.png"/></p>
+<p><img alt="" src="/images/20240503154793.jpg"/></p>
 <p>修改 macs2 输出文件中的 bed 文件，只保留染色体、开始位置、终止位置和值四列即可，如：</p>
 <pre><code>1   1074    1075    33.7137
 1   84253   84254   2.21489
@@ -379,9 +384,9 @@ plotAnnoBar(peakAnno)
 1   104876  104877  6.8855
 </code></pre>
 <p>将文件导入到 TBtools：</p>
-<p><img alt="" src="/images/202405031551451.png"/></p>
+<p><img alt="" src="/images/20240503155145.jpg"/></p>
 <p>然后改一下颜色、字体什么的进行一下简单的美化：</p>
-<p><img alt="" src="/images/202405031552775.png"/></p>
+<p><img alt="" src="/images/20240503155277.jpg"/></p>
 <p>到这里大致的流程基本上就完成了，还有一些分析就是视情况才做的了。</p>
 <h2>参考资料</h2>
 <ul>

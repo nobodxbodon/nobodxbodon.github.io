@@ -19,23 +19,14 @@
 <p>HTTP is an application protocol and used mostly for browsing the internet. HTTP itself can't be used to transport information to/from a remote end point. Instead it relies on an underlying protocol which in HTTP's case is TCP. TCP provides a reliable link between two computers (if packet get lost - it is re-transmitted). TCP itself rides on top of IP, which provides unified addressing to communicate between computers. Basically it means if you are communicating HTTP, you are doing it with TCP/IP underneath.</p>
 <p>Sockets are an API that most operating systems provide to be able to talk with the network at the transport layer. A socket API provided by the OS can be accessed using libraries in all programming languages. Plain sockets are more powerful and generic. They run over TCP/IP but they are not restricted to browsers or HTTP protocol. They could be used to implement any kind of communication, but you need to take care of all the lower-level details of a TCP/IP connection.</p>
 <p>WebSocket is another application level protocol over TCP protocol. A webSocket runs over a regular socket, but runs its own connection scheme and framing protocol on top of the regular socket.</p>
+<p>Btw, <a href="https://www.npmjs.com/package/partysocket">PartySocket</a> is a tiny abstraction on top of websockets that adds reconnections/buffering/resilience. Use it as a drop in replacement for your ws <code>import { WebSocket } from “partysocket”</code>.</p>
+<p>WebSockets are stateful, making them challenging to scale in distributed systems. Systems typically use:</p>
+<ul>
+<li>Consistent Hashing for Load Balancing – Ensures that a reconnecting client is routed to the correct server.</li>
+<li>Cross-Server Communication – Messages need to be passed between WebSocket servers to ensure continuity for users, regardless of which server they land on.</li>
+</ul>
 <blockquote><p>You must design your system for scale if you plan to load balance multiple WebSocket servers. Each client connects to one of your servers, where it then opens a persistent WebSocket connection. Because each server has only its own list of connected clients, messages passed to one server must be shared with the other servers somehow. Similarly, when you want to broadcast a message to all clients, all servers must receive and relay it. A typical way to solve this is to store messages in a shared database like Redis or pass messages between servers using a Publish/Subscribe framework like Kafka or RabbitMQ.</p>
 </blockquote>
-<p>The problem with the current WebSocket API is that there is no way to apply backpressure. When messages arrive faster than the <code>process()</code> method can handle them, the render process will either fill up memory by buffering those messages or become unresponsive due to 100% CPU usage. Chrome 124 introduces the <a href="https://developer.chrome.com/docs/capabilities/web-apis/websocketstream">WebSocket Stream API</a>. It gives you the power of streams, which means back pressure can be applied without any extra cost. Now if <code>process()</code> takes extra time, the next message will only be consumed once the pipeline is ready.</p>
-<pre><code class="lang-js">const wss = new WebSocketStream(WSS_URL);
-const {readable, writable} = await wss.opened;
-const reader = readable.getReader();
-const writer = writable.getWriter();
-
-while (true) {
-  const {value, done} = await reader.read();
-  if (done) {
-    break;
-  }
-  const result = await process(value);
-  await writer.write(result);
-}
-</code></pre>
 <h3>Redirections</h3>
 <p>In HTTP, redirection is triggered by a server sending a special redirect response to a request. Redirect responses have status codes that start with <code>3</code>, and a <code>Location</code> header holding the URL to redirect to. When browsers receive a redirect, they immediately load the new URL provided in the <code>Location</code> header. <strong>However, browsers always send a <code>GET</code> request to that new URL</strong>.</p>
 <p>The <code>301 (Moved Permanently)</code> status code indicates that the target resource has been assigned a new permanent URI. The client should always go to the new location. A user agent may change the request method from <code>POST</code> to <code>GET</code> for the subsequent request.</p>
@@ -59,6 +50,50 @@ while (true) {
 <p>Content security policy (CSP) is a multi-purpose browser feature that you can use to manage mixed content at scale. The <code>upgrade-insecure-requests</code> CSP directive instructs the browser to upgrade insecure URLs before making network requests. As with browser automatic upgrading, if the resource is not available over HTTPS, the upgraded request fails and the resource is not loaded. This maintains the security of your page.</p>
 <blockquote><p>The HTTP Strict-Transport-Security response header (often abbreviated as <code>HSTS</code>) informs browsers that the site should only be accessed using HTTPS, and that any future attempts to access it using HTTP should automatically be converted to HTTPS. This is more secure than simply configuring a HTTP to HTTPS (301) redirect on your server, where the initial HTTP connection is still vulnerable to a man-in-the-middle attack.</p>
 </blockquote>
+<h3>Chunked transfer encoding</h3>
+<p>In HTTP/1.1, use <code>transfer-encoding: chunked</code> in response header like below, and we could keep writing response <code>res.write()</code>, till we use <code>res.end()</code> to finish the streaming process.</p>
+<pre><code class="lang-js">res.writeHead(200, {
+  'Content-Type': 'text/html',
+  'Transfer-Encoding': 'chunked'
+});
+</code></pre>
+<p>Here’s what’s happening:</p>
+<ul>
+<li>Each chunk starts with its length in hexadecimal.</li>
+<li>The data follows the length, and the next chunk starts after a newline.</li>
+<li>The response ends with a zero-length chunk.</li>
+</ul>
+<p>Note that HTTP/2 specification explicitly forbids the use of the <code>Transfer-Encoding</code> header. HTTP/2 and later provide more efficient mechanisms for data streaming than chunked transfer. Usage of the header in HTTP/2 may likely result in a specific protocol error.</p>
+<pre><code class="lang-js">const http2 = require('http2');
+const fs = require('fs');
+
+const server = http2.createSecureServer({
+  key: fs.readFileSync('server.key'),
+  cert: fs.readFileSync('server.crt'),
+});
+
+server.on('stream', (stream, headers) =&gt; {
+  stream.respond({
+    ':status': 200,
+    'content-type': 'text/html',
+  });
+
+  stream.write('&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;head&gt;&lt;title&gt;HTTP/2 Streaming&lt;/title&gt;&lt;/head&gt;&lt;body&gt;');
+
+  setTimeout(() =&gt; {
+    stream.write('&lt;p&gt;First chunk of content streamed.&lt;/p&gt;');
+  }, 1000);
+
+  setTimeout(() =&gt; {
+    stream.write('&lt;p&gt;Final chunk of content streamed.&lt;/p&gt;');
+    stream.end('&lt;/body&gt;&lt;/html&gt;');
+  }, 2000);
+});
+
+server.listen(3000, () =&gt; {
+  console.log('HTTP/2 server running at https://localhost:3000/');
+});
+</code></pre>
 <h2>HTTP caching</h2>
 <p>The HTTP cache stores a response associated with a request and reuses the stored response for subsequent requests. Proper operation of the cache is critical to the health of the system.</p>
 <ul>

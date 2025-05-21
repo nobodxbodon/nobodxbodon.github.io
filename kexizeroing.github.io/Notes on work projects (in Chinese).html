@@ -96,8 +96,10 @@
 </ul>
 <p>The <code>DefinePlugin</code> allows you to create global constants that are replaced at compile time, commonly used to specify environment variables or configuration values that should be available throughout your application during the build process. For example, you might use it to define <code>process.env.NODE_ENV</code> as 'production' or 'development' which webpack will literally replace in your code during bundling.</p>
 <pre><code class="lang-js">new webpack.DefinePlugin({
-  'process.env.NODE_ENV': JSON.stringify('development')
-}),
+  'process.env.NODE_ENV': '"production"',
+  'process.env.BUILD_ENV': buildEnv ? `"${buildEnv}"`: '""',
+  'process.env.PLATFORM_ENV': platFormEnv ? `"${platFormEnv}"`: '""'
+})
 </code></pre>
 <h4>difference between <code>--watch</code> and <code>--hot</code></h4>
 <ul>
@@ -375,6 +377,7 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <li>iOS 方面，根据 App Store 审核指南，上架 App Store 的应用不允许使用自己的浏览器内核。如果 app 会浏览网页，则必须使用相应的 WebKit 框架和 WebKit Javascript。</li>
 <li>Android 方面，不限制应用使用自己的浏览器内核。安卓微信之前的浏览器为基于 WebKit 的 X5 浏览器，后为了和小程序的浏览器内核同构，大概 2020-05 从 X5 迁移到 XWeb，官方一般会有内核版本升级体验通告，比如<a href="https://developers.weixin.qq.com/community/develop/doc/0002c2167840006af8df3c94256001">2023-06 更新</a>：当前安卓微信 XWeb 开发版基于 111 新内核，现网仍基于 107 内核。</li>
 </ul>
+<p>vue vite 打包后白屏问题，推测就是 webview 版本太旧了，使用 <a href="https://github.com/vitejs/vite/tree/main/packages/plugin-legacy">@vitejs/plugin-legacy</a> 做兼容。它的内部使用 <code>@babel/preset-env</code> 以及 <code>core-js</code> 等一系列基础库来进行语法降级和 Polyfill 注入，以解决在旧版浏览器上的兼容性问题。<em>（默认情况下，Vite 的目标是能够支持原生 ESM script 标签、支持原生 ESM 动态导入 和 import.meta 的浏览器）</em></p>
 <blockquote><ol>
 <li>当小程序基于 WebView 环境下时，WebView 的 JS 逻辑、DOM 树创建、CSS 解析、样式计算、Layout、Paint 都发生在同一线程，在 WebView 上执行过多的 JS 逻辑可能阻塞渲染，导致界面卡顿（Chrome 的渲染进程是多线程的）。以此为前提，小程序同时考虑了性能与安全，采用了 AppService 和 WebView 的双线程模型。</li>
 <li>为了进一步优化小程序性能，在 WebView 渲染之外新增了一个渲染引擎 Skyline，拥有更接近原生渲染的性能体验。Skyline 创建了一条渲染线程来负责 Layout, Composite 和 Paint 等渲染任务，并在 AppService 中划出一个独立的上下文，来运行之前 WebView 承担的 JS 逻辑、DOM 树创建等逻辑。</li>
@@ -439,6 +442,10 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 </code></pre>
 <p>后续使用 <a href="https://github.com/AttoJS/vue-request">VueRequest</a>，管理请求状态，支持 SWR、轮询、错误重试、缓存、分页等常用功能。<code>useRequest</code> 接收一个 service 函数，service 是一个异步的请求函数，换句话说，还可以使用 axios 来获取数据，然后返回一个 Promise。<code>useRequest</code> 会返回 data、loading、error 等，它们的值会根据请求状态和结果进行修改。返回的 run 方法，可以手动触发 service 请求。</p>
 <p>Use <code>$fetch</code>, <code>useFetch</code>, or <code>useAsyncData</code> in Nuxt: <a href="https://masteringnuxt.com/blog/when-to-use-fetch-usefetch-or-useasyncdata-in-nuxt-a-comprehensive-guide">https://masteringnuxt.com/blog/when-to-use-fetch-usefetch-or-useasyncdata-in-nuxt-a-comprehensive-guide</a></p>
+<ul>
+<li>The <code>useFetch</code> composable is the best choice to load initial data once on the server. It prevents extra calls after hydration.</li>
+<li>The <code>$fetch</code> method is more direct for forms or user-triggered actions. It doesn’t store SSR data in the Nuxt payload and doesn’t automatically prevent re-fetching.</li>
+</ul>
 <p><strong>Preventing Duplicate Requests:</strong></p>
 <ol>
 <li>UI Blocking<ul>
@@ -468,6 +475,15 @@ async function makeRequest() {
   }
 }
 </code></pre>
+<h3>Chrome's <code>--remote-debugging-port=9222</code> feature</h3>
+<ol>
+<li>Launch Chrome with remote debugging: <code>google-chrome --remote-debugging-port=9222</code>. Chrome will start an internal HTTP and WebSocket server on port 9222.</li>
+<li>Go to <code>http://localhost:9222/json</code>, and you'll see JSON metadata for every open tab. Each tab has its own WebSocket debugger endpoint. If you connect to that using a WebSocket client, you can send and receive raw DevTools Protocol commands.</li>
+<li>Use Node.js with ws to control the tab. Use <code>webSocketDebuggerUrl</code> from the JSON to connect <code>new WebSocket('ws://localhost:9222/devtools/page/...');</code>.</li>
+</ol>
+<h4>Debugging Node.js with <code>--inspect-brk</code></h4>
+<p><a href="https://www.builder.io/blog/debug-nodejs">https://www.builder.io/blog/debug-nodejs</a></p>
+<p>Launch your Node.js process using the <code>--inspect-brk</code> flag (<code>node server.js --inspect-brk</code>). Now, open up any Edge or Chrome dev tools window and click the little green Node.js logo button. A new instance of DevTools will open and connect to the node process.</p>
 <h3>阿里云 CDN</h3>
 <p>阿里云 CDN 对于文件是否支持缓存是以 <code>X-Cache</code> 头部来确定，缓存时间是以 <code>X-Swift-CacheTime</code> 头部来确认。</p>
 <ul>
@@ -627,3 +643,69 @@ https://registry.npmmirror.com/antd/latest/files
 </ul>
 </li>
 </ol>
+<h4>展厅项目架构</h4>
+<p>打包遥控器页面 + 一台 server 端主机 + 一台 client 端主机</p>
+<pre><code>"winserver": "npm run build:web &amp;&amp; cross-env PLATFORM_ENV=server npm run pack:windows",
+"winclient": "cross-env PLATFORM_ENV=client npm run pack:windows",
+</code></pre>
+<p><strong>遥控器</strong> 就是常规的页面，一个独立的 SPA 使用 webpack 构建产出放在 <code>dist/web</code> 目录下 (打包后在 <code>path.join(process.resourcesPath, 'app.asar.unpacked', 'web')</code>)。它要建立 ws 连接，角色是 REMOTE：</p>
+<ul>
+<li>接收 hello 指令，把 client 5-8 屏加进屏幕列表中</li>
+<li>接收 guest 指令，获取到嘉宾数据，可以显示主嘉宾</li>
+<li>接收 scene 指令，激活屏变化，更新当前屏的指令集</li>
+<li>发送 ws 消息，包括 开启、重启、关闭、选择屏幕、选择指令</li>
+</ul>
+<p><strong>server 端主机</strong>启动一个 ws 服务 (<code>new WebSocketServer({ port })</code>)，接收遥控器和 client 端发送过来的消息，如果是 client 端消息，需要转发给遥控器。如果是遥控器通知开启、关闭等，需要通过 <code>emitter.emit</code> 传递处理，并且转发给另一台主机 client 端。上下文 context 中保存着当前激活的屏幕和之前激活的屏幕序号。此外，它还启动了一个 express 服务，作为遥控器的 web 服务端，处理页面展示和嘉宾图片上传。</p>
+<pre><code class="lang-js">wss.clients.forEach((client) =&gt; {
+  if (client.role === RemoteClientRoleMap.CLIENT) {
+    // ...
+    client.send(msg);
+  }
+})
+</code></pre>
+<p><strong>client 端主机</strong>建立 ws 连接 (<code>new WebSocket(wssURL)</code>)，角色是 CLIENT，接收启动、重启、关闭、激活屏幕、指令控制等消息，都会通过 <code>emitter.emit</code> 发送给 <code>ipc-exhibition-hall</code> 这个 service，它会在主进程的入口文件中被注册上。</p>
+<p><strong>主进程入口</strong></p>
+<pre><code class="lang-js">// 根据安装包配置参数 确定是否是server端
+// isServer = process.env.PLATFORM_ENV === 'server';
+if (isServer) {
+  remoteWSServer.start();
+  // 方便发送消息
+  global.rain.remoteWSServer = remoteWSServer;
+} else {
+  global.rain.remoteWSClinet = remoteWSClinet;
+
+  setTimeout(()=&gt;{
+    remoteWSClinet.startConnect();
+  }, 1000)
+}
+</code></pre>
+<p><strong>通信服务 ipc-exhibition-hall 文件</strong></p>
+<ul>
+<li>接收开启、重启、关闭等 emitter 的事件，使用 electron 内部的 <code>app.relaunch</code>，窗体展示或关闭等方法。</li>
+<li>接收遥控器激活屏幕、操作指令等，给指定窗体发送 IPC 消息。（给当前屏发送激活消息、给上一屏发送取消激活消息）</li>
+<li>处理跨屏幕的 IPC 消息，比如学生作答反馈给老师、语音识别结果发送给学生屏幕展示。</li>
+<li>加载每个屏幕对应的窗体，窗体的 x 坐标由 <code>width * index</code> 计算得到，<code>index</code> 根据是第几个屏幕配置。</li>
+</ul>
+<pre><code class="lang-js">ipcMain.on('teaching-screen-ready', async (event, data) =&gt; {
+  let index = 1;
+
+  if (config &amp;&amp; config.DisplaysEnable) {
+    displaysEnable = config.DisplaysEnable;
+  }
+
+  if (displaysEnable[DisplaySerialNumber.SIXTH_DISPLAY]) {
+    studentWin.show({ index });
+    index += 1;
+  }
+});
+
+// active, launch, restart, close, ExecRemoteCommand...
+emitter.on('xxx', (data) =&gt; {
+  // ...
+  if (isServer) {
+    exhibitionHallWinMap[activeIndex]?.send('message-from-process', data);
+  } else {
+    exhibitionHallWinMap[activeIndex]?.send('message-from-process', data);
+  }
+})
+</code></pre>

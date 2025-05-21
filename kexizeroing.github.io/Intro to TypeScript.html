@@ -128,7 +128,8 @@ import { type xyz } from "xyz";
 <p>By the way, <code>jsconfig.json</code> is a descendant of <code>tsconfig.json</code>. The presence of <code>jsconfig.json</code> file in a directory indicates that the directory is the root of a JavaScript project.</p>
 <h2>Basic Static Types</h2>
 <p>TypeScript brings along static types to the JavaScript language. <strong>TypeScript's types don't exist at runtime.</strong> They're only used to help you catch errors at compile time.</p>
-<p><a href="https://www.totaltypescript.com/ts-reset">ts-reset</a> from Total TypeScript is a 'CSS reset' for TypeScript, improving types for common JavaScript API's. For example, <code>.json()</code> and <code>JSON.parse</code> return unknown, <code>.filter(Boolean)</code> behaves exactly how you expect.</p>
+<blockquote><p><a href="https://www.totaltypescript.com/ts-reset">ts-reset</a> from Total TypeScript is a 'CSS reset' for TypeScript, improving types for common JavaScript API's. For example, <code>.json()</code> and <code>JSON.parse</code> return unknown, <code>.filter(Boolean)</code> behaves exactly how you expect.</p>
+</blockquote>
 <pre><code class="lang-ts">let isAwesome: boolean = true;
 let name: string = 'Chris';
 let decimalNumber: number = 42;
@@ -220,20 +221,13 @@ interface Animal {
   color?: string; // optional property
 }
 
-let dog: Animal;
-dog = {
-  kind: 'mammal',
-  weight: 10,
-};
-
 // Type Alias
-// `interface` and `type` are compatible here, because their shape (structure) is the same.
+// `interface` and `type` are compatible here, because their shape is the same.
 type Animal = {
   kind: string;
   weight: number;
   color?: string;
 };
-let dog: Animal;
 
 // Union Type (a type can be one of multiple types, type A = X | Y)
 // Narrow down the types of values: typeof, truthiness, instanceof...
@@ -255,7 +249,8 @@ type Employee = {
 };
 let person: Student &amp; Employee;
 
-// Interfaces are faster than type intersections.
+// Interfaces using `extends` are faster than type intersections (can cache)
+
 // Merge incompatible types
 interface User1 {
   age: number;
@@ -269,7 +264,35 @@ interface User extends User1 {  // raise an error
   age: string;
 }
 
-// `typeof` operator takes any object and extracts the shape of it.
+// Index signatures in types vs interfaces
+interface KnownAttributes {
+  x: number;
+  y: number;
+}
+const knownAttributes: KnownAttributes = { x: 1, y: 2 };
+
+type RecordType = Record&lt;string, number&gt;;
+const oi: RecordType = knownAttributes;  // Error (interface could later be extended)
+// Index signature for type 'string' is missing in type 'KnownAttributes'.
+
+type KnownAttributes = {
+  x: number;
+  y: number;
+};
+const knownAttributes: KnownAttributes = { x: 1, y: 2 };
+
+type RecordType = Record&lt;string, number&gt;;
+const oi: RecordType = knownAttributes;  // works
+</code></pre>
+<p><strong>Summary of Type vs Interface:</strong></p>
+<ul>
+<li>Interfaces can't express unions or mapped types. Type aliases can express any type.</li>
+<li>Interfaces can use <code>extends</code>, types can't.</li>
+<li>When you're working with objects that inherit from each other, use interfaces. <code>extends</code> makes TypeScript's type checker run slightly faster than using <code>&amp;</code>.</li>
+<li>Interfaces with the same name in the same scope merge their declarations.</li>
+<li>Type aliases have an implicit index signature of <code>Record&lt;PropertyKey, unknown&gt;</code>, but interfaces don't.</li>
+</ul>
+<pre><code class="lang-ts">// `typeof` operator takes any object and extracts the shape of it.
 // It is not the same as the `typeof` operator used at runtime
 const albumSales = {
   "Kind of Blue": 500,
@@ -346,9 +369,17 @@ const albumAwards: Record&lt;string, boolean&gt; = {};
 type PngFile = `${string}.png`;
 let myImage: PngFile = "my-image.png";
 
+type Headers = {
+  Authorization: `Bearer ${string}`;
+}
+
 type ColorShade = 100 | 200 | 300;
 type Color = "red" | "blue" | "green";
 type ColorPalette = `${Color}-${ColorShade}`;
+
+// The 'string &amp; {}' trick (loose autocomplete)
+type ModelNames = 'a' | 'b' | 'c' | (string &amp; {});
+const model: ModelNames = 'a';  // autocomplete and can pass in any string
 </code></pre>
 <p>It's worth noting the similarities between <code>Exclude/Extract</code> and <code>Omit/Pick</code>. A common mistake is to think that you can <code>Pick</code> from a union, or use <code>Exclude</code> on an object.</p>
 <pre><code class="lang-ts">// Exclude/Extract - union (members)
@@ -371,6 +402,7 @@ type DistributiveOmit&lt;T, K extends PropertyKey&gt; = T extends any
 
 type Distributive = DistributiveOmit&lt;Union, 'c'&gt;; // Omit&lt;A, "c"&gt; | Omit&lt;B, "c"&gt;
 </code></pre>
+<p>When you're working with React and TypeScript, you may ask how do I figure out the type of a component's props? How do I get all the types that a div or span accepts? The answer is in a single place: <code>ComponentProps</code>.</p>
 <pre><code class="lang-tsx">// https://www.totaltypescript.com/react-component-props-type-helper
 import { ComponentProps } from "react"
 
@@ -767,13 +799,32 @@ type User = z.infer&lt;typeof User&gt;;
 // We can use this type to tell `react-hook-form` what our data should look like.
 type FormSchemaType = z.infer&lt;typeof formSchema&gt;;
 </code></pre>
+<pre><code class="lang-js">// URL parameter validation via Zod (use Zod to validate runtime inputs)
+const productIdSchema = z.coerce.number().positive();
+
+const searchParams = new URLSearchParams(window.location.search);
+const productIdParam = searchParams.get("productId");
+
+if (productIdParam) {
+  const result = productIdSchema.safeParse(productIdParam);
+  if (result.success) {
+    const productId = result.data; // This will be a number
+    console.log("Valid URL parameter:", productId);
+  } else {
+    console.error("Invalid URL parameter:", result.error);
+  }
+}
+</code></pre>
 <blockquote><p><a href="https://github.com/fabian-hiller/valibot">Valibot</a> is very similar to Zod, helping you validate data easily using a schema. The biggest difference is the modular design and the ability to reduce the bundle size to a minimum.</p>
+<p><a href="https://github.com/arktypeio/arktype">ArkType</a> is a TypeScript-first runtime validation library designed to offer concise, composable, and powerful type definitions with zero dependencies, optimized from editor to runtime.</p>
 <p>JSON Schema is a declarative language for defining structure and constraints for JSON data.</p>
 <ul>
 <li>Zod to JSON Schema: <a href="https://github.com/StefanTerdell/zod-to-json-schema">https://github.com/StefanTerdell/zod-to-json-schema</a></li>
 <li>JSON Schema to Zod: <a href="https://github.com/StefanTerdell/json-schema-to-zod">https://github.com/StefanTerdell/json-schema-to-zod</a></li>
 </ul>
 </blockquote>
+<p>&lt;br&gt;
+&lt;img alt="izod-and-arktype" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/zod-and-arktype.png" width="600"&gt;</p>
 <h2>Adding Type Check to JavaScript</h2>
 <p>TypeScript provides code analysis for JavaScript and VS Code gives us TypeScript out of the box (TypeScript language server). With the addition of <code>//@ts-check</code> as the very first line in our JavaScript file, TypeScript became active and started to add red lines to code pieces that just don’t make sense.</p>
 <p><a href="https://deno.com/blog/document-javascript-package">JSDoc</a> is a way to annotate JavaScript code using comments. JSDoc comments are any block comments that begin with <code>/**</code> and end with <code>*/</code> that precede a block of code. The comments can span multiple lines. Each line should start with <code>*</code> and should be indented by one space. JSDoc supports a variety of tags that can be used to provide additional information about your symbols, such as <code>@param</code> for parameters, <code>@returns</code> for the return value, or <code>@typeParam</code> for type parameters. TypeScript uses this annotations to get more information on our intended types.</p>
@@ -804,73 +855,3 @@ const storage = {
  */
 function doStuff(storage) {}
 </code></pre>
-<h2>Set up a Node server with TypeScript in 2024</h2>
-<pre><code class="lang-sh"># install dev dependencies
-npm i -D typescript ts-node @types/node
-
-# initialize TypeScript
-npx tsc --init
-</code></pre>
-<pre><code class="lang-json">{
-  "name": "my-node-app",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "build": "tsc",
-    "dev": "node --env-file=.env --watch -r ts-node/register src/index.ts",
-    "test": "echo \"Error: no test specified\" &amp;&amp; exit 1"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.17",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
-  },
-  "engines": {
-    "node": "&gt;=20.6.0"
-  }
-}
-</code></pre>
-<blockquote><p>Make sure you’re using Node &gt;=20.6 — it’s required for some of the flags used in this setup. The <code>--watch</code> flag was added in Node v18.11.0. The <code>--env-file</code> flag was added in Node v20.6.0.</p>
-</blockquote>
-<pre><code class="lang-js">// testing source code
-import { describe, it } from "node:test";
-import assert from "node:assert";
-
-describe("test ...", () =&gt; {
-  it('should ...', () =&gt; {
-    assert.strictEqual(1, 1);
-  });
-});
-
-// watching source code
-"node --watch index.js"
-"node --watch-path=./src --watch-path=./tests index.js"
-
-// styling output
-import { styleText } from 'node:util'
-
-const redText = styleText('red', 'I’m a red text')  
-console.log(redText)
-
-const blackWithGreenBg = styleText(['black', 'bgGreen'], 'I’m green with a black background')  
-console.log(blackWithGreenBg)
-</code></pre>
-<p>How to run ts files from command line? There is <a href="https://github.com/TypeStrong/ts-node">ts-node</a> that will compile the code and REPL for node.js: <code>npx ts-node src/foo.ts</code>. <code>tsc</code> writes js to disk. <code>ts-node</code> doesn't need to do that and runs ts on the fly. But it's not typechecking your code. So we recommend to type check your code first with <code>tsc</code> and then run it with <code>ts-node</code> before shipping it.</p>
-<p>CLI tools like <a href="https://github.com/privatenumber/tsx">tsx</a> and <a href="https://github.com/unjs/jiti">jiti</a> offer a seamless experience for running TypeScript and ESM code without requiring additional configuration.</p>
-<blockquote><p>How does <code>tsx</code> compare to <code>ts-node</code>?</p>
-<ul>
-<li><code>tsx</code> works out of the box without needing a <code>tsconfig.json</code> file, making it easy for beginners.</li>
-<li><code>tsx</code> can be used without installation (via <code>npx tsx ./script.ts</code>) and comes as a single binary with no peer dependencies. <code>ts-node</code> requires installation of TypeScript or SWC as peer dependencies.</li>
-<li><code>tsx</code> uses esbuild for fast compilation and does not perform type checking. <code>ts-node</code> uses the TypeScript compiler by default, with an option to use the SWC compiler for faster performance.</li>
-</ul>
-</blockquote>
-<p>For lightweight support to enable runtime TypeScript in Node.js, you can use the built-in support for <a href="https://nodejs.org/api/typescript.html#type-stripping">type stripping</a>. By default Node.js will execute only files that contain no TypeScript features that require transformation, such as enums or namespaces. Node.js will replace inline type annotations with whitespace, and no type checking is performed. Node 23 will be able to run TypeScript files without any extra configuration <em>(unflagging <code>--experimental-strip-types</code>)</em>.</p>
-<ul>
-<li>Create an <code>index.ts</code> file containing TS syntax. Enums and namespaces are not supported by default.</li>
-<li>Run node <code>index.ts</code> with no further flags.</li>
-<li>Node will strip out the types using a version of swc, then run the resulting code.</li>
-<li>Node will not typecheck your files when it runs them.</li>
-</ul>
-<blockquote><p>In TypeScript 5.8, the flag <code>--erasableSyntaxOnly</code> marks enums, namespaces and class parameter properties as errors. These pieces of syntax are not considered erasable. "Erasable" syntax means that the syntax can be deleted without the runtime behaviour being affected.</p>
-</blockquote>
