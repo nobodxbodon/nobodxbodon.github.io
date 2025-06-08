@@ -1,0 +1,46 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-05-05-CLIPS 模拟生态0.5：求最近；取属性、查事实等函数.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/05/05/CLIPS-模拟生态0.5：求最近；取属性、查事实等函数">站点原文</a></h2>
+<h2>取最近目标</h2>
+<p><a href="https://zhuanlan.zhihu.com/p/1900859458827026489">之前</a> 选取食物时并未取最短距离。开始在想怎么写按照属性找最小值的循环，还要遍历事实列表。后找到<a href="https://groups.google.com/g/clipsesg/c/5GkIczCPFxg/m/zmvUbpFnxiUJ">此帖</a>，于是：</p>
+<p>在<code>觅食</code>规则中添加如下条件：</p>
+<pre><code>?最近食物 &lt;- (食物 ... (x ?最近位置))
+
+(not (食物 (x ?其他位置&amp;:(&lt; (取距离 ?其他位置 ?个体位置) (取距离 ?最近位置 ?个体位置)))))
+</code></pre>
+<p>即：「有某个食物，其他食物的距离没有比它的近」。这个实现思路相比手写循环比较距离更接近业务一些。</p>
+<h2>加调试开关</h2>
+<p>在初始化时内置事实：</p>
+<pre><code>(deffacts 运行环境
+  (调试 TRUE))
+</code></pre>
+<p>并在<code>显示详情</code>规则中加条件<code>(调试 TRUE)</code>即可。</p>
+<h2>终于找到如何取事实的属性值</h2>
+<p>类似根据struct地址取值：fact-slot-value，于是把显示提取到功用，不需置于业务部分：</p>
+<pre><code>(deffunction 显示 (?首个)
+  (print (fact-slot-value ?首个 速度) " "))
+</code></pre>
+<p>用户手册（user guide）中居然没有提此函数，好奇是有其他的选择或者推荐方法吗？</p>
+<h2>报错很大改进空间</h2>
+<p>代码段：</p>
+<pre><code>(deffunction 取距离 (位置1 位置2)
+  (abs (- 位置1 位置2)))
+</code></pre>
+<p>语法错误如下：</p>
+<pre><code>[PRNTUTIL2] 功用.clp, Line 14: Syntax Error:  Check appropriate syntax for parameter list.
+
+ERROR:
+(deffunction MAIN::取距离
+   (位置1
+</code></pre>
+<p>原因是函数形参必须问号开头：</p>
+<pre><code>(deffunction 取距离 (?位置1 ?位置2)
+  (abs (- ?位置1 ?位置2)))
+</code></pre>
+<p>有一说一，参考手册 P371~409 近四十页列出了所有错误信息、解释和例子，很不错！</p>
+<h2>查询事实</h2>
+<p>发现了按条件查询的函数，像 SQL 的 select，不需自行逐个计数了：</p>
+<pre><code>(deffunction 事实个数 (?模版)
+  (length$ (find-all-facts ((?各事实 ?模版)) TRUE)))
+</code></pre>
+<p>还有 any-factp（有否满足条件的fact，这个命名里的p不知何意）find-fact 等。</p>
+<h2>OO特性待研究</h2>
+<p>下面要添加狼、羊、草等类型，虽然可以添加个「物种」属性实现，仍打算有空看看 OO 相关章节。看文档说它同时支持多种范式，但感觉事实（Fact）已经有对象的味道。看看结合的多自然吧。</p>
