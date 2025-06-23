@@ -235,6 +235,7 @@ function App() {
     queryFn: () =&gt; fetch(...).then(res =&gt; res.json()),
   })
 
+  // const queryClient = useQueryClient()
   const newPostMutation = useMutation({
     mutationFn: async (newTitle) =&gt; {
       const response = await fetch(...)
@@ -242,7 +243,7 @@ function App() {
     },
     onSuccess: (data) =&gt; {
       // update the cache
-      queryClient.invalidateQueries(['post'])
+      queryClient.invalidateQueries({ queryKey: ['post'] })
     }
   })
 
@@ -259,11 +260,11 @@ function App() {
 }
 </code></pre>
 <p>To manage client state in a React app, we have lots of options available, starting from the built-in hooks like <code>useState</code> and <code>useReducer</code>, all the way up to community maintained solutions like redux or zustand. But what are our options for managing server state in a React app? Historically, there weren't many. That is, until React Query came along.</p>
-<p>While React Query goes very well with data fetching, a better way to describe it is as an async state manager that is also acutely aware of the needs of server state. In fact, React Query doesn't fetch any data for you. You provide it a promise (whether from fetch, axios, graphql, etc.), and React Query will then take the data that the promise resolves with and make it available wherever you need it throughout your entire application.</p>
+<p>A better way to describe React Query is as an async state manager that is also acutely aware of the needs of server state. In fact, React Query doesn't fetch any data for you. You provide it a promise (whether from fetch, axios, graphql, etc.), and React Query will then take the data that the promise resolves with and make it available wherever you need it throughout your entire application.</p>
 <blockquote><p>A common mistake people do is try to combine useEffect and useQuery. useQuery already handles the state for you. If you're using a useEffect to somehow manage what you get from useQuery, you're doing it wrong.</p>
 </blockquote>
-<p><code>staleTime</code> is the duration until a query transitions from fresh to stale. As long as the query is fresh, data will always be read from the cache only - no network request will happen. If the query is stale (which per default is: instantly), <strong>you will still get data from the cache, but a background refetch can happen</strong>.</p>
-<p>As long as a query is being actively used, the cached data will be kept in memory. What about inactive queries? <code>gcTime</code> is the duration until inactive queries will be removed from the cache. This defaults to 5 minutes, which means that if a query is not being used for 5 minutes, the cache for that query will be cleaned up.</p>
+<p>The library operates on well-chosen defaults. <code>staleTime</code> is the duration until a query transitions from fresh to stale. As long as the query is fresh, data will always be read from the cache only - no network request will happen. If the query is stale (which per default is: instantly), <strong>you will still get data from the cache, but a background refetch can happen</strong>.</p>
+<p>As long as a query is being actively used, the cached data will be kept in memory. What about inactive queries? <code>gcTime</code> is the duration until inactive queries will be removed from the cache. This defaults to 5 minutes, which means that if a query is not being used for 5 minutes, the cache for that query will be cleaned up. Queries transition to the inactive state as soon as there are no observers registered, so when all components which use that query have unmounted.</p>
 <blockquote><ul>
 <li><code>staleTime</code>: How long before data is considered stale, when should revalidation happen? (default: 0)</li>
 <li><code>gcTime</code>: How long before inactive data is garbage collected, when should the cache be cleared? (default: 5 minutes)</li>
@@ -283,11 +284,33 @@ function App() {
 // the data is removed from cache
 // If they return within 5 minutes, the cached data is still there!
 </code></pre>
-<p>Query keys are reactive. When a key changes, React Query knows it needs fresh data. You don't manually trigger refetches, you just change the key, and React Query handles the rest. Your UI becomes a reflection of your query keys.</p>
+<p>If you see a refetch that you are not expecting, it is likely because you went to a different browser tab, and then came back to your app. React Query is doing a <code>refetchOnWindowFocus</code>, and data on the screen will be updated if something has changed on the server in the meantime.</p>
+<p>The <code>enabled</code> option is a very powerful one that can be used in Dependent Queries—queries depend on previous ones to finish before they can execute. To achieve this, it's as easy as using the <code>enabled</code> option to tell a query when it is ready to run.</p>
+<pre><code class="lang-js">export const useContactDetails = (contactId: string | undefined) =&gt;
+  useQuery({
+    queryKey: ["contacts", contactId],
+    queryFn: () =&gt; getContact(contactId!),
+    enabled: !!contactId,
+  });
+</code></pre>
+<p>For most queries <code>const { isPending, isError, data, error } = useQuery()</code>, it's usually sufficient to check for the <code>isPending</code> state, then the <code>isError</code> state, then finally, assume that the data is available and render the successful state.</p>
+<ul>
+<li><code>isPending</code> or <code>status === 'pending'</code>: If there's no cached data and no query attempt was finished yet.</li>
+<li><code>isFetching</code> is true whenever the <code>queryFn</code> is executing, which includes initial pending as well as background refetches.</li>
+<li><code>isLoading</code> Is true whenever the first fetch for a query is in-flight. Is same as <code>isFetching &amp;&amp; isPending</code>.</li>
+</ul>
+<p>Query keys are reactive. When a key changes, React Query knows it needs fresh data. You don't manually trigger refetches, you just change the key, and React Query handles the rest. Your UI becomes a reflection of your query keys. <em>(I don't think I have ever passed a variable to the <code>queryFn</code> that was not part of the <code>queryKey</code>)</em></p>
 <pre><code class="lang-js">function TodoList({ filter }) {
+  const queryClient = useQueryClient();
+
   const { data } = useQuery({
     queryKey: ["todos", filter],
     queryFn: () =&gt; fetchTodos(filter),
+    // To prevent loading state when you switch for the first time,
+    // we can pre-fill the newly created cache entry with `initialData`.
+    initialData: () =&gt; {
+      return queryClient.getQueryData(['todos', 'all']);
+    },
   });
 }
 
@@ -352,6 +375,18 @@ console.log('Transformation complete. Output written to example.js');
 <h3>Oxc - The JavaScript Oxidation Compiler</h3>
 <p>Oxc is building a parser, linter, formatter, transpiler, minifier, resolver ... all written in Rust. This project shares the same philosophies as Biome. JavaScript tooling could be rewritten in a more performant language.</p>
 <p><a href="https://oxc-project.github.io/docs/guide/usage/linter.html">Oxlint</a> is a JavaScript linter designed to catch erroneous or useless code without requiring any configurations by default. It is generally available at December 12, 2023.</p>
+<h3>Rolldown - Fast Rust-based bundler</h3>
+<p><a href="https://rolldown.rs">Rolldown</a> is a Rust-based next-generation bundler with Rollup-compatible API. Oxc acts as foundational layer for Rolldown, providing the necessary building blocks for efficient JavaScript and TypeScript processing.</p>
+<p>Rolldown is primary designed to serve as the underlying bundler in Vite, with the goal to replace esbuild and Rollup (which are currently used in Vite as dependencies) with one unified build tool. Although designed for Vite, Rolldown is also fully capable of being used as a standalone, general-purpose bundler. It can serve as a drop-in replacement for Rollup in most cases.</p>
+<blockquote><ol>
+<li><p>A deep analysis on why bundlers are still needed: <a href="https://rolldown.rs/guide/in-depth/why-bundlers">https://rolldown.rs/guide/in-depth/why-bundlers</a></p>
+</li>
+<li><p>Try out the Rolldown-powered Vite today by using the <a href="https://voidzero.dev/posts/announcing-rolldown-vite">rolldown-vite</a> package instead of the default vite package. It is a drop-in replacement, as Rolldown will become the default bundler for Vite in the future.</p>
+</li>
+</ol>
+</blockquote>
+<p><a href="https://tsdown.dev">tsdown</a> is built on top of Rolldown. While Rolldown is a powerful and general-purpose tool, tsdown is optimized specifically for building libraries. It includes features like automatic TypeScript declaration generation and multiple output formats.</p>
+<p><code>tsdown</code> was heavily inspired by <code>tsup</code>, and even incorporates parts of its codebase. While <code>tsup</code> is built on top of esbuild, <code>tsdown</code> leverages the power of Rolldown to deliver a faster and more powerful bundling experience.</p>
 <h3>Biome - Toolchain of the web</h3>
 <ul>
 <li>Biome is a fast formatter that scores 96% compatibility with Prettier.</li>

@@ -24,8 +24,111 @@ Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ=
 <p>基础认证可以把账号密码加在 url 里，这样就不会弹出询问框了，但这不是一种安全的形式，据说新版的 Chrome 已经禁用了这种形式。</p>
 <pre><code>https://username:password@www.example.com/
 </code></pre>
-<p>退出登录时，只需要服务器响应一个 401 或用 ajax 故意发送一个错误的账号密码就可以的了。</p>
+<p>退出登录时，只需要服务器响应一个 401 或用 ajax 故意发送一个错误的账号密码 或者 在浏览器的地址栏故意输入错误的账号密码（但下次登录时要记得检查url里有没有错误的账号） 就可以的了。</p>
 <p>基础认证最好配合 HTTPS ，如果没有 HTTPS 只要随便抓个包就能知道账号密码。</p>
+<p>用于退出登录的 js</p>
+<pre><code class="lang-js">// 用这样的方式退出登录，需要刷新一次才可以重新登录，不然会保留错误的用户名导致一致登录失败
+(function() {
+    var xmlhttp;
+    if (window.XMLHttpRequest) xmlhttp = new XMLHttpRequest();
+    else xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");
+    xmlhttp.onreadystatechange = function() {
+        if (xmlhttp.readyState == 4) {
+            location.reload();
+        }
+    }
+    xmlhttp.open("GET", location.origin, true);
+    xmlhttp.setRequestHeader("Authorization", "Basic YXNkc2E6");
+    xmlhttp.send();
+    return false;
+})()
+</code></pre>
+<h3>基本认证的 apache 配置</h3>
+<pre><code># Apache/2.4.62
+# mod_auth_basic mod_auth_digest mod_authn_file mod_authn_core mod_authz_core mod_authz_user 需要启用这几个模块
+&lt;VirtualHost localhost-auth-basic.com:80&gt;
+    ServerAdmin webmaster@dummy-host.example.com
+    DocumentRoot "${SRVROOT}/htdocs"
+    ServerName localhost-auth-basic.com
+    ServerAlias localhost-auth-basic.com
+
+    &lt;Location "/"&gt;
+        # 禁止使用 .htaccess 文件来覆盖当前目录下的 Apache 设置
+        AllowOverride None
+        # Indexes：当没有 index.html 等默认文件时显示目录列表。FollowSymLinks：允许跟随符号链接。
+        Options Indexes FollowSymLinks
+
+        # 基本认证对话框中显示的提示信息
+        AuthName "用户名"
+        # 认证类型为 HTTP Basic 认证
+        AuthType Basic
+        # 指定用户密码文件的位置
+        # 这几项都是有效的，如果填相对目录，那么是相对服务器根目录
+        # AuthUserFile .passwd
+        # AuthUserFile "${SRVROOT}/.passwd"
+        # AuthUserFile "/etc/apache2/.passwd"
+        AuthUserFile "./.passwd"
+        # AuthBasicFake demo demopass
+        # 要求访问者必须提供有效的用户名和密码
+        Require valid-user
+    &lt;/Location&gt;
+
+    &lt;IfModule dir_module&gt;
+        DirectoryIndex index.html index.php
+    &lt;/IfModule&gt;
+
+    ErrorLog "logs/localhost-auth-basic.com-error.log"
+    CustomLog "logs/localhost-auth-basic.com-access.log" common
+&lt;/VirtualHost&gt;
+</code></pre>
+<p>htpasswd 的使用例子</p>
+<pre><code>创建用户文件并添加第一个用户，如果文件已存在会覆盖已存在的文件
+htpasswd -c -B .passwd user1
+
+添加新用户
+htpasswd /path/to/.htpasswd username
+
+修改用户密码
+htpasswd /path/to/.htpasswd username
+
+使用 bcrypt 加密
+htpasswd -B /path/to/.htpasswd username
+
+删除用户
+htpasswd -D /path/to/.htpasswd username
+</code></pre>
+<h3>用 php 实现的基本认证例子</h3>
+<pre><code class="lang-php">$userLists = [
+    'qwe' =&gt; '123',
+];
+
+if (!isset($_SERVER['PHP_AUTH_USER'])) {
+    header('WWW-Authenticate: Basic realm="git auth"');
+    header('HTTP/1.0 401 Unauthorized');
+    echo 'Authorization Required.';
+    exit;
+}
+
+$PHP_AUTH_USER = $_SERVER['PHP_AUTH_USER'] ?? '';
+$PHP_AUTH_PW = $_SERVER['PHP_AUTH_PW'] ?? '';
+if (!isset($userList[$PHP_AUTH_USER]) || $userList[$PHP_AUTH_USER] != $PHP_AUTH_PW) {
+    header('HTTP/1.0 403 Forbidden');
+    echo '403 Forbidden';
+    exit;
+}
+
+if (isset($_GET['logout'])) {
+    header('HTTP/1.0 401 Unauthorized');
+    echo 'logout';
+    exit;
+}
+
+echo 'auth success';
+echo '&lt;pre&gt;';
+var_dump($_SERVER);
+echo '&lt;/pre&gt;';
+</code></pre>
+<p>参考 <a href="https://www.php.net/manual/zh/features.http-auth.php">https://www.php.net/manual/zh/features.http-auth.php</a></p>
 <h2>摘要认证 (Digest Access Authentication)</h2>
 <p>在浏览器里的表现形式和基础认证基本一致，但发送账号密码的部分不一样，密码包含在数字摘要里，这样可以避免被抓包时就直接知道密码。</p>
 <p>摘要认证无法防止中间人攻击。一个中间人可以告知客户端使用基本认证模式，而摘要访问认证没有提供任何机制帮助客户端验证服务器的身份。</p>
@@ -121,7 +224,58 @@ method:uri
 当 qop 是 auth 时， A2 只包含请求方法和 uri ， 还添加了报文主体部分
 method:uri:H(entity-body)
 </code></pre>
-<p>这是一段用 php 实现的摘要认证例子</p>
+<h3>摘要认证的 apache 配置</h3>
+<pre><code>
+&lt;VirtualHost localhost-auth-digest.com:80&gt;
+    ServerAdmin webmaster@dummy-host.example.com
+    DocumentRoot "${SRVROOT}/htdocs"
+    ServerName localhost-auth-digest.com
+    ServerAlias localhost-auth-digest.com
+
+    # 这一段放在 &lt;Directory /var/www/&gt; 也可以
+    &lt;Location "/"&gt;
+        # 禁止使用 .htaccess 文件来覆盖当前目录下的 Apache 设置
+        AllowOverride None
+        # Indexes：当没有 index.html 等默认文件时显示目录列表。FollowSymLinks：允许跟随符号链接。
+        Options Indexes FollowSymLinks
+
+        # 基本认证对话框中显示的提示信息 这里的 AuthName 必须和密码文件里的 realm 一致，这里只能填英文
+        AuthName "username"
+        # 认证类型为 HTTP Digest 认证
+        # "http://localhost-auth-digest.com/"
+        AuthType Digest
+        AuthDigestDomain "/"
+        AuthDigestProvider file
+        AuthUserFile "./.digest_pw"
+        # 要求访问者必须提供有效的用户名和密码
+        Require valid-user
+    &lt;/Location&gt;
+
+    &lt;IfModule dir_module&gt;
+        DirectoryIndex index.html index.php
+    &lt;/IfModule&gt;
+
+    ErrorLog "logs/localhost-auth-digest.com-error.log"
+    CustomLog "logs/localhost-auth-digest.com-access.log" common
+&lt;/VirtualHost&gt;
+</code></pre>
+<p>htdigest 的使用例子</p>
+<pre><code>
+创建用户文件并添加第一个用户，如果文件已存在会覆盖已存在的文件
+htdigest -c 文件路径 realm 用户名
+htdigest -c .digest_pw "private area" user2
+
+添加新用户
+htdigest .digest_pw "private area" user2
+
+修改用户密码
+htdigest .digest_pw "private area" user2
+
+htdigest 好像没有删除用户的命令，但直接改文件也不是不可以的。。。
+</code></pre>
+<p>htpasswd 和 htdigest 都可以在 bin 目录下找到，
+htpasswd 和 htdigest 生成的都是文本文件</p>
+<h3>用 php 实现的摘要认证例子</h3>
 <pre><code class="lang-php">$userLists = [
     'qwe' =&gt; '123',
 ];

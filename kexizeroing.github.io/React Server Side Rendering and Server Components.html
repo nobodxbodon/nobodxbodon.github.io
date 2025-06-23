@@ -94,19 +94,18 @@ interface ClientOnlyProps {
 const ClientOnly: React.FC&lt;ClientOnlyProps&gt; = ({ 
   children
 }) =&gt; {
-  const [hasMounted, setHasMounted] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
-  // `useEffect` doesn't run during SSR. It runs until the JavaScript is downloaded.
   useEffect(() =&gt; {
-    setHasMounted(true);
+    setIsClient(true);
   }, [])
 
-  if (!hasMounted) return null;
+  if (!isClient) {
+    return null
+  }
 
   return (
-    &lt;&gt;
-      {children}
-    &lt;/&gt;
+    &lt;&gt;{children}&lt;/&gt;
   );
 };
 
@@ -121,6 +120,29 @@ export default ClientOnly;
 <p>Fix Next.js error: Event handlers cannot be passed to client component:<br/>
 You use <code>&lt;Card onClick={() =&gt; console.log(1)} /&gt;</code> to pass a function from the server to the client. The issue here is the function is not serializable. The workaround is to make both of them client components.</p>
 </blockquote>
+<p><code>useSyncExternalStore</code> can be more appropriate if your data exists outside the React tree. It takes in three parameters: <code>useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot?)</code>, and returns the current snapshot of the external data you’re subscribed to. Any changes in the external store will be immediately reflected, and React will re-render the UI based on snapshot changes.</p>
+<ul>
+<li><code>subscribe</code> is a callback that takes in a function that subscribes to the external store data.</li>
+<li><code>getSnapshot</code> is a function that returns the current snapshot of external store data.</li>
+<li><code>getServerSnapshot</code> is an optional parameter that sends you a snapshot of the initial store data. You can use it on the server when generating the HTML or during the initial hydration of the server data.</li>
+</ul>
+<p>Note that on the server, React will only call <code>getServerSnapshot()</code>. On the client during hydration, it will initially call <code>getServerSnapshot()</code>, too — before calling <code>getSnapshot()</code>. This ensures that both environments start with the exact same value.</p>
+<pre><code class="lang-js">// This is your external "store"
+let lastUpdated = new Date()
+
+// A no-op subscription function — tells React we won't update
+const emptySubscribe = () =&gt; () =&gt; {}
+
+function LastUpdated() {
+  const date = React.useSyncExternalStore(
+    emptySubscribe,
+    () =&gt; lastUpdated.toLocaleDateString(),
+    () =&gt; null // safe for server-side render
+  )
+
+  return date ? &lt;span&gt;Last updated at: {date}&lt;/span&gt; : null
+}
+</code></pre>
 <h3>Understand the "children pattern"</h3>
 <p>React components re-render themselves and all their children when the state is updated. In this case, on every mouse move the state of <code>MovingComponent</code> is updated, its re-render is triggered, and as a result, <code>ChildComponent</code> will re-render as well.</p>
 <pre><code class="lang-jsx">const MovingComponent = () =&gt; {

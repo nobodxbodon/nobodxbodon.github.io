@@ -1,0 +1,135 @@
+<h2><a href="https://github.com/caol64/caol64.github.io/blob/master/content/posts/2025/2025-06-09-a-deep-dive-into-the-extensible-architecture-of-omni-article-markdown.md">仓库源文</a>，<a href="https://babyno.top/posts/2025/06/09/a-deep-dive-into-the-extensible-architecture-of-omni-article-markdown">站点原文</a></h2>
+<blockquote><p>让网页内容一键转 Markdown，从未如此优雅。</p>
+</blockquote>
+<p><img alt="demo" src="https://yuzhi.tech/img/amarkdown/1.gif"/></p>
+<p>互联网上的内容无所不在 —— 新闻、博客、技术文章、公众号推文、知乎专栏……信息丰富，却五花八门。当我们希望将它们转换为结构清晰、易于发布和归档的 Markdown 格式时，却不得不面对 HTML 结构的混乱、样式的割裂和内容提取的困扰。</p>
+<p>为了解决这个问题，开源项目 <strong>omni-article-markdown</strong>（中文名「墨探」）应运而生。但它并非仅是一个“爬虫”工具，更像一个可持续进化的“阅读器平台”。</p>
+<h2>架构初探</h2>
+<p>「墨探」的架构非常简单，它构建于两个模块之上：</p>
+<p><img alt="架构" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-06-09-a-deep-dive-into-the-extensible-architecture-of-omni-article-markdown/omni-article-markdown-1.jpg"/></p>
+<ul>
+<li>Reader 模块的功能是提取网页内容</li>
+<li>Parser 模块的功能是将网页内容转换成<code>Markdown</code></li>
+</ul>
+<h2>插件为核心</h2>
+<blockquote><p>插件如何让「墨探」可适应所有网站？</p>
+</blockquote>
+<p>其核心亮点，便在于它构建于 <code>pluggy</code> 插件机制之上。</p>
+<p>在传统方案中，提取网页内容往往依赖硬编码的规则。如果目标网站一改版，就前功尽弃。而「墨探」通过引入 <a href="https://pluggy.readthedocs.io/en/latest/">pluggy</a>，构建了一套通用插件注册系统，允许开发者为特定网站编写自定义解析器，无需修改主程序，就能“无缝接入”。</p>
+<p><img alt="架构" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-06-09-a-deep-dive-into-the-extensible-architecture-of-omni-article-markdown/omni-article-markdown-2.jpg"/></p>
+<h2>插件工作机制</h2>
+<p>插件的工作机制也是十分简单，当「墨探」遇到一个 URL 时，询问所有插件谁能处理它。一旦某个插件声明“我可以处理这个 URL”，主应用就会优先调用它进行内容提取，而不是使用默认的 HTML 提取器。这种机制让工具具备了「策略模式」的灵活性，但又通过 <code>pluggy</code> 实现了解耦与统一管理。</p>
+<h3>插件的实现方式</h3>
+<p>项目使用 <code>pluggy</code> 定义了一个关键钩子（hooks）：</p>
+<pre><code class="lang-python">@hookspec(firstresult=True)
+def get_custom_reader(url: str) -&gt; Optional[ReaderPlugin]:
+  ...
+</code></pre>
+<p>而作为插件开发者，首先就是要实现这个钩子。以“知乎插件”为例：</p>
+<pre><code class="lang-python"># 实例化插件
+zhihu_plugin_instance = ZhihuReader()
+
+@hookimpl
+def get_custom_reader(url: str) -&gt; Optional[ReaderPlugin]:
+    if zhihu_plugin_instance.can_handle(url):
+        return zhihu_plugin_instance
+    return None
+</code></pre>
+<p>这个钩子，返回的是一个<code>ReaderPlugin</code>的实例，<code>ReaderPlugin</code>是为了简化和规范插件开发而定义的协议，它定义了两个接口：</p>
+<pre><code class="lang-python">class ReaderPlugin(Protocol):
+    def can_handle(self, url: str) -&gt; bool:
+        ...
+
+    def read(self, url: str) -&gt; str:
+        ...
+</code></pre>
+<ul>
+<li><code>can_handle()</code>：判断是否能处理当前 URL。</li>
+<li><code>read()</code>：返回网页原始 HTML。</li>
+</ul>
+<p>现在你只要编写<code>ZhihuReader</code>实现这两个接口即可完成自定义插件。</p>
+<h3>插件注册与加载</h3>
+<p>墨探使用 <code>pluggy</code> <strong>自动发现并通过 <code>setuptools</code> 的入口点（entry points）机制加载插件</strong>。插件开发者无需修改主程序代码，只需在插件项目的配置文件中添加如下声明：</p>
+<pre><code class="lang-toml">[project.entry-points."mdcli"]
+my_plugin = "my_plugin_module:plugin_object"
+</code></pre>
+<p>安装后，墨探在运行时会自动发现并加载该插件。</p>
+<p>插件机制带来的优势包括：</p>
+<ul>
+<li><strong>解耦</strong>：核心应用不依赖插件实现，插件与主程序相互独立。</li>
+<li><strong>可扩展性</strong>：任何符合规范的插件都可自动接入，无需修改主程序。</li>
+<li><strong>模块化</strong>：每个插件都可以单独开发、测试、分发，便于协作。</li>
+<li><strong>生态潜力</strong>：社区可贡献更多插件，形成一个内容提取生态系统。</li>
+</ul>
+<p>得益于这种插件注册机制，墨探得以从一个简单的网页解析工具，演进为一个可持续演化、社区可共建的内容提取平台。</p>
+<h3>插件安装与管理</h3>
+<p>墨探的命令行工具 <code>mdcli</code> 提供了便捷的插件管理命令：</p>
+<pre><code class="lang-sh">mdcli install zhihu
+mdcli uninstall zhihu
+</code></pre>
+<p>支持从 PyPI 或本地路径安装。目前已发布的插件包括：</p>
+<ul>
+<li><code>zhihu</code>：知乎专栏</li>
+<li><code>toutiao</code>：今日头条</li>
+<li><code>freedium</code>：绕过 Medium 限制的 Freedium</li>
+</ul>
+<h2>核心能力概览</h2>
+<h3>一键 Markdown 转换</h3>
+<p>墨探支持从网页 URL 或本地 HTML 文件中提取正文并转为 Markdown：</p>
+<pre><code class="lang-sh">mdcli https://example.com
+mdcli your/path/example.html
+</code></pre>
+<p>支持内容包括：标题、段落、列表、代码块、图片、表格、引用、公式、GitHub Gist 等。</p>
+<h3>灵活的保存选项</h3>
+<p>你可以将输出结果直接保存到当前目录或指定路径：</p>
+<pre><code class="lang-sh">mdcli https://example.com -s
+mdcli https://example.com -s /home/user/data.md
+</code></pre>
+<h3>默认支持的网站</h3>
+<p>即使不开启插件，墨探已对多个网站内置支持：</p>
+<ul>
+<li>掘金、CSDN、Medium、简书</li>
+<li>微信公众号</li>
+<li>towardsdatascience、quantamagazine 等</li>
+</ul>
+<h2>使用场景推荐</h2>
+<ul>
+<li>构建 Markdown 文档库：将博客收藏一键导出为 <code>.md</code>，便于归档与搜索。</li>
+<li>微信公众号写作：写作素材来自网页，导出 Markdown 后可直接发布。</li>
+<li>AI 数据整理：将网页文本标准化为 Markdown，供大模型处理或训练。</li>
+</ul>
+<h2>为什么推荐你使用墨探</h2>
+<ul>
+<li><strong>轻量纯粹</strong>：CLI 工具，开箱即用，无需繁重依赖。</li>
+<li><strong>插件扩展</strong>：支持任意网站接入，适配灵活。</li>
+<li><strong>社区驱动</strong>：人人可写插件，共建生态圈。</li>
+<li><strong>格式优雅</strong>：生成 Markdown 结构清晰，语义准确。</li>
+</ul>
+<h2>快速开始</h2>
+<ol>
+<li>安装主程序</li>
+</ol>
+<pre><code class="lang-sh">pip install omni-article-markdown
+</code></pre>
+<ol>
+<li>安装插件（可选）</li>
+</ol>
+<pre><code class="lang-sh">mdcli install zhihu
+</code></pre>
+<ol>
+<li>运行命令：</li>
+</ol>
+<pre><code class="lang-sh">mdcli https://zhuanlan.zhihu.com/p/123456789 -s
+</code></pre>
+<ol>
+<li>打开刚保存的 Markdown 文件，享受清爽的阅读体验！</li>
+</ol>
+<h2>项目地址与贡献方式</h2>
+<ul>
+<li>GitHub 项目主页：
+<a href="https://github.com/caol64/omni-article-markdown">https://github.com/caol64/omni-article-markdown</a></li>
+</ul>
+<p>欢迎提交 Issue、Pull Request 或编写插件参与贡献！</p>
+<h2>结语</h2>
+<p>如果你喜欢这个项目，不妨<a href="https://yuzhi.tech/sponsor">喂作者家的猫吃点罐头</a>。</p>
+<p><strong>墨探，正在让阅读变得简单且优雅。</strong></p>

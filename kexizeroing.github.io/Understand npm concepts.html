@@ -7,7 +7,10 @@
 <li>Listed dependencies in <code>package-lock.json</code> file have mixed (sha1/sha512) integrity checksum. npm changed the integrity checksum from sha1 to sha512. Only packages published with npm@5 or later will include a sha512 integrity hash.</li>
 <li>Ignoring the lock file and pinning the exact version of a dependency in <code>package.json</code> is not a good idea since their dependencies (and deps of their deps) are not explicitly pinned to a version. This can result in different versions of same dependencies being installed when running <code>npm install</code> at different times.</li>
 </ol>
-<blockquote><p>Two fields are mandatory in <code>package.json</code>:</p>
+<blockquote><p>Don't pin your dependencies to a specific version and ignore the lock file. The problem is that the depenencies have their denpendencies, and those dependencies have their denpendencies, all the way down. These dependencies use caret (<code>^</code>) meaning they are not pinned. So the code you run locally may not be the same as the code your CI/CD pipeline runs.</p>
+</blockquote>
+<h4>Benefits of <code>exports</code> field</h4>
+<p>Two fields are mandatory in <code>package.json</code>:</p>
 <ul>
 <li><code>name</code>, can be scoped</li>
 <li><code>version</code>, has to be a valid SemVer number</li>
@@ -18,8 +21,6 @@
 <li><code>module</code>, ESM-specific entry point</li>
 <li><code>exports</code>, modern entry points, more flexible</li>
 </ul>
-</blockquote>
-<h4>Benefits of <code>exports</code> field</h4>
 <pre><code class="lang-json">// package.json
 {
   "name": "my-package",
@@ -283,32 +284,75 @@ catalogs:
   "react-dom": "catalog:react18",
 }
 </code></pre>
-<h4>corepack</h4>
-<p>Instead of installing <code>yarn</code> or <code>pnpm</code> globally, Corepack manages them for you behind the scenes. When you run a package manager command, Corepack intercepts it, checks what version you need, downloads it if necessary, and runs your command with the correct version.</p>
-<p>Corepack makes sure you're using the correct package manager for your project. Since v16.13, Node.js is shipping Corepack for managing package managers. This is an experimental feature, so you need to enable it by running <code>corepack enable pnpm</code>. To configure the package manager for your project, add the <code>packageManager</code> field to your <code>package.json</code>:</p>
-<pre><code class="lang-json">{
-  // npm
-  "packageManager": "npm@10.8.1",
-  // pnpm
-  "packageManager": "pnpm@9.1.4",
-  // yarn
-  "packageManager": "yarn@3.1.1"
-}
-</code></pre>
-<p>You can use <code>corepack use pnpm@x.y.z</code> to ask Corepack to update your local <code>package.json</code> to use the package manager of your choice. <em>(Corepack intercepts calls to <code>pnpm</code> or <code>yarn</code> to make sure you're using them correctly.)</em> You must specify an exact version of the package manager you want to use - not a range. Now, if you try to <code>npm install</code> in a project that has <code>packageManager</code> set to <code>pnpm</code>, corepack will show an error. And if you try to <code>pnpm install</code> there, corepack will automatically download and use the correct pnpm version.</p>
 <h4>monorepo setup</h4>
-<p>Monorepos are specified using a <code>pnpm-workspace.yaml</code> file instead of the <code>"workspaces"</code> field in <code>package.json</code> that npm and yarn use.</p>
+<p>Monorepos are specified using a <code>pnpm-workspace.yaml</code> file alongside <code>packages.json</code>, with a list of paths to directories in <code>packages</code> property.</p>
 <pre><code class="lang-yml"># The only field in this config file
 packages:
   - apps/*
   - packages/*
 </code></pre>
+<pre><code class="lang-json">// root package.json
+{
+  "name": "awesome-monorepo",
+  "scripts": {
+    "build": "pnpm --filter=@awesome/* run build",
+    "clean": "rimraf 'packages/*/{dist,node_modules}' &amp;&amp; rimraf node_modules",
+  }
+}
+
+// packages/utils/package.json
+{
+  "name": "@awesome/utils",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+  }
+}
+
+// packages/api-client/package.json
+{
+  "name": "@awesome/api-client",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+  },
+  "dependencies": {
+    "@awesome/utils": "workspace:*"
+  }
+}
+</code></pre>
 <p>To add a local dependency within a monorepo, in your <code>package.json</code> "dependencies" field you'll prefix your local dependencies' version-range strings with <code>"workspace:^"</code> <em>(<code>workspace:</code> indicates that the dependency should be resolved from the local workspace packages rather than pulling from an external registry. <code>^</code> means the version should follow the semver caret (^) range rule.)</em> <code>workspace:*</code> uses the exact version of the dependency as defined in its <code>package.json</code> within the workspace.</p>
-<p>Check out the example:</p>
-<ul>
-<li><a href="https://www.youtube.com/watch?v=KIgPJT806D0">https://www.youtube.com/watch?v=KIgPJT806D0</a></li>
-<li><a href="https://github.com/w3cj/monorepo-example-tasks-app">https://github.com/w3cj/monorepo-example-tasks-app</a></li>
-</ul>
+<pre><code class="lang-sh"># Development dependencies for the workspace root
+# Adding a new dependency to the root workspace package fails, 
+# unless the `--ignore-workspace-root-check` or `-w` flag is used.
+pnpm add -Dw typescript @types/node eslint
+
+# Add React to a package
+pnpm add react react-dom --filter @awesome/api-client
+
+# Add multiple packages to multiple filters
+pnpm add lodash --filter @awesome/utils --filter @awesome/api-client
+
+# Install to all packages matching pattern
+pnpm add dayjs --filter "@awesome/*"
+
+# Add @awesome/utils as dependency to @awesome/api-client
+pnpm add @awesome/utils --filter @awesome/api-client
+
+# Use wildcard version for latest workspace version
+pnpm add @awesome/utils@workspace:* --filter @awesome/api-client
+</code></pre>
+<blockquote><p>There is not much difference between <code>pnpm add</code> and <code>pnpm install</code>. We use <code>pnpm add</code> when we want to add a new dependency; We use <code>pnpm install</code> when we have an existing project with the lockfile and we want to install all dependencies from the lockfile. The only difference is that <code>pnpm add</code> will fail when executed without args. <code>pnpm install</code> will work in both cases.</p>
+<p>You can run all of your <code>package.json</code> scripts via <code>pnpm &lt;script-name&gt;</code>. You can also run your installed binaries with <code>pnpm &lt;command&gt;</code>. For example, you might want to run local versions of Typescript (<code>pnpm tsc</code>) or eslint (<code>pnpm eslint</code>). npm uses a separate command (<code>npx</code>) to run binaries.</p>
+</blockquote>
 <h3>npm scripts</h3>
 <p>npm scripts are a set of built-in and custom scripts defined in the <code>package.json</code> file. Their goal is to provide a simple way to execute repetitive tasks.</p>
 <ul>

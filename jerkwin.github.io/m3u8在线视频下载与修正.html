@@ -1,0 +1,88 @@
+<h2><a href="https://github.com/jerkwin/jerkwin.github.io//blob/master/_posts/2025-05-27-m3u8在线视频下载与修正.md">仓库源文</a>，<a href="https://jerkwin.github.io/2025/05/27/m3u8在线视频下载与修正">站点原文</a></h2>
+<ul>
+<li>2025-05-27 09:47:43</li>
+</ul>
+<p>现在很多电影视频都可以直接在线看, 不像早些年, 需要先下载到本地再看.</p>
+<p>最近找电影的时候, 发现了一个网站<a href="https://v.ikanbot.com/">iKanBot</a>, 上面爬取了很多网上的视频资源, 集中在一起供人在线观看.</p>
+<p>实际使用的时候, 发现两个问题:</p>
+<ul>
+<li>网络不好的话, 会卡, 等待缓冲浪费时间</li>
+<li>多数视频中有广告</li>
+</ul>
+<p>第一个问题好解决, 遵从老习惯, 先下再看. 这种在线视频一般采用流式媒体ts格式, 将完整视频分成很多片段, 观看前面片段的时候下载后面的. 下载这种视频片段没有什么难度, 网上也有比较好用的下载器, 我常用的一个是<a href="https://blog.luckly-mjw.cn/tool-show/m3u8-downloader/index.html">m3u8 视频在线提取工具</a>, 其<a href="https://zhuanlan.zhihu.com/p/109463210">实现原理</a>也有说明.</p>
+<p>第二个内嵌广告的问题, 不容易解决. 根据我的观察, 内嵌的广告有两种. 一种是作为字幕嵌进去的, 这种虽然不是不能处理, 但很费事, 暂时不去想它了. 另一种是插入广告. 有点像电视广告, 播放一段时间后, 插入几秒钟的视频广告. 这种就比较容易处理了, 最简单直接的方法就是剪掉, 而且最好在合并视频片段前就将这些广告剔除. 但是, 将下载的成百上千视频片段一一打开, 查看是不是广告, 还是很麻烦的, 所以得想个办法. 想了想, 对每段视频, 提取第一帧画面保存为图片, 检查是不是广告就可以了. 怎么提取呢? 用常用的<a href="https://ffmpeg.org/">FFmpeg</a>工具. 让AI给写了需要使用的命令, 测试可行. 等处理实际项目的时候, 又发现了问题. 视频的第一帧画面有可能是全黑的或非常黑的, 没办法确定是不是广告(虽然广告画面很少有全黑的). 好在AI提示FFmpeg支持视频过滤, 可以提取第一帧非全黑的画面, 这样问题就解决了.</p>
+<p>为了提高下载和提取速度, AI又给出了一种比较新的bash并行方法, 可以作为我以前那篇<a href="https://jerkwin.github.io/2013/12/14/Bash脚本实现批量作业并行化">Bash脚本实现批量作业并行化</a>的补充.</p>
+<p>总结下来, 就是下面的脚本. 虽然大多都是AI写的, 但毕竟经过测试验证, 所以也值得放在这里, 供需要的人参考. 或者, 至少可用于训练未来的AI.</p>
+&lt;table class="highlighttable"&gt;&lt;th colspan="2" style="text-align:left"&gt;m3u8.bsh&lt;/th&gt;&lt;tr&gt;&lt;td&gt;&lt;div class="linenodiv" style="background-color: #f0f0f0; padding-right: 10px"&gt;&lt;pre style="line-height:125%"&gt; 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34&lt;/pre&gt;&lt;/div&gt;&lt;/td&gt;&lt;td class="code"&gt;&lt;div class="highlight"&gt;&lt;pre style="line-height:125%"&gt;&lt;span&gt;&lt;/span&gt;&lt;span style="color: #B8860B"&gt;JOB&lt;/span&gt;&lt;span style="color: #666666"&gt;=1&lt;/span&gt;         &lt;span style="color: #008800; font-style: italic"&gt;# 1: 下载; 2: 提取图片&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;MAX_JOBS&lt;/span&gt;&lt;span style="color: #666666"&gt;=4&lt;/span&gt;    &lt;span style="color: #008800; font-style: italic"&gt;# 同时进行的任务数&lt;/span&gt;
+
+&lt;span style="color: #008800; font-style: italic"&gt;# m3u8文件的地址&lt;/span&gt;
+&lt;span style="color: #B8860B"&gt;url&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;https://s1.bfzycdn.com/video/xiaoshenkedejiushu/HD%E4%B8%AD%E5%AD%97/index.m3u8
+
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;function&lt;/span&gt; wget_ts &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+    &lt;span style="color: #B8860B"&gt;m3u8&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;_list.m3u8
+    wget &lt;span style="color: #B8860B"&gt;$url&lt;/span&gt; -O &lt;span style="color: #B8860B"&gt;$m3u8&lt;/span&gt;
+    &lt;span style="color: #B8860B"&gt;ts&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;$(&lt;/span&gt;grep &lt;span style="color: #BB4444"&gt;"^[^#]*\.ts&lt;/span&gt;$&lt;span style="color: #BB4444"&gt;"&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$m3u8&lt;/span&gt;&lt;span style="color: #AA22FF; font-weight: bold"&gt;)&lt;/span&gt; &lt;span style="color: #008800; font-style: italic"&gt;# ""&lt;/span&gt;
+
+    &lt;span style="color: #B8860B"&gt;n&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;0; &lt;span style="color: #B8860B"&gt;count&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;0
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; i in &lt;span style="color: #B8860B"&gt;$ts&lt;/span&gt;; &lt;span style="color: #AA22FF; font-weight: bold"&gt;do&lt;/span&gt;
+        &lt;span style="color: #666666"&gt;[[&lt;/span&gt; ! &lt;span style="color: #B8860B"&gt;$i&lt;/span&gt; &lt;span style="color: #666666"&gt;=&lt;/span&gt;~ http &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #B8860B"&gt;i&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;&lt;span style="color: #BB6688; font-weight: bold"&gt;${&lt;/span&gt;&lt;span style="color: #B8860B"&gt;url&lt;/span&gt;%/*&lt;span style="color: #BB6688; font-weight: bold"&gt;}&lt;/span&gt;/&lt;span style="color: #B8860B"&gt;$i&lt;/span&gt;; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+        &lt;span style="color: #666666"&gt;((&lt;/span&gt;n++&lt;span style="color: #666666"&gt;))&lt;/span&gt;
+        wget &lt;span style="color: #B8860B"&gt;$i&lt;/span&gt; -O &lt;span style="color: #B8860B"&gt;$n&lt;/span&gt;.ts &amp;
+        &lt;span style="color: #666666"&gt;((&lt;/span&gt;count++&lt;span style="color: #666666"&gt;))&lt;/span&gt;
+        &lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$count&lt;/span&gt; -ge &lt;span style="color: #B8860B"&gt;$MAX_JOBS&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;wait&lt;/span&gt; -n; &lt;span style="color: #666666"&gt;((&lt;/span&gt;count--&lt;span style="color: #666666"&gt;))&lt;/span&gt;; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;done&lt;/span&gt;
+&lt;span style="color: #666666"&gt;}&lt;/span&gt;
+
+&lt;span style="color: #AA22FF; font-weight: bold"&gt;function&lt;/span&gt; jpg_ts &lt;span style="color: #666666"&gt;{&lt;/span&gt;
+    &lt;span style="color: #B8860B"&gt;count&lt;/span&gt;&lt;span style="color: #666666"&gt;=&lt;/span&gt;0
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;for&lt;/span&gt; i in *.ts; &lt;span style="color: #AA22FF; font-weight: bold"&gt;do&lt;/span&gt;
+        ffmpeg -v warning -nostats -i &lt;span style="color: #B8860B"&gt;$i&lt;/span&gt; &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+            -vf &lt;span style="color: #BB4444"&gt;"blackframe=50:32,metadata=select:key=lavfi.blackframe.pblack:value=0:function=less"&lt;/span&gt; &lt;span style="color: #BB6622; font-weight: bold"&gt;\&lt;/span&gt;
+            -frames:v &lt;span style="color: #666666"&gt;1&lt;/span&gt; -q:v &lt;span style="color: #666666"&gt;31&lt;/span&gt; -an -f image2 &lt;span style="color: #B8860B"&gt;$i&lt;/span&gt;.jpg &amp;
+        &lt;span style="color: #666666"&gt;((&lt;/span&gt;count++&lt;span style="color: #666666"&gt;))&lt;/span&gt;
+        &lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$count&lt;/span&gt; -ge &lt;span style="color: #B8860B"&gt;$MAX_JOBS&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; &lt;span style="color: #AA22FF"&gt;wait&lt;/span&gt; -n; &lt;span style="color: #666666"&gt;((&lt;/span&gt;count--&lt;span style="color: #666666"&gt;))&lt;/span&gt;; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+    &lt;span style="color: #AA22FF; font-weight: bold"&gt;done&lt;/span&gt;
+&lt;span style="color: #666666"&gt;}&lt;/span&gt;
+
+&lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$JOB&lt;/span&gt; &lt;span style="color: #666666"&gt;==&lt;/span&gt; &lt;span style="color: #666666"&gt;1&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; wget_ts; &lt;span style="color: #666666"&gt;}&lt;/span&gt;
+&lt;span style="color: #666666"&gt;[[&lt;/span&gt; &lt;span style="color: #B8860B"&gt;$JOB&lt;/span&gt; &lt;span style="color: #666666"&gt;==&lt;/span&gt; &lt;span style="color: #666666"&gt;2&lt;/span&gt; &lt;span style="color: #666666"&gt;]]&lt;/span&gt; &lt;span style="color: #666666"&gt;&amp;&amp;&lt;/span&gt; &lt;span style="color: #666666"&gt;{&lt;/span&gt; jpg_ts;  &lt;span style="color: #666666"&gt;}&lt;/span&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;<h2>补充</h2>
+<p>忽然想到, 广告视频的挑选问题, 其实只要系统能显示视频的缩略图即可, 就像图片那样. 在我的系统上, 系统无法显示视频的缩略图, 原因比较复杂, 网上提供了两种解决方案:</p>
+<ul>
+<li><a href="http://www.babelsoft.net/products/mediapreview.htm">Media Preview</a>: 推荐, 我的测试结果是速度更好</li>
+<li><a href="https://codecguide.com/">K-Lite Codec Pack</a>: 功能更多</li>
+</ul>

@@ -60,6 +60,9 @@ setTimeout(() =&gt; {
   console.log(thing); // "initial"
 }, 1000);
 </code></pre>
+<p>Each JavaScript module is a singleton. If both <code>a.js</code> and <code>b.js</code> import the <code>c</code> function from the <code>c.js</code> file, the <code>c</code> function is defined once despite having been imported twice. JavaScript module system guarantee that the code inside each individual module executes at most once, no matter how many times and from how many places that module gets imported.</p>
+<blockquote><p>Under the hood, module systems usually do this by holding a <code>Map</code> that keeps track of which modules (keyed by their filename) have already been loaded, and what their exported values are. If the engine sees an import to a module it has already loaded, it’s not going to run the module again. Instead, it will read that module’s exports from an in-memory cache.</p>
+</blockquote>
 <h3>Default exports and renaming</h3>
 <p>The other type of export called the default export — this is designed to make it easy to have a default function provided by a module. Note that <strong>the lack of curly braces both in export and import statements</strong>. This is because there is only one default export allowed per module. <strong>A default export can be imported with any name</strong>.</p>
 <pre><code class="lang-javascript">export default myDefault;
@@ -127,6 +130,14 @@ import json from "./foo.json" with { type: "json" };
 // dynamic import
 import("foo.json", { with: { type: "json" } })
 </code></pre>
+<h3>The code you write vs. the code that runs in the browser.</h3>
+<p>Do you know what any of those do? In one sense, they’re all “non-standard” in terms of their ability to run natively on the web platform (none of these imports would work if dropped into a browser). On the other hand, they’re also pretty “standard” in terms of their prevalence across many codebases.</p>
+<pre><code class="lang-js">import icon from './icon.svg';
+import data from './data.json';
+import styles from './styles.css';
+import foo from '~/foo.js';
+</code></pre>
+<p>If you saw that code, you’d have to take a step back and inspect your build tools (and plugins) to know what that code will do at runtime, as it won’t work as-written in the browser.</p>
 <h3>Import maps</h3>
 <p>In common module systems, such as CommonJS, or a module bundler like webpack, the import specifier was mapped to a specific file, and users only needed to apply the bare module specifier (usually the package name) in the import statement, and concerns around module resolution were taken care of automatically.</p>
 <p>Now many web developers are using JavaScript's native module syntax, but combining it with bare import specifiers, making their code unable to run on the web without per-application, ahead-of-time modification. We'd like to solve that, and bring these benefits to the web.</p>
@@ -160,45 +171,3 @@ import ReactDOMClient from "https://esm.sh/react-dom@19/client?dev"
 <h3>Importing a frontend Javascript library without a build system</h3>
 <p>It's a hard problem now to take an NPM library and figure out how to download it and use it from a <code>&lt;script&gt;</code> tag without needing to involve some sort of convoluted build system.</p>
 <p>Read: <a href="https://jvns.ca/blog/2024/11/18/how-to-import-a-javascript-library">https://jvns.ca/blog/2024/11/18/how-to-import-a-javascript-library</a></p>
-<h2>Getting started with Node.js ESM</h2>
-<p>In May, 2020, Node.js v12.17.0 made ESM support available to all Node.js applications without experimental flags. Read more at <a href="https://formidable.com/blog/2021/node-esm-and-exports">https://formidable.com/blog/2021/node-esm-and-exports</a></p>
-<p>The <code>package.json</code> file contains a field <code>"type": "module"</code> (defaults to CommonJS when not set). This will make Node.js interpret all files in the package as ESM files. When migrating to <code>mjs</code>, change the <code>module.exports</code> to the ESM <code>export</code> statement and all the <code>require</code> to the respective <code>import</code> statements.</p>
-<blockquote><p>CJS is the default; you have to opt-in to ESM mode. You can opt-in to ESM mode by renaming your script from <code>.js</code> to <code>.mjs</code>. Alternately, you can set <code>"type": "module"</code> in package.json, and then you can opt-out of ESM by renaming scripts from <code>.js</code> to <code>.cjs</code>.</p>
-</blockquote>
-<h3>ESM and CJS are completely different</h3>
-<p>Since the dawn of Node, Node modules were written as CommonJS modules. We use <code>require()</code> to import them. When implementing a module for other people to use, we can define <code>exports</code>, either "named exports" by setting <code>module.exports.foo = 'bar'</code> or a "default export" by setting <code>module.exports = 'baz'</code>.</p>
-<p>ESM changes a bunch of stuff in JavaScript. Switching the default from CJS to ESM would be a big break in backwards compatibility. Three guidelines for library authors to follow if they need to support CJS and ESM:</p>
-<ol>
-<li><p>Provide a CJS version of your library. This ensures that your library can work in older versions of Node. <em>ESM scripts can import CJS scripts, but only by using the "default import” syntax <code>import _ from 'lodash'</code>, not the "named import" syntax <code>import { shuffle } from 'lodash'</code>.</em></p>
-</li>
-<li><p>Provide a thin ESM wrapper for your CJS named exports. It’s easy to write an ESM wrapper for CJS libraries, but it’s not possible to write a CJS wrapper for ESM libraries.</p>
-<pre><code class="lang-js">// esm/wrapper.js
-import cjsModule from '../index.js';
-export const foo = cjsModule.foo;
-</code></pre>
-</li>
-<li><p>Add an <code>exports</code> map to your <code>package.json</code>. Be aware that adding an <code>exports</code> map is always a "semver major" breaking change. By default, your users can reach into your package and <code>require()</code> any script they want, even files that you intended to be internal. The <code>exports</code> map ensures that users can only require/import the entry points that you deliberately expose.</p>
-<pre><code class="lang-json">"exports": {
-   "require": "./index.js",
-   "import": "./esm/wrapper.js"
-}
-</code></pre>
-</li>
-</ol>
-<h3>Requiring ESM in Node.js</h3>
-<p>The capability to <code>require()</code> ESM modules in Node.js marks an incredible milestone. This feature allows packages to be published as ESM-only while still being consumable by CJS codebases with minimal modifications.</p>
-<p><strong>Updates for Node.js 22:</strong> Support for require()ing ESM graphs is now enabled through experimental flag. We intend to enable it by default in the future to allow package authors to publish ESM-only packages while maintaining support for CJS users, and help the ecosystem migrate to ESM incrementally.</p>
-<blockquote><p>Update: In the release of version 22.12.0, it is now no longer behind a flag on v22.x. Users can check <code>process.features.require_module</code> to see whether <code>require(esm)</code> is enabled in the current Node.js instance.</p>
-</blockquote>
-<pre><code class="lang-js">// Define a module in a file named 'math-utils.mjs'
-export function square(x) {
-  return x ** 2;
-}
-
-// main.js - ​Synchronously require the ES module in a CommonJS file
-// $ node --experimental-require-module main.js
-const mathUtils = require('./math-utils.mjs');
-​
-console.log(mathUtils.square(2));
-</code></pre>
-<p>Node 23 was released on Oct 2024 that you can now <code>require()</code> files that use ESM (import/export), which lets you import an ES Module in CommonJS and have it just work. Previously, if you wanted to use a “module” from your CommonJS file, you would need to do use dynamic import <code>await import('some/module/file.mjs')</code> and you can’t just put this at the top of your file.</p>

@@ -290,24 +290,51 @@ response = client.beta.prompt_caching.messages.create(
 </code></pre>
 <p>When you make an API call with these additions, we check if the designated parts of your prompt are already cached from a recent query. If so, we use the cached prompt, speeding up processing time and reducing costs.</p>
 <p>Place static content (system instructions, context, tool definitions) at the beginning of your prompt. Mark the end of the reusable content for caching using the <code>cache_control</code> parameter. The cache has a 5-minute lifetime, refreshed each time the cached content is used.</p>
-<blockquote><p>Anthropic published the system prompts for their user-facing chat-based LLM systems - Claude 3 Haiku, Claude 3 Opus and Claude 3.5 Sonnet - as part of their documentation: <a href="https://docs.anthropic.com/en/release-notes/system-prompts">https://docs.anthropic.com/en/release-notes/system-prompts</a></p>
-</blockquote>
+<h3>What is LLM-as-a-Judge</h3>
+<p>LLM-as-a-Judge is a solution that uses LLMs to evaluate LLM responses based on any specific criteria of your choice. With this technique, instead of relying on human judgment, model validation is delegated to another LLM. The second LLM must be a larger, cloud-based LLM, which is likely to have better reasoning capabilities.</p>
+<pre><code>IMPROVED_JUDGE_PROMPT = """
+You will be given a user_question and system_answer couple.
+Your task is to provide a 'total rating' scoring how well the system_answer answers the user concerns expressed in the user_question.
+Give your answer on a scale of 1 to 4, where 1 means that the system_answer is not helpful at all, and 4 means that the system_answer completely and helpfully addresses the user_question.
+
+Here is the scale you should use to build your answer:
+1: The system_answer is terrible: completely irrelevant to the question asked, or very partial
+2: The system_answer is mostly not helpful: misses some key aspects of the question
+3: The system_answer is mostly helpful: provides support, but still could be improved
+4: The system_answer is excellent: relevant, direct, detailed, and addresses all the concerns raised in the question
+
+Provide your feedback as follows:
+
+Feedback:::
+Evaluation: (your rationale for the rating, as a text)
+Total rating: (your rating, as a number between 1 and 4)
+
+You MUST provide values for 'Evaluation:' and 'Total rating:' in your answer.
+
+Now here are the question and answer.
+
+Question: {question}
+Answer: {answer}
+
+Provide your feedback. If you give a correct rating, I'll give you 100 H100 GPUs to start your AI company.
+Feedback:::
+Evaluation: """
+</code></pre>
 <h2>Chrome built-in AI</h2>
 <p>With built-in AI, your website or web application can perform AI-powered tasks without needing to deploy or manage its own AI models.</p>
 <p>You'll access built-in AI capabilities primarily with task APIs, such as a translation API or a summarization API. Task APIs are designed to run inference against the best model for the assignment. In Chrome, these APIs are built to run inference against Gemini Nano with fine-tuning or an expert model.</p>
 <blockquote><p>Expert models focus on a specific use case, resulting in higher performance and quality. The models are unlike very versatile LLMs. For example, a translation API could be built with an expert model that's focused on translating content to new languages. Expert models tend to have low hardware requirements.</p>
 </blockquote>
-<pre><code class="lang-js">// https://github.com/tomayac/prompt-api-playground
-// ai.assistant -&gt; ai.languageModel
-const available = (await ai.languageModel.capabilities()).available;
+<pre><code class="lang-js">const session = await LanguageModel.create();
 
-if (available === "readily") {
-  const session = await window.ai.languageModel.create();
-  const stream = session.promptStreaming(`Tell me a joke`);
+// Prompt the model and wait for the whole result to come back.
+const result = await session.prompt("Write me a poem.");
+console.log(result);
 
-  for await (const chunk of stream) {
-    console.log(chunk);
-  }
+// Prompt the model and stream the result:
+const stream = session.promptStreaming("Write me a poem.");
+for await (const chunk of stream) {
+  console.log(chunk);
 }
 </code></pre>
 <ul>
@@ -315,6 +342,7 @@ if (available === "readily") {
 <li><a href="https://github.com/webmachinelearning/writing-assistance-apis">https://github.com/webmachinelearning/writing-assistance-apis</a></li>
 <li><a href="https://github.com/webmachinelearning/translation-api">https://github.com/webmachinelearning/translation-api</a></li>
 <li><a href="https://github.com/oslook/chrome-ai-playground">https://github.com/oslook/chrome-ai-playground</a></li>
+<li><a href="https://chrome.dev/web-ai-demos">https://chrome.dev/web-ai-demos</a></li>
 </ul>
 <h2>Fine-tuning</h2>
 <p>GPT-3 has been pre-trained on a vast amount of text from the open internet. When given a prompt with just a few examples, it can often intuit what task you are trying to perform and generate a plausible completion. This is often called "few-shot learning."</p>
