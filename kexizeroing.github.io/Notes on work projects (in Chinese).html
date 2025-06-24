@@ -392,6 +392,43 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
 <li>为了进一步优化小程序性能，在 WebView 渲染之外新增了一个渲染引擎 Skyline，拥有更接近原生渲染的性能体验。Skyline 创建了一条渲染线程来负责 Layout, Composite 和 Paint 等渲染任务，并在 AppService 中划出一个独立的上下文，来运行之前 WebView 承担的 JS 逻辑、DOM 树创建等逻辑。</li>
 </ol>
 </blockquote>
+<h3>课堂业务</h3>
+<pre><code>Lesson(classroomID, lessonID, teacher, allStudents, checkinStudents, presentation)
+Presentation(presentationID, slideIndex, content, problems)
+
+1. start lesson
+- sql getClassroomId from a universityId
+- local presentation json data -&gt; getTitle()
+- sql all students(role=1 -&gt; teacher, role=5 -&gt; allStudents)
+- API.NEW_LESSON(teacherId, classroomId, presentationTitle) -&gt; get a lessonID
+
+2. upload presentation
+- API.NEW_PRESENTATION(presentationContent, teacherId, lessonId)
+- parse slides, get content and problem slides
+
+3. connectWS
+- sql app_openid, weixin_unionid, user_id... from teacherId
+- API.GET_USER_INFO to get Auth
+- new WebSocket to send op=hello, userId, role, auth
+
+4. checkin
+- API.LESSON_CHECK_IN(studentId, lessonId, source)
+
+5. showPresentation
+- get presentation curent slide
+- ws send op=showpresentation, lessonId, presentationId, slideId
+
+6. rollcall
+- Based on the mode, eligiblePool is checked in students or all students
+- Count how many times each student has been called
+- Find minimum call count among called students
+- Create fair selection pools "neverCalled" and "leastCalled"
+- selectionPool is assigned as "neverCalled" first, then "leastCalled"
+- Randomly select a student from the selectionPool
+
+7. end lesson
+- API.END_LESSON(teacherId, lessonId)
+</code></pre>
 <h3>HTTP 请求相关</h3>
 <ul>
 <li>通过 <code>axios.defaults.headers['xyz'] = 'abc'</code> 这样的方式添加需要的请求头</li>
@@ -449,7 +486,6 @@ if (!isInIframe &amp;&amp; !ua.toLowerCase().match(/micromessenger|android|iphon
     return res.data
   })
 </code></pre>
-<p>后续使用 <a href="https://github.com/AttoJS/vue-request">VueRequest</a>，管理请求状态，支持 SWR、轮询、错误重试、缓存、分页等常用功能。<code>useRequest</code> 接收一个 service 函数，service 是一个异步的请求函数，换句话说，还可以使用 axios 来获取数据，然后返回一个 Promise。<code>useRequest</code> 会返回 data、loading、error 等，它们的值会根据请求状态和结果进行修改。返回的 run 方法，可以手动触发 service 请求。</p>
 <p>Use <code>$fetch</code>, <code>useFetch</code>, or <code>useAsyncData</code> in Nuxt: <a href="https://masteringnuxt.com/blog/when-to-use-fetch-usefetch-or-useasyncdata-in-nuxt-a-comprehensive-guide">https://masteringnuxt.com/blog/when-to-use-fetch-usefetch-or-useasyncdata-in-nuxt-a-comprehensive-guide</a></p>
 <ul>
 <li>The <code>useFetch</code> composable is the best choice to load initial data once on the server. It prevents extra calls after hydration.</li>

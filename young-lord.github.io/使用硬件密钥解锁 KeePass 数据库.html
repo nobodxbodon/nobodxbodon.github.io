@@ -1,0 +1,56 @@
+<h2><a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/_posts/2025-06-22-使用硬件密钥解锁KeePass数据库.md">仓库源文</a>，<a href="https://young-lord.github.io/posts/keepass-security-key">站点原文</a></h2>
+<p>该教程适用于YubiKey、CanoKey等支持GPG的物理密钥，目标是在Linux系统上使用简短的PIN而非较长的数据库密钥解锁KeePass数据库。</p>
+<h2>准备</h2>
+<p>本文使用的环境是 Arch Linux，KDE桌面环境，KeePassXC。</p>
+<p>首先你需要在硬件密钥中生成一个GPG密钥，该过程已有<a href="https://blog.dejavu.moe/posts/canokey-openpgp/#%E7%94%9F%E6%88%90-pgp-%E5%AF%86%E9%92%A5">很多教程</a>，此处不再赘述。</p>
+<p>使用<code>gpg -K</code>或<code>gpg --card-status</code>，获得主密钥的ID，或智能卡中任一子密钥的ID，形如<code>69D6E8DCB9E4117864368CA0EE4FB075119CE61F</code>或<code>7C4464C89E529178</code>，以下统一以前者代替，请根据实际修改。</p>
+<p>执行<code>read -s password &amp;&amp; echo -n "$password" | gpg --encrypt --armor -r 69D6E8DCB9E4117864368CA0EE4FB075119CE61F &gt; ENCRYPTED_PASS_FILE.gpg</code>，输入数据库密钥后生成其加密副本。此处的<code>--armor</code>仅用于以ASCII格式保存文件，若省略则以二进制格式保存。</p>
+<p>将以下文件保存为<code>unlock_keepassxc_with_key.sh</code>，使用<code>chmod a+x unlock_keepassxc_with_key.sh</code>赋予可执行权限。</p>
+<pre><code class="lang-shell">#!/usr/bin/env bash
+# https://young-lord.github.io/posts/keepass-security-key
+
+# Configuration
+ENCRYPTED_PASS_FILE="/path/to/ENCRYPTED_PASS_FILE.gpg"
+DATABASE_FILE="/path/to/keepass_database.kdbx"
+
+unlock_with_secrutiy_key() {
+    echo "Please tap your key."
+    # idk why terminal doesn't show in KDE autostart, so the kind notice is useless.
+
+    local decrypted_pass
+    if decrypted_pass=$(gpg --quiet --decrypt "$ENCRYPTED_PASS_FILE" 2&gt;/dev/null); then
+        nohup keepassxc --pw-stdin "$DATABASE_FILE" &lt;&lt;&lt;"$decrypted_pass" &gt;/dev/null 2&gt;&amp;1 &amp;
+        disown
+        return 0
+    else
+        echo "Failed to decrypt password using security key."
+        return 1
+    fi
+}
+
+manual_unlock() {
+    nohup keepassxc &gt;/dev/null 2&gt;&amp;1 &amp;
+    disown
+}
+
+# Main execution
+if gpg --card-status &gt;/dev/null 2&gt;&amp;1; then
+    unlock_with_secrutiy_key || manual_unlock
+else
+    manual_unlock
+fi
+</code></pre>
+<p>在KeePassXC的设置中，关闭“系统运行时自动启动 KeePassXC”，打开“在应用程序启动时最小化窗口”。</p>
+<p>对于KDE，在 System Settings -&gt; System -&gt; Autostart -&gt; Add New -&gt; Login Script 中添加该脚本。对于GNOME、Xfce等其他桌面环境，对应配置位置可能不同。</p>
+<p>对于其他操作系统、原版KeePass，本方式经微调后亦可使用。</p>
+<p>如果一切顺利，在插入硬件密钥的条件下，下次登录时，即会弹出输入OpenPGP PIN的窗口，输入PIN后，KeePassXC即在后台自动解锁。</p>
+<h2>缺点</h2>
+<p>目前仅可在开机（用户首次登录）时调用该脚本解锁，若重新锁定数据库，仍然需要输入数据库密码解锁。</p>
+<p>该脚本未对内存中已解密的数据库密钥进行销毁等处理，可能存在泄露风险。</p>
+<div class="license">
+  <p>本文遵守 <a itemprop="license" rel="license" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA-4.0</a> 许可协议。<a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/README.md#%E5%A3%B0%E6%98%8E">（不允许转载至简书或 CSDN）</a>
+    <a rel="license" aria-label="详细了解协议内容" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+<!--        <img alt="CC BY-NC-SA-4.0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" />-->
+    </a>
+  </p>
+</div>

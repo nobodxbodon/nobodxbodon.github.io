@@ -228,37 +228,7 @@ const Bookmarks = ({ category }) =&gt; {
   );
 };
 </code></pre>
-<pre><code class="lang-jsx">// besides `useQuery`, there's also `useMutation`
-function App() {
-  const postQuery = useQuery({
-    queryKey: ['post'],
-    queryFn: () =&gt; fetch(...).then(res =&gt; res.json()),
-  })
-
-  // const queryClient = useQueryClient()
-  const newPostMutation = useMutation({
-    mutationFn: async (newTitle) =&gt; {
-      const response = await fetch(...)
-      return response.json()
-    },
-    onSuccess: (data) =&gt; {
-      // update the cache
-      queryClient.invalidateQueries({ queryKey: ['post'] })
-    }
-  })
-
-  return (
-    &lt;div&gt;
-      { postQuery.data.map(post =&gt; &lt;div key={post.id}&gt;{post.title}&lt;/div&gt;) }
-      &lt;button
-        disabled={newPostMutation.isLoading}
-        onClick={() =&gt; newPostMutation.mutate('My new post')}&gt;
-        Create new
-      &lt;/button&gt;
-    &lt;/div&gt;
-  )
-}
-</code></pre>
+<h4>TanStack Query details</h4>
 <p>To manage client state in a React app, we have lots of options available, starting from the built-in hooks like <code>useState</code> and <code>useReducer</code>, all the way up to community maintained solutions like redux or zustand. But what are our options for managing server state in a React app? Historically, there weren't many. That is, until React Query came along.</p>
 <p>A better way to describe React Query is as an async state manager that is also acutely aware of the needs of server state. In fact, React Query doesn't fetch any data for you. You provide it a promise (whether from fetch, axios, graphql, etc.), and React Query will then take the data that the promise resolves with and make it available wherever you need it throughout your entire application.</p>
 <blockquote><p>A common mistake people do is try to combine useEffect and useQuery. useQuery already handles the state for you. If you're using a useEffect to somehow manage what you get from useQuery, you're doing it wrong.</p>
@@ -311,6 +281,13 @@ function App() {
     initialData: () =&gt; {
       return queryClient.getQueryData(['todos', 'all']);
     },
+    // `initialData` goes straight to the cache, 
+    // while `placeholderData` is not persisted to the cache.
+    placeholderData: (previousData) =&gt; previousData,
+    // Transform or select a part of the data returned by the query function
+    select: (data) =&gt; { ... },
+    // Refetch every 5 seconds
+    refetchInterval: 5000,
   });
 }
 
@@ -322,6 +299,76 @@ useQuery({
   queryFn: () =&gt; searchItems(search),
 });
 </code></pre>
+<pre><code class="lang-jsx">// besides `useQuery`, there's also `useMutation`
+function App() {
+  const postQuery = useQuery({
+    queryKey: ['post'],
+    queryFn: () =&gt; fetch(...).then(res =&gt; res.json()),
+  })
+
+  // const queryClient = useQueryClient()
+  const newPostMutation = useMutation({
+    mutationFn: async (newTitle) =&gt; {
+      const response = await fetch(...)
+      return response.json()
+    },
+    onSuccess: (data) =&gt; {
+      // update the cache
+      queryClient.invalidateQueries({ queryKey: ['post'] })
+    },
+    onError: () =&gt; {
+      // roll back the optimistic update
+    },
+    onSettled: () =&gt; {
+      // always run this, regardless of success or error
+    },
+  })
+
+  return (
+    &lt;div&gt;
+      { postQuery.data.map(post =&gt; &lt;div key={post.id}&gt;{post.title}&lt;/div&gt;) }
+      &lt;button
+        disabled={newPostMutation.isLoading}
+        onClick={() =&gt; newPostMutation.mutate('My new post')}&gt;
+        Create new
+      &lt;/button&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<pre><code class="lang-js">// pagination example
+const {
+  data,
+  fetchNextPage,
+  hasNextPage,
+  isFetching,
+  isFetchingNextPage,
+} = useInfiniteQuery({
+  queryKey: ['users'],
+  queryFn: getUsers,
+  initialPageParam: 1,
+  // fetch('/api/users?cursor=0')
+  // { data: [...], nextCursor: 3}
+  // fetch('/api/users?cursor=3')
+  // { data: [...], nextCursor: 6}
+  getNextPageParam: (lastPage, pages) =&gt; lastPage.nextCursor,
+})
+</code></pre>
+<pre><code class="lang-js">// prefetching example
+const queryClient = useQueryClient()
+const prefetch = () =&gt; {
+  queryClient.prefetchQuery({...})
+}
+
+return (
+  &lt;button onMouseEnter={prefetch} onFocus={prefetch} onClick={...}&gt;
+    Show Details
+  &lt;/button&gt;
+)
+</code></pre>
+<blockquote><p><a href="https://pinia-colada.esm.dev">Pinia Colada</a> is the smart data fetching layer for Vue.js. You don't even need to learn Pinia to use Pinia Colada because it exposes its own composables.</p>
+<p>Pinia Colada shares similarities with TanStack Query and has adapted some of its APIs for easier migration. However, Pinia Colada is tailored specifically for Vue, resulting in a lighter library with better and official integrations like Data Loaders. If you're familiar with TanStack Query, you'll find Pinia Colada intuitive and easy to use.</p>
+</blockquote>
 <h2>SWC - Rust-based platform for the Web</h2>
 <p>SWC (stands for Speedy Web Compiler) is a super-fast TypeScript / JavaScript compiler written in Rust, and can be used for both compilation and bundling. SWC is 20x faster than babel on a single-core benchmark, 68x faster than babel on a multicore benchmark.</p>
 <blockquote><p>JavaScript can only work on one core at a time. Languages like Go and Rust have multi-threading support built-in, which means they can use multiple CPU cores to parallelize as much work as possible.</p>
