@@ -1,0 +1,103 @@
+<h2><a href="https://github.com/achuanya/lhasa.github.io/blob/master/_posts/2025-02-06-BlogFunctionUpdate2025(2">仓库源文</a>.md)，<a href="https://lhasa.icu/BlogFunctionUpdate2025(2">站点原文</a>)</h2>
+<h2>Update details</h2>
+<ul>
+<li><strong>移除红灯笼</strong></li>
+<li><strong>新增 <code>sitemap.xml</code> 和 <code>sitemap.txt</code>，自动生成，不再手动更新！</strong></li>
+</ul>
+<p>之前我一直使用 &lt;a href="https://www.xml-sitemaps.com" target="_blank"&gt;xml-sitemaps&lt;/a&gt; 
+手动生成<code>sitemap.xml</code>，但每当 URL 新增或变更都需要手动提交。实在麻烦！所以，今日用 Liquid 实现自动生成，一劳永逸</p>
+<h2>sitemap.xml 优化策略</h2>
+<ul>
+<li><strong>首页优先级最高 (<code>1.0</code>)</strong>，其他页面次之 (<code>0.8</code>)  </li>
+<li><strong>新文章优先级高</strong>（30 天内 <code>0.9</code>，半年内 <code>0.8</code>，一年内 <code>0.6</code>），让新内容更容易被搜索引擎收录  </li>
+<li><strong>旧文章优先级降低</strong>（1 年以上 <code>0.4</code>，2 年以上 <code>0.2</code>），减少搜索引擎对老旧内容的爬取</li>
+<li><strong>动态调整 <code>changefreq</code></strong>，确保新内容频繁爬取，而老文章爬取频率降低</li>
+</ul>
+<p>{% raw %}</p>
+<pre><code class="lang-xml">---
+layout: null
+---
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"&gt;
+  {% assign now = site.time | date: "%s" | plus: 0 %}
+
+  {% for page in site.pages %}
+    {% if page.url == "/" %}
+    &lt;!-- 首页优先级最高 --&gt;
+      {% assign page_priority = "1.0" %}
+    {% else %}
+      {% assign page_priority = "0.8" %}
+    {% endif %}
+
+    &lt;url&gt;
+      &lt;loc&gt;{{ site.url }}{{ page.url | replace:'index.html','' }}&lt;/loc&gt;
+      &lt;lastmod&gt;{{ site.time | date_to_xmlschema }}&lt;/lastmod&gt;
+      &lt;changefreq&gt;weekly&lt;/changefreq&gt;
+      &lt;priority&gt;{{ page_priority }}&lt;/priority&gt;
+    &lt;/url&gt;
+  {% endfor %}
+
+  &lt;!-- 根据发布时间动态调整 priority 和 changefreq --&gt;
+  {% for post in site.posts %}
+    {% assign post_time = post.date | date: "%s" | plus: 0 %}
+    {% assign diff = now | minus: post_time %}
+    {% assign days_old = diff | divided_by: 86400 %}
+
+    {% if days_old &lt; 30 %}
+      {% assign priority = "0.9" %}
+      {% assign changefreq = "daily" %}
+    {% elsif days_old &lt; 180 %}
+      {% assign priority = "0.8" %}
+      {% assign changefreq = "weekly" %}
+    {% elsif days_old &lt; 365 %}
+      {% assign priority = "0.6" %}
+      {% assign changefreq = "monthly" %}
+    {% elsif days_old &lt; 730 %}
+      {% assign priority = "0.4" %}
+      {% assign changefreq = "yearly" %}
+    {% else %}
+      {% assign priority = "0.2" %}
+      {% assign changefreq = "never" %}
+    {% endif %}
+
+    &lt;url&gt;
+      &lt;loc&gt;{{ site.url }}{{ post.url }}&lt;/loc&gt;
+      &lt;lastmod&gt;{{ post.date | date_to_xmlschema }}&lt;/lastmod&gt;
+      &lt;changefreq&gt;{{ changefreq }}&lt;/changefreq&gt;
+      &lt;priority&gt;{{ priority }}&lt;/priority&gt;
+    &lt;/url&gt;
+  {% endfor %}
+&lt;/urlset&gt;
+</code></pre>
+<h2>sitemap.txt 兼容旧版爬虫</h2>
+<p>sitemap.txt 适用于不支持 XML 的搜索引擎（如某些旧版爬虫）</p>
+<pre><code class="lang-xml">---
+layout: null
+permalink: /sitemap.txt
+---
+{% for page in site.pages %}
+{{ site.url }}{{ page.url | replace:'index.html','' }}
+{% endfor %}
+
+{% for post in site.posts %}
+{{ site.url }}{{ post.url }}
+{% endfor %}
+</code></pre>
+<p>{% endraw %}</p>
+<h2>在 robots.txt 里声明 Sitemap</h2>
+<p>确保搜索引擎能找到 <code>Sitemap</code>，需要在 <code>robots.txt</code> 文件中声明 <code>sitemap.xml</code> 和 <code>sitemap.txt</code></p>
+<pre><code class="lang-txt">User-agent: *
+Allow: /
+
+User-agent: MJ12bot
+Disallow: /
+User-agent: AhrefsBot
+Disallow: /
+User-agent: SemrushBot
+Disallow: /
+User-agent: dotbot
+Disallow: /
+
+Sitemap: https://lhasa.icu/sitemap.xml
+Sitemap: https://lhasa.icu/sitemap.txt
+</code></pre>

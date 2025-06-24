@@ -1,16 +1,21 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/react-18-suspense-transition.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-18-suspense-transition">站点原文</a></h2>
-<p>A key property of Concurrent React is that rendering is interruptible. With synchronous rendering, once an update starts rendering, nothing can interrupt it until the user can see the result on screen. In a concurrent render, this is not always the case. React may start rendering an update, pause in the middle, then continue later. It may even abandon an in-progress render altogether.</p>
-<p>Concurrent React is opt-in — it’s only enabled when you use a concurrent feature. The new root API in React 18 enables the new concurrent renderer, which allows you to opt-into concurrent features. Continue to read <a href="https://react.dev/blog/2022/03/08/react-18-upgrade-guide">How to Upgrade to React 18</a>.</p>
+<p>Concurrent React is a new feature introduced in React 18 that changes how React handles rendering and updates. A key property of Concurrent React is that rendering is interruptible. With synchronous rendering, once an update starts rendering, nothing can interrupt it until the user can see the result on screen. In a concurrent render, React may start rendering an update, pause in the middle, then continue later. It may even abandon an in-progress render altogether.</p>
+<h2>New Root API</h2>
+<p>Concurrent React is opt-in — it’s only enabled when you use a concurrent feature. The new root API in React 18 enables the new concurrent renderer, which allows you to opt-into concurrent features.</p>
 <pre><code class="lang-js">// Before
 import { render } from 'react-dom';
 const container = document.getElementById('app');
-render(&lt;App tab="home" /&gt;, container);
+render(&lt;App /&gt;, container);
 
 // After
 import { createRoot } from 'react-dom/client';
 const container = document.getElementById('app');
 const root = createRoot(container);
-root.render(&lt;App tab="home" /&gt;);
+root.render(&lt;App /&gt;);
+</code></pre>
+<pre><code class="lang-js">import { hydrateRoot } from 'react-dom/client';
+
+hydrateRoot(document.getElementById('root'), &lt;App /&gt;);
 </code></pre>
 <h2>Transitions</h2>
 <p>Consider typing in an input field that filters a list of data. Here, whenever the user types a character, we update the input value and use the new value to search the list and show the results. For large screen updates, this can cause lag on the page while everything renders, making typing or other interactions feel slow and unresponsive. Conceptually, there are two different updates that need to happen. The first update is an urgent update, to change the value of the input field. The second, is a less urgent update to show the results of the search.</p>
@@ -83,7 +88,7 @@ startTransition(() =&gt; {
 </code></pre>
 <p>If we didn't use <code>useDeferredValue</code>, the expensive computation ("List" component here) would run on every keystroke, which could lead to performance issues. By deferring the update of the text value, we ensure that the expensive computation only runs when the text value has stabilized.</p>
 <h2>New Suspense Features</h2>
-<p>Suspense allows you to render a fallback component while a component is waiting for some asynchronous operations.</p>
+<p>Suspense allows you to render a fallback component while a component is waiting for some asynchronous operations. With React 18, Suspense can be used on the server.</p>
 <p>Suspense is used on the client in React 16, but it would throw an error when used in SSR. Suspense and code-splitting using <code>React.lazy</code> were not compatible with SSR, until React 18.</p>
 <pre><code class="lang-jsx">import React, { lazy, Suspense } from 'react';
 
@@ -97,21 +102,18 @@ const Component = () =&gt; (
 </code></pre>
 <p>SSR lets you render your React components on the server into HTML and send it to the user. It's useful because it lets users with worse connections start reading or looking at the content while JavaScript is loading. The problem with SSR today is a “waterfall”: fetch data (server) → render to HTML (server) → load code (client) → hydrate (client). Neither of the stages can start until the previous stage has finished. This is why it’s inefficient. To solve this, React created Suspense.</p>
 <p>React 18 includes architectural improvements to React SSR performance <em>(with <code>renderToPipeableStream</code> and <code>&lt;Suspense&gt;</code>)</em>. It lets you use <code>&lt;Suspense&gt;</code> to break down your app into smaller independent units. As a result, your app’s users will see the content sooner and be able to start interacting with it much faster. When the data for a component is ready on the server, React will send additional HTML into the same stream, as well as a minimal inline <code>&lt;script&gt;</code> tag to put that HTML in the “right place”. Read "New Suspense SSR Architecture in React 18": <a href="https://github.com/reactwg/react-18/discussions/37">https://github.com/reactwg/react-18/discussions/37</a></p>
-<pre><code class="lang-js">import { renderToPipeableStream } from 'react-dom/server';
+<pre><code class="lang-jsx">function App() {
+  return (
+    &lt;Suspense fallback={&lt;Spinner /&gt;}&gt;
+      &lt;Comments /&gt;
+    &lt;/Suspense&gt;
+  );
+}
 
-app.use('/', (request, response) =&gt; {
-  const { pipe } = renderToPipeableStream(&lt;App /&gt;, {
-    // This points to the JavaScript file used to bootstrap the client-side code.
-    bootstrapScripts: ['/main.js'],
-    // The `onShellReady` callback fires when the entire shell has been rendered. 
-    // The part of your app outside of any `&lt;Suspense&gt;` boundaries is called the shell.
-    // By the time `onShellReady` fires, components in nested `&lt;Suspense&gt;` might still be loading data.
-    onShellReady() {
-      response.setHeader('content-type', 'text/html');
-      pipe(response);
-    }
-  });
-});
+async function renderToHTML() {
+  const html = await renderToString(&lt;App /&gt;);
+  return html;
+}
 </code></pre>
 <p><code>&lt;Suspense&gt;</code> allows for server-side HTML streaming and selective hydration on the client:</p>
 <ol>
@@ -122,46 +124,6 @@ app.use('/', (request, response) =&gt; {
 <blockquote><p>Understand Node stream:<br/>
 The HTTP response object is a writable stream. All streams are instances of <code>EventEmitter</code>. They emit events that can be used to read and write data. The <code>pipe()</code> function reads data from a readable stream as it becomes available and writes it to a destination writable stream. All that the <code>pipe</code> operation does is subscribe to the relevant events on the source and call the relevant functions on the destination. The <code>pipe</code> method is the easiest way to consume streams.</p>
 </blockquote>
-<h3>How Suspense works</h3>
-<p>One of the key benefits of React Suspense is that it lets you render as you fetch. Basically the React Component wrapped in Suspense tags, will start to try to render continuosly and <strong>it expects for a method that throws a new promise</strong> until the original promise is not resolved, that's how it knows that it has to keep rendering the fallback. So you need to pass a resource with a very specific shape, that's why you need a wrapper. Fetching libraries like react-query or SWR will implement the wrapper themselves, so you won't have to care of that part.</p>
-<pre><code class="lang-js">// Use Suspense without a 3rd party library
-const OuterComponent = () =&gt; {
-  return (
-    &lt;Suspense fallback={&lt;div&gt;Loading...&lt;/div&gt;}&gt;
-      &lt;DataLoader /&gt;
-    &lt;/Suspense&gt;
-  );
-}
-
-let data;
-
-const DataLoader = () =&gt; {
-  if (!data) {
-    throw fetchUserProfile(userId)
-      .then((profile) =&gt; { data = profile });
-  }
-
-  return &lt;UserProfile data={data} /&gt;
-}
-</code></pre>
-<h3>Streaming in Next.js</h3>
-<p>Streaming enables you to progressively render UI from the server, which allows you to break down the page's HTML into smaller chunks and progressively send those chunks from the server to the client. This enables parts of the page to be displayed sooner, without waiting for all the data to load before any UI can be rendered. Streaming is built into the Next.js App Router by default.</p>
-<pre><code class="lang-tsx">import { Suspense } from 'react'
-import { PostFeed, Weather } from './Components'
-
-export default function Posts() {
-  return (
-    &lt;section&gt;
-      &lt;Suspense fallback={&lt;p&gt;Loading feed...&lt;/p&gt;}&gt;
-        &lt;PostFeed /&gt;
-      &lt;/Suspense&gt;
-      &lt;Suspense fallback={&lt;p&gt;Loading weather...&lt;/p&gt;}&gt;
-        &lt;Weather /&gt;
-      &lt;/Suspense&gt;
-    &lt;/section&gt;
-  )
-}
-</code></pre>
 <h2>Suspense and <code>startTransition</code></h2>
 <p>These two APIs are designed for different use cases and can absolutely be used together. Read from <a href="https://github.com/reactwg/react-18/discussions/94">https://github.com/reactwg/react-18/discussions/94</a></p>
 <p>When a component suspends, the closest parent Suspense boundary switches to showing the fallback. This can lead to a jarring user experience if it was already displaying some content. To prevent the whole site layout got replaced by <code>BigSpinner</code>, you can mark the navigation state update as a transition with <code>startTransition</code>. This tells React that the state transition is not urgent, and it’s better to keep showing the previous page instead of hiding any already revealed content.</p>
@@ -207,55 +169,120 @@ function BigSpinner() {
 <li>When you initially load data on an unloaded page (ex. navigating to a new page). Suspense is a way to specify fallbacks instead of content, so it should used in this case.</li>
 <li>When you load new data on a page that has already loaded (ex. tab navigations). In this case, it's bad to hide something the user has already seen. In this case, <code>startTransition</code> lets you show a pending indicator until that render completes, and avoid retriggering Suspense boundaries.</li>
 </ul>
+<h2>How to fetch data in React</h2>
 <blockquote><p><strong>Render-as-you-fetch</strong> is a pattern that lets you start fetching the data you will need at the same time you start rendering the component using that data. Used along with <code>Suspense</code>, the data call is made while the component is being rendered. While the data is being loaded the component is in a suspended state and <code>Suspense</code> is used to show a fallback UI.</p>
 </blockquote>
-<h3><code>useOptimistic</code> use case</h3>
-<p>When the app is settled, the server is their source of truth. Whenever the server responds with a page, the checkboxes should reflect the URL that was used to generate that page. When the app is transitioning, the client is their source of truth. If we press a checkbox and trigger a server-side refresh, the client should immediately reflect our press while the app is preparing the next page.</p>
-<p>This is exactly what <code>useOptimistic</code> was designed for. It gives you some local React state that's seeded with server-side data, but lets you make temporary changes while your app is transitioning. Once all pending transitions settle, <code>useOptimistic</code> automatically discards any changes you made, and resets its value to the latest version of your server-side data.</p>
-<pre><code class="lang-js">// 
-// 1. `optimisticState` is the resulting optimistic state. It is equal to state
-// unless an action is pending, in which case it is equal to the value returned by `updateFn`.
-// 2. `addOptimistic` is the dispatching function to call when you have an optimistic update, 
-// it takes one argument `optimisticValue`, and will call the `updateFn`.
-const [optimisticState, addOptimistic] = useOptimistic(
-  // the value to be returned initially
-  state,
-  // updateFn
-  (currentState, optimisticValue) =&gt; {
-    // merge and return new state
-    // with optimistic value
-  }
-);
+<ol>
+<li><p>React Server Components (server-side data fetching)</p>
+<pre><code class="lang-jsx"> const PostsPage = async () =&gt; {
+   const posts = await getPosts();
+
+   return (
+     &lt;ul&gt;
+       {posts?.map((post) =&gt; (
+         &lt;li key={post.id}&gt;{post.title}&lt;/li&gt;
+       ))}
+     &lt;/ul&gt;
+   );
+ };
 </code></pre>
-<pre><code class="lang-jsx">// https://buildui.com/posts/instant-search-params-with-react-server-components
-export default function GenresPanel({ genres }: { genres: string[] }) {
-  let [optimisticGenres, setOptimisticGenres] = useOptimistic(genres);
-  let [isPending, startTransition] = useTransition();
-  let router = useRouter();
+</li>
+<li><p>React Suspense is a feature that allows you to suspend the rendering of a component until some asynchronous operation is done.</p>
+<pre><code class="lang-jsx"> const PostsPage = () =&gt; {
+   return (
+     &lt;Suspense fallback={&lt;div&gt;Loading...&lt;/div&gt;}&gt;
+       &lt;PostList /&gt;
+     &lt;/Suspense&gt;
+   );
+ };
 
-  return (
-    &lt;&gt;
-      &lt;input
-        name={genre}
-        type="checkbox"
-        checked={optimisticGenres.includes(genre)}
-        onChange={(e) =&gt; {
-          let { name, checked } = e.target;
-          let newGenres = checked
-            ? [...optimisticGenres, name]
-            : optimisticGenres.filter((g) =&gt; g !== name);
+ const PostList = async () =&gt; {
+   const posts = await getPosts();
 
-          let newParams = new URLSearchParams(
-            newGenres.map((genre) =&gt; ["genre", genre])
-          );
-
-          startTransition(() =&gt; {
-            setOptimisticGenres(newGenres);
-            router.push(`?${newParams}`);
-          });
-        }}
-      /&gt;
-    &lt;/&gt;
-  );
-}
+   return (
+     &lt;ul&gt;
+       {posts?.map((post) =&gt; (
+         &lt;li key={post.id}&gt;{post.title}&lt;/li&gt;
+       ))}
+     &lt;/ul&gt;
+   );
+ }
 </code></pre>
+</li>
+<li><p>When it comes to CSR React applications (i.e. SPAs), the most recommended way to fetch data is by using a library like React Query.</p>
+<pre><code class="lang-jsx"> "use client";
+
+ const PostsPage = () =&gt; {
+   const { data: posts } = useQuery({
+     queryKey: ["posts"],
+     queryFn: getPosts,
+   });
+
+   return (
+     &lt;ul&gt;
+       {posts?.map((post) =&gt; (
+         &lt;li key={post.id}&gt;{post.title}&lt;/li&gt;
+       ))}
+     &lt;/ul&gt;
+   );
+ };
+</code></pre>
+</li>
+<li><p>Combine React Server Components and client-side data fetching with React Query. You want to fetch initial data on the server-side and then use React Query for continued client-side data fetching.</p>
+<pre><code class="lang-jsx"> const PostsPage = async () =&gt; {
+   const posts = await getPosts();
+
+   return (
+     &lt;div&gt;
+       &lt;PostList initialPosts={posts} /&gt;
+     &lt;/div&gt;
+   );
+ };
+</code></pre>
+<pre><code class="lang-jsx"> "use client";
+
+ const PostList = ({ initialPosts }: PostListProps) =&gt; {
+   const { data: posts } = useQuery({
+     queryKey: ["posts"],
+     queryFn: getPosts,
+     initialData: initialPosts,
+   });
+
+   return (
+     &lt;ul&gt;
+       {posts?.map((post) =&gt; (
+         &lt;li key={post.id}&gt;{post.title}&lt;/li&gt;
+       ))}
+     &lt;/ul&gt;
+   );
+ };
+</code></pre>
+</li>
+<li><p>React's <code>use()</code> API. It allows you to pass a Promise from a Server Component to a Client Component and resolve it in the Client Component.</p>
+<pre><code class="lang-jsx"> const PostsPage = () =&gt; {
+   const postsPromise = getPosts();
+
+   return (
+     &lt;Suspense&gt;
+       &lt;PostList promisedPosts={postsPromise} /&gt;
+     &lt;/Suspense&gt;
+   );
+ };
+</code></pre>
+<pre><code class="lang-jsx"> "use client";
+
+ const PostList = ({ promisedPosts }: PostListProps) =&gt; {
+   // this will suspend the component and stream data as well
+   const posts = use(promisedPosts);
+
+   return (
+     &lt;ul&gt;
+       {posts?.map((post) =&gt; (
+         &lt;li key={post.id}&gt;{post.title}&lt;/li&gt;
+       ))}
+     &lt;/ul&gt;
+   );
+ };
+</code></pre>
+</li>
+</ol>
