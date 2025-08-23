@@ -1,0 +1,96 @@
+<h2><a href="https://github.com/caol64/caol64.github.io/blob/master/content/posts/2025/2025-06-26-pcsx2-pine-protocol-explanation.md">仓库源文</a>，<a href="https://babyno.top/posts/2025/06/26/pcsx2-pine-protocol-explanation">站点原文</a></h2>
+<p>最近在逛 <a href="https://pcsx2.net/blog/2024/pcsx2-2-release">PCSX2</a> 博客的时候，注意到这么一段话：</p>
+<blockquote><p>PINE Isn't a Tree, It's a Protocol!</p>
+<p>Introduced by GovanifY, PINE is a protocol we adopted for networked software to access PCSX2. If you've ever wanted to have external software be able to probe PS2 memory, write into it, or even command savestate loads or saves, it's your lucky day. PINE opens the door to automation like never before and gives developers the opportunity to make companion apps for PCSX2. Apps like KAMI have already been made to add native mouse support to games, and we can't wait to see what else people come up with!</p>
+</blockquote>
+<p>大致意思是：开放允许网络化软件 (networked software) 能够访问和控制 PCSX2 模拟器。最重要的是，可以读写 PS2 内存了。</p>
+<p>原理应该是 PCSX2 作为服务端，开放了一个端口，而网络化软件作为客户端与之连接。它们之间的通信协议被称之为 PINE。</p>
+<p>之前我开发了一个「<a href="https://github.com/caol64/sakatsuku04">球会04存档修改器</a>」，借助这个机制，是不是可以开发一个即时游戏修改器了？说干就干，我们来做下测试。</p>
+<h2>启用 PCSX2 的 PINE 服务端</h2>
+<p>PINE 服务已经内置在新版本的 PCSX2 软件中，只是默认未开启。如下图所示，把<code>PINE 设置</code>的<code>启用</code>选项打勾，注意不要修改默认的<code>28011</code>端口。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-06-26-pcsx2-pine-protocol-explanation/1.webp"/></p>
+<h2>编译 PINE 客户端库</h2>
+<p>根据指引，来到 GovanifY 老哥的<a href="https://github.com/GovanifY/pine">PINE仓库</a>。找了半天，老哥没有提供编译好的 release 文件。看来只能自己动手编译了，好在并不复杂，只要初始化一个 python 环境，然后按照下面的步骤来：</p>
+<pre><code class="lang-sh">git clone git@github.com:GovanifY/pine.git
+pip install meson ninja
+cd bindings/c
+meson build
+cd build
+ninja
+</code></pre>
+<p>此时在<code>bindings/c/build</code>目录下会生成<code>libpine_c.dylib</code>文件。（这个文件在 windows 和 linux 下分别是<code>libpine_c.dll</code>和<code>libpine_c.so</code>）</p>
+<h2>客户端测试</h2>
+<p>在<code>bindings</code>目录下作者提供了几个语言的调用代码示例。我们用 Python 测试一下。</p>
+<p>先将<code>libpine_c.dylib</code>复制到<code>bindings/python</code>目录下，然后运行<code>example.py</code>。</p>
+<p>不出意外的话，会报错：<code>segmentation fault</code>。</p>
+<p>难道是编译的库有问题？我使用相同的库，用<code>bindings/rust</code>下的代码跑了一遍，没问题。这就证明我们编译出来的库是对的。</p>
+<p>把 python 代码和 rust 代码扔给 AI 做比较，很快给出了答案：</p>
+<blockquote><p>Python 崩溃原因：参数类型不匹配</p>
+<p>在 ctypes 中，如果你不显式指定函数的参数和返回值类型，默认按 int 处理</p>
+</blockquote>
+<p>把<code>example.py</code>稍作修改：</p>
+<pre><code class="lang-python">import ctypes
+import os
+import platform
+from ctypes import c_void_p, c_uint, c_ulong, c_char, c_bool
+
+
+# we get the correct library extension per os
+lib="libpine_c"
+cur_os = platform.system()
+if(cur_os == "Linux"):
+    lib="libpine_c.so"
+elif(cur_os == "Windows"):
+    lib="libpine_c.dll"
+elif(cur_os == "Darwin"):
+    lib="libpine_c.dylib"
+
+
+# we load the library, this will require it to be in the same folder
+# refer to bindings/c to build the library.
+libipc = ctypes.CDLL(os.path.join(os.path.dirname(os.path.abspath(__file__)),lib))
+
+libipc.pine_pcsx2_new.restype = c_void_p
+
+libipc.pine_read.argtypes = [c_void_p, c_uint, c_char, c_bool]
+libipc.pine_read.restype = c_ulong
+
+libipc.pine_get_error.argtypes = [c_void_p]
+libipc.pine_get_error.restype = c_uint
+
+libipc.pine_pcsx2_delete.argtypes = [c_void_p]
+libipc.pine_pcsx2_delete.restype = None
+
+ipc = libipc.pine_pcsx2_new()
+value = libipc.pine_read(ipc, 0x00347D34, c_char(0), False)
+print("Read:", value)
+print("Error:", libipc.pine_get_error(ipc))
+libipc.pine_pcsx2_delete(ipc)
+</code></pre>
+<p>再次运行就没问题了。</p>
+<h2>实操测试</h2>
+<ul>
+<li>模拟器：PCSX2 v2.2.0</li>
+<li>游戏：J.League Pro Soccer Club o Tsukurou! 04</li>
+<li>PINE：开启</li>
+</ul>
+<p>进入游戏：</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-06-26-pcsx2-pine-protocol-explanation/2.webp"/></p>
+<p>我们知道金钱的地址：0x703D58，位数为 32 bit ，编写代码：</p>
+<pre><code class="lang-python">ipc = libipc.pine_pcsx2_new()
+value = libipc.pine_read(ipc, 0x703D58, c_char(2), False)
+print("Read:", value)
+</code></pre>
+<p>得到结果：</p>
+<pre><code>Read: 64300
+</code></pre>
+<p>再次编写代码尝试修改金钱：</p>
+<pre><code class="lang-python">libipc.pine_write(ipc, 0x703D58, c_ulong(11500), c_char(6), False)
+</code></pre>
+<p>结果：</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-06-26-pcsx2-pine-protocol-explanation/3.webp"/></p>
+<p>在 PCSX2 的日志中可以看到 PINE 客户端已连接。</p>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/babyno.top/content/imgs/posts/2025-06-26-pcsx2-pine-protocol-explanation/4.webp"/></p>
+<h2>结语</h2>
+<p>长期以来我一直在寻找一种可以修改 PCSX2 内存的方法，来开发一个游戏修改器。然而，面对现代操作系统（如 macOS 的 SIP 和 Windows 的 UAC）日益增强的安全防护机制，在不关闭这些安全功能的前提下直接操作另一应用的内存几乎是不可能的。让普通用户为了使用修改器而关闭 SIP，或频繁接受 UAC 弹窗，用户体验的代价未免过高。</p>
+<p>PINE 协议的出现，为控制 PCSX2 内存提供了一种优雅且用户接受度更高的解决方案。它规避了直接内存操作的安全和权限障碍，为开发者打开了新的大门。无论如何，这对于开发者是个好的开始，我们期待着基于 PINE 开发出的软件能带来怎样的实际效果。</p>

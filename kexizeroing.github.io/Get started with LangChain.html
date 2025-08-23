@@ -199,6 +199,7 @@ export const run = async () =&gt; {
 <ul>
 <li>Google Drive Loader: <a href="https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/Google%20Drive%20Loader.ipynb">https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/Google%20Drive%20Loader.ipynb</a></li>
 <li>YouTube Loader: <a href="https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/YouTube%20Loader.ipynb">https://github.com/gkamradt/langchain-tutorials/blob/main/loaders/YouTube%20Loader.ipynb</a></li>
+<li>WebBaseLoader: <a href="https://python.langchain.com/docs/integrations/document_loaders/web_base">https://python.langchain.com/docs/integrations/document_loaders/web_base</a></li>
 </ul>
 <pre><code class="lang-js">// text_loader.ts
 import { TextLoader } from "langchain/document_loaders";
@@ -247,6 +248,8 @@ export const run = async () =&gt; {
    */
 };
 </code></pre>
+<blockquote><p>Suppose you have a set of documents and want to summarize their content. <strong>Map-reduce</strong> operations are essential for efficient task decomposition and parallel processing. In the map step, the documents are split into batches, and each document is summarized individually using a LLM. Then, in the reduce step, those individual summaries are consolidated into a single global summary. The map step is typically parallelized over the input documents.</p>
+</blockquote>
 <h3>LangChain Expression Language (LCEL)</h3>
 <p>LangChain Expression Language is a declarative system designed for easily building multi-step computational chains, from simple prototypes to complex, production-level applications. It simplifies the process of setting up complex computational tasks by allowing users to state “what” outcome is needed rather than detailing “how” to achieve it.</p>
 <pre><code class="lang-py">from langchain_core.output_parsers import StrOutputParser
@@ -271,7 +274,6 @@ chain.invoke({
   "question": "Who is Mary's sister?"
 })
 
-```py
 from langchain_community.vectorstores import DocArrayInMemorySearch
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 
@@ -292,142 +294,3 @@ setup = RunnableParallel(context=retriever, question=RunnablePassthrough())
 chain = setup | prompt | model | parser
 chain.invoke("What color is Patricia's car?")
 </code></pre>
-<h3>How agents work under the hood</h3>
-<p>With the Agent model, LLM becomes an orchestrator, taking a question, decomposing it into chunks, then using appropriate tools to pull together an answer.</p>
-<p>What is an agent?</p>
-<ul>
-<li>Planning: Break down large tasks into smaller, managable subgoals.</li>
-<li>Memory: Short (e.g. chat history) and long-term (e.g. vector store) memories.</li>
-<li>Tool use: External APIs for extra information.</li>
-</ul>
-<blockquote><p>Agents are distinct from workflows:</p>
-<ul>
-<li>Agents: non-linear, non-deterministic (can change from run to run)</li>
-<li>Workflows: linear, deterministic execution paths</li>
-</ul>
-</blockquote>
-<p>ReAct is a very popular implementation of an agent and involves basically the loop of Action-Observation-Thinking to perform tasks. (Planning: Lets LLM choose an action, observe result, think, and choose action again.)</p>
-<p>Delving into the LangChain codebase, we find that this orchestration is performed by the following prompt:</p>
-<pre><code>Answer the following questions as best you can. You have access to the following tools:
-
-${tools}
-
-Use the following format:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [search, calculator]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-Begin!
-
-Question: ${question}
-Thought:
-</code></pre>
-<p>The full code can be found at <a href="https://github.com/ColinEberhardt/langchain-mini">https://github.com/ColinEberhardt/langchain-mini</a></p>
-<pre><code class="lang-js">const googleSearch = async (question) =&gt;
-  await fetch(
-    `https://serpapi.com/search?api_key=${process.env.SERPAPI_API_KEY}&amp;q=${question}`
-  )
-    .then((res) =&gt; res.json())
-    .then((res) =&gt; res.answer_box?.answer || res.answer_box?.snippet);
-
-const tools = {
-  search: {
-    description:
-      "a search engine. useful for when you need to answer questions about current events. input should be a search query.",
-    execute: googleSearch,
-  },
-  calculator: {
-    description:
-      "Useful for getting the result of a math expression. The input to this tool should be a valid mathematical expression that could be executed by a simple calculator.",
-    // import { Parser } from "expr-eval"
-    execute: (input) =&gt; Parser.evaluate(input).toString(),
-  },
-};
-
-// construct the prompt, with our question and the tools that the chain can use
-let prompt = promptTemplate.replace("${question}", question).replace(
-  "${tools}",
-  Object.keys(tools)
-    .map((toolname) =&gt; `${toolname}: ${tools[toolname].description}`)
-    .join("\n")
-);
-
-// allow the LLM to iterate until it finds a final answer
-while (true) {
-  const response = await completePrompt(prompt);
-
-  // add this to the prompt
-  prompt += response;
-
-  const action = response.match(/Action: (.*)/)?.[1];
-  if (action) {
-    // execute the action specified by the LLMs
-    const actionInput = response.match(/Action Input: "?(.*)"?/)?.[1];
-    const result = await tools[action.trim()].execute(actionInput);
-    prompt += `Observation: ${result}\n`;
-  } else {
-    return response.match(/Final Answer: (.*)/)?.[1];
-  }
-}
-</code></pre>
-<blockquote><p>Agents are systems where LLMs dynamically direct their own processes and tool usage, maintaining control over how they accomplish tasks.</p>
-<p>Workflows use "predefined code paths", whereas agents "dynamically direct their own processes". The difference between them is the degree of autonomy. Agents have more autonomy, workflows run on pre-defined rails.</p>
-<ul>
-<li><a href="https://www.aihero.dev/building-effective-agents">https://www.aihero.dev/building-effective-agents</a></li>
-<li><a href="https://www.georgesung.com/ai/autogpt-arch">https://www.georgesung.com/ai/autogpt-arch</a></li>
-</ul>
-</blockquote>
-<h3>Run open-source LLMs locally on your computer</h3>
-<ol>
-<li><p>Ollama + OpenWebUI</p>
-<ul>
-<li><a href="https://github.com/kexiZeroing/langchain-llamaindex-ollama">https://github.com/kexiZeroing/langchain-llamaindex-ollama</a></li>
-<li><a href="https://github.com/ollama/ollama/blob/main/docs/faq.md">https://github.com/ollama/ollama/blob/main/docs/faq.md</a></li>
-<li><a href="https://github.com/ollama/ollama-js">https://github.com/ollama/ollama-js</a></li>
-<li><a href="https://github.com/open-webui/open-webui">https://github.com/open-webui/open-webui</a></li>
-<li><a href="https://simonwillison.net/2024/Dec/27/open-webui">https://simonwillison.net/2024/Dec/27/open-webui</a></li>
-</ul>
-</li>
-<li><p>LM Studio</p>
-<ul>
-<li><a href="https://lmstudio.ai">https://lmstudio.ai</a></li>
-<li><a href="https://huggingface.co/blog/yagilb/lms-hf">https://huggingface.co/blog/yagilb/lms-hf</a></li>
-</ul>
-</li>
-<li><p>GPT4All</p>
-<ul>
-<li><a href="https://github.com/nomic-ai/gpt4all">https://github.com/nomic-ai/gpt4all</a></li>
-</ul>
-</li>
-<li><p>Vercel AI Chatbot Template</p>
-<ul>
-<li><a href="https://github.com/vercel/ai-chatbot">https://github.com/vercel/ai-chatbot</a></li>
-</ul>
-</li>
-<li><p>Transformers.js uses ONNX Runtime to run models in the browser</p>
-<ul>
-<li><a href="https://huggingface.co/docs/transformers.js/index">https://huggingface.co/docs/transformers.js/index</a></li>
-<li><a href="https://huggingface.co/onnx-community">https://huggingface.co/onnx-community</a></li>
-</ul>
-</li>
-</ol>
-<p>You can run any GGUF (GPT-Generated Unified Format), a binary format that is optimized for quick loading and saving of models, on the Hugging Face Hub directly with ollama. All you need to do is:</p>
-<pre><code class="lang-sh"># https://huggingface.co/docs/hub/en/ollama
-ollama run hf.co/{username}/{repository}
-
-# run the Llama 3.2 1B
-ollama run hf.co/bartowski/Llama-3.2-1B-Instruct-GGUF:latest
-</code></pre>
-<blockquote><p>Mirror site of huggingface.co in China</p>
-<ul>
-<li><a href="https://hf-mirror.com">https://hf-mirror.com</a></li>
-<li><a href="https://zhuanlan.zhihu.com/p/663712983">https://zhuanlan.zhihu.com/p/663712983</a></li>
-</ul>
-<p>DeepSeek's official API platform has been down. You could use either <a href="https://openrouter.ai">OpenRouter</a> or the Chinese equivalent, <a href="https://siliconflow.cn">SiliconFlow</a>.</p>
-</blockquote>

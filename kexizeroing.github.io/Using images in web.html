@@ -90,7 +90,7 @@
 <li><a href="https://web.dev/browser-level-image-lazy-loading">https://web.dev/browser-level-image-lazy-loading</a></li>
 <li><a href="https://github.com/lovell/sharp">https://github.com/lovell/sharp</a></li>
 </ul>
-<h3>Let the CDN do the work</h3>
+<h2>Let the CDN do the work</h2>
 <p>Most images on modern websites are hosted on a CDN that can resize images on the fly and deliver them at the edge.</p>
 <p>The library <a href="https://github.com/ascorbic/unpic-img">unpic-img</a> detects the image CDN, and then uses the CDN's URL API to resize and format images. It then generates the correct srcset and sizes attributes for the image. It uses new features built into modern browsers to handle lazy loading, fetch priority and decoding. It also uses pure CSS to handle responsive resizing of images, preserving aspect ratio and avoiding layout shift.</p>
 <p>It turns this:</p>
@@ -130,29 +130,39 @@ function MyComponent() {
   "
 /&gt;
 </code></pre>
-<h3>Universal lazy loading for placeholder images</h3>
-<p><a href="https://unlazy.byjohann.dev">unlazy</a> is intended to be used with the <code>loading="lazy"</code> attribute alongside (blurry) placeholder images. If you have a pre-generated blurry placeholder image, use the <code>src</code> attribute to specify it. Otherwise, you can use a BlurHash or ThumbHash to generate a placeholder image on the fly.</p>
-<pre><code class="lang-html">&lt;img
-  loading="lazy"
-  src="blurry placeholder ..."
-  data-srcset="image.png"
-  data-sizes="auto"
-&gt;
+<h3>Next.js <code>&lt;Image&gt;</code> component</h3>
+<p>For local images:</p>
+<ol>
+<li>Files inside <code>public</code> folder can be referenced by your code starting from the base URL (<code>/</code>).</li>
+<li>If the image is statically imported, Next.js will automatically determine the intrinsic width and height.</li>
+</ol>
+<pre><code class="lang-js">import Image from 'next/image'
+import ProfileImage from './profile.png'
 
-&lt;img
-  data-src="image.jpg"
-  data-thumbhash="1QcSHQRnh493V4dIh4eXh1h4kJUI"
-&gt;
+export default function Page() {
+  return (
+    &lt;Image
+      src={ProfileImage}
+      // width={500} automatically provided
+      // height={500} automatically provided
+      // blurDataURL="data:..." automatically provided
+      // placeholder="blur" // Optional blur-up while loading
+    /&gt;
+  )
+}
 </code></pre>
-<pre><code class="lang-js">import { lazyLoad } from 'unlazy'
+<p>For remote images:</p>
+<ol>
+<li>Since Next.js does not have access to remote files during the build process, you'll need to provide the <code>width</code>, <code>height</code> and optional <code>blurDataURL</code> props manually. <em>(infer the correct aspect ratio and avoid layout shift)</em></li>
+<li>To safely allow images from remote servers, you need to define a list of supported URL patterns in <code>next.config.js</code></li>
+</ol>
+<pre><code class="lang-js">import type { NextConfig } from 'next'
 
-// Client-side lazily load all `img[loading="lazy"]` images
-lazyLoad()
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [new URL('https://res.cloudinary.com/**')],
+  },
+}
 
-
-// Server-Side ThumbHash Decoding
-import { createPngDataUri } from 'unlazy/thumbhash'
-
-const thumbhash = '1QcSHQRnh493V4dIh4eXh1h4kJUI'
-const pngDataUri = createPngDataUri(thumbhash)
+export default nextConfig
 </code></pre>

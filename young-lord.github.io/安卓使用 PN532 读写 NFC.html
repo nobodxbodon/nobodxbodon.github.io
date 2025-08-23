@@ -47,11 +47,11 @@
 <li><a href="https://apkpure.com/cn/rfid-tools/com.rfidresearchgroup.rfidtools/download/6-APK">RFID Tools v1.3.3</a>：一站式NFC工具箱，支持系统NFC（部分）与PN532等外接NFC设备</li>
 </ul>
 <h3>Termux配置</h3>
-<p>该方案在TermuxArch等proot系统中也可使用。强烈建议使用TermuxArch。</p>
+<p>该方案在<a href="https://github.com/TermuxArch/TermuxArch">TermuxArch</a>等proot/chroot容器中也可使用。强烈建议使用TermuxArch。</p>
 <p>感谢<a href="https://github.com/termux/termux-packages/discussions/15819">这个讨论</a>中给出的方案！</p>
-<pre><code class="lang-shell">pkg install autoconf make git automake pkg-config libtool clang
-# for Arch Linux
-# yay -S --needed autoconf make git automake pkg-config libtool gcc
+<pre><code class="lang-shell">pkg install autoconf make git automake pkg-config libtool clang wget python
+# for Arch Linux ARM
+# pacman -S --needed autoconf make git automake pkg-config libtool gcc wget python
 git clone --depth 1 https://github.com/mywalkb/libnfc
 cd libnfc
 autoreconf -vis
@@ -59,12 +59,13 @@ autoreconf -vis
 make -j8
 make install
 </code></pre>
+<p>对于TermuxArch，请添加<code>aur</code>仓库，并安装及配置好<code>yay</code>。</p>
 <h2>连接</h2>
 <h3>TCPUART监听</h3>
-<p>将PN532使用USB线连接到手机上，打开TCPUART，点击第一个<code>Connect</code>并在系统弹框中允许访问USB设备；然后下面的选项改为<code>Server</code>，配置监听端口（此处假设为<code>10000</code>），点击<code>Start</code>。记得锁后台，别被杀了。</p>
+<p>将PN532使用USB线连接到手机上，打开TCPUART。在<code>USB_UART</code>区域，点击<code>Connect</code>，并在系统弹框中允许访问USB设备。在<code>TCP</code>区域，选择<code>Server</code>模式，配置监听端口（此处假设为<code>10000</code>），点击<code>Start</code>。记得锁后台，别被杀了。</p>
 <h3>Termux使用</h3>
 <pre><code class="lang-shell">export LIBNFC_DEVICE="pn532_uart:tcp_127.0.0.1_10000"
-# do what you want to do now
+# do whatever you want to do now
 </code></pre>
 <p>如果一切正常，你应该可以开始使用NFC相关命令了。</p>
 <pre><code class="lang-console">$ nfc-scan-device # 查看 NFC 设备
@@ -118,40 +119,43 @@ Writing 64 blocks |.............................................................
 Done, 64 of 64 blocks written.
 </code></pre>
 <h3>mfoc &amp; mfcuk</h3>
-<p>如果你正在用Termux，你得先去编译安装<a href="https://github.com/nfc-tools/mfoc-hardnested">mfoc-hardnested</a>与<a href="https://github.com/nfc-tools/mfcuk">mfcuk</a>，这里就不多赘述。</p>
+<p>如果你正在用Termux，你得先去编译安装<a href="https://github.com/nfc-tools/mfoc-hardnested">mfoc-hardnested</a>与<a href="https://github.com/nfc-tools/mfcuk">mfcuk</a>，这里就不赘述。</p>
 <p>如果你在用Arch，可以直接使用<code>yay -S mfoc-hardnested-git mfcuk-git</code>安装。</p>
 <p><code>mfcuk</code>可用于全加密卡，使用<code>mfcuk -C -R 0:A -s 250 -S 250</code>进行爆破，爆破出至少一个密码时可改用<code>mfoc</code>。</p>
 <p><code>mfoc-hardnested</code>可用于半加密卡或已知一个密码的卡，使用<code>mfoc-hardnested -O dump.mfd</code>进行爆破。</p>
 <h3>crypto1_bs</h3>
-<p>用于半加密卡之一密破解。</p>
-<pre><code class="lang-console">git clone https://github.com/aczid/crypto1_bs.git --depth 1
+<p>用于半加密卡知一密破解。</p>
+<pre><code class="lang-shell">git clone https://github.com/aczid/crypto1_bs.git --depth 1
 cd crypto1_bs
 git clone https://github.com/Tilka/crapto1.git crapto1-v3.3 --depth 1
 git clone https://github.com/vk496/craptev1.git craptev1-v1.1 --depth 1
+export C_INCLUDE_PATH=/include
 make
 ./libnfc_crypto1_crack &lt;known key&gt; &lt;for block&gt; &lt;A|B&gt; &lt;target block&gt; &lt;A|B&gt;
 </code></pre>
-<p>收集足够nounces（即停止显示<code>Collected xxx nounces...</code>，进入到<code>Cracking</code>）后，你就可以直接停止破解，在目录下找到<code>0x1111aaaa_003A.txt</code>的文件（<code>1111aaaa</code>为卡片UID，<code>3</code>为待破解扇区，<code>B</code>为待破解扇区密钥类型），并按照<a href="#动机">动机</a>中的视频教程破解，或是使用<code>./solve_bs 0x1111aaaa_003A.txt 0x1111aaaa</code>破解。</p>
+<p>收集足够nounces（即停止显示<code>Collected xxx nounces...</code>，进入到<code>Cracking</code>，或提示<code>press enter to start brute-force phase</code>）后，你就可以直接停止破解，在目录下找到<code>0x1111aaaa_003A.txt</code>的文件（<code>1111aaaa</code>为卡片UID，<code>3</code>为待破解block（注意不是sector！比如sector 11包含44-47这4个block），<code>A</code>为待破解扇区密钥类型）。该过程大约需要15分钟。</p>
+<p>接下来，可以使用<code>./solve_bs 0x1111aaaa_003A.txt 0x1111aaaa</code>破解，但是由于速度过慢，我们采用下一部分的Proxmark3破解。</p>
 <h3>Proxmark3</h3>
+<p>此部分参考了<a href="#动机">动机</a>中的视频教程。</p>
 <h4>如果你在用Termux（非proot/chroot）</h4>
 <p>自己编译各个组件（指<code>termcap</code>等）去吧。我也不确定能不能成功。</p>
 <h4>如果你在用Windows</h4>
 <p>直接下<a href="https://github.com/wh201906/Proxmark3GUI/releases/latest">预编译版本</a>中有<code>official</code>字样的即可。</p>
 <p>用<code>Go.bat</code>即可开启Proxmark3控制台，<code>nonces.bin</code>放到<code>Go.bat</code>同一目录下。（见下）</p>
-<h4>如果你在用Arch</h4>
-<p>直接<code>yay -S termcap gcc-arm-none-eabi-bin &amp;&amp; git clone https://github.com/Proxmark/proxmark3 --depth 1 &amp;&amp; cd proxmark3 &amp;&amp; wget https://github.com/Proxmark/proxmark3/commit/ee8491b04a5ef3950c2fdc1dd2c2a14706247e7e.diff &amp;&amp; git apply ee8491b04a5ef3950c2fdc1dd2c2a14706247e7e.diff &amp;&amp; make clean &amp;&amp; make all</code>即可。</p>
-<p>make完成后，你可以得到<code>client/</code>目录，<code>cd</code>进入此目录。</p>
-<p>下载<a href="https://github.com/Young-Lord/Young-Lord.github.io/releases/download/assets/nfc_txttobin.py">nfc_txt_to_bin.py</a>，并将<code>0x1111aaaa_003A.txt</code>转换为<code>1111aaaa_generated.bin</code>，重命名为<code>nonces.bin</code>丢到<code>client/</code>目录下。</p>
+<h4>如果你在用TermuxArch</h4>
+<p>直接<code>yay -S termcap pcsc-lite &amp;&amp; git clone https://github.com/Proxmark/proxmark3 --depth 1 &amp;&amp; cd proxmark3 &amp;&amp; wget https://github.com/Proxmark/proxmark3/commit/ee8491b04a5ef3950c2fdc1dd2c2a14706247e7e.diff &amp;&amp; git apply ee8491b04a5ef3950c2fdc1dd2c2a14706247e7e.diff &amp;&amp; make client -j8</code>即可。</p>
+<p>make完成后，转换nonces格式，并进入Proxmark3交互式命令行：</p>
 <pre><code class="lang-shell">cd client
 wget https://github.com/Young-Lord/Young-Lord.github.io/releases/download/assets/nfc_txttobin.py
 python3 nfc_txttobin.py 0x1111aaaa_003A.txt 1111aaaa
 mv 1111aaaa_generated.bin nonces.bin
-# 进入交互式命令行，串口号相关报错不用理
 ./proxmark3 /
+# 由于未连接硬件，提示`ERROR: invalid serial port`为正常现象
 </code></pre>
-<p>进入proxmark3命令行后，执行以下命令爆破。注意留出足够的运行内存（~2GB）</p>
-<p><code>hf mf hardnested r</code></p>
-<p>很快该扇区密码就能跑出来了。</p>
+<p>进入Proxmark3命令行后，执行以下命令爆破。注意留出足够的运行内存（~2GB）</p>
+<pre><code class="lang-shell">hf mf hardnested r
+</code></pre>
+<p>很快该扇区密码就能跑出来了。该过程大约需要2分钟。</p>
 <pre><code class="lang-plain">proxmark3&gt; hf mf hardnested r
 --target block no:  0, target key type:A, known target key: 0x000000000000 (not set), file action: read, Slow: No, Tests: 0           
 Using no SIMD core.          
@@ -172,7 +176,7 @@ Using no SIMD core.
 <h3>mfterm</h3>
 <p>用于更简单地爆破密码、读写转储。</p>
 <p>Arch: <code>yay -S mfterm</code></p>
-<p>Termux: 自行编译，<code>wget https://github.com/4ZM/mfterm/releases/download/v1.0.7/mfterm-1.0.7.tar.gz &amp;&amp; tar xvf mfterm-1.0.7.tar.gz &amp;&amp; cd mfterm-1.0.7/ &amp;&amp; ./configure --prefix=$PREFIX "CFLAGS=-Wno-error" &amp;&amp; make &amp;&amp; make install</code></p>
+<p>Termux: 自行编译：<code>wget https://github.com/4ZM/mfterm/releases/download/v1.0.7/mfterm-1.0.7.tar.gz &amp;&amp; tar xvf mfterm-1.0.7.tar.gz &amp;&amp; cd mfterm-1.0.7/ &amp;&amp; ./configure --prefix=$PREFIX "CFLAGS=-Wno-error" &amp;&amp; make &amp;&amp; make install</code></p>
 <p>注意这里的<code>write unlocked</code>不一定能写入0扇区0块，此时可以尝试使用<code>nfc-mfclassic W</code>。</p>
 <h3>mfdread</h3>
 <p>Python脚本，用于查看<code>.mfd</code>转储。</p>

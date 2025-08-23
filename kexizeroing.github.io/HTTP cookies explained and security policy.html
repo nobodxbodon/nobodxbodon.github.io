@@ -11,10 +11,14 @@ Host: www.example.org
 Cookie: yummy_cookie=choco; tasty_cookie=strawberry
 </code></pre>
 <p>Basic HTTP cookie parser and serializer for HTTP servers: <a href="https://github.com/jshttp/cookie">https://github.com/jshttp/cookie</a></p>
+<ul>
+<li>cookie.parse(str, options)</li>
+<li>cookie.serialize(name, value, options)</li>
+</ul>
 <pre><code class="lang-js">// Set a new cookie with the name: cookie.serialize(name, value, options)
 res.setHeader(
   "Set-Cookie",
-  cookie.serialize("name", String(query.name), {
+  cookie.serialize("name", "value", {
     httpOnly: true,
     maxAge: 60 * 60 * 24 * 7, // 1 week
   }),
@@ -32,20 +36,20 @@ Set-Cookie: mykey=myvalue; SameSite=Strict
 </code></pre>
 <p>The lifetime of a cookie can be defined in two ways:</p>
 <ul>
-<li><strong>Session cookies</strong> are deleted when the current session ends. (Some browsers have a session restore feature that will save all tabs and restore them next time the browser is used. Session cookies will also be restored, as if the browser was never closed, which can cause session cookies to last indefinitely long).</li>
-<li><strong>Permanent cookies</strong> are deleted at a date specified by the <code>Expires</code> attribute, or after a period of time in seconds specified by the <code>Max-Age</code> attribute. If both <code>Expires</code> and <code>Max-Age</code> are set, <code>Max-Age</code> has precedence.</li>
+<li><strong>Session cookies</strong> are deleted when the current session ends. To set session cookies, simply create a cookie without the <code>Expires</code> or <code>Max-Age</code> attributes. This tells the browser to treat it as a session cookie, which will be removed when the browser is closed.</li>
+<li><strong>Persistent cookies</strong> remain on the user's device until a specified expiration date. This can be set using the <code>Expires</code> attribute (a specific date) or the <code>Max-Age</code> attribute (a duration in seconds). If both <code>Expires</code> and <code>Max-Age</code> are set, the browser will honor <code>Max-Age</code> and ignore <code>Expires</code>.</li>
 </ul>
 <p>A cookie with the <code>Secure</code> attribute is sent to the server only over the HTTPS protocol, never with unsecured HTTP (except on localhost). Insecure sites <code>http:</code> cannot set cookies with the <code>Secure</code> attribute. A cookie with the <code>HttpOnly</code> attribute is inaccessible to the JavaScript <code>document.cookie</code> API; it is sent only to the server.</p>
-<blockquote><p>Normally localhost should be treated as a secure origin even if not HTTPs. Both Chrome (<a href="https://bugs.chromium.org/p/chromium/issues/detail?id=1056543">https://bugs.chromium.org/p/chromium/issues/detail?id=1056543</a>) and Firefox (<a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1648993">https://bugzilla.mozilla.org/show_bug.cgi?id=1648993</a>) fixed issues to allow Secure cookies for localhost. The <code>https:</code> requirements are ignored when the <code>Secure</code> attribute is set by localhost since Firefox 75 and Chrome 89. However, Safari doesn’t set Secure cookies on localhost, as Firefox and Chrome do.</p>
+<blockquote><p>Normally localhost should be treated as a secure origin even if not HTTPs. Both Chrome and Firefox fixed issues to allow Secure cookies for localhost. The <code>https:</code> requirements are ignored when the <code>Secure</code> attribute is set by localhost since Firefox 75 and Chrome 89. However, Safari doesn’t set Secure cookies on localhost, as Firefox and Chrome do.</p>
 </blockquote>
 <p>The <code>Domain</code> attribute specifies which hosts are allowed to receive the cookie. If unspecified, defaults to the host of the current document URL, <strong>not including subdomains</strong>. If <code>Domain</code> is specified, then <strong>subdomains are always included</strong>. For example, if the value of the <code>Domain</code> attribute is "example.com", the user agent will include the cookie in the Cookie header when making HTTP requests to <code>example.com</code>, <code>www.example.com</code>, and <code>www.corp.example.com</code>. If the server omits the <code>Domain</code> attribute, the user agent will return the cookie only to the origin server.</p>
 <p>The <code>Path</code> attribute indicates a URL path that must exist in the requested URL in order to send the Cookie. For example, if <code>Path=/docs</code> is set, <code>/docs</code>, <code>/docs/Web/</code>, <code>/docs/Web/HTTP</code> are all matched.</p>
-<p>The <code>SameSite</code> attribute lets servers require that a cookie shouldn't be sent with cross-origin requests. It takes three possible values: <code>Strict</code>, <code>Lax</code>, and <code>None</code>. With <code>Strict</code>, the cookie is sent only to the same site as the one that originated it. In user terms, the cookie will only be sent if the site for the cookie matches the site currently shown in the browser's URL bar. <code>Lax</code> is similar, with an exception for when the user navigates to a URL from an external site, such as by following a link. <strong>This is the default behavior if the <code>SameSite</code> attribute is not specified.</strong> <code>None</code> has no restrictions on cross-site requests, but requires that the <code>Secure</code> attribute must be used: <code>SameSite=None; Secure</code>.</p>
+<p>The <code>SameSite</code> attribute lets servers require that a cookie shouldn't be sent with cross-origin requests. It takes three possible values: <code>Strict</code>, <code>Lax</code>, and <code>None</code>. With <code>Strict</code>, the cookie is sent only to the same site as the one that originated it. In user terms, the cookie will only be sent if the site for the cookie matches the site currently shown in the browser's URL bar. <strong>Even if you navigate from site A to site B, site B’s cookies won’t be sent on that navigation.</strong> <code>Lax</code> is similar, with an exception for when the user navigates to a URL from an external site, such as by following a link <em>(top-level navigation)</em>. This is the default behavior if the <code>SameSite</code> attribute is not specified. <code>None</code> has no restrictions on cross-site requests, but requires that the <code>Secure</code> attribute must be used as <code>SameSite=None; Secure</code>. This is required for third-party cookies.</p>
 <blockquote><p><code>SameSite=Lax</code> cookies are not sent:</p>
 <ul>
 <li>A site on another domain makes an AJAX/fetch request using JavaScript to your site won't include Lax (or Strict) cookies.</li>
 <li>If your site is embedded in an iframe on a site hosted on a different domain, your site won't receive any Lax (or Strict) cookies.</li>
-<li>An image on your website is linked to directly in the src attribute of an image from another site.</li>
+<li>If a third-party site loads your images, your Lax (or Strict) cookies are not sent with those image requests.</li>
 </ul>
 </blockquote>
 <h3>Cross-Site Request Forgery (CSRF) attacks</h3>
@@ -66,7 +70,7 @@ Set-Cookie: mykey=myvalue; SameSite=Strict
 <ul>
 <li>Use <code>sameSite</code> Cookie.</li>
 <li>Determine the origin of the request is coming from. It can be done via <code>Origin</code> or <code>Referer</code> header.</li>
-<li>Include a CSRF token as a hidden field when the form is submitted. This token is a unique, secret, unpredictable value generated by the server-side and transmitted to the client in such a way that it is included in a subsequent HTTP request made by the client.</li>
+<li>Include a CSRF token as a hidden field when the form is submitted. This token is a unique, secret, unpredictable value generated by the server-side and transmitted to the client in such a way that it is included in a subsequent HTTP request made by the client. (e.g. hidden form field, HTTP header)</li>
 </ul>
 <h3>Cross-site scripting</h3>
 <p>Cross-site scripting (XSS) is a security bug that can affect websites. This bug can allow an attacker to add their own malicious JavaScript code onto the HTML pages displayed to the users. The vulnerabilities most often happen when user input is sent to the server, and the server responds back to the user by displaying a page that includes the user input without validation. XSS also can occur entirely in the client-side without data being sent back and forth between the client and server.</p>
@@ -80,7 +84,12 @@ Set-Cookie: mykey=myvalue; SameSite=Strict
 <blockquote><p>We do not recommend that you manually escape user-supplied data. Instead, we strongly recommend that you use a templating system or web development framework that provides context-aware auto-escaping. If this is impossible for your website, use existing libraries (e.g., <a href="https://github.com/cure53/DOMPurify">DOMPurify</a>, <a href="https://github.com/component/escape-html">escape-html</a>) that are known to work, and apply them consistently to all user-supplied data.</p>
 <p>For example in Vue, whether using templates or render functions, content is automatically escaped. <a href="https://github.com/LeSuisse/vue-dompurify-html/tree/main/packages/vue-dompurify-html">vue-dompurify-html</a> is a "safe" replacement for the <code>v-html</code> directive. The HTML code is sanitized with DOMPurify before being interpreted.</p>
 </blockquote>
-<p>It’s recommended to avoid storing any sensitive information in local storage where authentication would be assumed. You can trivially read all data stored in local storage with <code>Object.entries(localStorage)</code>. This means if your website is vulnerable to XSS attacks, where a third party can run arbitrary scripts, your users’ tokens can be easily stolen. Cookies, on the other hand, can’t be read by client-side JS if you add the <code>HttpOnly</code> flag.</p>
+<pre><code class="lang-js">// DOMPurify will strip out everything that contains dangerous HTML
+DOMPurify.sanitize('&lt;img src=x onerror=alert(1)//&gt;'); // becomes &lt;img src="x"&gt;
+DOMPurify.sanitize('&lt;svg&gt;&lt;g/onload=alert(2)//&lt;p&gt;'); // becomes &lt;svg&gt;&lt;g&gt;&lt;/g&gt;&lt;/svg&gt;
+DOMPurify.sanitize('&lt;p&gt;abc&lt;iframe//src=jAva&amp;Tab;script:alert(3)&gt;def&lt;/p&gt;'); // becomes &lt;p&gt;abc&lt;/p&gt;
+</code></pre>
+<p>It’s recommended to avoid storing any sensitive information in local storage where authentication would be assumed. You can trivially read data stored in local storage with <code>Object.entries(localStorage)</code>. This means if your website is vulnerable to XSS attacks, where a third party can run arbitrary scripts, your users’ tokens can be easily stolen. Cookies, on the other hand, can’t be read by client-side JS if you add the <code>HttpOnly</code> flag.</p>
 <p>Store data inside of your users browser: <a href="https://rxdb.info/articles/localstorage-indexeddb-cookies-opfs-sqlite-wasm.html">https://rxdb.info/articles/localstorage-indexeddb-cookies-opfs-sqlite-wasm.html</a></p>
 <ul>
 <li>Cookies</li>
@@ -103,7 +112,7 @@ Set-Cookie: mykey=myvalue; SameSite=Strict
 }
 </code></pre>
 <h3>Content Security Policy</h3>
-<p>Configuring Content Security Policy involves adding the <code>Content-Security-Policy</code> HTTP header to a web page and giving it values to control what resources the user agent is allowed to load for that page. If the site doesn't offer the CSP header, browsers likewise use the standard same-origin policy. A properly designed Content Security Policy helps protect a page against a cross-site scripting attack. There are specific directives for a wide variety of types of items, so that each type can have its own policy, including fonts, frames, images, audio and video media, scripts, and workers.</p>
+<p>Configuring Content Security Policy involves adding the <code>Content-Security-Policy</code> HTTP header to a web page and giving it values to control what resources the user agent is allowed to load for that page. CSP is typically set on every HTML page’s HTTP response, and it applies to that entire page. A properly designed Content Security Policy helps protect a page against a cross-site scripting attack. There are specific directives for a wide variety of types of items, so that each type can have its own policy, including fonts, frames, images, audio and video media, scripts, and workers.</p>
 <pre><code>Content-Security-Policy: default-src 'self'; script-src 'self' cdn.example.com; img-src 'self' img.example.com; style-src 'self';
 </code></pre>
 <p>The above policy permits:</p>
@@ -113,32 +122,19 @@ Set-Cookie: mykey=myvalue; SameSite=Strict
 <li>Images from the site's own origin and <code>img.example.com</code></li>
 <li>Styles only from the site's origin.</li>
 </ul>
-<p>The <a href="https://github.com/helmetjs/helmet">Helmet</a> middleware in Express is a security package that helps protect your application by setting various HTTP headers. It helps defend against:</p>
-<ol>
-<li>Cross-site attacks by controlling resource loading and framing</li>
-<li>Network/connection vulnerabilities by enforcing HTTPS and managing DNS settings</li>
-<li>Content-type attacks by preventing MIME-type sniffing and setting proper security policies</li>
-</ol>
-<hr/>
-<h2>iframe 跨域嵌入的实践</h2>
-<p>网站 A 嵌入网站 B，且 A 和 B 是不同域名时，主要需要解决跨域请求 CORS 和 Cookie 的问题。先说预期，我们希望的是 A 网站嵌入 B 网站的同时，B 网站可以正常请求 B 域名的接口和发送 B 域名下的 Cookie。</p>
-<h3>CORS 的处理</h3>
-<p>先说跨域请求，由于我们的请求目标应该都是 B，所以不涉及跨域。但如果出现在 A 域名中请求 B，需要 B 域名的服务端设置 <code>Access-Control-Allow-Origin: 'https://a-domain.com'</code> 和 <code>Access-Control-Allow-Credentials: true</code>，后者允许浏览器在跨域请求中发送 Cookies。注意此时 <code>Access-Control-Allow-Origin</code> 不能使用通配符 <code>*</code>，否则无法携带 Cookie 等凭证。</p>
-<h3>Cookie 的处理</h3>
-<p>对于 Cookie 的问题，首先浏览器默认会给第三方 Cookie 添加 <code>SameSite=Lax</code> 属性，意味着 A 域名跨域请求 B 域名，不会携带 Cookie。所以需要 B 域名手动设置 Cookie <code>SameSite=None; Secure</code> 属性，确保 Cookie 可以在跨域上下文中发送 <em>(此时也增加了 CSRF 攻击的风险，建议使用 CSRF Token)</em>。</p>
-<p>上述方案基本可行，但是有一个长期维护的问题。Chrome 118 开始有第三方 Cookie 的警告，2024 年 Q1-Q3 逐步禁用 <code>SameSite=None; Secure</code>，请求时无法读取并携带第三方 Cookie。浏览器也有设置 flag 可以开启进行实验：</p>
-<p>&lt;img alt="third-party cookie" src="https://raw.githubusercontent.com/kexiZeroing/blog-images/main/Test%20Third%20Party%20Cookie%20Phaseout.png" width="500"&gt;</p>
-<p>从长期考虑，可以使用 Partitioned Cookies 方案（这也官方推荐的方式，别名叫做 CHIPS，即 Cookies Having Independent Partitioned State）。大概意思是如果 A 要嵌入 C，C 在它的 Cookie 上指定了 <code>partitioned</code> 属性，这个 Cookie 将保存在一个特殊的分区 jar 中。 它只会在 A 中通过 iframe 嵌入 C 时才会生效，浏览器会判断顶级网站为 A 时才发送该 Cookie。如果 B 也通过 iframe 嵌入了 C，这时在 B 下的 C 是无法访问到之前在 A 下面设置的那个 Cookie 的。如果用户直接访问 C，一样也是访问不到这个 Cookie 的。</p>
-<p>关于 Partitioned Cookie 的参考链接：</p>
+<h4>Hotlink Protection</h4>
+<p>Hotlinking happens when someone embeds your hosted files (images, videos, PDFs, etc.) on their site by linking directly to your URL.</p>
 <ul>
-<li><a href="https://developers.google.com/privacy-sandbox/cookies/chips">https://developers.google.com/privacy-sandbox/cookies/chips</a></li>
-<li><a href="https://sooniter.site/posts/third-party-cookie">https://sooniter.site/posts/third-party-cookie</a></li>
+<li>Bandwidth cost — You’re paying for traffic from someone else’s site.</li>
+<li>Performance impact — Your server handles more requests than it should.</li>
+<li>Security concerns — In some cases, files could be linked for malicious purposes.</li>
 </ul>
-<p>其实还有另一种方式避开 Cookie 的限制，就是使用 JWT 代替做验证，在域名 A 下生成 token，并传递给 iframe（url 参数或 postMessage）。后续 B 域名通过 JWT 验证请求中的用户身份。前端可以在所有发往 B 的请求上添加 <code>Authorization</code> 请求头，但是服务端 B 的认证方式都要修改。所以说 JWT 能避免浏览器的第三方 Cookie 限制，但也需要额外的 token 管理机制和服务端验证更新策略。</p>
-<h3>结论和方案</h3>
-<p>三种可能的模式如下，无论哪种都涉及跨域，都要按上面描述的方式设置 Cookie，后两种还有一些额外的工作。</p>
-<ul>
-<li><strong>外面不需要登录，里面需要先登录好</strong>：只是一个单纯套壳，只修改里面的 Cookie 设置就行。</li>
-<li><strong>外面需要登录，里面需要先登录好</strong>：认证方式应该是里面和外面一起，需要把外面登录后拿到的 token 或者 Cookie 传给里面。里面在请求接口时，除了本身的 Cookie，还要包括外层拿到的登录认证信息。</li>
-<li><strong>外面需要登录，里面不需要先登录</strong>：只有一个外层的登录，应该需要里面的服务提供一个接口，前端在里面的第一步先发请求，传递外面的登录信息，让服务端把 Cookie 种在里面的域名上。</li>
-</ul>
+<p>Hotlink protection typically checks the <code>Referer</code> HTTP header to see which page requested the file. Most CDNs have a “Hotlink Protection” toggle that works by automatically checking the referrer before serving assets.</p>
+<p>Signed URLs:<br/>
+Instead of letting users access videos directly by a fixed URL, you generate a temporary, signed URL that includes an expiry timestamp, and signed with a secret key. (<code>https://cdn.yourdomain.com/video.mp4?expires=1723119800&amp;signature=4d2f0d1a...</code>)</p>
+<p>For adaptive streaming:<br/>
+The <code>.m3u8</code> playlist URL is signed and expires quickly. Each media chunk request is also signed, and the chunk URLs will expire quickly.</p>
+<h3>Handling Cross-Domain Cookies in iframes</h3>
+<p>Modern browsers have increasingly strict rules around third-party cookies. To allow cookies in cross-origin iframes, the server must explicitly set the cookie with <code>SameSite=None; Secure</code>. However, starting with Chrome 118, there's a gradual rollout to block third-party cookies, regardless of this setting. This change is part of Chrome’s Privacy Sandbox initiative.</p>
+<p>A long-term solution is to use <strong>Partitioned Cookies</strong>, officially known as CHIPS (Cookies Having Independent Partitioned State). With CHIPS, if domain A embeds domain C in an iframe, and domain C sets a cookie with the <code>Partitioned</code> attribute, that cookie is stored in a partitioned jar specific to the top-level site A. The same iframe embedded under a different site (like B embedding C) will have a completely separate cookie state. These cookies are also not accessible when users directly navigate to domain C.</p>
+<p>Alternatively, you can bypass the need for cookies altogether by using JWT for authentication. Domain A can generate a token and pass it to the embedded iframe. The iframe, hosted on domain B, can then include the JWT in requests via an <code>Authorization</code> header. This approach avoids cookie restrictions, but requires implementing a proper token validation and refresh mechanism on the server side.</p>

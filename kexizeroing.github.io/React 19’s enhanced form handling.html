@@ -1,0 +1,332 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/react-19-enhanced-form-handling.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-19-enhanced-form-handling">站点原文</a></h2>
+<h2>React 19 <code>useActionState</code> and <code>useFormStatus</code></h2>
+<p>React 19 has a built-in mechanism for handling forms called "actions". Below is an example from <a href="https://www.youtube.com/watch?v=ExZUdkfu-KE">Shruti Kapoor's video</a> shows how to convert a form from React 18 to React 19.</p>
+<ul>
+<li>There’s no need to add <code>event.preventDefault</code> because that’s handled for us by React.</li>
+<li>The <code>action</code> is automatically treated as a transition.</li>
+<li>We can hook into the pending state of this action using <code>useFormStatus</code>.</li>
+<li>React manages errors and race conditions to ensure our form’s state is always correct.</li>
+</ul>
+<pre><code class="lang-js">// React 18
+function App() {
+  const [name, setName] = useState("");
+  const [isPending, setIsPending] = useState("");
+
+  const handleChange = (event) =&gt; {
+    setName(event.target.value);
+  };
+
+  const handleSubmit = (event) =&gt; {
+    event.preventDefault();
+    setIsPending(true);
+    setTimeout(() =&gt; {
+      // call API
+      setIsPending(false);
+    }, [1000]);
+
+    // or use [isPending, startTransition] from `useTransition`
+    // to remove isPending state
+  };
+
+  return (
+    &lt;form&gt;
+      &lt;input type="text" name="name" onChange={handleChange} /&gt;
+      { isPending ? &lt;p&gt;{"Loading"}&lt;/p&gt; : &lt;p&gt; Hello in React 18 {name}&lt;/p&gt; }
+      &lt;button onClick={handleSubmit} disabled={isPending}&gt;
+        Update
+      &lt;/button&gt;
+    &lt;/form&gt;
+  );
+}
+</code></pre>
+<pre><code class="lang-js">// React 19
+function RenderName({ name }) {
+  // 1. `useFormStatus` must be called from a component that is rendered inside a &lt;form&gt;
+  // 2. `useFormStatus` will only return status information for a parent &lt;form&gt;
+  const { pending } = useFormStatus();
+  return &lt;div&gt;{pending ? "Loading" : `Hello in React 19 ${name}` }&lt;/div&gt;;
+}
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    &lt;button type="submit" disabled={pending}&gt;
+      Update
+    &lt;/button&gt;
+  );
+}
+
+function App() {
+  // https://react.dev/reference/react/useActionState
+  // You pass `useActionState` an existing form action function as well as an initial state,
+  // and it returns a new action that you use in your form, along with the latest form state.
+  // The latest form state is also passed to the function that you provided.
+  const [state, formAction] = useActionState(submitFormAction, { name: "" });
+
+  return (
+    &lt;form action={formAction}&gt;
+      &lt;input type="text" name="inputName" /&gt;
+      &lt;RenderName name={state?.name} /&gt;
+      &lt;SubmitButton /&gt; 
+    &lt;/form&gt;
+  );
+}
+
+// actions.js
+'use server';
+
+export const submitFormAction = async (previousState, formData) =&gt; {
+  const name = formData.get("inputName");
+  await new Promise((res) =&gt; setTimeout(res, 1000));
+  return { ...previousState, name: name };
+};
+</code></pre>
+<p>There is another example from React Conf 2024 displaying a message box, which is progressively enhanced with React 19 features. <strong>The main functionality of the form works without JavaScript</strong>.</p>
+<pre><code class="lang-js">// https://www.youtube.com/watch?v=X9cw4VczYVg
+export default function MessageInput({ userId }) {
+  const [state, submitMessageAction] = useActionState(submitMessage, {
+    success: false,
+  });
+
+  useEffect(() =&gt; {
+    if (state.error) {
+      toast.error(state.error);
+    }
+  }, [state.error, state.timestamp]);
+
+  return (
+    &lt;&gt;
+      &lt;form action={submitMessageAction} className="flex flex-col gap-2 p-6"&gt;
+        &lt;input
+          autoComplete="off"
+          required
+          minLength={1}
+          name="content"
+          placeholder="Type a message..."
+        /&gt;
+        &lt;input type="hidden" name="userId" value={userId} /&gt;
+        {/* get pending status using `useFormStatus()` inside the button component */}
+        &lt;SubmitButton&gt;Send&lt;/SubmitButton&gt;
+      &lt;/form&gt;
+    &lt;/&gt;
+  );
+}
+
+export async function submitMessage(_prevState, formData) {
+  // z.object({
+  //   content: z.string().min(1, {
+  //     message: 'Content must be at least 1 characters long',
+  //   }),
+  //   createdById: z.string().uuid({
+  //     message: 'Invalid user ID',
+  //   }),
+  // });
+  const result = messageSchema.safeParse({
+    content: formData.get('content'),
+    createdById: formData.get('userId'),
+  });
+
+  if (!result.success) {
+    return {
+      error: 'Invalid message!',
+      success: false,
+      timestamp: new Date(),
+    };
+  }
+
+  await prisma.message.create({
+    data: result.data,
+  });
+
+  revalidatePath('/');
+
+  return {
+    success: true,
+  };
+}
+</code></pre>
+<h3><code>useOptimistic</code> use case</h3>
+<p>This hook lets you update the UI immediately in response to an action, before the server responds. You pass to it the current state you want to manage, and a (optional) function to update the optimistic state. It returns you the optimistic state (which you use for immediate rendering), and a function to update it.</p>
+<pre><code class="lang-js">'use server'
+
+export async function addTodo(newTodo: string): Promise&lt;Todo&gt; {
+  await new Promise((resolve) =&gt; setTimeout(resolve, 2000))
+  return {
+    todo: newTodo + ' test',
+  }
+}
+</code></pre>
+<pre><code class="lang-js">'use client'
+
+import { useOptimistic, useState, useRef } from 'react'
+import { addTodo } from './actions'
+
+export default function Todos() {
+  const [todos, setTodos] = useState&lt;Todo[]&gt;([])
+  const formRef = useRef&lt;HTMLFormElement&gt;(null)
+
+  const [optimisticTodos, addOptimisticTodo] = useOptimistic&lt;Todo[], string&gt;(
+    todos,
+    (state, newTodo) =&gt; [...state, { todo: newTodo }]
+  )
+
+  const formAction = async (formData: FormData) =&gt; {
+    const todo = formData.get('todo') as string
+    addOptimisticTodo(todo)
+    formRef.current?.reset()
+
+    try {
+      const result = await addTodo(todo)
+      setTodos((prevTodos) =&gt; [...prevTodos, { todo: result.todo }])
+    } catch (error) {
+      console.error('Error adding todo:', error)
+    }
+  }
+
+  return (
+    &lt;div&gt;
+      {optimisticTodos.map((m, i) =&gt; (
+        &lt;div key={i}&gt;{m.todo}&lt;/div&gt;
+      ))}
+      &lt;form action={formAction} ref={formRef}&gt;
+        &lt;input type='text' name='todo' /&gt;
+        &lt;button type='submit'&gt;Send&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
+<blockquote><p>For native HTML forms, <code>action</code> is the URL that processes the form submission. <code>&lt;form action={formAction}&gt;</code> where <code>formAction</code> is a JavaScript function is a React feature. It is a client-side form action, stays on the same page and doesn't navigate anywhere. <code>useActionState</code> is optional and primarily designed for handling pending states and return values from your form actions.</p>
+</blockquote>
+<p>The optimistic updater function is just for calculating what the UI should look like immediately. The server action does the actual work of making that change permanent. If the server action fails, the optimistic update gets thrown away and the UI reverts to the real state. If it succeeds, the optimistic state should match the new real state, so there's no visual change when they swap.</p>
+<pre><code class="lang-js">const [optimisticCategories, setOptimisticCategories] = useOptimistic(searchParams.getAll('category'))
+
+startTransition(() =&gt; {
+  setOptimisticCategories(newCategories) // Optimistic (temporary)
+  router.push(`?${params.toString()}`)   // Real update (URL change)
+});
+</code></pre>
+<ol>
+<li>When <code>useOptimistic</code> is called without an <code>updateFn</code> (second parameter), it defaults to a simple replacement function.</li>
+<li><code>setOptimisticCategories(newCategories)</code> immediately updates the local state and re-renders the component with the new <code>optimisticCategories</code> value.</li>
+<li><code>optimisticCategories</code> temporarily overrides what the URL actually says. Users see their click immediately, even though the URL is still updating.</li>
+<li>Meanwhile, <code>router.push()</code> updates the URL and triggers any server-side filtering, but the UI doesn't wait for this to complete. <code>isPending</code> becomes true when you call <code>startTransition</code>, then stays true until everything triggered by that transition (including Server Component re-renders) completes.</li>
+<li><code>useOptimistic</code> is designed to work seamlessly with React's concurrent rendering and transitions. It keeps your UI in sync with the "real" state, and automatically falls back if the action fails or completes.</li>
+</ol>
+<h2>React 19 <code>cache</code> function</h2>
+<p><code>cache</code> is <strong>only for use with React Server Components</strong>, not client components, and lets you cache the result of a data fetch or computation. It wraps around a function and remembers what that function returned for specific inputs. When multiple components need the same data, they get the cached result instead of fetching it again.</p>
+<pre><code class="lang-js">import { cache } from "react";
+
+// Create a memoized function outside components
+const getUser = cache(async (userId) =&gt; {
+  return await db.getUser(userId);
+});
+
+// Use it in multiple components
+function ProfileHeader({ userId }) {
+  const user = getUser(userId);
+  // ...
+}
+
+function ProfileStats({ userId }) {
+  const user = getUser(userId);
+  // ...
+}
+</code></pre>
+<blockquote><ul>
+<li>Use <code>cache</code> in Server Components to memoize work that can be shared across components.</li>
+<li>Use <code>useMemo</code> for caching a expensive computation in a Client Component across renders.</li>
+<li>Use <code>memo</code> to prevent a component re-rendering if its props are unchanged.</li>
+</ul>
+</blockquote>
+<h2>Support for document metadata</h2>
+<p>In React 19, we’re adding support for rendering document metadata tags in components natively. When React renders this component, it will see these tags, and automatically hoist them to the <code>&lt;head&gt;</code> section of document.</p>
+<pre><code class="lang-js">function BlogPost() {
+  return (
+    &lt;article&gt;
+      &lt;meta name="author" content="Josh" /&gt;
+      &lt;link rel="author" href="https://twitter.com/joshcstory/" /&gt;
+      &lt;p&gt;Hello&lt;/p&gt;
+    &lt;/article&gt;
+  );
+}
+
+function ComponentOne() {
+  return (
+    &lt;Suspense fallback="loading..."&gt;
+      &lt;link rel="stylesheet" href="foo" precedence="default" /&gt;
+      &lt;link rel="stylesheet" href="bar" precedence="high" /&gt;
+      &lt;article class="foo-class bar-class"&gt;...&lt;/article&gt;
+    &lt;/Suspense&gt;
+  )
+}
+</code></pre>
+<p>React 19 added special support for the <code>&lt;link&gt;</code> element. When rendered with the <code>precedence</code> prop, stylesheets will be automatically hoisted into the <code>&lt;head&gt;</code> and deduplicated. In addition, when rendered inside a <code>&lt;Suspense&gt;</code> boundary, React will wait for the stylesheet to load before revealing content that depends on it.</p>
+<ul>
+<li>Your component will suspend while the stylesheet is loading. You must supply the <code>precedence</code> prop, which tells React where to place this stylesheet relative to others — stylesheets with higher precedence can override those with lower precedence.</li>
+<li>If you render the same stylesheet from multiple components, React will place only a single <code>&lt;link&gt;</code> in the document head.</li>
+</ul>
+<h2>Next.js sever actions and <code>&lt;Form&gt;</code> component</h2>
+<p>Next.js Server Actions is a feature that allows you to run server-side code directly from client components. It is part of Next.js's full-stack framework features, eliminating the need for API routes for basic form handling.</p>
+<p>&lt;img alt="next-server-actions-1" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/next-server-actions-1.png" width="650"&gt;</p>
+<p>&lt;img alt="next-server-actions-2" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/next-server-actions-2.png" width="650"&gt;
+&lt;br&gt;</p>
+<p><code>useActionState</code> helps you deal with loading and error states.</p>
+<pre><code class="lang-ts">// contact-form.tsx
+const [state, action, isLoading] = useActionState(submitFormAction, {
+  email: "",
+});
+
+return (
+  &lt;form action={action}&gt;
+    &lt;input type="email" name="email" /&gt;
+    {isLoading ? "Loading..." : null}
+    &lt;button type="submit"&gt;Submit&lt;/button&gt;
+  &lt;/form&gt;
+)
+
+// action.ts
+export async function submitFormAction(previousState: string, formData: FormData) {
+  await new Promise((res) =&gt; setTimeout(res, 1000));
+  const email = formData.get("email");
+  return { email };
+}
+</code></pre>
+<p>The Next.js <code>&lt;Form&gt;</code> component extends the HTML <code>&lt;form&gt;</code> element to provide prefetching of loading UI, client-side navigation on submission, and progressive enhancement. The behavior of the <code>&lt;Form&gt;</code> component depends on whether the <code>action</code> prop is passed a string or function.</p>
+<ul>
+<li>When action is a function (Server Action), <code>&lt;Form&gt;</code> behaves like a React form, executing the action when the form is submitted.</li>
+<li>When action is a string, the <code>&lt;Form&gt;</code> behaves like a native HTML form that uses a GET method. The form data is encoded into the URL as search params, and when the form is submitted, it navigates to the specified URL. In addition, Next.js performs a client-side navigation instead of a full page reload when the form is submitted.</li>
+</ul>
+<pre><code class="lang-ts">import Form from 'next/form'
+
+export default function Page() {
+  return (
+    // URL will be /search?query=abc
+    &lt;Form action="/search"&gt;
+      &lt;input name="query" /&gt;
+      &lt;button type="submit"&gt;Submit&lt;/button&gt;
+    &lt;/Form&gt;
+  )
+}
+
+// Perform mutations by passing a function to the action prop
+export default function Page() {
+  return (
+    &lt;Form action={createPost}&gt;
+      &lt;input name="title" /&gt;
+      &lt;button type="submit"&gt;Create Post&lt;/button&gt;
+    &lt;/Form&gt;
+  )
+}
+
+// app/posts/actions.ts
+'use server'
+import { redirect } from 'next/navigation'
+
+export async function createPost(formData: FormData) {
+  // Create a new post
+  // ...
+
+  redirect(`/posts/${data.id}`)
+}
+</code></pre>

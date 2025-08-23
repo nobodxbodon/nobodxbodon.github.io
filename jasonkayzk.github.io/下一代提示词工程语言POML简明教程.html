@@ -1,0 +1,329 @@
+<h2><a href="https://github.com/jasonkayzk/jasonkayzk.github.io/blob/master/source/_posts/下一代提示词工程语言POML简明教程.md">仓库源文</a>，<a href="https://jasonkayzk.github.io/2025/08/20/下一代提示词工程语言POML简明教程">站点原文</a></h2>
+<p>传统的提示词工程通常涉及编写自由文本，随着应用的发展，提示词文本会变得越来越复杂。</p>
+<p>从而引出：提示词难以维护、难以进行版本控制、在不同场景下难以重用，几乎不可能进行系统化测试等一系列问题。</p>
+<p>如何解决这些问题呢？</p>
+<p>Microsoft给出了一个工程化的答案：POML！</p>
+<p>文章和 Colab 配合，学习效果更佳：</p>
+<ul>
+<li><a href="https://colab.research.google.com/drive/1RrZyqB16XMvsFBjir90m-NCXE35kWFdy?usp=sharing">https://colab.research.google.com/drive/1RrZyqB16XMvsFBjir90m-NCXE35kWFdy?usp=sharing</a></li>
+</ul>
+<p>&lt;br/&gt;</p>
+&lt;!--more--&gt;
+
+<h1><strong>下一代提示词工程语言POML简明教程</strong></h1>
+<h2><strong>一、简介</strong></h2>
+<p><strong>POML通过引入一种结构化方法，使用类似于 HTML 的格式编写提示词内容；</strong></p>
+<p><strong>用户无需编写纯文本提示词，而是可以使用 <code>&lt;role&gt;</code>、<code>&lt;task&gt;</code> 和 <code>&lt;example&gt;</code> 等语义组件来组织提示词意图，从而带来更好的 LLM 性能和更便捷的提示词维护。</strong></p>
+<p><strong>同时，POML具有类似CSS的样式系统，将内容与定义表示分离；</strong></p>
+<h3><strong>（一）核心架构</strong></h3>
+<p>POML采用三层架构运行，分离关注点并支持灵活的提示词开发：</p>
+<p><img alt="poml-structure" src="https://hub.gitmirror.com/raw.githubusercontent.com/JasonkayZK/blog_static/master/images/poml-structure.png"/></p>
+<p>该架构通过几个阶段处理POML文件：</p>
+<ol>
+<li><strong>解析</strong>：将类似XML的语法转换为结构化的中间表示；</li>
+<li><strong>处理</strong>：应用样式表、解析模板并集成外部数据；</li>
+<li><strong>生成</strong>：以各种格式生成最终的优化提示词；</li>
+</ol>
+<p>这种分离使开发者能够在不改变核心逻辑的情况下修改表示样式，无缝集成外部数据源，并在项目中保持一致的提示词结构。</p>
+<p>&lt;br/&gt;</p>
+<h3><strong>（二）主要特性</strong></h3>
+<h4><strong>1、结构化标记系统</strong></h4>
+<p>POML使用类似HTML的语法和语义组件，使提示词更具可读性和可维护性。</p>
+<p>主要组件包括：</p>
+<ul>
+<li><code>&lt;role&gt;</code>：定义LLM应采用的角色或身份；</li>
+<li><code>&lt;task&gt;</code>：指定LLM需要完成的任务；</li>
+<li><code>&lt;example&gt;</code>：提供少样本学习示例；</li>
+<li><code>&lt;output-format&gt;</code>：控制预期的响应格式；</li>
+<li><code>&lt;hint&gt;</code>：提供额外的上下文或约束；</li>
+</ul>
+<p>例如：</p>
+<pre><code class="lang-xml">&lt;poml&gt;
+  &lt;role&gt;You are a patient teacher explaining concepts to a 10-year-old.&lt;/role&gt;
+  &lt;task&gt;Explain the concept of photosynthesis using the provided image as a reference.&lt;/task&gt;
+
+  &lt;img src="photosynthesis.png" alt="Diagram of photosynthesis" /&gt;
+
+  &lt;output-format&gt;
+    Keep the explanation simple, engaging, and under 100 words.
+    Start with "Hey there, future scientist!".
+  &lt;/output-format&gt;
+&lt;/poml&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h4><strong>2、外部数据集成</strong></h4>
+<p>POML通过专用组件来集成外部数据：</p>
+<ul>
+<li><code>&lt;document&gt;</code>：嵌入文本文件、PDF或Word文档；</li>
+<li><code>&lt;table&gt;</code>：集成电子表格或CSV文件中的结构化数据</li>
+<li><code>&lt;img&gt;</code>：包含带有替代文本的图像，用于支持视觉的模型</li>
+<li><code>&lt;audio&gt;</code>：处理多模态应用的音频文件；</li>
+</ul>
+<p>例如：</p>
+<pre><code class="lang-xml">&lt;hint captionStyle="header" caption="Background Knowledge"&gt;
+  &lt;Document src="assets/tom_and_jerry.docx"/&gt;
+&lt;/hint&gt;
+
+&lt;example&gt;
+  &lt;input&gt;
+    &lt;img src="assets/tom_cat.jpg" alt="The image contains the Tom cat character." syntax="multimedia" /&gt;
+  &lt;/input&gt;
+  &lt;output&gt;
+    &lt;Document src="assets/tom_introduction.txt"/&gt;
+  &lt;/output&gt;
+&lt;/example&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h4><strong>3、解耦的表示样式</strong></h4>
+<p>POML具有类似CSS的样式系统，将内容与表示分离。</p>
+<p>例如：</p>
+<pre><code class="lang-css">&lt;stylesheet&gt;
+  role {
+    verbosity: concise;
+    format: markdown;
+  }
+  task {
+    emphasis: strong;
+  }
+&lt;/stylesheet&gt;
+</code></pre>
+<p>这允许开发者修改详细程度、输出格式和强调等样式方面，而无需改变核心提示词逻辑，显著降低调整提示词时格式漂移的风险。</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>4、模板引擎</strong></h4>
+<p>POML包含强大的模板引擎，用于动态提示词生成：</p>
+<ul>
+<li>变量：<code>{ { variable_name } }</code></li>
+<li>循环：<code>&lt;for each="item in items"&gt;...&lt;/for&gt;</code></li>
+<li>条件：<code>&lt;if condition="variable &gt; 0"&gt;...&lt;/if&gt;</code></li>
+<li>定义：<code>&lt;let name="variable" value="expression" /&gt;</code></li>
+</ul>
+<p>这支持创建数据驱动的提示词，能够适应不同的上下文和输入。</p>
+<p>&lt;br/&gt;</p>
+<h3>（三）开发生态</h3>
+<p>POML提供全面的开发工具包，提高生产力：</p>
+<h4><strong>1、VSCode扩展</strong></h4>
+<p>Visual Studio Code扩展提供：</p>
+<ul>
+<li>语法高亮和语言支持</li>
+<li>上下文感知的自动补全</li>
+<li>实时预览功能</li>
+<li>与LLM提供商的集成测试</li>
+<li>错误诊断和验证</li>
+<li>可重用组件的提示词库</li>
+</ul>
+<p>&lt;br/&gt;</p>
+<h4><strong>2、多语言SDK</strong></h4>
+<p>POML为Python和TypeScript/JavaScript提供SDK：</p>
+<p><strong>Python SDK:</strong></p>
+<pre><code class="lang-python">from poml import load, render
+
+# Load and render a POML file
+prompt = load("example.poml")
+result = render(prompt, variables={"topic": "photosynthesis"})
+</code></pre>
+<p><strong>TypeScript SDK:</strong></p>
+<pre><code class="lang-typescript">import { loadPoml, renderPoml } from 'pomljs';
+
+// Load and render a POML file
+const prompt = await loadPoml('example.poml');
+const result = await renderPoml(prompt, { topic: 'photosynthesis' });
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h2>二、基本使用</h2>
+<h3><strong>（一）安装</strong></h3>
+<p>Node.js (via npm)：</p>
+<pre><code class="lang-shell">npm install pomljs
+</code></pre>
+<p>Python (via pip)：</p>
+<pre><code class="lang-bash">pip install poml
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>（二）第一个案例</strong></h3>
+<h4><strong>1、编写POML文件</strong></h4>
+<p>编写一个名为 <code>example.poml</code> 的文件，内容如下：</p>
+<p>example.poml</p>
+<pre><code class="lang-xml">&lt;poml&gt;
+  &lt;role&gt;You are a patient teacher(named {{teacher_name}}) explaining concepts to a 10-year-old.&lt;/role&gt;
+  &lt;task&gt;Explain the concept of photosynthesis using the provided image as a reference.&lt;/task&gt;
+
+  &lt;input&gt;
+  &lt;img src="photosynthesis.jpg" alt="Diagram of photosynthesis" syntax="multimedia"/&gt;
+  &lt;/input&gt;
+  &lt;output-format&gt;
+    Keep the explanation simple, engaging, and under 100 words.
+    Start with "Hey there, future scientist!".
+  &lt;/output-format&gt;
+&lt;/poml&gt;
+</code></pre>
+<p>示例定义了：</p>
+<ul>
+<li>LLM 的角色和任务，包含一张图片作为上下文，并指定了所需的输出格式。</li>
+<li>同时，包含了一个变量 <code>teacher_name</code>；</li>
+</ul>
+<p>编写完成后，如果你安装了 <a href="https://marketplace.visualstudio.com/items?itemName=poml-team.poml">Visual Studio Code poml</a>  插件，则可以进行预览：</p>
+<p>&lt;img src="https://hub.gitmirror.com/raw.githubusercontent.com/JasonkayZK/blog_static/master/images/poml-preview.jpg" width="50%" height="50%" /&gt;</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>2、解析并渲染POML</strong></h4>
+<p>借助 POML 工具包，此提示词可以轻松渲染为灵活的格式，并可通过 LLM 进行测试。</p>
+<p>例如在 Python 中：</p>
+<pre><code class="lang-python">from poml import poml
+
+# Process a POML file
+# result = poml("example.poml")
+
+# Process with context variables
+result = poml("example.poml", context={"teacher_name": "Jasonkay"})
+print(f"Process with context variables: {result}")
+
+# Get OpenAI chat format(Within the higher version)
+# messages = poml("example.poml", format="openai_chat")
+# print(f"Get OpenAI chat format: {messages}")
+</code></pre>
+<p><code>poml</code> 函数接受以下参数：</p>
+<ul>
+<li><code>markup</code>：POML 内容（字符串或文件路径）</li>
+<li><code>context</code>：可选的模板注入数据</li>
+<li><code>stylesheet</code>：可选的样式自定义</li>
+<li><code>format</code>：输出格式（"dict"、"openai_chat"、"langchain"、"pydantic" 或 "raw"）</li>
+</ul>
+<p>执行代码后，输出结果为：</p>
+<pre><code class="lang-bash">Process with context variables: [{'speaker': 'system', 'content': '# Role\n\nYou are a patient teacher(named Jasonkay) explaining concepts to a 10-year-old.\n\n# Task\n\nExplain the concept of photosynthesis using the provided image as a reference.'}, {'speaker': 'human', 'content': [{'type': 'image/webp', 'base64': 'UklGRg......', 'alt': 'Diagram of photosynthesis'}, '# Output Format\n\nKeep the explanation simple, engaging, and under 100 words. Start with "Hey there, future scientist!".']}]
+</code></pre>
+<p>可以看到，输出的内容将内容进行了渲染！</p>
+<p>&lt;br/&gt;</p>
+<h4><strong>3、与LLM系统集成(Gemini)</strong></h4>
+<p>最后，将我们的提示词和外部 LLM 系统相结合！</p>
+<blockquote><p>由于目前最新的 POML SDK 还不支持使用 <code>format</code> 参数来渲染 <code>openai_chat</code> 类型的 Prompt；</p>
+<p>因此，这里使用 Gemini API 来发送图片！</p>
+</blockquote>
+<p>使用下面的 poml 文件来渲染：</p>
+<p>example.poml</p>
+<pre><code class="lang-xml">&lt;poml&gt;
+  &lt;role&gt;You are a patient teacher(named {{teacher_name}}) explaining concepts to a 10-year-old.&lt;/role&gt;
+  &lt;task&gt;Explain the concept of photosynthesis using the provided image as a reference.&lt;/task&gt;
+
+  &lt;output-format&gt;
+    Keep the explanation simple, engaging, and under 100 words.
+    Start with "Hey there, future scientist!".
+  &lt;/output-format&gt;
+&lt;/poml&gt;
+</code></pre>
+<p>&lt;br/&gt;</p>
+<p>首先安装 Gemini SDK：</p>
+<pre><code class="lang-bash">pip install -U google-genai
+</code></pre>
+<blockquote><p><strong>要运行下面的代码，你需要创建一个 Gemini 的 API Key：</strong></p>
+<ul>
+<li><p><a href="https://aistudio.google.com/app/apikey">https://aistudio.google.com/app/apikey</a></p>
+<p><strong>随后，将下面的 <code>YOUR_API_KEY</code> 替换为你生成的 Key！</strong></p>
+</li>
+</ul>
+</blockquote>
+<pre><code class="lang-python">from google import genai
+from poml import poml
+from google.genai import types
+
+
+GEMINI_API_KEY="YOUR_API_KEY"
+
+client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Read the picture
+with open('photosynthesis.jpg', 'rb') as f:
+    image_bytes = f.read()
+
+# Render the POML file
+result = poml("example.poml", context={"teacher_name": "Jasonkay"}, chat=False)
+# print(f"Process with context variables: {result}")
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash", 
+    contents=[
+        result,
+        types.Part.from_bytes(
+          data=image_bytes,
+          mime_type='image/jpeg',
+      ),
+    ]
+)
+print(response.text)
+</code></pre>
+<p>最后，执行即可输出内容：</p>
+<pre><code>Look at our amazing plant friend! Just like you need food, plants need to eat too! This image shows how they do it, a process called **photosynthesis**. Plants use sunlight from the sun, and "drink" water through their roots. They also breathe in a gas called CO2 (carbon dioxide) from the air, shown by the blue arrow going in. Using these, they make their own sugary food to grow! As a super cool bonus, they release O2 (oxygen) for us to breathe, shown by the blue arrow going out. Amazing, right?
+</code></pre>
+<p>&lt;br/&gt;</p>
+<h3><strong>（三）使用样式</strong></h3>
+<p>现在，让我们为上面的例子增加相关的样式，来优化的 Prompt 配置！</p>
+<p>example-2.poml</p>
+<pre><code class="lang-xml">&lt;poml&gt;
+  &lt;role&gt;You are a patient teacher(named {{teacher_name}}) explaining concepts to a 10-year-old.&lt;/role&gt;
+  &lt;task&gt;Explain the concept of photosynthesis using the provided image as a reference.&lt;/task&gt;
+
+  &lt;output-format&gt;
+    &lt;list listStyle="dash"&gt;
+        &lt;item className="explanation"&gt;Keep the explanation simple, engaging, and under 100 words.&lt;/item&gt;
+        &lt;item className="greeting"&gt;    Start with "Hey there, future scientist!".     &lt;/item&gt;
+    &lt;/list&gt;
+  &lt;/output-format&gt;
+&lt;/poml&gt;
+
+&lt;stylesheet&gt;
+  {
+    ".explanation": {
+      "syntax": "json"
+    },
+    "list" : {
+      "whiteSpace": "trim"
+    }
+  }
+&lt;/stylesheet&gt;
+</code></pre>
+<p>渲染结果如下：</p>
+<pre><code class="lang-bash"># Role
+
+You are a patient teacher(named ) explaining concepts to a 10-year-old.
+
+# Task
+
+Explain the concept of photosynthesis using the provided image as a reference.
+
+# Output Format
+
+```json
+"Keep the explanation simple, engaging, and under 100 words."
+```
+
+- Start with "Hey there, future scientist!".
+</code></pre>
+<blockquote><p>更多内容可以参考官方文档：</p>
+<ul>
+<li><a href="https://microsoft.github.io/poml/latest/language/standalone/#stylesheet">https://microsoft.github.io/poml/latest/language/standalone/#stylesheet</a></li>
+</ul>
+</blockquote>
+<p>&lt;br/&gt;</p>
+<h2><strong>三、深入学习</strong></h2>
+<p>在完成了基础学习之后，可以继续阅读下面的内容：</p>
+<ul>
+<li><a href="https://github.com/microsoft/poml/tree/main/examples">更多官方的案例</a></li>
+<li><a href="https://microsoft.github.io/poml/latest/">官方文档</a></li>
+<li><a href="https://zread.ai/microsoft/poml/6-poml-syntax-and-structure">POML语法结构</a></li>
+<li><a href="https://zread.ai/microsoft/poml/8-intermediate-representation">POML中间表示</a></li>
+<li><a href="https://zread.ai/microsoft/poml/11-api-reference">API参考</a></li>
+<li><a href="https://zread.ai/microsoft/poml/13-integration-with-external-systems">外部系统集成</a></li>
+<li><a href="https://zread.ai/microsoft/poml/14-custom-component-development">自定义组件</a></li>
+</ul>
+<p>进行更加深度的学习！</p>
+<p>&lt;br/&gt;</p>
+<h1><strong>附录</strong></h1>
+<p>文章和 Colab 配合，学习效果更佳：</p>
+<ul>
+<li><a href="https://colab.research.google.com/drive/1RrZyqB16XMvsFBjir90m-NCXE35kWFdy?usp=sharing">https://colab.research.google.com/drive/1RrZyqB16XMvsFBjir90m-NCXE35kWFdy?usp=sharing</a></li>
+</ul>
+<p>参考文章：</p>
+<ul>
+<li><a href="https://github.com/microsoft/poml">https://github.com/microsoft/poml</a></li>
+<li><a href="https://zread.ai/microsoft/poml">https://zread.ai/microsoft/poml</a></li>
+<li><a href="https://microsoft.github.io/poml/latest/">https://microsoft.github.io/poml/latest/</a></li>
+<li><a href="https://ai.google.dev/gemini-api/docs/image-understanding">https://ai.google.dev/gemini-api/docs/image-understanding</a></li>
+</ul>
+<p>&lt;br/&gt;</p>

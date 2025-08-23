@@ -1,7 +1,28 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/learn-from-advent-of-vue.md">仓库源文</a>，<a href="https://kexizeroing.github.io/learn-from-advent-of-vue">站点原文</a></h2>
+<h3>Before coding</h3>
+<p>Vue 3 becomes the new default version on February 7, 2022. When Vue first started, it was just a runtime library. Over the years, it has evolved into a framework that encompasses many sub projects.</p>
+<p>The <a href="https://github.com/vuejs/language-tools">Vue Language Tools</a> are essential for providing language features such as autocompletion, type checking, and diagnostics when working with Vue’s SFCs. While <code>Volar</code> powers the language tools, the official extension for Vue is titled <code>Vue - Official</code> now on the VSCode marketplace.</p>
+<p>Vue DevTools is designed to enhance the Vue developer experience. There are multiple options to add this tool to your projects by <a href="https://devtools.vuejs.org/guide/vite-plugin">Vite plugin</a>, <a href="https://devtools.vuejs.org/guide/standalone">Standalone App</a>, or Chrome Extension. Note that The v7 version of devtools only supports Vue3. If your application is still using Vue2, please install the v6 version.</p>
 <h3>Code Structure</h3>
-<p>Use the template <a href="https://stackblitz.com/edit/vue3-vite-starter">https://stackblitz.com/edit/vue3-vite-starter</a> to start.</p>
 <p>In a Vue component, <code>&lt;script setup&gt;</code> can be used alongside normal <code>&lt;script&gt;</code> using the options API. It works because the <code>&lt;script setup&gt;</code> block is compiled into the component's <code>setup()</code> function. A normal <code>&lt;script&gt;</code> may be needed, for example, we need to run side effects or create objects that should only execute once in module scope (outside the <code>export default {}</code>).</p>
+<pre><code class="lang-vue">&lt;script&gt;
+console.log('module loaded') // runs ONCE
+
+export default {
+  name: 'MyComponent',
+  created() {
+    console.log('in created') // runs EVERY time component is created
+  }
+}
+&lt;/script&gt;
+</code></pre>
+<blockquote><p>Each <code>.vue</code> file is turned into a JavaScript ES module. So:</p>
+<ul>
+<li>Top-level code in <code>&lt;script&gt;</code> runs once when the module is loaded.</li>
+<li>Code inside <code>&lt;script setup&gt;</code> or in lifecycle hooks runs every time a new component instance is created.</li>
+</ul>
+</blockquote>
+<p>The <code>data</code> option defined in a component in Vue 2 must be a function (that returns an object), rather than an object. This is because the object returned from a function is created every time a new instance of the component is created, while an object assigned directly to the <code>data</code> option would be shared across all instances.</p>
 <p>Components using <code>&lt;script setup&gt;</code> are closed by default - i.e. the public instance of the component will not expose any of the bindings declared inside <code>&lt;script setup&gt;</code>. To explicitly expose properties, use the <code>defineExpose</code> compiler macro.</p>
 <h3>Date Countdown</h3>
 <p><a href="https://papaya-caramel-13dd76.netlify.app/">https://papaya-caramel-13dd76.netlify.app/</a></p>
@@ -37,6 +58,14 @@ state.value.count = 2
 // does trigger change
 state.value = { count: 2 }
 </code></pre>
+<h3>Why Vue need to use <code>.value</code> to access the ref property?</h3>
+<p>The <code>.value</code> syntax is used in Vue 3 to access the value of a ref property because refs are designed to be reactive objects rather than simple values. When you create a ref, you are actually creating an object with a single property named <code>value</code>. The <code>value</code> property holds the actual value that the ref represents, and any changes to the <code>value</code> property trigger reactivity. When we access the ref directly, we are accessing the object, not the value.</p>
+<p>When you create a reactive object with <code>reactive()</code>, you can access its properties directly using dot notation, without needing to use <code>.value</code>. This is because reactive objects use JavaScript's built-in getters and setters to intercept property access and modification, allowing Vue to track dependencies and trigger reactivity as needed.</p>
+<ul>
+<li><code>reactive()</code> only takes objects, NOT JS primitives.</li>
+<li><code>ref()</code> is calling <code>reactive()</code> behind the scenes.</li>
+<li><code>ref()</code> has a <code>.value</code> property for reassigning, <code>reactive()</code> does not have this and therefore CANNOT be reassigned.</li>
+</ul>
 <h3><code>defineProps</code> and compiler macros</h3>
 <p>You don't need to import <code>defineProps</code> from Vue. <code>defineProps</code>, <code>defineEmits</code>, and <code>defineExpose</code> are <strong>compiler macros</strong> that are compiled away, and they are not actual functions in the Vue package. These are just hints for the compiler to create them nicely.</p>
 <blockquote><p>A compiler macro is special code that is processed by a compiler and converted into something else. They are effectively a clever form of string replacement.</p>
@@ -146,6 +175,19 @@ export function useTimeout = (fn, delay, options) =&gt; {
 <li>The callback function receives a special function called <code>onCleanup</code> as its first argument. You can use this function to register a cleanup callback that will be called before the watcher is re-executed.</li>
 <li>A confusing caveat is that <code>watchEffect</code> only tracks dependencies during its synchronous execution. When using it with an async callback, only properties accessed before the first <code>await</code> tick will be tracked. Everything after the <code>await</code> will NOT be tracked.</li>
 </ol>
+<pre><code class="lang-js">// `onCleanup` function is also passed to watcher callbacks as the 3rd argument
+watch(searchQuery, (query, oldQuery, onCleanup) =&gt; {
+  searchResults.value = []
+
+  const timerId = setTimeout(async () =&gt; {
+    const results = await fetch(`/api/search?q=${query}`)
+    searchResults.value = await results.json()
+  }, 300)
+
+  onCleanup(() =&gt; clearTimeout(timerId))
+})
+</code></pre>
+<p>Vue calls your cleanup function in two situations: when the watcher is about to run again, and when the watcher stops completely (like when a component unmounts).</p>
 <h3>Watchers callback flush timing</h3>
 <p>Similar to component updates, user-created watcher callbacks are batched to avoid duplicate invocations.</p>
 <p>By default, a watcher's callback is called after parent component updates (if any), and <strong>before</strong> the owner component's DOM updates. This means if you attempt to access the owner component's own DOM inside a watcher callback, the DOM will be in a pre-update state.</p>
@@ -163,30 +205,6 @@ watch(count, watchFn('post'), { flush: 'post' }); // Count is 1
 watch(count, watchFn('sync'), { flush: 'sync' }); // Count is 0
 </code></pre>
 <h3>Write better Vue composables</h3>
-<p>Passing props and events back and forth through the component hierarchy creates a lot of complexity. A more straightforward solution is to create a shared data store that any component can import:</p>
-<pre><code class="lang-js">import { reactive, toRefs } from 'vue'
-const state = reactive({ user: { name: 'Alice' } })
-
-export function useUserStore() {
-  // Without toRefs, if you were to destructure the returned state like this:
-  // const { user } = useUserStore()
-  // You would lose reactivity because destructuring breaks the reactive connection. T
-  return toRefs(state)
-}
-</code></pre>
-<blockquote><p>Without <code>toRefs</code>, if you were to destructure the returned state <code>const { user } = useUserStore()</code>, you would lose reactivity because destructuring breaks the reactive connection. The <code>user</code> variable would just be a static copy of the value at the time of destructuring. With <code>toRefs</code>, each property becomes an individual <code>ref</code> that maintains its reactive connection to the original state. If you only ever used the state as a whole object (like <code>state.user.name</code>) and never destructured it, then you wouldn't need <code>toRefs</code>.</p>
-</blockquote>
-<p>A giant component might put all its refs and methods in one place, so that setup quickly becomes unmanageable. Instead, an inline composable can group logic and provide it locally.</p>
-<pre><code class="lang-vue">&lt;script setup&gt;
-function useCounter() {
-  const count = ref(0)
-  const increment = () =&gt; count.value++
-  return { count, increment }
-}
-
-const { count, increment } = useCounter()
-&lt;/script&gt;
-</code></pre>
 <p>We abandon the options API for the composition API, and the idea is not that we write everything the same way as the options API but not having the data/computed/watch options.</p>
 <pre><code class="lang-js">// Common mistake: Grouping by options
 // data
@@ -249,29 +267,6 @@ function useMessage(input) {
   }
 }
 </code></pre>
-<h3>Custom Directives</h3>
-<pre><code class="lang-html">&lt;div class="w-full h-full flex flex-col justify-center items-center text-center gap-12"&gt;
-  &lt;p v-christmas&gt;Red + Green (default)&lt;/p&gt;
-  &lt;p v-christmas:red&gt;Red only&lt;/p&gt;
-  &lt;p v-christmas:green&gt;Green only&lt;/p&gt;
-  &lt;p v-christmas="5"&gt;Slower Animation&lt;/p&gt;
-&lt;/div&gt;
-</code></pre>
-<pre><code class="lang-js">// main.js
-const app = createApp(App)
-
-app.directive('christmas', (el, binding) =&gt; {
-  const duration = binding.value ?? 2 // the length of the animation in seconds
-  const color = binding.arg ?? 'red-green' // the class to add for the different colors
-
-  // this will be called for both `mounted` and `updated`
-  el.classList.add('christmas-text', color)
-
-  el.style.animationDuration = duration + 's'
-})
-
-app.mount('#app')
-</code></pre>
 <h3>Writable Computed Refs</h3>
 <pre><code class="lang-js">const firstName = ref('');
 const lastName = ref('');
@@ -288,7 +283,7 @@ const fullName = computed({
 fullName.value = 'Michael Thiessen';
 console.log(lastName.value);      // 'Thiessen'
 </code></pre>
-<p>A common mistake using <code>computed</code> is non reactive value as a dependency. Often developers need some reactivity when working with browser API’s, but the APIs are not reactive. To get around this, we will use VueUse library that adds reactivity to web browser APIs.</p>
+<p>A common mistake using <code>computed</code> is non reactive value as a dependency. Often developers need some reactivity when working with browser API’s, but the APIs are not reactive. To get around this, we will use VueUse library that adds reactivity to web browser APIs. <em>(VueUse makes non‑reactive browser data reactive by storing it in <code>ref</code> or <code>reactive</code> objects and updating those values using browser event listeners or polling.)</em></p>
 <pre><code class="lang-js">const videoPlayer = ref&lt;HTMLVideoElement&gt;();
 // wrong, not reactive
 const playing = computed(() =&gt; !videoPlayer.value?.paused);
@@ -333,6 +328,9 @@ const { playing: videoPlaying} = useMediaControls(videoRef, {
   &lt;/SlotsScoped&gt;
 &lt;/template&gt;
 </code></pre>
+<blockquote><p><code>&lt;template v-slot="{ number, message }"&gt;</code> is same as <code>&lt;template #default="{ number, message }"&gt;</code></p>
+<p><code>&lt;template v-slot:display="{ number, message }"</code> is same as <code>&lt;template #display="{ number, message }"&gt;</code></p>
+</blockquote>
 <h3>Async Components</h3>
 <p>Vue allows us to divide an app into smaller chunks by loading components asynchronously with the help of the <code>defineAsyncComponent()</code> function, which accepts a loader function that returns a Promise that resolves to the imported component.</p>
 <pre><code class="lang-js">import { defineAsyncComponent } from "vue";
@@ -378,6 +376,33 @@ export default {
 };
 &lt;/script&gt;
 </code></pre>
+<h3>Custom Directives</h3>
+<pre><code class="lang-html">&lt;div class="w-full h-full flex flex-col justify-center items-center text-center gap-12"&gt;
+  &lt;p v-christmas&gt;Red + Green (default)&lt;/p&gt;
+  &lt;p v-christmas:red&gt;Red only&lt;/p&gt;
+  &lt;p v-christmas:green&gt;Green only&lt;/p&gt;
+  &lt;p v-christmas="5"&gt;Slower Animation&lt;/p&gt;
+&lt;/div&gt;
+</code></pre>
+<pre><code class="lang-js">// main.js
+const app = createApp(App)
+
+app.directive('christmas', (el, binding) =&gt; {
+  const duration = binding.value ?? 2 // the length of the animation in seconds
+  const color = binding.arg ?? 'red-green' // the class to add for the different colors
+
+  // this will be called for both `mounted` and `updated`
+  el.classList.add('christmas-text', color)
+
+  el.style.animationDuration = duration + 's'
+})
+
+app.mount('#app')
+</code></pre>
+<ul>
+<li><code>el</code> is the DOM element the directive is bound to. You can manipulate it directly to set styles, classes, listeners, etc.</li>
+<li><code>binding</code> is an object containing data about the binding. It includes <code>value</code> (v-christmas="myValue"), <code>arg</code> (v-christmas:color), <code>modifiers</code> (v-christmas.foo.bar), etc.</li>
+</ul>
 <h3>Global Properties</h3>
 <p>It's possible to add global properties to your Vue app in both Vue 2 and Vue 3. Prefixing global properties with a <code>$</code> helps prevent naming conflicts with other variables, and it's a standard convention that makes it easy to spot when a value is global.</p>
 <pre><code class="lang-js">// Vue 3
@@ -398,8 +423,6 @@ import { inject } from 'vue'
 const myGlobalVariable = inject('myGlobalVariable')
 &lt;/script&gt;
 </code></pre>
-<blockquote><p><a href="https://alexop.dev/posts/solving-prop-drilling-in-vue">Solving Prop Drilling in Vue</a>: Instead of event buses, use Pinia for state, composables for logic, and provide/inject for component trees.</p>
-</blockquote>
 <h3>How to Use Provide/Inject</h3>
 <p>Vue’s Provide/Inject API is a powerful feature that allows components to share data without prop drilling. It is not meant for global state management but rather for local component hierarchies.</p>
 <pre><code class="lang-js">// parent component to make data available to its descendants
@@ -413,51 +436,20 @@ const sharedMessage = inject('sharedMessage');
 <li>Provide/Inject is best suited for sharing dependencies like form contexts, themes, or service instances, rather than global state management. If multiple components rely on the same data structure, consider Vuex or Pinia.</li>
 <li>Since <code>provide</code> passes values by reference, you may need to use <code>ref()</code> or <code>reactive()</code> to ensure reactivity.</li>
 </ol>
-<h3>Vue router and Suspense</h3>
-<pre><code class="lang-vue">&lt;template&gt;
-  &lt;nav&gt;
-    &lt;router-link to="/"&gt;first&lt;/router-link&gt; /
-    &lt;router-link to="/second"&gt;second&lt;/router-link&gt;
-  &lt;/nav&gt;
-  &lt;main&gt;
-    &lt;RouterView v-slot="{ Component }"&gt;
-      &lt;template v-if="Component"&gt;
-        &lt;KeepAlive&gt;
-          &lt;Suspense&gt;
-            &lt;!-- main content --&gt;
-            &lt;component :is="Component"&gt;&lt;/component&gt;
-
-            &lt;!-- loading state --&gt;
-            &lt;template #fallback&gt; Loading... &lt;/template&gt;
-          &lt;/Suspense&gt;
-        &lt;/KeepAlive&gt;
-      &lt;/template&gt;
-    &lt;/RouterView&gt;
-  &lt;/main&gt;
-&lt;/template&gt;
-
-&lt;script&gt;
-import { watchEffect } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-
-export default {
-  setup() {
-    const route = useRoute()
-    const router = useRouter()
-    // Route isn't reactive
-    watchEffect(() =&gt; console.log('Route changed', route))
-    // But its properties are
-    watchEffect(() =&gt; console.log('Path changed', route.path))
-    // useRouter also works
-    watchEffect(() =&gt; console.log('[Router] Path changed', router.currentRoute.value))
-  },
-}
-&lt;/script&gt;
+<h3>Namespaced Components</h3>
+<pre><code class="lang-ts">// form.ts
+export { default as Form } from "./Form.vue";
+export { default as Input } from "./FormInput.vue";
 </code></pre>
-<p><code>v-slot="{ Component }"</code> exposes a scoped slot, where <code>Component</code> is the dynamically loaded component for the current route. The scoped slot gives you more programmatic control over the rendering process, making it easier to add transitions, loading states, or additional wrapping logic around your route components.</p>
+<pre><code class="lang-js">import * as AppForm from "./form";
+
+&lt;AppForm.Form&gt;
+  &lt;AppForm.Input v-model="msg" /&gt;
+&lt;/AppForm.Form&gt;
+</code></pre>
 <h3>Renderless Components</h3>
 <p>Renderless components can be an alternative to composables when finding ways to design reusable logic in your Vue apps. As you might guess, they don't render anything. Instead, they handle all the logic inside a script section and then expose properties through a scoped slot.</p>
-<p>Many components are contentless components. They provide a container, and you have to supply the content. Think of a button, a menu, or a card component. Slots allow you to pass in whatever markup and components you want, and they also are relatively open-ended, giving you lots of flexibility.</p>
+<p>Contentless components provide a container, and you have to supply the content. Think of a button, a menu, or a card component. Slots allow you to pass in whatever markup and components you want, and they also are relatively open-ended, giving you lots of flexibility.</p>
 <pre><code class="lang-vue">&lt;!-- NorthPoleDistance.vue --&gt;
 &lt;script setup lang="ts"&gt;
 import { getDistanceKm, getDistanceMiles } from '@/utils/distance'
@@ -532,6 +524,11 @@ export function useCheckboxToggle() {
 </code></pre>
 <h3>Render function</h3>
 <p>When using the render function instead of templates, you'll be using the <code>h</code> function a lot (<code>hyperscript</code> - "JavaScript that produces HTML"). It creates a virtual node, an object that Vue uses internally to track updates and what it should be rendering. These render functions are essentially what is happening "under the hood" when Vue compiles your single file components to be run in the browser.</p>
+<p>If you write render functions, you can use runtime-only builds and save bundle size. No template compiler needed if you don’t use templates.</p>
+<ul>
+<li>Standalone build: includes both the compiler and the runtime.</li>
+<li>Runtime only build: since it doesn't include the compiler, you need to either pre-compiled templates in a compile step, or manually written render functions. The npm package will export this build by default, since when consuming Vue from npm, you will likely be using a compilation step, during which vue-loader will perform the template pre-compilation.</li>
+</ul>
 <pre><code class="lang-vue">&lt;script&gt;
 import { h } from 'vue'
 
@@ -547,44 +544,4 @@ export default {
   }
 }
 &lt;/script&gt;
-</code></pre>
-<pre><code class="lang-js">// vue-vdom.js
-// Create a virtual node
-export function h(tag, props, children) {
-  return { tag, props, children }
-}
-
-// tag: h1
-// props: { class: 'text-red-500'}
-// children: 'Hello'
-// Add a virtual node onto the DOM
-export function mount(vnode, container) {
-  const el = document.createElement(vnode.tag)
-  vnode.el = el
-
-  for (const key in vnode.props) {
-    if (key.startsWith('on')) {
-      el.addEventListener(key.slice(2).toLowerCase(), vnode.props[key])
-    }
-    el.setAttribute(key, vnode.props[key])
-  }
-
-  if (typeof vnode.children === 'string') {
-    // Text
-    el.textContent = vnode.children
-  } else if (Array.isArray(vnode.children)) {
-    // Array of vnodes
-    vnode.children.forEach(child =&gt; mount(child, el))
-  } else {
-    // Single vnode
-    mount(vnode.children, el)
-  }
-
-  container.appendChild(el)
-}
-
-// Remove a vnode from the real DOM
-export function unmount(vnode) {
-  vnode.el.parentNode.removeChild(vnode.el)
-}
 </code></pre>

@@ -44,8 +44,15 @@ Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ=
 })()
 </code></pre>
 <h3>基本认证的 apache 配置</h3>
+<p>需要启用这几个模块</p>
+<ul>
+<li>mod_auth_basic</li>
+<li>mod_authn_file</li>
+<li>mod_authn_core</li>
+<li>mod_authz_core</li>
+<li>mod_authz_user</li>
+</ul>
 <pre><code># Apache/2.4.62
-# mod_auth_basic mod_auth_digest mod_authn_file mod_authn_core mod_authz_core mod_authz_user 需要启用这几个模块
 &lt;VirtualHost localhost-auth-basic.com:80&gt;
     ServerAdmin webmaster@dummy-host.example.com
     DocumentRoot "${SRVROOT}/htdocs"
@@ -225,8 +232,11 @@ method:uri
 method:uri:H(entity-body)
 </code></pre>
 <h3>摘要认证的 apache 配置</h3>
-<pre><code>
-&lt;VirtualHost localhost-auth-digest.com:80&gt;
+<p>在 basic 认证的基础上还需要启用这几个模块</p>
+<ul>
+<li>mod_auth_digest</li>
+</ul>
+<pre><code>&lt;VirtualHost localhost-auth-digest.com:80&gt;
     ServerAdmin webmaster@dummy-host.example.com
     DocumentRoot "${SRVROOT}/htdocs"
     ServerName localhost-auth-digest.com
@@ -373,6 +383,92 @@ echo 'auth success';
 </code></pre>
 <p>表单认证讨论得最多得问题是，会话状态要保存在哪里 cookie? token? jwt? session?
 本文只描述 http 的认证，这个问题就不展开了。</p>
+<h3>表单认证的 apache 配置</h3>
+<p>在 basic 认证的基础上还需要启用这几个模块</p>
+<ul>
+<li>mod_auth_form</li>
+<li>mod_request</li>
+<li>mod_session</li>
+<li>mod_session_cookie</li>
+<li>mod_session_crypto</li>
+</ul>
+<p>密码文件的生成和 basic 认证的一样</p>
+<pre><code>&lt;VirtualHost localhost-auth-form.com:80&gt;
+    ServerAdmin webmaster@dummy-host.example.com
+    DocumentRoot "${SRVROOT}/htdocs"
+    ServerName localhost-auth-form.com
+    ServerAlias localhost-auth-form.com
+
+    &lt;Location "/login.html"&gt;
+        Satisfy any
+        Allow from all
+        AuthType None
+        Require all granted
+    &lt;/Location&gt;
+    &lt;Location "/loggedout.html"&gt;
+        Satisfy any
+        Allow from all
+        AuthType None
+        Require all granted
+    &lt;/Location&gt;
+
+    &lt;Location "/dologin.html"&gt;
+        SetHandler form-login-handler
+        AuthFormLoginRequiredLocation "/login.html"
+        AuthFormLoginSuccessLocation "/index.html"
+        AuthFormProvider file
+        AuthUserFile "${SRVROOT}/.passwd"
+        AuthType form
+        AuthName /admin
+        Session On
+        SessionCookieName session path=/
+        SessionCryptoPassphrase secret
+    &lt;/Location&gt;
+    &lt;Location "/logout.html"&gt;
+        SetHandler form-logout-handler
+        AuthFormLogoutLocation "/loggedout.html"
+        Session On
+        SessionMaxAge 1
+        SessionCookieName session path=/
+        SessionCryptoPassphrase secret
+    &lt;/Location&gt;
+
+    &lt;Location "/"&gt;
+        AuthFormProvider file
+        AuthUserFile "${SRVROOT}/.passwd"
+        AuthType form
+        AuthName "/admin"
+        AuthFormLoginRequiredLocation "/login.html"
+
+        Session On
+        SessionCookieName session path=/
+        SessionCryptoPassphrase secret
+
+        Require valid-user
+    &lt;/Location&gt;
+
+    &lt;IfModule dir_module&gt;
+        DirectoryIndex index.html index.php
+    &lt;/IfModule&gt;
+
+    ErrorLog "logs/localhost-auth-form.com-error.log"
+    CustomLog "logs/localhost-auth-form.com-access.log" common
+&lt;/VirtualHost&gt;
+</code></pre>
+<p>在这个例子里还需要在网站的更目录新建几个 html 文件</p>
+<p>login.html</p>
+<pre><code class="lang-html">&lt;form method="POST" action="/dologin.html"&gt;
+  Username: &lt;input type="text" name="httpd_username" value="" /&gt;
+  Password: &lt;input type="password" name="httpd_password" value="" /&gt;
+  &lt;input type="submit" name="login" value="Login" /&gt;
+&lt;/form&gt;
+</code></pre>
+<p>loggedout.html</p>
+<pre><code class="lang-html">&lt;h1&gt;loggedout&lt;/h1&gt;
+</code></pre>
+<p>index.html</p>
+<pre><code class="lang-html">&lt;h1&gt;index&lt;/h1&gt;
+</code></pre>
 <h2>SSL 客户端证书</h2>
 <p>SSL 客户端证书，应该是最安全的形式了，但也是最麻烦的形式，网站必须启用 https 和 要在客户端安装一个证书。</p>
 <p>除此之外，客户端证书还要单独向 CA 申请。如果是内部自建的 CA 还好，不然申请客户端证书还会有额外的成本。</p>

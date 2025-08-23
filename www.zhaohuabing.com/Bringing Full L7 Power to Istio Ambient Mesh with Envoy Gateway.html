@@ -1,0 +1,452 @@
+<h2><a href="https://github.com/zhaohuabing/hugo_blog/blob/master/content/post/2025-07-23-Use Envoy Gateway as the Ingress Gateway and Waypoint Proxy for Ambient Mesh.md">仓库源文</a>，<a href="https://www.zhaohuabing.com/post/2025-07-23-Use Envoy Gateway as the Ingress Gateway and Waypoint Proxy for Ambient Mesh">站点原文</a></h2>
+&lt;center&gt;Surf Love, Taken in Pingtan County, Fuzhou, Fujian, China, Summer 2025&lt;/center&gt;<p>In this article, we’ll look at how you can use <a href="https://gateway.envoyproxy.io/">Envoy Gateway</a>, an Envoy project open source solution, together with Istio when running in Ambient mode. This will allow you to easily leverage the power of Envoy’s L7 capabilities for Ingress traffic and east-west traffic in your mesh with easy-to-use CRDs.</p>
+<p>To understand how this integration works, let’s first take a quick look at <strong>Ambient Mesh</strong> itself. Also known as <a href="https://istio.io/latest/docs/ambient/overview/"><strong>Istio Ambient mode</strong></a>, it’s a sidecar-less service mesh architecture that aims to simplify deployments and can boost efficiency for specific use cases. Unlike sidecar-based meshes, Ambient splits the data plane into two key components: the <strong>ztunnel</strong>, which secures service-to-service communication, and the <strong>Waypoint Proxy</strong>, which handles Layer 7 traffic routing and policy enforcement.</p>
+<p>On the other side, <strong>Envoy Gateway</strong> is a Kubernetes-native API gateway built on top of Envoy Proxy. It’s designed to work seamlessly with the Kubernetes Gateway API and takes a batteries-included approach—offering built-in support for authentication, authorization, rate limiting, CORS handling, header manipulation, and more. These capabilities are exposed through familiar Kubernetes-style APIs, letting you fully tap into Envoy’s power without needing complex configurations.</p>
+<p>Because both Ambient Mesh and Envoy Gateway are built on top of Envoy, they share a common foundation. This makes integration straightforward and allows <strong>Envoy Gateway to act as both the Ingress Gateway and Waypoint Proxy</strong>—giving you a consistent and powerful way to manage traffic and apply Layer 7 policies across your mesh.</p>
+<h2><strong>Why use Envoy Gateway with Ambient Mesh?</strong></h2>
+<p><strong>While Ambient Mesh simplifies service mesh operations by removing sidecars, its feature set doesn’t yet match the maturity of the sidecar-based model</strong>. Some advanced Layer 7 capabilities are either missing, considered experimental, or require extra complexity to configure in native Ambient mode.</p>
+<p><strong>Limited VirtualService Support:</strong>
+<a href="https://istio.io/latest/docs/ambient/usage/l7-features/">VirtualService—a key resource for traffic management in classic Istio—is only available at Alpha level in Ambient</a>. On top of that, it can’t be used in combination with Gateway API resources. That leaves you with the Gateway API as the only supported option. While it handles basic routing just fine, it’s intentionally generic to support many gateway implementations. As a result, you lose access to some of the richer, Envoy-specific functionality — such as global rate limiting, circuit breaking, and OIDC authentication.</p>
+<p><strong>Lack of  EnvoyFilter Support:</strong>
+In Ambient mode, <a href="https://github.com/istio/istio/issues/43720">EnvoyFilters are not supported</a>. These filters are critical in sidecar deployments when you need to tweak or extend proxy behavior at the xDS level—whether for custom logic, telemetry, or integration with external systems. Without them, your ability to fine-tune proxy behavior is limited, which can be a blocker for advanced or production-grade use cases.</p>
+<p>With these limitations, it can be challenging to move from a sidecar-based model to Ambient Mesh without losing important functionality.  <strong>Envoy Gateway</strong> helps bridge that gap. It builds on the Gateway API with <a href="https://gateway.envoyproxy.io/latest/tasks/">a powerful set of custom policies</a>—like ClientTrafficPolicy, BackendTrafficPolicy, SecurityPolicy, EnvoyExtensionPolicy, and EnvoyPatchPolicy—to <strong>unlock Envoy’s full potential within Ambient Mesh</strong>. These policies can be attached directly to core Gateway API resources such as Gateway and HTTPRoute, enabling fine-grained traffic control, enhanced security, pluggable extensions, and even low-level xDS patching—all without sacrificing the simplicity of a sidecar-free architecture.</p>
+<p><img alt="" src="/img/2025-07-23-Use-Envoy-Gateway-as-the-Ingress-Gateway-and-Waypoint-Proxy-for-Ambient-Mesh/1.png"/></p>
+&lt;center&gt;Unlocking Envoy’s Full Potential with Envoy Gateway Policies in Ambient Mesh&lt;/center&gt;<h2>How Envoy Gateway Works in Ambient Mesh?</h2>
+<p>In a default Ambient Mesh deployment, the waypoint proxy handles both terminating the incoming HBONE tunnel and establishing a new one to the destination service. It also applies Layer 7 traffic policies during this process.</p>
+<p><img alt="" src="/img/2025-07-23-Use-Envoy-Gateway-as-the-Ingress-Gateway-and-Waypoint-Proxy-for-Ambient-Mesh/2.png"/></p>
+&lt;center&gt;Traffic Flow in a Default Waypoint Proxy Deployment&lt;/center&gt;<p>However, Ambient also supports a more modular “sandwich” model, where the ztunnel is logically placed before and after the waypoint proxy—like a sandwich. In this setup, the ztunnel is responsible for managing the HBONE tunnels on both sides, while the waypoint proxy focuses solely on L7 traffic management and policy enforcement.
+<img alt="" src="/img/2025-07-23-Use-Envoy-Gateway-as-the-Ingress-Gateway-and-Waypoint-Proxy-for-Ambient-Mesh/3.png"/></p>
+&lt;center&gt;Traffic Flow in a Sandwiched Waypoint Proxy Deployment&lt;/center&gt;<p>Note: This diagram illustrates how traffic flows through various components in Ambient Mesh. While it appears that there are two zTunnels placed before and after Envoy Gateway, they’re actually the same instance—let’s gloss over that detail for simplicity.</p>
+<p>This separation of responsibilities makes it possible to swap out the default waypoint proxy and Ingress Gateway with Envoy Gateway. By doing so, you can leverage Envoy Gateway’s advanced Gateway API capabilities without giving up the simplicity of Ambient Mesh.</p>
+<p>This also makes it possible to use Envoy Gateway as the Ingress Gateway for Ambient Mesh. The only difference is that the ztunnel needs to be placed only after Envoy Gateway (not in front), since incoming traffic originates outside the mesh and doesn’t arrive over an HBONE tunnel.</p>
+<h2>Setting Up Envoy Gateway as the Ingress Gateway</h2>
+<p>Let’s get our hands dirty with this duo, creating an Envoy Gateway as Ingress, routing to a backend service and defining a global rate limiting for a specific service. Then, you will deploy an Envoy Gateway as a waypoint proxy.</p>
+<p>To begin with, you need to have a Kubernetes cluster with Istio Ambient mode installed, like:</p>
+<pre><code class="lang-shell">istioctl install --set profile=ambient
+</code></pre>
+<p>Then, install the Envoy Gateway with:</p>
+<pre><code class="lang-shell">helm install eg oci://docker.io/envoyproxy/gateway-helm \
+  --version v0.0.0-latest \
+  --set config.envoyGateway.provider.kubernetes.deploy.type=GatewayNamespace \
+  -n envoy-gateway-system \
+  --create-namespace
+</code></pre>
+<p>Notice the flag for the deploy type. With this you make sure the Gateway is deployed where the Gateway resource is created and not in the envoy-gateway-system namespace, which is the default behavior.</p>
+<p>Label the default namespace for ambient onboarding:</p>
+<pre><code class="lang-shell">kubectl label namespace default istio.io/dataplane-mode=ambient
+</code></pre>
+<p>Last but not least, deploy a backend service you wish to call. In this case, we use Istio’s classic <a href="https://raw.githubusercontent.com/istio/istio/refs/heads/master/samples/bookinfo/platform/kube/bookinfo.yaml">Bookinfo</a> in the default namespace.</p>
+<pre><code class="lang-shell">kubectl apply -f https://raw.githubusercontent.com/istio/istio/refs/heads/master/samples/bookinfo/platform/kube/bookinfo.yaml
+</code></pre>
+<p>With the canvas in place, it’s time to take the brushes. You need a GatewayClass as the Ingress template, a Gateway instantiating this class and the HTTPRoute establishing the data path bridge. Apply them:</p>
+<pre><code class="lang-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg-ingress
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+EOF
+</code></pre>
+<p>In Gateway, notice the gatewayClassName referencing eg-ingress above as well as the onboarding to the Ambient mesh:</p>
+<pre><code class="lang-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  labels:
+    istio.io/dataplane-mode: ambient
+  name: bookinfo-ingress
+spec:
+  gatewayClassName: eg-ingress
+  listeners:
+  - allowedRoutes:
+      namespaces:
+        from: Same
+    name: ingress
+    port: 80
+    protocol: HTTP
+EOF
+</code></pre>
+<pre><code class="lang-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ingress-bookinfo
+spec:
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: bookinfo-ingress
+  rules:
+  - backendRefs:
+    - group: ""
+      kind: Service
+      name: productpage
+      port: 9080
+EOF
+</code></pre>
+<p>Now, onto some validations. Attention, as this step will help you get Envoy Gateway and Ambient basic debugging skills. First, check the Gateway is created and that its traffic is intercepted by ztunnel:</p>
+<pre><code class="lang-shell">$ kubectl get pod -l app.kubernetes.io/name=envoy
+NAME                                                       READY   STATUS    RESTARTS   AGE
+bookinfo-ingress-bcc6457b8-qfhcv                           2/2     Running   0          3h11m
+$ istioctl ztunnel-config connections --node &lt;NODE_NAME&gt; -o yaml | yq '.[].info | select(.name | test("^envoy*"))'
+name: bookinfo-ingress-bcc6457b8-qfhcv
+namespace: default
+serviceAccount: bookinfo-ingress-bcc6457b8-qfhcv
+trustDomain: ""
+</code></pre>
+<p>Then, inspect the HTTPRoute was effectively attached to the Gateway and it could find the backend service:</p>
+<pre><code class="lang-shell">$ kubectl get httproute ingress-bookinfo -oyaml | yq '.status.parents'
+- conditions:
+    - lastTransitionTime: "2025-07-18T03:20:14Z"
+      message: Route is accepted
+      observedGeneration: 1
+      reason: Accepted
+      status: "True"
+      type: Accepted
+    - lastTransitionTime: "2025-07-18T03:20:14Z"
+      message: Resolved all the Object references for the Route
+      observedGeneration: 1
+      reason: ResolvedRefs
+      status: "True"
+      type: ResolvedRefs
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parentRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: bookinfo-ingress
+</code></pre>
+<p>Seems like everything’s in order. Time to make the requests:</p>
+<pre><code class="lang-shell">$ export ENVOY_SERVICE=$(kubectl get svc --selector=gateway.envoyproxy.io/owning-gateway-name=bookinfo-ingress -o jsonpath='{.items[0].metadata.name}')
+$ kubectl port-forward service/${ENVOY_SERVICE} 8080:80 &amp;
+$ curl localhost:8080/productpage -w '%{http_code}\n' -o /dev/null -s
+200
+</code></pre>
+<p>Ztunnel logs the following:</p>
+<pre><code class="lang-shell">2025-07-18T03:33:20.718599Z info    access  connection complete src.addr=10.244.1.70:45168 src.workload="envoy-default-bookinfo-ingress-15c0d731-57b6bb576c-8ltvl" src.namespace="default" src.identity="spiffe://cluster.local/ns/default/sa/envoy-default-bookinfo-ingress-15c0d731" dst.addr=10.244.1.68:15008 dst.hbone_addr=10.244.1.68:9080 dst.workload="productpage-v1-54bb874995-kzpnw" dst.namespace="default" dst.identity="spiffe://cluster.local/ns/default/sa/bookinfo-productpage" direction="outbound" bytes_sent=232 bytes_recv=15245 duration="2022ms"
+</code></pre>
+<p>That’s Envoy Gateway sandwiched by ztunnel working as an Ingress for Istio Ambient Mesh!</p>
+<p>Hold on. This Ingress needs rate limiting. This is achieved with a new Redis backend, referencing it in the EG config and applying a BackendTrafficPolicy. We’re deploying a demo Redis instance here for demo purpose. In a production setup, you’ll want to provide your own Redis service—properly secured and scaled to meet your traffic demands.</p>
+<pre><code class="lang-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: redis-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: redis-system
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - image: redis:6.0.6
+        imagePullPolicy: IfNotPresent
+        name: redis
+        resources:
+          limits:
+            cpu: 1500m
+            memory: 512Mi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: redis-system
+  labels:
+    app: redis
+  annotations:
+spec:
+  ports:
+  - name: redis
+    port: 6379
+    protocol: TCP
+    targetPort: 6379
+  selector:
+    app: redis
+EOF
+</code></pre>
+<p>Once the redisD DB is ready, go ahead and upgrade the eg helm release’s values adding a rate limit backend:</p>
+<pre><code class="lang-shell">helm upgrade eg oci://docker.io/envoyproxy/gateway-helm \
+  --set config.envoyGateway.rateLimit.backend.type=Redis \
+  --set config.envoyGateway.rateLimit.backend.redis.url="redis.redis-system.svc.cluster.local:6379" \
+  --reuse-values \
+  -n envoy-gateway-system
+</code></pre>
+<p>Then, create a BackendTrafficPolicy that enforces a limit of 3 requests per hour for non-admin users.</p>
+<pre><code class="lang-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: productpage-rate-limiting
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: ingress-bookinfo
+  rateLimit:
+    type: Global
+    global:
+      rules:
+      - clientSelectors:
+        - headers:
+          - type: Distinct
+            name: x-user-id
+          - name: x-user-id
+            value: admin
+            invert: true
+        limit:
+          requests: 3
+          unit: Hour
+EOF
+</code></pre>
+<p>And test it:</p>
+<pre><code class="lang-shell">$ while true; do curl localhost:8080/productpage -H "x-user-id: john" -w '%{http_code}\n' -o /dev/null -s; sleep 1; done
+Handling connection for 8080
+200
+Handling connection for 8080
+200
+Handling connection for 8080
+200
+Handling connection for 8080
+429
+Handling connection for 8080
+429
+</code></pre>
+<h2>Enabling Envoy Gateway as the Waypoint Proxy</h2>
+<p>For the waypoint proxy, many steps remain the same—you still create a GatewayClass, a Gateway, and HTTPRoutes. However, you define a separate GatewayClass for the waypoint, as its configuration differs from that of the ingress gateway.</p>
+<pre><code class="lang-yaml">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg-waypoint
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: waypoint
+    namespace: default
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: waypoint
+spec:
+  provider:
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                # HACK:ztunnel currently expects the HBONE port to always be on the Waypoint's Service
+                # This will be fixed in future PRs to both istio and ztunnel.
+                - name: fake-hbone-port
+                  port: 15008
+                  protocol: TCP
+                  targetPort: 15008
+    type: Kubernetes
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  labels:
+    istio.io/dataplane-mode: ambient
+  name: waypoint
+spec:
+  gatewayClassName: eg-waypoint
+  listeners:
+  - allowedRoutes:
+      namespaces:
+        from: Same
+    name: ratings
+    port: 9080
+    protocol: HTTP
+  - allowedRoutes:
+      namespaces:
+        from: Same
+    name: fake-hbone
+    port: 15008
+    protocol: TCP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ratings
+spec:
+  hostnames:
+  - ratings
+  - ratings.default
+  - ratings.default.svc.cluster.local
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: waypoint
+  rules:
+  - backendRefs:
+    - group: ""
+      kind: Service
+      name: ratings
+      port: 9080
+EOF
+</code></pre>
+<p>Label the ratings service so it uses the already deployed waypoint. You could also label the namespace for all services to use it:</p>
+<pre><code class="lang-shell">$ kubectl label svc ratings istio.io/use-waypoint=waypoint
+</code></pre>
+<p>After making the same request as before, check the waypoint’s logs:</p>
+<pre><code class="lang-shell">{":authority":"ratings:9080","bytes_received":0,"bytes_sent":358,"connection_termination_details":null,"downstream_local_address":"10.244.1.73:9080","downstream_remote_address":"10.244.1.68:38315","duration":3,"method":"GET","protocol":"HTTP/1.1","requested_server_name":null,"response_code":200,"response_code_details":"via_upstream","response_flags":"-","route_name":"httproute/default/ratings/rule/0/match/0/ratings","start_time":"2025-07-18T05:16:36.829Z","upstream_cluster":"httproute/default/ratings/rule/0","upstream_host":"10.244.1.65:9080","upstream_local_address":"10.244.1.73:33244","upstream_transport_failure_reason":null,"user-agent":"curl/8.7.1","x-envoy-origin-path":"/ratings/0","x-envoy-upstream-service-time":null,"x-forwarded-for":"10.244.1.68","x-request-id":"839bb7b2-af76-496c-9760-b90f118f191c"}
+</code></pre>
+<p>Now let’s look at a more advanced scenario—using features in Envoy Gateway that aren’t yet available in Ambient L7. Circuit breaking is a great example, enabling your service to fail fast and avoid cascading failures when upstreams become unhealthy.</p>
+<p>For this, we need a failing service. Luckily, ratings has a delayed mode to simulate it. Add to it this env variable:</p>
+<pre><code class="lang-shell">kubectl set env deployment/ratings-v1 SERVICE_VERSION=v-delayed
+</code></pre>
+<p>For testing, you can use the <a href="https://github.com/rakyll/hey">hey load testing tool</a> to send traffic directly to the ratings service from within the cluster.</p>
+<pre><code class="lang-shell">kubectl run hey --rm -i   --image=williamyeh/hey   http://ratings:9080/ratings/0
+If you don't see a command prompt, try pressing enter.
+
+Summary:
+  Total:    28.5228 secs
+  Slowest:  7.5211 secs
+  Fastest:  0.0005 secs
+  Average:  3.6650 secs
+  Requests/sec: 7.0119
+
+
+Response time histogram:
+  0.000 [1] |
+  0.753 [98]    |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  1.505 [0] |
+  2.257 [0] |
+  3.009 [0] |
+  3.761 [0] |
+  4.513 [0] |
+  5.265 [0] |
+  6.017 [0] |
+  6.769 [0] |
+  7.521 [101]   |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+</code></pre>
+<p>The ratings service adds a 7-second delay to half of the responses, which you can observe in the output from the hey command.</p>
+<p>Next, create a new BackendTrafficPolicy with a deliberately aggressive circuit breaker configuration—just enough to make it easy to trip during testing.</p>
+<pre><code class="lang-yaml">apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: circuit-breaker-btp
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: ratings
+  circuitBreaker:
+      maxPendingRequests: 0
+      maxParallelRequests: 10
+</code></pre>
+<p>Make sure it has been accepted:</p>
+<pre><code class="lang-shell">$ kubectl get backendtrafficpolicy circuit-breaker-btp -ojsonpath='{.status.ancestors[0].conditions}'
+[{"lastTransitionTime":"2025-07-22T08:53:59Z","message":"Policy has been accepted.","observedGeneration":2,"reason":"Accepted","status":"True","type":"Accepted"}]%
+</code></pre>
+<p>Now, run the hey test again to check if the circuit breaker is kicking in as expected:</p>
+<pre><code class="lang-shell">$ kubectl run hey --rm -i --image=williamyeh/hey http://ratings:9080/ratings/0
+If you don't see a command prompt, try pressing enter.
+
+Summary:
+  Total:    0.7135 secs
+  Slowest:  0.6990 secs
+  Fastest:  0.0007 secs
+  Average:  0.1720 secs
+  Requests/sec: 280.3131
+
+  Total data:   16200 bytes
+  Size/request: 81 bytes
+
+Response time histogram:
+  0.001 [1] |
+  0.071 [149]   |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.140 [0] |
+  0.210 [0] |
+  0.280 [0] |
+  0.350 [0] |
+  0.420 [0] |
+  0.490 [0] |
+  0.559 [0] |
+  0.629 [0] |
+  0.699 [50]    |■■■■■■■■■■■■■
+
+(trimmed)
+
+Status code distribution:
+  [503] 200 responses
+
+pod "hey" deleted
+</code></pre>
+<p>Notice how most of the requests failed in under 100ms—this indicates that the circuit breaker kicked in and started rejecting traffic quickly.</p>
+<p>If you check the waypoint logs, you’ll see clear signs of this in action: the UO response flag and response_code_details set to overflow show that the circuit breaker was triggered. Envoy Gateway dropped the excess requests without forwarding them to the ratings service, just as expected.</p>
+<pre><code class="lang-shell">$ kubectl logs waypoint-7cc857d87b-8kv2z
+Defaulted container "envoy" out of: envoy, shutdown-manager
+{":authority":"ratings:9080","bytes_received":0,"bytes_sent":81,"connection_termination_details":null,"downstream_local_address":"10.244.1.36:9080","downstream_remote_address":"10.244.1.41:40909","duration":0,"method":"GET","protocol":"HTTP/1.1","requested_server_name":null,"response_code":503,"response_code_details":"upstream_reset_before_response_started{overflow}","response_flags":"UO","route_name":"httproute/default/ratings/rule/0/match/0/ratings","start_time":"2025-07-22T09:14:19.407Z","upstream_cluster":"httproute/default/ratings/rule/0","upstream_host":"10.244.1.37:9080","upstream_local_address":null,"upstream_transport_failure_reason":null,"user-agent":"hey/0.0.1","x-envoy-origin-path":"/ratings/0","x-envoy-upstream-service-time":null,"x-forwarded-for":"10.244.1.41","x-request-id":"f611fd0a-8b7f-4c7d-ad18-6f0f8812ac6b"}
+...
+</code></pre>
+<p>Now, it’s time for you to try it out!</p>
+<h2>Should You Use Envoy Gateway with Ambient Mesh?</h2>
+<p>Envoy Gateway and Ambient Mesh are now fully capable of serving your traffic. Together, they deliver a powerful, batteries-included Layer 7 experience—offering out-of-the-box support for advanced features like rate limiting, OIDC and JWT-based authentication, API key validation, CORS handling, and rich observability. All of this fits neatly into Ambient’s streamlined, sidecar-free model.</p>
+<p>Of course, there are tradeoffs. You’ll need to run a separate Envoy Gateway control plane (which you might already be doing if you’re using a non-Istio ingress gateway) and manage some additional configuration.</p>
+<p>If the built-in ingress and waypoint proxies already meet your needs, there’s no pressure to switch. But if you’re looking for greater control, stronger security, and more flexibility at Layer 7, Envoy Gateway is a powerful way to level up your Ambient Mesh setup.</p>
+<p><strong>✅ When to Use Envoy Gateway with Ambient</strong></p>
+<p>Consider using Envoy Gateway if you:</p>
+<ul>
+<li><p>Need advanced Layer 7 features like:</p>
+<ul>
+<li><p>Rate limiting</p>
+</li>
+<li><p>JWT/OIDC authentication</p>
+</li>
+<li><p>API key validation</p>
+</li>
+<li><p>CORS handling</p>
+</li>
+<li><p>Wasm or ext_proc extensions</p>
+</li>
+</ul>
+</li>
+<li><p>Want Gateway API compatibility with more powerful, opinionated policies (e.g., SecurityPolicy, ClientTrafficPolicy)</p>
+</li>
+<li><p>Prefer a unified control plane to manage both ingress and internal Layer 7 traffic</p>
+</li>
+<li><p>Appreciate a batteries-included gateway that works out of the box—without needing to write custom Envoy filters (unless you really want to)</p>
+</li>
+</ul>
+<p><strong>❌ When You Might Hold Off (For Now)</strong></p>
+<p>You might want to skip Envoy Gateway—at least for now—if you:</p>
+<ul>
+<li><p>Are still experimenting with Ambient Mesh and don’t need advanced Layer 7 features</p>
+</li>
+<li><p>Are fine with the current limitations of Ambient’s built-in Gateway support (e.g., no VirtualService, limited routing options)</p>
+</li>
+<li><p>Want to keep your control plane as lightweight and simple as possible, avoiding extra CRDs or configuration overhead</p>
+</li>
+</ul>
+<h2>What's Next?</h2>
+<p>Envoy Gateway and Ambient are a duo that will optimize some of your workloads, so we encourage you to try it out. It unblocks the migration as your organization doesn't have to wait for the Istio API to include for Ambient the powerful Envoy features you’ve already experienced in this demo.</p>
+<p>Curious to see what else Envoy Gateway can do in an Ambient Mesh? Check out the <a href="https://gateway.envoyproxy.io/latest/tasks/">official tasks</a> to explore its full feature set.</p>
+<h2>References</h2>
+<ul>
+<li><a href="https://istio.io/latest/docs/ambient/usage/l7-features/">Istio Ambient mode layer 7 features</a></li>
+<li><a href="https://github.com/istio/istio/issues/43720">Add EnvoyFilter support for waypoint proxies</a></li>
+<li><a href="https://gateway.envoyproxy.io/latest/tasks/">Envoy Gateway traffic policies</a></li>
+</ul>

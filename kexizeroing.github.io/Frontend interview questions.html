@@ -2,7 +2,7 @@
 <ol>
 <li>假设现在有 20 个异步请求需要发送，但由于某些原因，我们必须将同一时刻的并发请求数量控制在 3 个以内。实现一个并发请求函数，要求最大并发数 maxNum，每当有一个请求返回，就留下一个空位，可以增加新的请求。当所有请求完成后，结果按照 urls 里面的顺序依次输出。</li>
 </ol>
-<blockquote><p>由于 http2 支持并发处理，如果后端接口设计基于这个假设，可能不会提供批量获取数据的接口，需要前端通过 id 来逐个获取。但当同时发送上千个请求时，浏览器会变的明显卡顿，虽然这样发送可以更快的获取数据，但会带来不好的用户体验，所以一个解决方案是给并发添加最大数量限制。如果是 http1.1，浏览器会有默认的并发限制，并不需要我们处理这个问题，比如 Chrome 中并发数量是 6 个，所以这个问题的成立是建立在 http2 的基础上。</p>
+<blockquote><p>http2 支持并发请求（单个连接多路复用），但当同时发送上千个请求时，消耗大量内存，浏览器会变的明显卡顿，所以一个解决方案是给并发添加最大数量限制。如果是 http1.1，浏览器会有默认的并发限制，并不需要我们处理这个问题，比如 Chrome 中并发数量是 6 个，所以这个问题的成立是建立在 http2 的基础上。</p>
 </blockquote>
 <pre><code class="lang-js">const concurrencyRequest = (urls, maxNum) =&gt; {
   return new Promise((resolve) =&gt; {
@@ -11,13 +11,13 @@
       return;
     }
     const results = [];
-    let index = 0; // 下一个请求的下标
-    let count = 0; // 当前请求完成的数量
+    let count = 0;
+    let index = 0;
 
     async function request() {
       if (index === urls.length) return;
-      const i = index; // 保存序号，使得 result 和 url 对应
-      const url = urls[index];
+      const i = index; // 保存序号
+      const url = urls[i];
       index++;
 
       try {
@@ -27,7 +27,6 @@
         results[i] = err;
       } finally {
         count++;
-        // 判断是否所有的请求都已完成
         if (count === urls.length) {
           resolve(results);
         }
@@ -60,7 +59,8 @@ return new Promise((resolve, reject) =&gt; {
  const result = [];
  for (let i = 0; i &lt; promises.length; i++) {
    // Use</code>Promise.resolve(promises[i])<code>instead of</code>promises[i].then()<code>, 
-   // because</code>promises[i]<code>could be a non-promise so it won’t have</code>.then()` method
+   // if it is non-promise value, wrap it
+   // if already promise,</code>Promise.resolve(promises[i])` returns the same Promise
    Promise.resolve(promises[i]).then(res =&gt; {<pre><code> result[i] = res;
  counter += 1;
  if (counter === promises.length) {
@@ -86,7 +86,7 @@ return new Promise((resolve, reject) =&gt; {
 <pre><code>
 3. Implement `debounce` and `throttle`.
 ```js
-function debounce(fn, time) {
+function debounce(fn, delay) {
   let timer = null
 
   return (...args) =&gt; {
@@ -96,7 +96,7 @@ function debounce(fn, time) {
     }
     timer = setTimeout(() =&gt; {
       fn(...args)
-    }, time)
+    }, delay)
   }
 }
 
@@ -112,22 +112,9 @@ function throttle(fn, delay) {
 }
 </code></pre>
 <ol>
-<li>Implement calling click event listener only once without using <code>{once: true}</code>.
-```js
-function clickOnce(el, cb) {
-const cb2 = () =&gt; {
- cb();
- el.removeEventListener('click', cb2, false);
-}
-el.addEventListener('click', cb2, false);
-}</li>
+<li>Implement the <code>bind</code> function by yourself.</li>
 </ol>
-<p>clickOnce($0, () =&gt; console.log('click'));</p>
-<pre><code>
-5. Implement the `bind` function by yourself.
-
-```js
-Function.prototype.myBind = function(context, ...args1) {
+<pre><code class="lang-js">Function.prototype.myBind = function(context, ...args1) {
   const fn = this;
 
   return function(...args2) {
@@ -136,61 +123,24 @@ Function.prototype.myBind = function(context, ...args1) {
 };
 </code></pre>
 <ol>
-<li>Calling the same function over and over again is wasteful if we know that the function is pure. We can create a memoized version of a function that we don't have to reexecute it if we keep using the same value.</li>
-</ol>
-<pre><code class="lang-js">function memoize(fn) {
-  let cachedArg;
-  let cachedResult;
-  return function(arg) {
-    if (cachedArg === arg) {
-      return cachedResult;
-    }
-    cachedArg = arg;
-    cachedResult = fn(arg);
-    return cachedResult;
-  };
-}
-</code></pre>
-<ol>
-<li><p>Implement the deep clone method.
-```js
-function deepClone(obj) {
-if (obj === null || typeof obj !== 'object') {
- return obj;
-}
-let copy = Array.isArray(obj) ? [] : {};</p>
-<p>for (let key in obj) {
- if (obj.hasOwnProperty(key)) {
-   copy[key] = typeof obj[key] === 'object' ? deepClone(obj[key]) : obj[key];
- }
-}
-return copy;
-}</p>
-</li>
-</ol>
-<p>// <code>for...in</code> iterates over all enumerable properties, including those inherited.
-// <code>Object.keys()</code> gets only own enumerable property names.</p>
-<pre><code>
-8. Convert a list of objects into a tree.
+<li>Convert a list of objects into a tree.
 ```js
 let list = [
-  { id: 1, name: 'node1', pid: 0 },
-  { id: 2, name: 'node2', pid: 1 },
-  { id: 3, name: 'node3', pid: 1 },
-  { id: 4, name: 'node4', pid: 3 },
-  { id: 5, name: 'node5', pid: 4 },
-  { id: 6, name: 'node6', pid: 0 },
-]
-
-function listToTree(list) {
+{ id: 1, name: 'node1', pid: 0 },
+{ id: 2, name: 'node2', pid: 1 },
+{ id: 3, name: 'node3', pid: 1 },
+{ id: 4, name: 'node4', pid: 3 },
+{ id: 5, name: 'node5', pid: 4 },
+{ id: 6, name: 'node6', pid: 0 },
+]</li>
+</ol>
+<p>function listToTree(list) {
   const map = {}
-  const roots = []
-
-  list.forEach(item =&gt; {
+  const roots = []</p>
+<p>list.forEach(item =&gt; {
     map[item.id] = { ...item, children: [] }
-  })
-
-  list.forEach(item =&gt; {
+  })</p>
+<p>list.forEach(item =&gt; {
     if (item.pid === 0) {
       roots.push(map[item.id])
     } else {
@@ -198,138 +148,90 @@ function listToTree(list) {
         map[item.pid].children.push(map[item.id])
       }
     }
-  })
-
-  return roots
-}
-</code></pre>
-<ol>
-<li><p>Use <code>setTimeout</code> to invoke a function multiple times in the fixed interval.
+  })</p>
+<p>return roots
+}</p>
+<pre><code>
+6. Use `setTimeout` to invoke a function multiple times in the fixed interval.
 ```js
 function repeat(func, times, ms, immediate) {
-let count = 0;</p>
-<p>return function inner(...args) { 
- if (count === 0 &amp;&amp; immediate) {
-   func(...args);
-   count++; 
- }
- if (count &gt;= times) {
-   return;
- }
- setTimeout(() =&gt; {
-   func(...args);
-   count++;
-   inner(...args);
- }, ms);
+  let count = 0;
+
+  return function inner(...args) { 
+    if (count === 0 &amp;&amp; immediate) {
+      func(...args);
+      count++;
+    }
+    if (count &gt;= times) {
+      return;
+    }
+    setTimeout(() =&gt; {
+      func(...args);
+      count++;
+      inner(...args);
+    }, ms);
+  }
 }
+
+// test
+const repeatFunc = repeat(console.log, 4, 3000, true);
+repeatFunc("hello");
+</code></pre>
+<ol>
+<li><p>Implement the functionality of <code>lodash.get</code>.
+```js
+function get(obj, path, defaultValue = undefined) {
+const keys = Array.isArray(path) ? path : path.split('.');
+let result = obj;</p>
+<p>for (const key of keys) {
+ if (result == null || typeof result !== 'object') {
+   return defaultValue;
+ }
+ result = result[key];
+}</p>
+<p>return result === undefined ? defaultValue : result;
 }</p>
 </li>
 </ol>
 <p>// test
-const repeatFunc = repeat(console.log, 4, 3000, true);
-repeatFunc("hello");</p>
-<pre><code>
-10. Implement the functionality of `lodash.get`.
-```js
-// _.get(object, path, [defaultValue])
-function get(obj, path, defaultValue = undefined) {
-  const keys = Array.isArray(path) ? path : path.split('.');
-  let result = obj;
-
-  for (const key of keys) {
-    if (result == null || typeof result !== 'object') {
-      return defaultValue;
-    }
-    result = result[key];
-  }
-
-  return result === undefined ? defaultValue : result;
-}
-
-// test
 const obj = { a: { b: { c: 42 } } };
 console.log(get(obj, 'a.b.c')); // 42
 console.log(get(obj, ['a', 'b', 'c'])); // 42
 console.log(get(obj, 'a.b.d', 'default')); // 'default'
-console.log(get(obj, 'x.y.z', 'not found')); // 'not found'
-</code></pre>
-<ol>
-<li>Implement a simple middleware composition system, which is a common pattern in server-side JavaScript environments. <code>app.use</code> is used to register middleware functions, and <code>app.compose</code> is meant to run them in sequence.</li>
-</ol>
-<pre><code class="lang-js">const app = { middlewares: [] };
+console.log(get(obj, 'x.y.z', 'not found')); // 'not found'</p>
+<pre><code>
+8. Implement the render function to convert the virtual dom JSON to real DOM.
+```js
+function render(vnode) {
+  const { tag, props, children } = vnode;
+  const el = document.createElement(tag);
 
-app.use = (fn) =&gt; {
-  app.middlewares.push(fn);
-};
-
-app.compose = function() {
-  // Your code goes here
-}
-
-app.use(next =&gt; {
-  console.log(1);
-  next();
-  console.log(2);
-});
-app.use(next =&gt; {
-  console.log(3);
-  next();
-  console.log(4);
-});
-app.use(next =&gt; {
-  console.log(5);
-  next();
-  console.log(6);
-});
-
-app.compose();  // Logs: 1, 3, 5, 6, 4, 2
-</code></pre>
-<pre><code class="lang-js">const compose = (middlewares) =&gt; {
-  return () =&gt; {
-    const dispatch = (i) =&gt; {
-      const fn = middlewares[i];
-      if (!fn) return;
-      fn(() =&gt; dispatch(i + 1));
-    };
-    dispatch(0);
-  };
-};
-
-app.compose = compose(app.middlewares);
-</code></pre>
-<ol>
-<li><p>Implement the render function to convert the virtual dom JSON to real DOM.</p>
-<pre><code class="lang-js">function render(vnode) {
-const { tag, props, children } = vnode;
-const el = document.createElement(tag);
-
-if (props) {
-for (const key in props) {
-  const value = props[key];
-  if (key.startsWith("on")) {
-    el.addEventListener(key.slice(2).toLowerCase(), value);
-  } else {
-    el.setAttribute(key, value);
+  if (props) {
+    for (const key in props) {
+      const value = props[key];
+      if (key.startsWith("on")) {
+        el.addEventListener(key.slice(2).toLowerCase(), value);
+      } else {
+        el.setAttribute(key, value);
+      }
+    }
   }
-}
-}
 
-if (children) {
-if (typeof children === "string") {
-  el.textContent = children;
-} else {
-  children.forEach((item) =&gt; {
-    el.appendChild(render(item));
-  });
-}
-}
+  if (children) {
+    if ([string, number].includes(typeof children)) {
+      el.textContent = children;
+    } else {
+      children.forEach((item) =&gt; {
+        el.appendChild(render(item));
+      });
+    }
+  }
 
-return el;
+  return el;
 }
 </code></pre>
-</li>
-<li><p>You need to send to the browser is HTML — not a JSON tree. Write a function that turns your JSX to an HTML string. That's what React's built-in <code>renderToString</code> does.</p>
-</li>
+<ol>
+<li>You need to send to the browser is HTML — not a JSON tree. Write a function that turns your JSX to an HTML string. That's what React's built-in <code>renderToString</code> does.</li>
 </ol>
 <pre><code class="lang-js">// written by Dan Abramov
 // e.g. &lt;div&gt;hello&lt;span&gt;world&lt;/div&gt;
@@ -390,135 +292,62 @@ async function renderJSXToHTML(jsx) {
 }
 </code></pre>
 <ol>
-<li>Check if an object has circular references.</li>
+<li>给定一个 JavaScript 对象，它可能包含嵌套的对象或数组。请检测其中的循环引用，并将所有循环引用的值替换为字符串 "cycle"。</li>
 </ol>
-<pre><code class="lang-js">// `JSON.stringify` throws if one attempts to encode an object with circular references.
-function hasCircularReference(obj) {
-  try {
-    JSON.stringify(obj);
-    return false;
-  } catch (e) {
-    return true;
-  }
-}
+<pre><code class="lang-js">function cycle(obj) {
+  const seen = new Set();
 
-// use `WeakSet`
-// 1. don’t need to worry about cleaning up the references manually.
-// 2. O(1) time complexity.
-// 3. specifically designed to store objects.
-function hasCircularReference(obj) {
-  const seenObjects = new WeakSet();
+  function helper(o) {
+    if (typeof o !== 'object' || o === null) return;
 
-  function detect(obj) {
-    if (obj &amp;&amp; typeof obj === 'object') {
-      if (seenObjects.has(obj)) {
-        return true;
-      }
-      seenObjects.add(obj);
+    seen.add(o);
 
-      for (let key in obj) {
-        if (obj.hasOwnProperty(key)) {
-          if (detect(obj[key])) {
-            return true;
-          }
+    for (let key in o) {
+      if (typeof o[key] === 'object' &amp;&amp; o[key] !== null) {
+        if (seen.has(o[key])) {
+          o[key] = 'cycle';
+          continue;
+        } else {
+          helper(o[key]);
         }
       }
     }
-    return false;
   }
 
-  return detect(obj);
+  helper(obj);
+  return obj;
 }
 </code></pre>
-<ol>
-<li>Implement a streaming function that processes text data from a server, where messages need to be displayed character by character as they arrive.</li>
-</ol>
-<blockquote><p>Key Term: Streaming breaks up a resource you want to send or receive over a network into smaller chunks. This is common for browsers when receiving media assets, such as video buffering or partial loading of images.</p>
-</blockquote>
-<pre><code class="lang-js">// server
-app.get('/ask', async (req, res) =&gt; {
-  const { question } = req.query;
-  const anwser = await new OpenAI().chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "user",
-        content: `Answer the following question: ${question}`
-      }
-    ],
-    stream: true,
-  })
+<pre><code class="lang-js">// 嵌套很深的对象遍历
+// dfs
+function traverseDFS(obj) {
+  if (typeof obj !== 'object' || obj === null) return;
 
-  res.setHeader('Content-Type', 'text/event-stream');
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      console.log(key, obj[key]);
 
-  for await (const chunk of anwser) {
-    res.write(chunk.choices[0].delta.content);
-  }
-
-  res.end();
-});
-</code></pre>
-<pre><code class="lang-js">// client
-const handleSearch = async () =&gt; {
-  fetch(`/ask?question=${input}`).then((res) =&gt; {
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();  // binary to text
-
-    const read = async () =&gt; {
-      const { done, value } = await reader.read();
-      if (done) {
-        return;
-      }
-      const chunk = decoder.decode(value, { stream: true });
-      elResult.textContent += chunk;  // setResult(prev =&gt; prev + chunk);
-      read();
-    };
-
-    read();
-  })
-}
-</code></pre>
-<ol>
-<li>Use a stream to serialize a promise, which is readable while the promise is pending and resolved. This format needs to be sharable across the network.</li>
-</ol>
-<pre><code class="lang-js">const promise = new Promise((resolve) =&gt; {
-  setTimeout(() =&gt; resolve("Hello!"), 2000);
-});
-
-const json = JSON.stringify(promise); // =&gt; '{}'
-</code></pre>
-<pre><code class="lang-js">function serializePromise(promise) {
-  const stream = new ReadableStream({
-    async start(controller) {
-      controller.enqueue("promise:create");
-
-      const value = await promise;
-      controller.enqueue(`promise:resolve:${value}`);
-      controller.close();
-    },
-  });
-  return stream;
-}
-
-async function testStream() {
-  const promise = new Promise((resolve) =&gt; {
-    setTimeout(() =&gt; resolve("Hello"), 2000);
-  });
-
-  const stream = serializePromise(promise);
-  const reader = stream.getReader();
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      console.log("Stream closed");
-      break;
+      traverseDFS(obj[key]);
     }
-    console.log("Stream value:", value);
   }
 }
 
-testStream();
+// bfs
+function traverseBFS(obj) {
+  const queue = [obj];
+
+  while (queue.length &gt; 0) {
+    const current = queue.shift();
+
+    for (const key in current) {
+      if (current.hasOwnProperty(key)) {
+        console.log(key, current[key]);
+
+        if (typeof current[key] === 'object' &amp;&amp; current[key] !== null) {
+          queue.push(current[key]);
+        }
+      }
+    }
+  }
+}
 </code></pre>
-<blockquote><p>In React world, the server uses <code>renderToReadableStream</code> from "react-server-dom-webpack/server". The client uses <code>createFromReadableStream</code> from "react-server-dom-webpack/client" to read the stream and recreate the promise React serialized on the server. In reality, your app will never directly call these APIs. Instead, the framework you're using will rely on them under the hood.</p>
-</blockquote>

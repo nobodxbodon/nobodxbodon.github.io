@@ -44,6 +44,42 @@ input.addEventListener('change', e =&gt; {
 <li><strong>Data URIs</strong> (Base64 encoded strings) — these are great when you’re stuffing the data directly into an HTML attribute (e.g. <code>&lt;img src="data:image/png..."&gt;</code>).</li>
 <li><strong>Blobs</strong> (or Binary Objects) — useful when you’re dynamically updating HTML attributes like we did with the image preview example. We see that an <code>&lt;input type=file&gt;</code> uses Blobs. When you want someone to see a Blob, you don’t just add the Blob directly in the <code>&lt;img&gt;</code> or <code>&lt;a href="..."&gt;</code>. You have to give it an Object URL first.</li>
 </ol>
+<h3>Creating an image with watermark</h3>
+<p>The <code>HTMLCanvasElement.toDataURL()</code> method returns a data URL containing a representation of the image. The desired file format <em>(<code>image/png</code>, <code>image/jpeg</code> or <code>image/webp</code>)</em> and image quality <em>(a number between 0 and 1 indicating the image quality)</em> may be specified. If the file format is not specified, then the data will be exported as <code>image/png</code>.</p>
+<pre><code class="lang-js">function watermakImageWithText(originalImage, watermarkText) {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  const canvasWidth = originalImage.width;
+  const canvasHeight = originalImage.height;
+
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+
+  context.drawImage(originalImage, 0, 0, canvasWidth, canvasHeight);
+
+  // adding watermark text in the bottom right corner
+  context.globalAlpha = 0.5;
+  context.fillStyle = "blue";
+  context.font = "bold 40px serif";
+  // get width of text
+  const metrics = context.measureText(watermarkText);
+  context.fillText(watermarkText, canvasWidth - metrics.width - 20, canvasHeight - 20);
+
+  return canvas.toDataURL();
+}
+</code></pre>
+<p>Data URLs, URLs prefixed with the <code>data:</code> scheme, allow content creators to embed small files inline in documents. They are composed of four parts: a prefix (<code>data:</code>), a MIME type, an optional base64 token if non-textual, and the data itself: <code>data:[&lt;mediatype&gt;][;base64],&lt;data&gt;</code></p>
+<p><code>toDataURL()</code> encodes the whole image in an in-memory string. For larger images, this can have performance implications, and may even overflow browsers' URL length limit when assigned to <code>HTMLImageElement.src</code>. You should generally prefer <code>HTMLCanvasElement.toBlob()</code> instead, in combination with <code>URL.createObjectURL()</code>.</p>
+<pre><code class="lang-js">// toDataURL() result:
+// grows with image size (base64 string contains all pixel data)
+data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABQAAAALQC.....
+
+// toBlob() + createObjectURL() result:
+// blob:[origin]/[UUID]
+// The UUID part is always the same length 
+blob:https://example.com/550e8400-e29b-41d4-a716-446655440000"
+</code></pre>
 <h2>Difference between an ArrayBuffer and a Blob</h2>
 <p>ArrayBuffer object is used to represent generic, fixed-length raw binary data buffer. You cannot directly manipulate the contents of an ArrayBuffer; instead, you create one of the typed array objects or a DataView object which represents the buffer in a specific format, and use that to read and write the contents of the buffer.</p>
 <ul>
@@ -152,22 +188,22 @@ const emptyBuf = Buffer.alloc(10);
 
 // Output: &lt;Buffer 00 00 00 00 00 00 00 00 00 00&gt;
 </code></pre>
-<h3>Different ways to convert an image URL to Base64</h3>
-<pre><code class="lang-js">async function urlToBase64(url) {
-  const response = await fetch(url);
-  const arrayBuffer = await response.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString('base64');
-  return base64; // Raw Base64 string without the "data:image/jpeg;base64," prefix
-}
-</code></pre>
-<pre><code class="lang-js">async function urlToBase64(url) {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) =&gt; {
-    const reader = new FileReader();
-    reader.onloadend = () =&gt; resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob); // Base64-encoded data URI, including the MIME type prefix
-  });
+<pre><code class="lang-js">// Next.js api route 
+export async function POST(request: NextRequest) {
+  const formData = await request.formData();
+  const audioFile = formData.get('audio') as File;
+
+  const bytes = await audioFile.arrayBuffer();
+  const buffer = Buffer.from(bytes);
+  const uploadDir = join(process.cwd(), 'uploads')
+  try {
+    await mkdir(uploadDir, { recursive: true });
+  } catch {}
+
+  const filename = `${memoId}.webm`;
+  const filepath = join(uploadDir, filename);
+  await writeFile(filepath, buffer);
+
+  // some db operation to save...
 }
 </code></pre>

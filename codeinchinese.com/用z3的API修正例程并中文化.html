@@ -1,0 +1,108 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2025-07-27-用z3的API修正例程并中文化.md">仓库源文</a>，<a href="http://codeinchinese.com/2025/07/27/用z3的API修正例程并中文化">站点原文</a></h2>
+<p><a href="https://zhuanlan.zhihu.com/p/1924448382409213544">之前搭原型时</a>，发现了 <a href="https://github.com/Z3Prover/z3/issues/7724">这个问题向z3定理证明库的开发组请教</a>，原来应使用其 API 而非 Python 的原生逻辑运算符。</p>
+<p>将 <a href="https://www.zhihu.com/pin/1918270031793480596">原始例程</a> 修正并中文化后如下。</p>
+<h2>z3 版本</h2>
+<p>仍在 python 3.12 下测试。</p>
+<pre><code class="lang-py">import z3
+
+## You can install z3 using the following command:
+## pip3 install z3-solver
+
+s = z3.Solver()
+
+甲, 戊, 丁, 乙, 丙 = z3.Bools(
+    ["甲", "戊", "丁", "乙", "丙"]
+)
+
+# 1. 至少一个有问题
+s.add(z3.Or(甲, 丁, 乙, 丙, 戊))
+
+
+# 2. 若甲有问题，且乙没问题
+#    则戊有问题
+s.add(z3.If(
+        z3.And(甲, z3.Not(乙)), # condition
+        戊,                  # then
+        True))                            # else
+
+# 3. 若甲没问题, 则丙没问题
+s.add(z3.If(z3.Not(甲), z3.Not(丙), True))
+
+# 4. 若乙有问题, 则丙有问题
+s.add(z3.If(乙, 丙, True))
+
+# 5. 甲和乙都有问题不可能
+s.add(z3.Not(z3.And(甲, 乙)))
+
+# 6. 除非乙有问题否则戊没问题
+s.add(z3.If(乙, True, z3.Not(戊)))
+
+# 输出解答
+if s.check() != z3.sat:
+    raise ValueError("无解")
+print(s.model())
+</code></pre>
+<p>输出：</p>
+<pre><code>[甲 = False, 乙 = False, 丙 = False, 丁 = True, 戊 = False]
+</code></pre>
+<h2>Prolog 版本</h2>
+<p><a href="https://swish.swi-prolog.org/">在线环境</a> 运行 <code>?- 侦查(X甲, X戊, X丁, X乙, X丙)</code>。</p>
+<pre><code>有问题 :- true.
+没问题 :- false.
+
+侦查(X甲, X戊, X丁, X乙, X丙):-
+    % 每人没问题或有问题
+    member(X甲, [有问题, 没问题]),
+    member(X戊, [有问题, 没问题]),
+    member(X丁, [有问题, 没问题]),
+    member(X乙, [有问题, 没问题]),
+    member(X丙, [有问题, 没问题]),
+
+    % 1. 至少一个有问题
+      (X甲 = 有问题
+     ; X戊 = 有问题
+     ; X丁 = 有问题
+     ; X乙 = 有问题
+     ; X丙 = 有问题),
+
+    % 2. 若甲有问题，且乙没问题
+    %    则戊有问题
+    ((X甲 = 有问题, X乙 = 没问题)   % 如果
+        -&gt; X戊 = 有问题           % 则
+        ; true),                  % 否则
+
+    % 3. 若甲没问题, 则丙没问题
+    (X甲 = 没问题 -&gt; X丙 = 没问题; true),
+
+    % 4. 若乙有问题, 则丙有问题
+    (X乙 = 有问题 -&gt; X丙 = 有问题; true),
+
+    % 5. 甲和乙都有问题不可能
+    not(X甲 = 有问题), not(X乙 = 有问题),
+
+    % 6. 除非乙有问题否则戊没问题
+    (X乙 = 有问题 -&gt; true; X戊 = 没问题),
+
+    true.
+</code></pre>
+<p>输出：</p>
+<pre><code>X丁 = 有问题,
+X丙 = X乙, X乙 = X戊, X戊 = X甲, X甲 = 没问题
+</code></pre>
+<h2>对比</h2>
+<p>语法相似：</p>
+<p><img alt="对比" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/codeinchinese.com/_posts/../assets/2025-07-27-z3-prolog.png"/></p>
+<p>prolog 版本里的这句 <code>not(X甲 = 有问题), not(X乙 = 有问题),</code> 还是带疑惑，没找到如果要表达「甲没问题，乙也没问题」该怎么写。</p>
+<hr/>
+<p><a href="https://github.com/Z3Prover/z3/issues/7724">https://github.com/Z3Prover/z3/issues/7724</a></p>
+<p>I found a weird issue when trying out the sample.</p>
+<p>After checking the tutorial, I replaced the or clause with Or:</p>
+<p>s.add(z3.Or(Chase, Heath, Mullaney, Ellis, Decker))</p>
+<p>And the issue is gone. I wonder what's the difference between z3.Or and the python or?</p>
+<p>NikolajBjorner commented on Jul 8, 2025
+NikolajBjorner
+on Jul 8, 2025
+Contributor</p>
+<p>python or: not translated to z3.
+z3.Or: translated to z3.</p>
+<p>We don't overload "or" in the BoolRef class in python. Not sure if it is desired/possible.</p>

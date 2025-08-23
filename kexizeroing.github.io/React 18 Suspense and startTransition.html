@@ -1,5 +1,7 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/react-18-suspense-transition.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-18-suspense-transition">站点原文</a></h2>
-<p>Concurrent React is a new feature introduced in React 18 that changes how React handles rendering and updates. A key property of Concurrent React is that rendering is interruptible. With synchronous rendering, once an update starts rendering, nothing can interrupt it until the user can see the result on screen. In a concurrent render, React may start rendering an update, pause in the middle, then continue later. It may even abandon an in-progress render altogether.</p>
+<p><strong>Concurrent React</strong> is a new feature introduced in React 18 that changes how React handles rendering and updates. A key property of Concurrent React is that rendering is interruptible. With synchronous rendering, once an update starts rendering, nothing can interrupt it until the user can see the result on screen. In a concurrent render, React may start rendering an update, pause in the middle, then continue later. It may even abandon an in-progress render altogether.</p>
+<blockquote><p>Fiber architecture allows using double buffering. You have two buffers of the current state and next state, and you can either throw away the next state if a higher priority update comes in or you can switch the current state to the next state seamlessly.</p>
+</blockquote>
 <h2>New Root API</h2>
 <p>Concurrent React is opt-in — it’s only enabled when you use a concurrent feature. The new root API in React 18 enables the new concurrent renderer, which allows you to opt-into concurrent features.</p>
 <pre><code class="lang-js">// Before
@@ -17,8 +19,28 @@ root.render(&lt;App /&gt;);
 
 hydrateRoot(document.getElementById('root'), &lt;App /&gt;);
 </code></pre>
+<h2>Automatic Batching</h2>
+<p>Before React 18, updates outside events were not batched. This meant that React updated the DOM immediately after each state change. Multiple state updates within a single event cycle would cause multiple, unnecessary re-renders, affecting the application's responsiveness.</p>
+<pre><code class="lang-js">// React 17
+const handleUpdate = () =&gt; {
+  setCount(count + 1); // First update
+  setFlag(!flag);      // Second update
+  // In pre-batching React, this would cause two separate re-renders
+};
+</code></pre>
+<p>React 18 introduced automatic batching to prevent these issues. Batching means that React groups multiple state updates into a single re-render cycle. This approach ensures that the UI is updated efficiently, reflecting all state changes in one go.</p>
+<p><code>flushSync</code> allows you to opt-out of batching for specific updates, forcing them to be processed immediately. This ensures that critical updates are executed in the correct order, even within a batched state update cycle. <em>(But, use it carefully and not too much, because using it too often can cancel out the performance advantages of batching.)</em></p>
+<pre><code class="lang-js">import { flushSync } from "react-dom";
+
+const handleClick = () =&gt; {
+  flushSync(() =&gt; {
+    setCount(count + 1); // Triggers an immediate re-render
+  });
+  setFlag(!flag); // Queued state update
+};
+</code></pre>
 <h2>Transitions</h2>
-<p>Consider typing in an input field that filters a list of data. Here, whenever the user types a character, we update the input value and use the new value to search the list and show the results. For large screen updates, this can cause lag on the page while everything renders, making typing or other interactions feel slow and unresponsive. Conceptually, there are two different updates that need to happen. The first update is an urgent update, to change the value of the input field. The second, is a less urgent update to show the results of the search.</p>
+<p>Consider typing in an input field that filters a list of data. Here, whenever the user types a character, we update the input value and use the new value to search the list and show the results. For huge data updates, this can cause lag on the page while everything renders, making typing or other interactions feel slow and unresponsive. Conceptually, there are two different updates that need to happen. The first update is an urgent update, to change the value of the input field. The second, is a less urgent update to show the results of the search.</p>
 <p>Until React 18, all updates were rendered urgently. A transition is a new concept in React to distinguish between urgent and non-urgent updates.</p>
 <ul>
 <li>Urgent updates reflect direct interaction, like typing, clicking, pressing, and so on.</li>
@@ -29,14 +51,12 @@ hydrateRoot(document.getElementById('root'), &lt;App /&gt;);
 // Urgent: Show what was typed
 setInputValue(input);
 
-// Mark any state updates inside as transitions
+// Mark any unurgent state updates inside as transitions
 startTransition(() =&gt; {
-  // Transition: Show the results
   setSearchQuery(input);
 });
 </code></pre>
 <p><code>startTransition</code> allows you to mark certain updates in the app as non-urgent, so they are paused while the more urgent updates like clicks or key presses come in. If a transition gets interrupted by the user, React will throw out the stale rendering work that wasn’t finished and render only the latest update.</p>
-<p>By default, React 18 still handles updates as urgent. You can use <code>startTransition</code> to wrap any update that you want to move to the background. (If some state update causes a component to suspend, that state update should be wrapped in a transition.)</p>
 <blockquote><p>How is it different from <code>setTimeout</code>?</p>
 <ol>
 <li><code>startTransition</code> is not scheduled for later like <code>setTimeout</code> is. The function passed to <code>startTransition</code> runs synchronously, but any updates inside of it are marked as “transitions”. React will use this information later when processing the updates to decide how to render the update. This means that we start rendering the update earlier than if it were wrapped in a timeout. </li>
@@ -49,29 +69,30 @@ startTransition(() =&gt; {
   const [isPending, startTransition] = useTransition();
   const [deferredQuery, setDeferredQuery] = useState(query);
 
-  useEffect(() =&gt; {
-    // Hi React, schedule this function for later
+  const handleChange = (e) =&gt; {
+    const newQuery = e.target.value;
+    setQuery(newQuery);
+
     startTransition(() =&gt; {
-      setDeferredQuery(query);
+      setDeferredQuery(newQuery);
     });
-  }, [query]);
+  };
 
   return (
     &lt;div&gt;
-      &lt;input
-        type="text"
-        value={query}
-        onChange={e =&gt; setQuery(e.target.value)}
-      /&gt;
+      &lt;input type="text" value={query} onChange={handleChange} /&gt;
+      {/* isPending remains true until the component re-renders with the new deferred value */}
       { isPending ? &lt;Spinner /&gt; : &lt;List q={deferredQuery} /&gt; }
     &lt;/div&gt; 
   )
 }
 </code></pre>
-<p>We can also use <code>useDeferredValue</code> for the query used in rendering the list, allowing React to prioritize more urgent input changes over re-rendering the list. <code>useTransition</code> returns <em>isPending</em> and <code>useDeferredValue</code> you can do <em>value !== deferredValue</em>.</p>
+<p>We can also use <code>useDeferredValue</code> for the query used in rendering the list, allowing React to prioritize more urgent input changes over re-rendering the list. During updates, React will first attempt a re-render with the old value, and then try another re-render in the background with the new value.</p>
+<p><code>useTransition</code> returns <em>isPending</em> and <code>useDeferredValue</code> you can check if <em>value !== deferredValue</em>.</p>
 <pre><code class="lang-jsx">function App() {
   const [query, setQuery] = useState('');
-  // Get a deferred version of that value
+  // It lets you defer updating a part of the UI
+  // Users don't notice the deferral because urgent UI stays responsive
   const deferredQuery = useDeferredValue(query);
 
   return (
@@ -85,9 +106,13 @@ startTransition(() =&gt; {
     &lt;/div&gt; 
   )
 }
+
+// never rerender the list unless the query changes
+const List = React.memo(({ q }) =&gt; {
+  /* filter the list based on the query */
+})
 </code></pre>
-<p>If we didn't use <code>useDeferredValue</code>, the expensive computation ("List" component here) would run on every keystroke, which could lead to performance issues. By deferring the update of the text value, we ensure that the expensive computation only runs when the text value has stabilized.</p>
-<h2>New Suspense Features</h2>
+<h2>Suspense on the server</h2>
 <p>Suspense allows you to render a fallback component while a component is waiting for some asynchronous operations. With React 18, Suspense can be used on the server.</p>
 <p>Suspense is used on the client in React 16, but it would throw an error when used in SSR. Suspense and code-splitting using <code>React.lazy</code> were not compatible with SSR, until React 18.</p>
 <pre><code class="lang-jsx">import React, { lazy, Suspense } from 'react';
@@ -102,41 +127,22 @@ const Component = () =&gt; (
 </code></pre>
 <p>SSR lets you render your React components on the server into HTML and send it to the user. It's useful because it lets users with worse connections start reading or looking at the content while JavaScript is loading. The problem with SSR today is a “waterfall”: fetch data (server) → render to HTML (server) → load code (client) → hydrate (client). Neither of the stages can start until the previous stage has finished. This is why it’s inefficient. To solve this, React created Suspense.</p>
 <p>React 18 includes architectural improvements to React SSR performance <em>(with <code>renderToPipeableStream</code> and <code>&lt;Suspense&gt;</code>)</em>. It lets you use <code>&lt;Suspense&gt;</code> to break down your app into smaller independent units. As a result, your app’s users will see the content sooner and be able to start interacting with it much faster. When the data for a component is ready on the server, React will send additional HTML into the same stream, as well as a minimal inline <code>&lt;script&gt;</code> tag to put that HTML in the “right place”. Read "New Suspense SSR Architecture in React 18": <a href="https://github.com/reactwg/react-18/discussions/37">https://github.com/reactwg/react-18/discussions/37</a></p>
-<pre><code class="lang-jsx">function App() {
-  return (
-    &lt;Suspense fallback={&lt;Spinner /&gt;}&gt;
-      &lt;Comments /&gt;
-    &lt;/Suspense&gt;
-  );
-}
-
-async function renderToHTML() {
-  const html = await renderToString(&lt;App /&gt;);
-  return html;
-}
-</code></pre>
 <p><code>&lt;Suspense&gt;</code> allows for server-side HTML streaming and selective hydration on the client:</p>
 <ol>
 <li>To opt into <strong>streaming HTML</strong> on the server, you’ll need to switch from <code>renderToString</code> to the new <code>renderToPipeableStream</code> method.</li>
 <li>To opt into <strong>selective hydration</strong> on the client, you’ll need to switch to <code>hydrateRoot</code> on the client and then start wrapping parts of your app with <code>&lt;Suspense&gt;</code>.</li>
-<li>Only Suspense-enabled data sources will activate the Suspense component. Server Components integrate with Suspense out of the box.</li>
 </ol>
-<blockquote><p>Understand Node stream:<br/>
-The HTTP response object is a writable stream. All streams are instances of <code>EventEmitter</code>. They emit events that can be used to read and write data. The <code>pipe()</code> function reads data from a readable stream as it becomes available and writes it to a destination writable stream. All that the <code>pipe</code> operation does is subscribe to the relevant events on the source and call the relevant functions on the destination. The <code>pipe</code> method is the easiest way to consume streams.</p>
-</blockquote>
 <h2>Suspense and <code>startTransition</code></h2>
 <p>These two APIs are designed for different use cases and can absolutely be used together. Read from <a href="https://github.com/reactwg/react-18/discussions/94">https://github.com/reactwg/react-18/discussions/94</a></p>
-<p>When a component suspends, the closest parent Suspense boundary switches to showing the fallback. This can lead to a jarring user experience if it was already displaying some content. To prevent the whole site layout got replaced by <code>BigSpinner</code>, you can mark the navigation state update as a transition with <code>startTransition</code>. This tells React that the state transition is not urgent, and it’s better to keep showing the previous page instead of hiding any already revealed content.</p>
-<pre><code class="lang-jsx">export default function App() {
-  return (
-    &lt;Suspense fallback={&lt;BigSpinner /&gt;}&gt;
-      &lt;Router /&gt;
-    &lt;/Suspense&gt;
-  );
-}
+<ul>
+<li>When you initially load data on an unloaded page (ex. navigating to a new page). Suspense is a way to specify fallbacks instead of content, so it should used in this case.</li>
+<li>When you load new data on a page that has already loaded (ex. tab navigations). In this case, it's bad to hide something the user has already seen. In this case, <code>startTransition</code> lets you show a pending indicator until that render completes, and avoid retriggering Suspense boundaries.</li>
+</ul>
+<pre><code class="lang-jsx">import { Suspense, useState, startTransition, useTransition } from 'react';
 
 function Router() {
   const [page, setPage] = useState('/');
+  const [isPending, startTransition] = useTransition();
 
   function navigate(url) {
     startTransition(() =&gt; {
@@ -147,30 +153,68 @@ function Router() {
   let content;
   if (page === '/') {
     content = (
-      &lt;IndexPage navigate={navigate} /&gt;
+      &lt;Suspense fallback={&lt;h2&gt;Loading page...&lt;/h2&gt;}&gt;
+        &lt;IndexPage navigate={navigate} /&gt;
+      &lt;/Suspense&gt;
     );
   } else if (page === '/the-beatles') {
     content = (
-      &lt;ArtistPage artist={{ id: 'the-beatles' }} /&gt;
+      &lt;Suspense fallback={&lt;h2&gt;Loading page...&lt;/h2&gt;}&gt;
+        &lt;ArtistPage artist={{ id: 'the-beatles' }} /&gt;
+      &lt;/Suspense&gt;
     );
   }
+
   return (
     &lt;Layout&gt;
+      {isPending &amp;&amp; &lt;div style={{ opacity: 0.7 }}&gt;Loading...&lt;/div&gt;}
       {content}
     &lt;/Layout&gt;
   );
 }
+</code></pre>
+<h2>New API <code>useId</code> and <code>useSyncExternalStore</code></h2>
+<p>The <code>useId</code> hook is used to generate unique IDs for elements within a component. This is particularly useful for accessibility purposes, such as linking form inputs with their labels. It ensures that IDs are unique across the entire application, even if the component is rendered multiple times.</p>
+<blockquote><p>Do not call <code>useId</code> to generate keys in a list:</p>
+<p>The point of keys is that it uniquely identifies your item in the list - so when you move it down or up it still has the same id as it had in the other place. You don't get that with <code>useId</code>, and you don't get that using index.</p>
+</blockquote>
+<p>Sometimes you have data that lives outside of React - like browser APIs, third-party libraries, or global state managers. React doesn't automatically know when this external data changes, so your components won't re-render when they should. <code>useSyncExternalStore</code> is essentially <strong>a notification system that bridges React and external data</strong>. It tells React "Hey, this external thing changed, you should re-render!" In response, React says "I can't track external data myself, so help me by telling me when it changes. I'll make sure your UI stays in sync and give you the current value of that external data to use in your component."</p>
+<p><code>useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot?)</code>:</p>
+<ul>
+<li><code>subscribe</code> ia a function that takes a single <code>callback</code> argument and subscribes it to the store. It should return a cleanup function.</li>
+<li><code>getSnapshot</code> is a function that returns the current value of external store data.</li>
+<li><code>getServerSnapshot</code> is an optional parameter that sends you a snapshot of the initial store data. Used for server-side rendering to avoid hydration mismatches.</li>
+</ul>
+<p>The <code>callback</code> is React's way of saying "call me when something changes so I can re-render the component."</p>
+<ol>
+<li>React calls your subscribe function and passes in a callback function</li>
+<li>You set up event listeners that will call this callback when data changes</li>
+<li>When external data changes, your event listener calls the callback</li>
+<li>React receives the callback call and knows to re-render the component</li>
+</ol>
+<pre><code class="lang-js">import { useSyncExternalStore } from 'react';
 
-function BigSpinner() {
-  return &lt;h2&gt;Loading...&lt;/h2&gt;;
+function useWindowWidth() {
+  return useSyncExternalStore(
+    // subscribe: "Tell me when window resizes"
+    (callback) =&gt; {
+      window.addEventListener('resize', callback);
+      return () =&gt; window.removeEventListener('resize', callback);
+    },
+
+    // getSnapshot: "What's the current width?"
+    () =&gt; window.innerWidth,
+  );
+}
+
+function MyComponent() {
+  const width = useWindowWidth();
+  return &lt;div&gt;Window width: {width}px&lt;/div&gt;;
 }
 </code></pre>
-<ul>
-<li>When you initially load data on an unloaded page (ex. navigating to a new page). Suspense is a way to specify fallbacks instead of content, so it should used in this case.</li>
-<li>When you load new data on a page that has already loaded (ex. tab navigations). In this case, it's bad to hide something the user has already seen. In this case, <code>startTransition</code> lets you show a pending indicator until that render completes, and avoid retriggering Suspense boundaries.</li>
-</ul>
 <h2>How to fetch data in React</h2>
-<blockquote><p><strong>Render-as-you-fetch</strong> is a pattern that lets you start fetching the data you will need at the same time you start rendering the component using that data. Used along with <code>Suspense</code>, the data call is made while the component is being rendered. While the data is being loaded the component is in a suspended state and <code>Suspense</code> is used to show a fallback UI.</p>
+<blockquote><p><strong>Render-as-you-fetch</strong> is a pattern that lets you start fetching the data you will need at the same time you start rendering the component using that data. Used along with <code>Suspense</code>, the data call is made while the component is being rendered.</p>
+<p>For SPA, "download the JS files -&gt; initializing React -&gt; starting to render React tree, CALLING THE ROUTE LOADERS": We can do it today with React Router v7 and Tanstack Router.</p>
 </blockquote>
 <ol>
 <li><p>React Server Components (server-side data fetching)</p>

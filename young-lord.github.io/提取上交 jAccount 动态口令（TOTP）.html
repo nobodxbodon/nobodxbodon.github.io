@@ -1,0 +1,68 @@
+<h2><a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/_posts/2025-08-05-提取上交jAccount动态口令（TOTP）.md">仓库源文</a>，<a href="https://young-lord.github.io/posts/sjtu-totp">站点原文</a></h2>
+<h2>背景</h2>
+<p>既然你能来到这里，应该也不需要什么介绍了吧。</p>
+<p>本文使用的环境：一台安卓手机，交我办 3.4.9。</p>
+<p>下文“分析”与“教程”是混在一起写的，你应当有能分辨必需步骤的能力。你应当知道你的用户名，下文以<code>faputa</code>或者<code>你的用户名</code>代替。</p>
+<p>警告：TOTP密钥为隐私内容，不应在任何不信任的网站上输入。本文中出现的密钥仅用于演示用途，已在本文编写完成后全部撤销。</p>
+<h2>正文</h2>
+<h3>获取密钥</h3>
+<p>多种方法选择任一即可。</p>
+<h4>读数据库方法</h4>
+<p>本方法需要用到安卓系统自带的备份功能，门槛较低。</p>
+<p>先在“交我办”生成动态口令。</p>
+<p>去翻翻应用私密文件，发现了个<code>TOTP.db</code>，打开看看发现没有<code>SQLite format 3</code>文件头，而且乱码看着很无规律，盲猜是<code>SQLCipher</code>。分析<code>classes*.dex</code>，在<code>edu.sjtu.infoplus.taskcenter.db.totp.TOTPDatabase$Companion</code>中发现<code>SQLCipher</code>相关内容（也就是<code>net.sqlcipher.database.SQLiteDatabase</code>等等类名）。结合<a href="https://github.com/sqlcipher/sqlcipher-android?tab=readme-ov-file#sqlcipher-for-android-room-integration">sqlcipher-android文档</a>，得到密钥<code>account#totp@db</code>。</p>
+<p>备份“交我办”后，解压备份文件，在<code>databases</code>或对应目录下找到<code>TOTP.db</code>及<code>TOTP.db-wal</code>文件。（谢谢你，<code>android:allowBackup="true"</code>）（如果你的手机root了，直接访问<code>/data/user/0/edu.sjtu.infoplus.taskcenter/databases/</code>即可获得）</p>
+<p>为什么要有个<code>TOTP.db-wal</code>文件？简单来说，由于某些bug，TOTP密钥一直没有被真正写入<code>TOTP.db</code>中，而是在<code>TOTP.db-wal</code>中暂存。&lt;del&gt;这垃圾bug调了我十分钟。&lt;/del&gt;</p>
+<p>安装SQLCipher（Windows版本可以在<a href="https://github.com/QQBackup/sqlcipher-github-actions/releases/tag/latest">这里</a>下载），执行<code>sqlcipher TOTP.db</code>，依次输入：</p>
+<pre><code class="lang-sql">PRAGMA KEY='account#totp@db';
+PRAGMA cipher_migrate;
+.tables
+select * from TOTPKey;
+</code></pre>
+<p>输出形如：<code>faputa|2C10EA6E652029139EABE8896E10C3705CB0F757CA2F2D5AEBF147F027E072697760BB50C8FC1CF1EB2914C5514AF57A0D3C768F4FED0357830B0E4567A1767F|2</code>，中间的一串即为TOTP密钥。</p>
+<h4>抓包方法</h4>
+<p>本方法需要用到ProxyPin等抓包软件。为了使目标软件信任自签名HTTPS证书，要求手机已经root，门槛较高。</p>
+<p>既然服务器端需要验证TOTP，必定会有一个服务器与客户端交换密钥的过程，因此尝试抓包。</p>
+<p>开启抓包软件，随后在“交我办”生成动态口令，得到URL为<code>https://jaccount.sjtu.edu.cn/jaccount/issueTotp</code>的<code>POST</code>请求。响应体中的<code>key</code>字段即为TOTP密钥，形如<code>2C10EA6E652029139EABE8896E10C3705CB0F757CA2F2D5AEBF147F027E072697760BB50C8FC1CF1EB2914C5514AF57A0D3C768F4FED0357830B0E4567A1767F</code>。</p>
+<p>完整的响应体形如：</p>
+<pre><code class="lang-json">{
+  "errno": 0,
+  "error": "动态口令开通成功",
+  "total": 0,
+  "entities": [
+    {
+      "key": "2C10EA6E652029139EABE8896E10C3705CB0F757CA2F2D5AEBF147F027E072697760BB50C8FC1CF1EB2914C5514AF57A0D3C768F4FED0357830B0E4567A1767F",
+      "version": 3
+    }
+  ]
+}
+</code></pre>
+<h5>不用手机的抓包方法</h5>
+<p>将浏览器的User Agent设置为<code>TaskCenterApp/3.4.9</code>，然后在浏览器中访问<code>https://jaccount.sjtu.edu.cn/jaccount/issueTotp?account=你的用户名</code>，即可访问开通TOTP的页面。对页面源码进行一些修改后，即可正常开通TOTP。其他操作与<a href="#抓包方法">“抓包方法”一节</a>相同。</p>
+<h3>将密钥导入密码管理器</h3>
+<p>得到的密钥为128位长，仅由<code>[0-9A-F]</code>组成的字符串，可直接猜测其为使用<code>SHA-512</code>的TOTP中，以hex格式表示的密钥。该猜测可被<code>edu.sjtu.infoplus.taskcenter.widget.TaskCenterWebView$5</code>的<code>TOTP.generateTOTP512</code>代码验证。</p>
+<p>一般密码管理器中，需要的TOTP密钥均为Base32格式（移除结尾的<code>=</code>），因此需要转码。</p>
+<p><a href="#鸣谢">“鸣谢”一节</a>中列出的网站可以帮你完成这一过程，但强烈建议在本地转换。比如，Linux系统中可以使用以下命令：</p>
+<p><code>cat | xxd -r -p | base32 -w0  | tr -d '='</code></p>
+<p>执行该命令，粘贴hex格式的密钥，按下回车，按下<code>Ctrl + D</code>，输出即为所需的Base32格式密钥。</p>
+<p>以上文中得到的密钥为例，转码后得到的Base32格式密钥为<code>FQIOU3TFEAURHHVL5CEW4EGDOBOLB52XZIXS2WXL6FD7AJ7AOJUXOYF3KDEPYHHR5MURJRKRJL2XUDJ4O2HU73IDK6BQWDSFM6QXM7Y</code></p>
+<p>配置好参数（即使用<code>SHA-512</code>，而非更常见的<code>SHA-1</code>算法）后，即可导入你的密码管理器或验证器。</p>
+<p>如果你需要生成二维码，或者直接编辑密码管理器的<code>otp</code>字段，你需要的Key Uri形如：<code>otpauth://totp/jAccount:faputa?issuer=jAccount&amp;secret=FQIOU3TFEAURHHVL5CEW4EGDOBOLB52XZIXS2WXL6FD7AJ7AOJUXOYF3KDEPYHHR5MURJRKRJL2XUDJ4O2HU73IDK6BQWDSFM6QXM7Y&amp;algorithm=SHA512&amp;digits=6&amp;period=30</code></p>
+<p>导入完成后，如果密钥来自“交我办”应用，可以验证生成的验证码是否与“交我办”中一致。</p>
+<h2>鸣谢</h2>
+<p>警告：TOTP密钥为隐私内容，不应在任何不信任的网站上输入。以下网站可能将你的密钥传输到服务端，并且可能存在第三方追踪器，因此不应当被信任。</p>
+<ul>
+<li><a href="https://www.lddgo.net/encrypt/otp-code-generate">在线OTP密码生成器 - lddgo.net</a></li>
+<li><a href="https://2fasolution.com/totp.html">Time-based one-time password (TOTP) Generator - 2fasolution.com</a></li>
+<li><a href="https://github.com/google/google-authenticator/wiki/Key-Uri-Format">Key Uri Format</a></li>
+</ul>
+<h2>另外</h2>
+<p>不要信上交招生老师一个字，虽然写给你看也没啥用。</p>
+<p>如果是交大校友，可以跟我认识一下，联系方式在网站右上角的<code>关于</code>里。</p>
+<div class="license">
+  <p>本文遵守 <a itemprop="license" rel="license" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA-4.0</a> 许可协议。<a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/README.md#%E5%A3%B0%E6%98%8E">（不允许转载至简书或 CSDN）</a>
+    <a rel="license" aria-label="详细了解协议内容" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+<!--        <img alt="CC BY-NC-SA-4.0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" />-->
+    </a>
+  </p>
+</div>

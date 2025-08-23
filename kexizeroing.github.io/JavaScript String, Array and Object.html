@@ -98,21 +98,12 @@ function replacer(match, p1, p2, p3, offset, string) {
 }
 'abc123#$'.replace(/([^\d]*)(\d*)([^\w]*)/, replacer); // abc-123-#$
 </code></pre>
-<h3>Avoid string comparisons</h3>
-<p>Javascript makes it easy to hide the real cost of string comparisons. If you need to compare strings in C, you’d use the <code>strcmp(a, b)</code> function. Javascript uses <code>===</code> instead, so you don’t see the <code>strcmp</code>. But it’s there, and a string comparison will usually require comparing each of the characters in the string with the ones in the other string; string comparison is O(n). With the advent of TypeScript this should be easily avoidable, as enums are integers by default.</p>
-<p>Integers are usually passed by value in JS engines, whereas strings are always passed as pointers, and memory accesses are expensive.</p>
-<pre><code class="lang-ts">// No
-enum Position {
-  TOP    = 'TOP',
-  BOTTOM = 'BOTTOM',
-}
-
-// Yes
-enum Position {
-  TOP,    // = 0
-  BOTTOM, // = 1
-}
-</code></pre>
+<blockquote><ul>
+<li><code>\d</code>: Matches any digit character. Equivalent to <code>[0-9]</code>.</li>
+<li><code>\w</code>: Matches any word character, where a word character includes letters (A–Z, a–z), numbers (0–9), and underscore (_).</li>
+<li><code>\s</code>: Matches any whitespace or line terminator character.</li>
+</ul>
+</blockquote>
 <h2>Array</h2>
 <h3>Check if the variable is an array</h3>
 <ul>
@@ -194,7 +185,6 @@ Array(1, 2, 3);    // [1, 2, 3]
 <blockquote><ol>
 <li><code>Array()</code> can be called with or without <code>new</code>. Both create a new Array instance.</li>
 <li>The <code>length</code> property of an array is a 32-bit unsigned integer, which limits the maximum number of entries an array can have, which is <code>Math.pow(2, 32) - 1</code>.</li>
-<li>Arrays can contain "empty slots" (not the same as slots filled with the value <code>undefined</code>), which are called sparse arrays.</li>
 </ol>
 </blockquote>
 <h3>Array.prototype.fill()</h3>
@@ -204,8 +194,6 @@ Array(1, 2, 3);    // [1, 2, 3]
 // Objects by reference
 var arr = Array(3).fill({}) // [{}, {}, {}];
 arr[0].hi = "hi"; // [{ hi: "hi" }, { hi: "hi" }, { hi: "hi" }]
-
-[].fill.call({ length: 3 }, 4);  // {0: 4, 1: 4, 2: 4, length: 3}
 
 // compare with Array.from
 const array = Array.from({ length: 3 }, () =&gt; ({}));
@@ -242,7 +230,7 @@ function implementMapUsingReduce(list, func) {
 }
 </code></pre>
 <h3>Array.prototype.splice()</h3>
-<p>It changes the contents of an array by removing or replacing existing elements or adding new elements in place.</p>
+<p>It changes the contents of an array by removing or replacing existing elements or adding new elements in place. This function returns an array containing the deleted elements.</p>
 <pre><code class="lang-js">var arrDeletedItems = array.splice(start[, deleteCount[, item1[, item2[, ...]]]])
 
 // insert
@@ -256,24 +244,6 @@ var removed = myFish.splice(3, 1);
 // replace
 var myFish = ['angel', 'clown', 'trumpet', 'sturgeon'];
 var removed = myFish.splice(0, 2, 'parrot', 'anemone', 'blue');
-</code></pre>
-<p>Move an array item to a different position.</p>
-<pre><code class="lang-js">export function arrayMoveMutable(array, fromIndex, toIndex) {
-  const startIndex = fromIndex &lt; 0 ? array.length + fromIndex : fromIndex;
-
-  if (startIndex &gt;= 0 &amp;&amp; startIndex &lt; array.length) {
-    const endIndex = toIndex &lt; 0 ? array.length + toIndex : toIndex;
-
-    const [item] = array.splice(fromIndex, 1);
-    array.splice(endIndex, 0, item);
-  }
-}
-
-export function arrayMoveImmutable(array, fromIndex, toIndex) {
-  const newArray = [...array];
-  arrayMoveMutable(newArray, fromIndex, toIndex);
-  return newArray;
-}
 </code></pre>
 <h3>Flatten array</h3>
 <pre><code class="lang-js">const arr1 = [1, 2, [3, 4]];
@@ -461,21 +431,6 @@ const language = {
 language.current = 'EN';
 console.log(language.log); // ['EN']
 </code></pre>
-<pre><code class="lang-ts">// a general purpose memoizer
-function lazy&lt;T&gt;(getter: () =&gt; T): { value: T } {
-  return {
-    get value() {
-      const value = getter();
-      Object.defineProperty(this, 'value', { value });
-      return value;
-    },
-  };
-}
-
-const myValue = lazy(() =&gt; 'Hello, world');
-myValue.value;  // compute value
-myValue.value;  // return cached value
-</code></pre>
 <h3>Object.keys(), Object.values(), Object.entries()</h3>
 <ul>
 <li>Object.keys() returns an array whose elements are strings corresponding to the enumerable properties found directly upon object. </li>
@@ -534,7 +489,7 @@ Foo.prototype.isPrototypeOf(baz);    // true
 Object.prototype.isPrototypeOf(baz); // true
 </code></pre>
 <h3>toString() and valueOf()</h3>
-<p>Every object has a <code>toString()</code> method that is automatically called when the object is to be represented as a text value or when an object is referred to in a manner in which a string is expected. <strong>For Numbers, <code>toString()</code> takes an optional parameter radix, the value of radix must be minimum 2 and maximum 36</strong>.</p>
+<p>Every object has a <code>toString()</code> method that is automatically called when the object is to be represented as a text value. For Numbers, <code>toString()</code> takes an optional parameter radix, the value of radix must be minimum 2 and maximum 36.</p>
 <p>You can create a function to be called in place of the default <code>toString()</code> method. The <code>toString()</code> method you create can be any value you want, but it will be most useful if it carries information about the object.</p>
 <pre><code class="lang-js">function Dog(name, breed, color, sex) {
   this.name = name;
@@ -581,7 +536,8 @@ obj === o1; // true
 </code></pre>
 <h3>Object.create()</h3>
 <p>It creates a new object, using an existing object as the prototype of the newly created object.</p>
-<pre><code class="lang-js">const o1 = Object.create({});   // create a normal object
+<pre><code class="lang-js">const o1 = Object.create({});  // create a normal object
+Object.create() // TypeError: Object prototype may only be an Object or null
 
 const o2 = Object.create(null); // create a totally empty object (without prototype)
 // Is equivalent to:
@@ -613,8 +569,6 @@ Rectangle.prototype.constructor = Rectangle;
 var rect = new Rectangle();
 rect instanceof Rectangle  // true
 rect instanceof Shape      // true
-
-// ** In modern code, the class syntax should be preferred in any case.**
 </code></pre>
 <h3>Object.freeze()</h3>
 <p>Freezing an object prevents extensions <em>(An object is extensible if new properties can be added to it)</em> and makes existing properties non-writable and non-configurable. A frozen object can no longer be changed: new properties cannot be added, existing properties cannot be removed, their enumerability, configurability, writability, or value cannot be changed, and the object's prototype cannot be re-assigned. <code>freeze()</code> returns the same object that was passed into the function. It does not create a frozen copy.</p>
@@ -632,22 +586,6 @@ obj.quaxxor = "the friendly duck";  // silently doesn't add the property
 
 // Attempted changes through Object.defineProperty, throw a TypeError in strict mode.
 Object.defineProperty(obj, "foo", { value: "eit" });
-</code></pre>
-<pre><code class="lang-js">// protect against prototype pollution
-[
-  Object,
-  Object.prototype,
-  Function,
-  Function.prototype,
-  Array,
-  Array.prototype,
-  String,
-  String.prototype,
-  Number,
-  Number.prototype,
-  Boolean,
-  Boolean.prototype,
-].forEach(Object.freeze);
 </code></pre>
 <h3>Object.is()</h3>
 <p>It determines whether two values are the same value. The only difference between <code>Object.is()</code> and <code>===</code> is in their treatment of signed zeros and NaN values.</p>
@@ -670,7 +608,7 @@ Object.is(NaN, 0/0);  // true
 <ul>
 <li>The keys of an Object are String and Symbol, whereas they can be any value for a Map, including functions, objects, and any primitive.</li>
 <li>The keys in Map are ordered while keys added to object are not. Thus, when iterating over it, a Map object returns keys in order of insertion.</li>
-<li>You can get the size of a Map easily with the <code>size</code> property, while the number of properties in an Object must be determined manually. (A Map is iterable, whereas a objects is not iterable.)</li>
+<li>You can get the size of a Map easily with the <code>size</code> property, while the number of properties in an Object must be determined manually. <strong>(A Map is iterable, whereas a objects is not iterable.)</strong></li>
 </ul>
 <pre><code class="lang-js">var myMap = new Map();
 myMap.set(0, 'zero');
@@ -688,6 +626,8 @@ myMap.has('key1');
 myMap.delete('key1');
 
 // Iterating with for..of
+// The keys(), values() method of Map instances returns a new map iterator object,
+// not an array.
 for (let key of myMap.keys()) console.log(key);
 for (let value of myMap.values()) console.log(value);
 for (let [key, value] of myMap.entries()) console.log(key + ' = ' + value);
@@ -756,10 +696,10 @@ Array.from(mySet2)
 // intersection
 var intersection = new Set([...set1].filter(x =&gt; set2.has(x)));
 
-// Newly available 2024
 const odds = new Set([1, 3, 5, 7, 9]);
 const squares = new Set([1, 4, 9]);
 
+// Newly available in ES2025
 console.log(odds.intersection(squares)); // Set(2) { 1, 9 }
 console.log(odds.difference(squares)); // Set(3) { 3, 5, 7 }
 console.log(odds.union(squares)); // Set(6) { 1, 3, 5, 7, 9, 4 }

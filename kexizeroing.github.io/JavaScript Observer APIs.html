@@ -2,21 +2,15 @@
 <p>Observers can be helpful to watch certain activities happening in the browser and respond accordingly. For example, we can observe, if child element has been added or removed from the parent DOM element, if a video is displayed within the viewport and enable autoplay, if the size/dimensions of a box element has changed and so on. These are different types of observer APIs in JavaScript.</p>
 <h2>Mutation Observer API</h2>
 <p>The <code>MutationObserver</code> interface provides the ability to watch for changes being made to the DOM tree.</p>
-<p>The <code>MutationObserver()</code> constructor creates and returns a new observer which invokes a specified callback when DOM events occur. The callback function takes as input two parameters:</p>
-<ol>
-<li>An array of objects describing each change that occurred.</li>
-<li>The <code>MutationObserver</code> which invoked the callback. <em>This is most often used to disconnect the observer using <code>MutationObserver.disconnect()</code>.</em></li>
-</ol>
+<p>The <code>MutationObserver()</code> constructor creates and returns a new observer which invokes a specified callback when DOM events occur. The callback function takes an array of <code>MutationRecord</code> objects, describing each change that occurred.</p>
 <p>DOM observation does not begin immediately; the <code>observe(target, options)</code> method must be called first to establish which portion of the DOM to watch (<code>target</code>) and what kinds of changes to watch for (<code>options</code>). To be more specific, the <code>options</code> object describe which DOM mutations should be reported to <code>mutationObserver</code>'s callback. At a minimum, one of <code>childList</code>, <code>attributes</code>, and <code>characterData</code> must be true. Otherwise, a TypeError exception will be thrown.</p>
 <ul>
-<li><code>subtree</code>: Set to true to extend monitoring to the entire subtree of nodes rooted at target. All of the other properties are then extended to all of the nodes in the subtree instead of applying solely to the target node. <em>(detect changes in all descendants of the node)</em></li>
 <li><code>childList</code>: Set to true to monitor the target node for the addition of new child nodes or removal of existing child nodes. <em>(detect changes in the direct children of node)</em></li>
 <li><code>attributes</code>: Set to true to watch for changes to the value of attributes on the node being monitored. <em>(detect attribute changes of node)</em></li>
-<li><code>characterData</code>: Set to true to monitor the specified target node for changes to the character data contained within the node. <em>(observe the changes of text content)</em></li>
+<li><code>characterData</code>: Set to true to monitor the specified target node for changes to the character data (text content of a text node) contained within the node. <em>(observe the changes of text content)</em></li>
+<li><code>subtree</code>: Set to true to extend monitoring to the entire subtree of nodes rooted at target. All of the other properties are then extended to all of the nodes in the subtree instead of applying solely to the target node. <em>(detect changes in all descendants of the node)</em></li>
 </ul>
-<pre><code class="lang-js">const targetNode = document.getElementById("some-id")
-
-const config = { attributes: true, childList: true, subtree: true }
+<pre><code class="lang-js">const config = { attributes: true, childList: true, subtree: true }
 
 const callback = (mutationList, observer) =&gt; {
   for (const mutation of mutationList) {
@@ -29,7 +23,7 @@ const callback = (mutationList, observer) =&gt; {
 }
 
 const observer = new MutationObserver(callback)
-observer.observe(targetNode, config)
+observer.observe(document.getElementById("test"), config)
 
 // Later, you can stop observing
 observer.disconnect()
@@ -41,15 +35,17 @@ export default function AutomaticScroller({ children, className }) {
   useEffect(() =&gt; {
     const mutationObserver = new MutationObserver(() =&gt; {
       if (ref.current) {
-        ref.current.scroll({ behavior: 'smooth', top: ref.current.scrollHeight });
-        // OR using `scrollTop` property
-        // ref.current.scrollTop = ref.current.scrollHeight - ref.current.clientHeight;
+        ref.current.scroll({
+          behavior: "smooth",
+          top: ref.current.scrollHeight,
+        });
       }
     });
 
     if (ref.current) {
       mutationObserver.observe(ref.current, {
         childList: true,
+        subtree: true, // observe all descendants
       });
     }
 
@@ -68,15 +64,11 @@ export default function AutomaticScroller({ children, className }) {
 <h2>Intersection Observer API</h2>
 <p>The <code>IntersectionObserver</code> interface provides a way to asynchronously observe changes in the intersection of a target element with an ancestor element or with a top-level document's viewport. The ancestor element or viewport is referred to as the root.</p>
 <p>The <code>IntersectionObserver(callback, options)</code> constructor creates and returns a new <code>IntersectionObserver</code> object.</p>
-<p>The callback function is called when the percentage of the target element is visible crosses a threshold. The callback receives two parameters:</p>
-<ol>
-<li>An array of objects, each describing the intersection between the target element and its root container at a specific moment of transition.</li>
-<li>The <code>IntersectionObserver</code> for which the callback is being invoked.</li>
-</ol>
+<p>The callback function receives a list of <code>IntersectionObserverEntry</code> objects. It is a list because you can use one observer for many elements, and the callback will be called whenever any of them intersect or stop intersecting. Each entry has detailed visibility info, such as <code>target</code>, <code>isIntersecting</code>, <code>boundingClientRect</code>, <code>intersectionRatio</code>, and so on.</p>
 <p>The <code>options</code> object customizes the observer, for exmple, we can set the <code>root</code> or <code>threshold</code> property. If not specified, the observer uses the document's viewport as the root, with no margin, and a 0% threshold.</p>
 <pre><code class="lang-js">const options = {
   root: null, // The element to use as viewport (null = browser viewport)
-  rootMargin: "0px", // Margin around the root
+  rootMargin: "0px", // Adjust the root's bounding box ("top right bottom left")
   threshold: 0.5, // Percentage of target visibility to trigger callback (0-1)
 };
 </code></pre>
@@ -108,9 +100,8 @@ const observer = new IntersectionObserver(handleIntersection)
 
 images.forEach(image =&gt; observer.observe(image))
 </code></pre>
-<p>The <code>thresholds</code>, if specified, accepts a value between 0 and 1 and represents the percentage of the element that must be visible before <code>isIntersecting</code> becomes true. By default this is set to 0 which means as soon as any part of the element is visible it will be considered intersecting. You can also pass an array to threshold which means that the <code>IntersectionObserver</code> will fire each time your element passes one of the thresholds passed to it.</p>
-<pre><code class="lang-js">const observer = new IntersectionObserver(
-  entries =&gt; {
+<p>The <code>thresholds</code>, if specified, accepts a value between 0 and 1 and represents the percentage of the element that must be visible before <code>isIntersecting</code> becomes true. By default this is set to 0 which means as soon as any part of the element is visible it will be considered intersecting. You can also pass an array to threshold which means “Call the callback every time the visible ratio of the target passes any of these points.”</p>
+<pre><code class="lang-js">const observer = new IntersectionObserver(entries =&gt; {
     entires.forEach(entry =&gt; {
       entry.target.innerText = `${Math.round(entry.intersectionRatio * 100)}%`
     })
@@ -118,55 +109,19 @@ images.forEach(image =&gt; observer.observe(image))
   { threshold: [0, 0.25, 0.5, 0.75, 1] }
 )
 </code></pre>
-<p>There is also a <code>rootMargin</code> option, which specifies a set of offsets to add to the root’s bounding box when calculating intersections, effectively shrinking or growing the root. The default is "0px 0px 0px 0px". To give you an example: if you want some code to run before the element is actually in view, <code>rootMargin: "25%"</code> will make the Intersection Observer report an intersection when the observed element is 25% away from the viewport.</p>
-<p>With the help of <code>IntersectionObserver</code> (and tricky usage of <code>top: -1px</code>), we can detect when a sticky element gets pinned.</p>
-<pre><code class="lang-js">const el = document.querySelector(".myElement")
-const observer = new IntersectionObserver( 
-  ([e]) =&gt; e.target.classList.toggle("is-pinned", e.intersectionRatio &lt; 1),
-  { threshold: [1] }
-);
-
-observer.observe(el);
-</code></pre>
-<pre><code class="lang-css">.myElement {
-  position: sticky;
-  top: -1px;
-}
-</code></pre>
-<p>Initially, the element scrolls normally with the page content. When the element reaches the top of the viewport, the <code>position: sticky</code> and <code>top: -1px</code> CSS properties make it stick there. At the exact moment it starts to stick, the <code>IntersectionObserver</code> detects that it's no longer fully visible (because its top edge is now out of view), and adds the "is-pinned" class.</p>
-<ol>
-<li>The first argument is a callback function that runs when the observed element's visibility changes. It uses destructuring to get the first (and only) entry <code>e</code> from the entries array.</li>
-<li><code>classList.toggle()</code> adds the class "is-pinned" if the second argument is true, and removes it if false.</li>
-<li><code>e.intersectionRatio &lt; 1</code> checks if the element is fully visible. If it's not (ratio &lt; 1), it returns true.</li>
-</ol>
+<p>There is also a <code>rootMargin</code> option, which specifies a set of offsets to add to the root’s bounding box when calculating intersections, effectively shrinking or growing the root. The default is "0px 0px 0px 0px". For example, set it to "0px 0px 100px 0px" means that the observer will call the callback when element is still 100px below the viewport.</p>
 <h2>Resize Observer API</h2>
 <p>The Resize Observer API provides a performant mechanism by which we can monitor an element for changes to its size, with notifications being delivered to the observer each time the size changes.</p>
-<p>Usage is simple <em>(All the APIs with the <code>Observer</code> suffix we mentioned above share a simple API design)</em>, you create a new <code>ResizeObserver</code> object using the <code>ResizeObserver()</code> constructor, then use <code>ResizeObserver.observe()</code> to make it look for changes to a specific element's size. A callback function set up inside the constructor then runs every time the size changes, providing access to the new dimensions and allowing you to do anything you like in response to those changes.</p>
-<pre><code class="lang-js">const ro = new ResizeObserver(entries =&gt; {
+<p><em>All the APIs with the <code>Observer</code> suffix we mentioned above share a simple API design.</em> You create a new <code>ResizeObserver</code> object using the <code>ResizeObserver()</code> constructor, then use <code>observe()</code> method to make it look for changes to a specific element's size. A callback function set up inside the constructor then runs every time the size changes, providing access to the new dimensions and allowing you to do anything you like in response to those changes.</p>
+<pre><code class="lang-js">const observer = new ResizeObserver(entries =&gt; {
   for (let entry of entries) {
-    const cr = entry.contentRect
+    // new size of the element
+    const { width, height } = entry.contentRect
 
     console.log('Element:', entry.target)
-    console.log(`Element size: ${cr.width}px x ${cr.height}px`)
+    console.log(`Element size: ${width}px x ${height}px`)
   }
 })
 
-ro.observe(document.getElementById("test"))
+observer.observe(document.getElementById("test"))
 </code></pre>
-<pre><code class="lang-js">// https://github.com/stackblitz/use-stick-to-bottom
-function Component() {
-  const { scrollRef, contentRef } = useStickToBottom();
-
-  return (
-    &lt;div style={{ overflow: 'auto' }} ref={scrollRef}&gt;
-      &lt;div ref={contentRef}&gt;
-        {messages.map((message) =&gt; (
-          &lt;Message key={message.id} message={message} /&gt;
-        ))}
-      &lt;/div&gt;
-    &lt;/div&gt;
-  );
-}
-</code></pre>
-<blockquote><p>The <code>wheel</code> event fires when the user rotates a wheel button on a pointing device (typically a mouse), which may help to distinguish between human and programmatic scrolling. Unfortunately the <code>wheel</code> event only fires for trackpads/scroll wheels. If you scroll up with the scrollbar located on the right of the window, or if you press arrow down, there's actually no way to distinguish this.</p>
-</blockquote>

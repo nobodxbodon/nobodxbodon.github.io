@@ -308,7 +308,7 @@ sh 下的绝对路径
 &lt;!--
 
 https，http2，http长连接
-目录索引，cgi，fcgi，重定向，url重写，反向代理，负载均衡，虚拟站点
+目录索引，cgi，fcgi，重定向，url重写，反向代理，fpm，负载均衡，虚拟站点
 WebSocket，WebSocket Secure
 Basic认证，Digest认证
 http压缩，http缓存，伪静态，mpm（Multi-Processing Modules）
@@ -317,6 +317,8 @@ servertype 的 standalone模式 和 inetd模式
 限速
     mod_ratelimit
     apache 原生的限速模块没有 nginx 的好用
+ip 白名单/黑名单
+主动返回 403 429
 
 mod_proxy
 mod_proxy_http
@@ -556,8 +558,15 @@ mod_rewrite
 </li>
 </ul>
 </li>
-<li><p>https 的配置</p>
-<ul>
+</ol>
+&lt;!--
+nginx 的配置文件只能用一次 include ，不能多个配置文件嵌套
+但可以用 * 作为通配符
+
+--&gt;
+
+<ol>
+<li>https 的配置<ul>
 <li>在 server 块里加上这三句</li>
 <li>ssl_certificate 是证书路径， ssl_certificate_key 是私钥路径</li>
 <li>ssl_certificate 和 ssl_certificate_key 的路径，要么填绝对路径，要么填相对于 nginx 根目录的路径</li>
@@ -635,9 +644,46 @@ kibana 的版本要和 elasticsearch 对应，不然 kibana 运行不了
 <li>kibana 的配置文件 config/kibana.yml</li>
 </ul>
 &lt;!--
+
+curl -v 'http://127.0.0.1:9200'
+
+查看节点信息
 curl -v --user user:passwd 'http://localhost:9200/_cat/nodes?v'
 curl -v 'http://127.0.0.1:9200/_cat/nodes?v'
-curl -v 'http://127.0.0.1:9200'
+
+ES默认的分词器是standard，对英文比较友好，
+例如：hello world 会被分解成 hello和world两个关键词，
+如果是中文会分解成一个一个字，例如：上海大学 会分解成: 上、海、大、学。
+
+analysis-smartcn 中文分词 ES官方推荐的中文分词插件
+analysis-stconvert 简体繁体转换 这个不是官方插件
+    https://github.com/infinilabs/analysis-stconvert
+
+ik分词器
+elasticsearch-plugin install https://get.infini.cloud/elasticsearch/analysis-ik/7.17.0
+
+{ES安装目录}/bin/elasticsearch-plugin install analysis-smartcn
+安装完后记得重启
+    前台运行就直接 ctrl+c 结束进程然后重新启动
+        bin/elasticsearch
+    后台启动
+        用 ps 找到进程id
+            ps -ef|grep elastic
+        用 kill 结束进程
+            kill -9 1302
+        重新启动
+            bin/elasticsearch -d
+
+docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:7.17.28
+docker exec -it elasticsearch /bin/bash
+
+查看已安装的插件
+bin/elasticsearch-plugin list
+curl -X GET "http://localhost:9200/_cat/plugins?v"
+
+查看版本信息
+curl -X GET "http://localhost:9200/_nodes/settings?pretty"
+
 --&gt;
 
 <h2>其它</h2>

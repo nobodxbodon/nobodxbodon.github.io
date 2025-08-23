@@ -6,10 +6,14 @@ const React = (function() {
   let idx = 0;
 
   function useState(initVal) {
-    const state = hooks[idx] || initVal;
+    const state = hooks[idx] ?? initVal;
     const _idx = idx;
     const setState = newVal =&gt; {
-      hooks[_idx] = newVal;
+      if (typeof newVal === 'function') {
+        hooks[_idx] = newVal(hooks[_idx]);
+      } else {
+        hooks[_idx] = newVal;
+      }
     };
     idx++;
     return [state, setState];
@@ -19,10 +23,10 @@ const React = (function() {
     const oldDeps = hooks[idx];
     let hasChanged = true;
 
-    if(oldDeps) {
+    if (oldDeps) {
       hasChanged = depArray.some((dep, i) =&gt; !Object.is(dep, oldDeps[i]));
     }
-    if(hasChanged) cb();
+    if (hasChanged) cb();
     hooks[idx] = depArray;
     idx++;
   }
@@ -80,87 +84,68 @@ var App = React.render(Component);
   {count: 2, text: "pear"}`
 */
 </code></pre>
-<h3>Simplified version of virtual DOM diffing and rendering</h3>
-<p><a href="https://gist.github.com/developit/2038b141b31287faa663f410b6649a87">https://gist.github.com/developit/2038b141b31287faa663f410b6649a87</a></p>
-<pre><code class="lang-js">// JSX constructor, similar to createElement()
-// Use /** @jsx h */ comment
-export const h = (type, props, ...children) =&gt; ({
-  type,
-  props,
-  children,
-  key: props &amp;&amp; props.key
-});
-
-export const render = (
-  newVNode,
-  dom,
-  oldVNode = dom._vnode || (dom._vnode = {}),
-  currentChildIndex
-) =&gt; {
-  if (Array.isArray(newVNode)) {
-    return newVNode.map((child, i) =&gt; render(child, dom, oldVNode._normalizedChildren?.[i]));
-  }
-  // Handle components
-  // Here components have a different signature compared to React:
-    // (props, state, updateFn) =&gt; VNode;
-  else if (typeof newVNode.type === 'function') {
-    newVNode.state = oldVNode.state || {};
-    const props = { ...newVNode.props, children: newVNode.children };
-    const renderResult = newVNode.type(
-      props,
-      newVNode.state,
-      nextState =&gt; {
-        Object.assign(newVNode.state, nextState);
-        render(newVNode, dom, newVNode);
-    });
-
-    render(renderResult, dom, oldVNode.rendered || {});
-  }
-  // Handle DOM elements and text nodes
-  else {
-    // assumes the types match here
-    newVNode.dom = oldVNode.dom || (newVNode.type ? document.createElement(newVNode.type) : new Text(newVNode.props));
-
-    // Update props
-    if (newVNode.type) {
-      for (const name in newVNode.props || {}) {
-        const value = newVNode.props[name];
-        if (value !== (oldVNode.props?.[name])) {
-          // DOM Properties like value, checked, className
-          name in newVNode.dom ? (newVNode.dom[name] = value) : newVNode.dom.setAttribute(name, value);
-        }
-      }
-    } else if (newVNode.props !== oldVNode.props) {
-      // document.createTextNode("Hello").data
-      newVNode.dom.data = newVNode.props;
+<h3>JSX Basics</h3>
+<pre><code class="lang-js">// 1. JSX and virtual DOM
+const React = {
+  createElement(type, props, ...children) {
+    if (typeof type === 'function') {
+      return type(props)
     }
-
-    // Newly created node won’t have a parentNode and needs to be inserted
-    if (!newVNode.dom.parentNode) {
-      dom.insertBefore(newVNode.dom, dom.childNodes[currentChildIndex] || null);
-    }
-
-    // Diff children
-    const newChildren = newVNode.children.flat();
-    const oldChildren = oldVNode._normalizedChildren || [];
-    newVNode._normalizedChildren = newChildren.map((child, i) =&gt; {
-      const nextNewChild = typeof child === 'string' ? h('', child) : child;
-      // Find oldChild with matching key
-      const matchingOldChild = oldChildren.find(oldChild =&gt; oldChild?.key === nextNewChild.key) || {};
-      return render(nextNewChild, newVNode.dom, matchingOldChild, i);
-    });
-
-    // Remove old children if there are any
-        if (oldVNode._normalizedChildren) {
-            oldVNode._normalizedChildren.map(oldChild =&gt; {
-                oldChild &amp;&amp; oldChild.dom.remove();
-            });
-        }
-
-    Object.assign(oldVNode, newVNode);
+    const element = { type, props: { ...props, children } }
+    return element
   }
-};
+}
+
+const App = () =&gt; (
+  &lt;div className="react"&gt;
+    &lt;h1&gt;Hello&lt;/h1&gt;
+    &lt;p&gt;some text here&lt;/p&gt;
+  &lt;/div&gt;
+)
+
+&lt;App /&gt;
+
+// 2. Render to real DOM
+const render = (reactElement, container) =&gt; {
+  if (['string', 'number'].includes(typeof reactElement)) {
+    container.appendChild(document.createTextNode(String(reactElement)))
+    return
+  }
+
+  const actualElement = document.createElement(reactElement.type)
+  if (reactElement.props) {
+    Object.keys(reactElement.props)
+      .filter(p =&gt; p !== 'children')
+      .forEach(p =&gt; actualElement[p] = reactElement.props[p])
+  }
+  if (reactElement.props.children) {
+    reactElement.props.children.forEach(child =&gt; render(child, actualElement))
+  }
+  container.appendChild(actualElement)
+}
+
+render(&lt;App /&gt;, document.querySelector('#app'))
 </code></pre>
+<p>Babel compiles JSX <code>&lt;div&gt;Hi&lt;/div&gt;</code> to a function call <code>React.createElement('div', null, 'hi')</code>. If you have a comment like <code>/** @jsx cool */</code>, Babel will transpile the JSX using the function <code>cool</code> you defined instead of <code>React.createElement</code>, so you can have a function <code>const cool = (el, props, ...children) =&gt; {}</code>, which could be totally not related to React.</p>
+<blockquote><p>You might recall that you needed to <code>import React from 'react'</code> to write JSX correctly. Starting with React 17, React introduced a new JSX transform that automatically imports special functions in the React package and calls them behind the scenes.</p>
+</blockquote>
+<h3>State updates are asynchronous and batched</h3>
+<pre><code class="lang-js">const [user, setUser] = useState({})
+
+setUser(data);
+console.log(user);
+</code></pre>
+<p>The <code>console.log(user)</code> will not show the updated data immediately. <code>setUser(data)</code> schedules a state update, it does not update user instantly. React batches state updates and triggers a re-render later. Only after the re-render will user reflect the new value.</p>
+<pre><code class="lang-js">const [count, setCount] = useState(0);
+
+function handleClick() {
+  setCount(count + 1);
+  setCount(count + 1);
+  setCount(count + 1);
+}
+</code></pre>
+<p>It will only increment the count by 1, despite the three calls. React state updates are async and batched so it will re-render only once. All three <code>setCount</code> are looking at the state of count on the same loop, so all of them see that count is 0 and all of them change it to 1. You're just setting it to 1 three times. If it was <code>setCount(c =&gt; c + 1)</code> then the result is 3.</p>
+<p>When something can be calculated from the existing props or state, don’t put it in state. Instead, calculate it during rendering.</p>
 <h3>How reconciliation works</h3>
 <p>If we had two components of the same type:</p>
 <pre><code class="lang-jsx">{isEditing ? (
@@ -178,20 +163,183 @@ export const render = (
   /&gt;
 )}
 </code></pre>
-<p>React preserves the DOM element and its state because both elements are of the same type (<code>input</code>) at the same position in the element tree. React simply updates the props of the existing element rather than recreating it.</p>
-<p>Note that here React still re-renders the component, but the DOM node for the <code>&lt;input&gt;</code> is preserved (not re-created). <strong>"DOM reuse" is not equivalent to "component render skip"</strong> — you can render a component again, and still reuse DOM nodes.</p>
-<p>Read this article: <a href="https://cekrem.github.io/posts/react-reconciliation-deep-dive">https://cekrem.github.io/posts/react-reconciliation-deep-dive</a></p>
+<p>When React rerenders this conditional input component, it performs reconciliation by comparing the new virtual DOM tree with the previous one. Since both the editing and non-editing branches render an input element of the same type at the same position in the component tree, React treats them as the same element and preserves the existing DOM node rather than destroying and recreating it. During this process, React updates the element's props, but maintains the DOM element's internal state, including any text the user has typed.</p>
+<p>Note that here React still fully re-renders the component when <code>isEditing</code> changes. However, during reconciliation, React's diffing algorithm determines that the DOM node can be reused rather than recreated. This demonstrates that "DOM reuse" is not equivalent to "component render skip" - you can render a component again and still reuse DOM nodes.</p>
+<p><strong>Force remount with a <code>key</code> prop</strong>: React's reconciliation algorithm sees different keys and treats them as different elements, destroying the old DOM node and creating a fresh one. This breaks the normal DOM reuse behavior, forcing a complete remount rather than a prop update, which clears any user input since the new DOM element starts with empty state.</p>
+<h3>Understand the "children pattern"</h3>
+<p>React components re-render themselves and all their children when the state is updated. In this case, on every mouse move the state of <code>MovingComponent</code> is updated, its re-render is triggered, and as a result, <code>ChildComponent</code> will re-render as well.</p>
+<pre><code class="lang-jsx">const MovingComponent = () =&gt; {
+  const [state, setState] = useState({ x: 100, y: 100 });
+
+  return (
+    &lt;div
+      onMouseMove={(e) =&gt; setState({ x: e.clientX - 20, y: e.clientY - 20 })}
+      style={{ left: state.x, top: state.y }}
+    &gt;
+      &lt;ChildComponent /&gt;
+    &lt;/div&gt;
+  );
+};
+</code></pre>
+<p>The way to fight this, other than <code>React.memo</code>, is to extract <code>ChildComponent</code> outside and pass it as children. React "children" is just a prop. When you pass children through props, React treats them as stable references. The child components were already created when the parent's JSX was evaluated, so they don't get recreated just because the parent re-renders. React simply passes the same element references down.</p>
+<blockquote><p>The children prop acts like a "slot" that holds pre-created elements, making it one of React's most effective built-in optimization techniques.</p>
+</blockquote>
+<pre><code class="lang-jsx">// https://www.developerway.com/posts/react-elements-children-parents
+const MovingComponent = ({ children }) =&gt; {
+  const [state, setState] = useState({ x: 100, y: 100 });
+
+  return (
+    &lt;div
+      onMouseMove={(e) =&gt; setState({ x: e.clientX - 20, y: e.clientY - 20 })}
+      style={{ left: state.x, top: state.y }}
+    &gt;
+      {children}
+    &lt;/div&gt;
+  );
+};
+
+const SomeOutsideComponent = () =&gt; {
+  return (
+    &lt;MovingComponent&gt;
+      &lt;ChildComponent /&gt;
+    &lt;/MovingComponent&gt;
+  );
+};
+</code></pre>
+<p><code>React.memo</code> is a higher order component that accepts another component as a prop. It will only render the component if there is any change in the props. <em>(Hey React, I know that this component is pure. You don't need to re-render it unless its props change.)</em></p>
+<p><code>useMemo</code> is used to memoize a calculation result, which focuses on avoiding heavy calculation.</p>
+<p><code>useCallback</code> will return a memoized version of the callback that only changes if one of the inputs has changed. This is useful when passing callbacks to optimized child components that rely on reference equality to prevent unnecessary renders. Note that <code>useCallback(fn, deps)</code> is equivalent to <code>useMemo(() =&gt; fn, deps)</code>.</p>
+<p>React compares the props of a memoized component with <code>Object.is</code> to check if it can skip rendering that sub-tree.</p>
+<pre><code class="lang-js">// Without memo, it still re-renders even though props didn't change
+const Child = React.memo(({ onClick, items }) =&gt; {
+ return &lt;div onClick={onClick}&gt;{items.join(', ')}&lt;/div&gt;;
+});
+
+const App = () =&gt; {
+ const [count, setCount] = useState(0);
+ const [filter, setFilter] = useState('');
+
+ const handleClick = useCallback(() =&gt; {
+   console.log('clicked');
+ }, []);
+
+ const filteredItems = useMemo(() =&gt; {
+   return ['apple', 'banana', 'cherry'].filter(item =&gt; 
+     item.includes(filter)
+   );
+ }, [filter]);
+
+ return (
+   &lt;div&gt;
+     &lt;button onClick={() =&gt; setCount(count + 1)}&gt;Count: {count}&lt;/button&gt;
+     &lt;input onChange={(e) =&gt; setFilter(e.target.value)} /&gt;
+
+     {/* Will NOT re-render when count changes */}
+     &lt;Child onClick={handleClick} items={filteredItems} /&gt;
+   &lt;/div&gt;
+ );
+};
+</code></pre>
+<blockquote><p><code>useCallback</code> and <code>useMemo</code> for props don’t prevent re-renders by themselves. They only create stable references. <code>React.memo</code> is what actually checks those references and prevents re-renders.</p>
+<p>You should treat <code>useCallback</code> as a performance optimization only, which means your code should still work if you remove it. It might not work as efficiently as before, but it also shouldn't crash.</p>
+<p>If we don't have any dependencies, we can even just move the function outside of our component to make it stable - no <code>useCallback</code> with empty dependency array necessary.</p>
+</blockquote>
+<p>Note that in the example above, <code>ChildComponent</code> does not automatically re-render because its parent component's states change. But if the parent's parent <code>SomeOutsideComponent</code> re-renders, it creates a new React element for <code>&lt;ChildComponent /&gt;</code> (a new object). That causes <code>MovingComponent</code> to re-render, even if nothing inside changed.</p>
+<p>For example, rerendering the <code>&lt;App&gt;</code> component will break memoization. JSX is just syntactic sugar for <code>React.createElement</code>, which will create a new object on every render. So, even though the <code>&lt;p&gt;</code> tag looks like it's the same to us, it won't be the same reference.</p>
+<pre><code class="lang-js">function App() {
+  return (
+    &lt;ExpensiveTree&gt;
+      &lt;p&gt;Hello, world!&lt;/p&gt;
+    &lt;/ExpensiveTree&gt;
+  )
+}
+
+function ExpensiveComponent({ children }) {
+  return (
+    &lt;div&gt;
+      I'm expensive!
+      {children}
+    &lt;/div&gt;
+  )
+}
+const ExpensiveTree = React.memo(ExpensiveComponent)
+</code></pre>
+<p>Instead of turning the <code>ServerComponent</code> into a client component, we can pass it down as a child to a client component wrapper that handles the state and UI rendering. The server component is still responsible only for data fetching. <em>This also means that wrapping your root layout in the client component does not automatically turn your entire app into a client rendering.</em></p>
+<pre><code class="lang-js">'use client';
+
+function ClientWrapper({ children }) {
+  const [visible, setVisible] = useState(true);
+  if (!visible) return null;
+
+  return (
+    &lt;div&gt;
+      {children}
+      &lt;button onClick={() =&gt; setVisible(false)}&gt;Dismiss&lt;/button&gt;
+    &lt;/div&gt;
+  );
+}
+
+function Page() {
+  return (
+    &lt;ClientWrapper&gt;
+      {/* the ServerComponent remains a server component */}
+      &lt;ServerComponent /&gt;
+    &lt;/ClientWrapper&gt;
+  );
+}
+</code></pre>
+<p>Look at another example, the <code>ShowMore</code> component is a reusable UI component to handle the “Show More” logic, and the <code>CategoryList</code> component remains focused on data fetching. This way, server and client responsibilities stay separate and your code stays clean.</p>
+<pre><code class="lang-js">async function CategoryList() {
+  const categories = await getCategories();
+
+  return (
+    &lt;ShowMore initial={5}&gt;
+      {categories.map((category) =&gt; (
+        &lt;div key={category.id}&gt;{category.name}&lt;/div&gt;
+      ))}
+    &lt;/ShowMore&gt;
+  );
+}
+
+'use client';
+
+export default function ShowMore({ children, initial = 5 }) {
+  const [expanded, setExpanded] = useState(false);
+  const items = expanded ? children : Children.toArray(children).slice(0, initial);
+  const remaining = Children.count(children) - initial;
+
+  return (
+    &lt;div&gt;
+      &lt;div&gt;{items}&lt;/div&gt;
+      {remaining &gt; 0 &amp;&amp; (
+        &lt;div&gt;
+          &lt;button onClick={() =&gt; setExpanded(!expanded)}&gt;
+            {expanded ? 'Show Less' : `Show More (${remaining})`}
+          &lt;/button&gt;
+        &lt;/div&gt;
+      )}
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<blockquote><p>The <code>children</code> prop can be a single React element or an array of elements, so using native <code>.map()</code>, <code>.forEach()</code> directly on <code>children</code> can be risky. React provides the <code>React.Children</code> utility to handle children safely and consistently, regardless of its form. It includes:</p>
+<ul>
+<li>React.Children.map(children, fn)</li>
+<li>React.Children.forEach(children, fn)</li>
+<li>React.Children.count(children)</li>
+<li>React.Children.toArray(children)</li>
+</ul>
+</blockquote>
 <h3>What is Fiber</h3>
-<p>React Fiber was introduced in React 16, which is a reimplementation of React's core algorithm. At it's core, Fiber is a JavaScript object that represents a unit of work. It's a lightweight representation of a component tree that React can work on.</p>
-<p>React processes Fibers and when done, it commits the changes to the DOM. This happens in two phases:</p>
+<p>React Fiber was introduced in React 16 as a complete reimplementation of React's core reconciliation algorithm. At its core, Fiber is a JavaScript object that represents both a unit of work and a node in React's internal tree structure, essentially serving as the modern implementation of React's Virtual DOM.</p>
+<p>Fiber nodes are organized in a linked-list tree structure that mirrors the component hierarchy, with each Fiber having pointers to its parent, first child, and next sibling. Fiber nodes are sophisticated objects that serve as both the Virtual DOM elements and the reconciliation units, containing work scheduling information.</p>
+<p>React processes Fibers in a two-phase cycle:</p>
 <ol>
-<li><p><strong>Render phase:</strong> During this phase, React does asynchronous work behind the scenes. It processes all Fibers. Because it happens asynchronously, work can be prioritized, paused, resumed, and aborted. Internal functions like <code>beginWork()</code> and <code>completeWork()</code> are called during this process.</p>
+<li><p><strong>Render phase:</strong> React performs interruptible work, processing Fiber nodes and calculating what changes need to be made. This work can be prioritized, paused, resumed, and aborted based on scheduling needs. Internal functions like <code>beginWork()</code> and <code>completeWork()</code> are called during this process to traverse and process the Fiber tree.</p>
 </li>
-<li><p><strong>Commit phase:</strong> Once the render phase is complete, React commits the changes to the DOM by calling <code>commitWork()</code>. This is synchronous and can't be interrupted.</p>
+<li><p><strong>Commit phase:</strong> Once the render phase completes, React synchronously commits all changes to the DOM by calling <code>commitWork()</code>. This phase cannot be interrupted to ensure DOM consistency.</p>
 </li>
 </ol>
-<p>Fiber nodes are organized in a tree structure that mirrors the component tree. Each Fiber has a reference to its parent, child, and sibling Fibers. This allows React to traverse the tree efficiently and perform updates.</p>
-<p>When React starts rendering, it creates a work-in-progress tree that mirrors the current tree. As React processes the work, it updates the work-in-progress tree. Once the work is complete, React swaps the current tree with the work-in-progress tree.</p>
 <pre><code class="lang-js">// React's Commit Phase
 // This runs on the main thread
 function commitToDOM() {
@@ -210,21 +358,22 @@ function commitToDOM() {
  // the code in here gets added to the call stack too
  runLayoutEffects()
 
- // Queue useEffect for later
+ // Let browser paint (happens automatically after call stack clears)
+
+ // Queue useEffect for later (after paint)
  queueMicrotask(() =&gt; {
    runEffects()
  })
 }
 </code></pre>
 <h3>You Might Not Need an Effect</h3>
-<blockquote><p>Whenever you think of writing <code>useEffect</code>, the only sane thing is to NOT do it. Instead, go to the react docs and re-read the page about why you don't need an effect. You really don't. -@TkDodo</p>
-</blockquote>
-<p>When developing an application in React 18+, you may encounter an issue where the <code>useEffect</code> hook is being run twice on mount. This occurs because since React 18, when you are in development, your application is being run in StrictMode by default. In Strict Mode, React will try to simulate the behavior of mounting, unmounting, and remounting a component to help developers uncover bugs during testing. <em>From the user’s perspective, visiting a page shouldn’t be different from visiting it, clicking a link, and then pressing Back. React verifies that your components don’t break this principle by remounting them once in development.</em> In most cases, it should be fine to leave your code as-is, since the <code>useEffect</code> will only run once in production.</p>
+<p>Whenever you think of writing <code>useEffect</code>, the only sane thing is to NOT do it. Instead, go to the react docs and re-read the page about why you don't need an effect. You really don't. -@TkDodo</p>
 <ul>
+<li>Goodbye, useEffect: <a href="https://www.youtube.com/watch?v=bGzanfKVFeU">https://www.youtube.com/watch?v=bGzanfKVFeU</a></li>
 <li><a href="https://react.dev/learn/you-might-not-need-an-effect">https://react.dev/learn/you-might-not-need-an-effect</a></li>
 <li><a href="https://eslint-react.xyz/docs/rules/hooks-extra-no-direct-set-state-in-use-effect">https://eslint-react.xyz/docs/rules/hooks-extra-no-direct-set-state-in-use-effect</a></li>
-<li><a href="https://www.youtube.com/watch?v=bGzanfKVFeU">https://www.youtube.com/watch?v=bGzanfKVFeU</a></li>
 </ul>
+<p>When developing an application in React 18+, you may encounter an issue where the <code>useEffect</code> hook is being run twice on mount. This occurs because since React 18, when you are in development, your application is being run in StrictMode by default. In Strict Mode, React will try to simulate the behavior of mounting, unmounting, and remounting a component to help developers uncover bugs during testing. <em>From the user’s perspective, visiting a page shouldn’t be different from visiting it, clicking a link, and then pressing Back. React verifies that your components don’t break this principle by remounting them once in development.</em> In most cases, it should be fine to leave your code as-is, since the <code>useEffect</code> will only run once in production.</p>
 <h3>Referencing values with <code>ref</code>s</h3>
 <p>When you want a component to “remember” some information, but you don’t want that information to trigger new renders, you can use a <code>ref</code>. Typically, you will use a ref when your component needs to “step outside” React and communicate with external APIs. (e.g. storing timeout IDs, DOM elements)</p>
 <ul>
@@ -261,15 +410,34 @@ function Counter() {
   );
 }
 </code></pre>
-<p>The key to understanding this hook is realizing there's a timing difference. When your component renders, the hook returns the current value of <code>ref.current</code>. After rendering, the effect runs and updates <code>ref.current</code> to the new value. On the next render, <code>ref.current</code> contains what was the value in the previous render.</p>
+<p>The key to understanding this hook is realizing there's a timing difference. When your component renders, the hook returns the current value of <code>ref.current</code>. After rendering, the effect runs and updates <code>ref.current</code> to the new value. On the next render, <code>ref.current</code> contains what was the value in the previous render. Note that <code>useRef()</code> doesn't create a new ref object on every render. <strong>React's hook system ensures that the same ref object persists across re-renders.</strong></p>
 <h4><code>ref</code> callback function</h4>
-<p>Instead of a ref object, you may pass a function to the ref attribute. When the <code>&lt;div&gt;</code> DOM node is added to the screen, React will call your <code>ref</code> callback with the DOM node as the argument. When that <code>&lt;div&gt;</code> DOM node is removed, React will call your <code>ref</code> callback with null. React will also call your <code>ref</code> callback whenever you pass a different <code>ref</code> callback.</p>
+<pre><code class="lang-js">React.useEffect(() =&gt; {
+  // ref.current is always null when this runs
+  ref.current?.focus()
+}, [])
+
+
+{show &amp;&amp; &lt;input ref={ref} /&gt;}
+</code></pre>
+<p>The input is not rendered at first, ref is still null, then effect runs, does nothing. When input is shown, ref will be filled, but will not be focussed because effect won't run again.</p>
+<p>This is where callback refs come into play. Instead of a ref object, you may <strong>pass a function to the <code>ref</code> attribute</strong>. When the <code>&lt;div&gt;</code> DOM node is added to the screen, React will call your <code>ref</code> callback with the DOM node as the argument. When that <code>&lt;div&gt;</code> DOM node is removed, React will call your <code>ref</code> callback with null. React will also call your <code>ref</code> callback whenever you pass a different <code>ref</code> callback.</p>
 <ul>
-<li>Called immediately when the element is attached to the DOM. </li>
-<li>It runs before <code>useLayoutEffect</code>.</li>
+<li>Called immediately when the element is attached to the DOM.</li>
+<li>Called with <code>null</code> when the element is removed.</li>
+<li>Runs before <code>useEffect</code>, but after <code>useLayoutEffect</code>.</li>
 <li>It's best for immediate DOM measurements or setup.</li>
 </ul>
-<pre><code class="lang-tsx">const scroller = (node: HTMLDivElement | null) =&gt; {
+<p>Passing a ref from <code>useRef</code> (a RefObject) to a React element is therefore just syntactic sugar for:</p>
+<pre><code class="lang-js">&lt;input
+  ref={(node) =&gt; {
+    ref.current = node;
+  }}
+/&gt;
+</code></pre>
+<pre><code class="lang-tsx">// move the function out of the component
+// never re-create the function during a re-render 
+const scroller = (node: HTMLDivElement | null) =&gt; {
   node?.scrollIntoView({ behavior: "smooth" });
 };
 
@@ -284,7 +452,7 @@ const ChatWindow = () =&gt; {
   );
 };
 </code></pre>
-<p>So if you need to interact with DOM nodes directly after they rendered, try not to jump to <code>useRef</code> + <code>useEffect</code> directly, but consider using <a href="https://tkdodo.eu/blog/ref-callbacks-react-19-and-the-compiler">callback refs</a> instead.</p>
+<p>So if you need to interact with DOM nodes directly after they rendered, try not to jump to <code>useRef</code> + <code>useEffect</code> directly, but consider using callback refs instead.</p>
 <h4><code>ref</code> as a prop in React 19</h4>
 <p>In React 19, <code>forwardRef</code> is no longer necessary. Pass <code>ref</code> as a prop instead.</p>
 <pre><code class="lang-jsx">export default function SearchInput({ inputRef }) {
@@ -300,26 +468,6 @@ export default function App() {
     &lt;/&gt;
   );
 }
-</code></pre>
-<h3>batching and flushSync in rendering</h3>
-<p>In early versions (React 17 and earlier), React updated the DOM immediately after each state change. Multiple state updates within a single event cycle would cause multiple, unnecessary re-renders, affecting the application's responsiveness.</p>
-<pre><code class="lang-js">// React 17
-const handleUpdate = () =&gt; {
-  setCount(count + 1); // First update
-  setFlag(!flag);      // Second update
-  // In pre-batching React, this would cause two separate re-renders
-};
-</code></pre>
-<p>React 18 introduced batching to prevent these issues. Batching means that React groups multiple state updates into a single re-render cycle. This approach ensures that the UI is updated efficiently, reflecting all state changes in one go.</p>
-<p><code>flushSync</code> allows you to opt-out of batching for specific updates, forcing them to be processed immediately. This ensures that critical updates are executed in the correct order, even within a batched state update cycle. <em>(But, use it carefully and not too much, because using it too often can cancel out the performance advantages of batching.)</em></p>
-<pre><code class="lang-js">import { flushSync } from "react-dom";
-
-const handleClick = () =&gt; {
-  flushSync(() =&gt; {
-    setCount(count + 1); // Triggers an immediate re-render
-  });
-  setFlag(!flag); // Queued state update
-};
 </code></pre>
 <h3>Higher Order Components</h3>
 <p>HOCs are wrapper components that help provide additional functionality to existing components. While hooks probably replaced most of shared logic concerns, there are still use cases where higher-order components could be useful. For example, you want to fire analytics event on every click of every button, dropdown and link everywhere.</p>
@@ -339,24 +487,3 @@ const handleClick = () =&gt; {
   };
 };
 </code></pre>
-<h3>What's new in React 17+</h3>
-<p>React 17:</p>
-<ul>
-<li><a href="https://legacy.reactjs.org/blog/2020/10/20/react-v17.html">https://legacy.reactjs.org/blog/2020/10/20/react-v17.html</a></li>
-<li><a href="https://legacy.reactjs.org/blog/2020/09/22/introducing-the-new-jsx-transform.html">https://legacy.reactjs.org/blog/2020/09/22/introducing-the-new-jsx-transform.html</a></li>
-</ul>
-<p>React 18:</p>
-<ul>
-<li><a href="https://react.dev/blog/2022/03/29/react-v18">https://react.dev/blog/2022/03/29/react-v18</a></li>
-<li><a href="https://www.youtube.com/watch?v=Z-NCLePa2x8">https://www.youtube.com/watch?v=Z-NCLePa2x8</a></li>
-<li><a href="https://www.youtube.com/watch?v=ytudH8je5ko">https://www.youtube.com/watch?v=ytudH8je5ko</a></li>
-<li><a href="https://tigerabrodi.blog/reacts-evolution-from-hooks-to-concurrent-react">https://tigerabrodi.blog/reacts-evolution-from-hooks-to-concurrent-react</a></li>
-</ul>
-<p>React 19:</p>
-<ul>
-<li><a href="https://react.dev/blog/2024/12/05/react-19">https://react.dev/blog/2024/12/05/react-19</a></li>
-<li><a href="https://www.epicreact.dev/react-19-cheatsheet">https://www.epicreact.dev/react-19-cheatsheet</a></li>
-<li><a href="https://shrutikapoor.dev/posts/React-React19">https://shrutikapoor.dev/posts/React-React19</a></li>
-<li><a href="https://www.youtube.com/watch?v=AJOGzVygGcY">https://www.youtube.com/watch?v=AJOGzVygGcY</a></li>
-<li><a href="https://www.youtube.com/watch?v=O3ZtlTwDnbk">https://www.youtube.com/watch?v=O3ZtlTwDnbk</a></li>
-</ul>

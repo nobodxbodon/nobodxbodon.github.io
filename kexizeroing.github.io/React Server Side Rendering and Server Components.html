@@ -1,7 +1,7 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/react-server-side-rendering.md">仓库源文</a>，<a href="https://kexizeroing.github.io/react-server-side-rendering">站点原文</a></h2>
 <h2>Adding Server-Side Rendering</h2>
 <p>SSR focuses on initial page load, sending pre-rendered HTML to the client that must then be hydrated with downloaded JavaScript before it behaves as a typical React app. SSR also only happens one time: when directly navigating to a page.</p>
-<p>Let’s create a simple React component App. We will render this component on the server-side and hydrate it on the client-side. <em>(The HTML React creates on the server must perfectly match what React tries to create in the browser.)</em></p>
+<p>Let’s create a simple React component App. We will render this component on the server-side and hydrate it on the client-side.</p>
 <pre><code class="lang-js">// client/components/App/index.js
 
 import React from 'react'
@@ -68,20 +68,17 @@ import App from './components/App';
 ReactDOM.hydrate(&lt;App /&gt;, document.getElementById('ssr-app'));
 </code></pre>
 <p>It's extremely important that SSR React output (HTML) and CSR React output (HTML) are matching, otherwise React will not be able to render and attach event listeners properly. If you follow semantic HTML principles, most of your app should work even before React has hydrated. Links can be followed, forms can be submitted, accordions can be expanded and collapsed (using <code>&lt;details&gt;</code> and <code>&lt;summary&gt;</code>). For most projects, it's fine if it takes a few seconds for React to hydrate.</p>
-<blockquote><p>For Vue server-side rendering, check out <a href="https://vuejs.org/guide/scaling-up/ssr.html">https://vuejs.org/guide/scaling-up/ssr.html</a></p>
-<p>Vite provides built-in support for Vue <a href="https://vite.dev/guide/ssr.html">server-side rendering</a>, but it is intentionally low-level <em>(for library and framework authors)</em>. If you wish to go directly with Vite, check out <a href="https://vite-plugin-ssr.com">vite-plugin-ssr</a>, a community plugin that abstracts away many challenging details for you.</p>
-</blockquote>
 <h3>Where to deploy</h3>
 <p>Hosting static resources is extremely cheap. But now, I need to have a server. There are two most common solutions here.</p>
 <ul>
 <li>We can use the serverless functions of the hosting provider that serve the static resources: Cloudflare Workers, Netlify Functions, Vercel Functions, Amazon Lambdas.</li>
 <li>Another option is to keep it as an actual tiny Node server and deploy it to any cloud platform, from AWS to Azure to Digital Ocean.</li>
 </ul>
-<p>If it’s deployed as one of the Serverless Functions, then there is a chance that it's not that bad. Some of the providers can run those functions “on Edge.” I.e., those functions are distributed to different servers that are closer to the end user. In this case, the latency will be minimal, and the performance degradation will be minimal.</p>
-<p>If, however, I went with the self-managed server, I don’t have the advantages of a distributed network. I’d have to deploy it to one particular region. So, users on the opposite side of the planet from this region have a chance to really feel the impact of the performance degradation.</p>
+<p>If it’s deployed as one of the Serverless Functions, the providers can run those functions “on Edge.” I.e., those functions are distributed to different servers that are closer to the end user. In this case, the latency will be minimal, and the performance degradation will be minimal.</p>
+<blockquote><p>Deploy Next.js: <a href="https://nextjs.org/docs/app/getting-started/deploying">https://nextjs.org/docs/app/getting-started/deploying</a></p>
+</blockquote>
 <h3>React hydration error</h3>
-<p>While rendering your application, there was a difference between the React tree that was pre-rendered from the server and the React tree that was rendered during the first render in the browser (hydration).</p>
-<p>When the React app runs on the client for the first time, it builds up a mental picture of what the DOM should look like, by mounting all of your components. Then it squints at the DOM nodes already on the page, and tries to fit the two together. We're rendering one thing on the server, but then telling React to expect something else on the client.</p>
+<p>When the React app runs on the client for the first time, it builds up a mental picture of what the DOM should look like, by mounting all of your components. Then it squints at the DOM nodes already on the page, and tries to fit the two together. Hydration errors affect every server-rendered React app. <em>Dates are often the culprit for hydration mismatches.</em></p>
 <p>To avoid issues, we need to ensure that the hydrated app matches the original HTML. When the React app adopts the DOM during hydration, <code>useEffect</code> hasn't been called yet, and so we're meeting React's expectation. Immediately after this comparison, we trigger a re-render, and this allows React to do a proper reconciliation. It'll notice that there's some new content to render here.</p>
 <pre><code class="lang-tsx">'use client';
 
@@ -120,88 +117,6 @@ export default ClientOnly;
 <p>Fix Next.js error: Event handlers cannot be passed to client component:<br/>
 You use <code>&lt;Card onClick={() =&gt; console.log(1)} /&gt;</code> to pass a function from the server to the client. The issue here is the function is not serializable. The workaround is to make both of them client components.</p>
 </blockquote>
-<p><code>useSyncExternalStore</code> can be more appropriate if your data exists outside the React tree. It takes in three parameters: <code>useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot?)</code>, and returns the current snapshot of the external data you’re subscribed to. Any changes in the external store will be immediately reflected, and React will re-render the UI based on snapshot changes.</p>
-<ul>
-<li><code>subscribe</code> is a callback that takes in a function that subscribes to the external store data.</li>
-<li><code>getSnapshot</code> is a function that returns the current snapshot of external store data.</li>
-<li><code>getServerSnapshot</code> is an optional parameter that sends you a snapshot of the initial store data. You can use it on the server when generating the HTML or during the initial hydration of the server data.</li>
-</ul>
-<p>Note that on the server, React will only call <code>getServerSnapshot()</code>. On the client during hydration, it will initially call <code>getServerSnapshot()</code>, too — before calling <code>getSnapshot()</code>. This ensures that both environments start with the exact same value.</p>
-<pre><code class="lang-js">// This is your external "store"
-let lastUpdated = new Date()
-
-// A no-op subscription function — tells React we won't update
-const emptySubscribe = () =&gt; () =&gt; {}
-
-function LastUpdated() {
-  const date = React.useSyncExternalStore(
-    emptySubscribe,
-    () =&gt; lastUpdated.toLocaleDateString(),
-    () =&gt; null // safe for server-side render
-  )
-
-  return date ? &lt;span&gt;Last updated at: {date}&lt;/span&gt; : null
-}
-</code></pre>
-<h3>Understand the "children pattern"</h3>
-<p>React components re-render themselves and all their children when the state is updated. In this case, on every mouse move the state of <code>MovingComponent</code> is updated, its re-render is triggered, and as a result, <code>ChildComponent</code> will re-render as well.</p>
-<pre><code class="lang-jsx">const MovingComponent = () =&gt; {
-  const [state, setState] = useState({ x: 100, y: 100 });
-
-  return (
-    &lt;div
-      onMouseMove={(e) =&gt; setState({ x: e.clientX - 20, y: e.clientY - 20 })}
-      style={{ left: state.x, top: state.y }}
-    &gt;
-      &lt;ChildComponent /&gt;
-    &lt;/div&gt;
-  );
-};
-</code></pre>
-<p>The way to fight this, other than <code>React.memo</code>, is to extract <code>ChildComponent</code> outside and pass it as children. React "children" is just a prop. When children are passed through props, React doesn't recreate them on each render. The child component's element is created when the JSX is evaluated. Once created, it's just passed down as a prop reference that stays stable across re-renders.</p>
-<pre><code class="lang-jsx">// https://www.developerway.com/posts/react-elements-children-parents
-const MovingComponent = ({ children }) =&gt; {
-  const [state, setState] = useState({ x: 100, y: 100 });
-
-  return (
-    &lt;div
-      onMouseMove={(e) =&gt; setState({ x: e.clientX - 20, y: e.clientY - 20 })}
-      style={{ left: state.x, top: state.y }}&gt;
-      // children now will not be re-rendered!
-      {children}
-    &lt;/div&gt;
-  );
-};
-
-const SomeOutsideComponent = () =&gt; {
-  return (
-    &lt;MovingComponent&gt;
-      &lt;ChildComponent /&gt;
-    &lt;/MovingComponent&gt;
-  );
-};
-</code></pre>
-<p><code>React.memo</code> is a higher order component that accepts another component as a prop. It will only render the component if there is any change in the props. <em>(Hey React, I know that this component is pure. You don't need to re-render it unless its props change.)</em></p>
-<p><code>useMemo</code> is used to memoize a calculation result, which focuses on avoiding heavy calculation.</p>
-<p><code>useCallback</code> will return a memoized version of the callback that only changes if one of the inputs has changed. This is useful when passing callbacks to optimized child components that rely on reference equality to prevent unnecessary renders. Note that <code>useCallback(fn, deps)</code> is equivalent to <code>useMemo(() =&gt; fn, deps)</code>.</p>
-<pre><code class="lang-js">const PageMemoized = React.memo(Page);
-
-const App = () =&gt; {
-  const [state, setState] = useState(1);
-  const onClick = useCallback(() =&gt; {
-    console.log('Do something on click');
-  }, []);
-
-  return (
-    // will NOT re-render because onClick is memoized
-    &lt;PageMemoized onClick={onClick} /&gt;
-    // WILL re-render because value is not memoized
-    &lt;PageMemoized onClick={onClick} value={[1, 2, 3]} /&gt;
-  );
-};
-</code></pre>
-<blockquote><p><code>useCallback</code> and <code>useMemo</code> for props don’t prevent re-renders by themselves. You can probably remove 90% of all <code>useMemo</code> and <code>useCallback</code> in your app right now, and the app will be fine and might even become slightly faster.</p>
-</blockquote>
 <h2>Add File-System Based Routing and Data Fetching into the server</h2>
 <p>Learn from <a href="https://www.youtube.com/watch?v=3RzhNYhjVAw&amp;t=460s">https://www.youtube.com/watch?v=3RzhNYhjVAw&amp;t=460s</a></p>
 <ol>
@@ -222,9 +137,11 @@ const app = express();
 app.use(express.static("./dist"));
 
 const pages = readdirSync(join(process.cwd(), "pages")).map(
+  // remove '.tsx' extension
   file =&gt; file.split(".")[0]
 );
 
+// app.get("/:page", async (req, res) =&gt; {
 pages.forEach((page) =&gt; {
   app.get(`/${page}`, async (req, res) =&gt; {
     const mod = await import(`./pages/${page}`);
@@ -251,8 +168,12 @@ pages.forEach((page) =&gt; {
     `)
 
     // replace `res.send` with `renderToPipeableStream` to use React concurrent features
-    // const { pipe } = renderToPipeableStream(&lt;Component {...props} /&gt;, { ... })
-    // pipe(res)
+    // (this change only in framework code)
+    // 
+    // const { pipe } = renderToPipeableStream(&lt;Component {...props} /&gt;, {
+    //   bootstrapScripts: ["/client.js"]
+    // });
+    // pipe(res);
   });
 });
 
@@ -261,34 +182,13 @@ app.listen(3000, () =&gt; {
 });
 </code></pre>
 <h2>Write React Server Components from Scratch</h2>
-<p>Server Components are a new type of Component that renders ahead of time, before bundling, in an environment separate from your client app or SSR server.</p>
 <p>Before React Server Components, all React components are “client” components — they are all run in the browser. RSC makes it possible for some components to be rendered by the server, and some components to be rendered by the browser. Server Components are not a replacement for SSR. They render exclusively on the server. Their code isn't included in the JS bundle, and so they never hydrate or re-render. With only SSR, we haven't been able to do server-exclusive work within our components (e.g. access database), because that same code would re-run in the browser.</p>
 <ul>
 <li>Server Component: Fetch data; Access backend resources directly; Keep large dependencies on the server.</li>
 <li>Client Component: Add interactivity and event listeners (<code>onClick()</code>); Use State and Lifecycle Effects (<code>useState()</code>, <code>useEffect()</code>); Use browser-only APIs.</li>
 </ul>
 <p>A common misconception here is that components with <code>"use client"</code> only run in browser. Client components still get pre-rendered to the initial HTML on the server (SSR). The <code>"use client"</code> doesn't mean the component is "client only", it means that we send the code for this component to the client and hydrate it.</p>
-<p>Also note that wrapping your root layout in the client component does not automatically turn your entire app into a client rendering. The children can stay server components. (It's about the structure of the import, not the rendering.) So if you want to have server components inside a client component, you need to use the children pattern to pass them down.</p>
-<pre><code class="lang-jsx">// layout.tsx
-return (
-  &lt;body&gt;
-    &lt;ThemeContextProvider&gt;{children}&lt;/ThemeContextProvider&gt;
-  &lt;/body&gt;
-)
-
-// ThemeContext.tsx
-"use client";
-
-export default function ThemeContextProvider(
-  { children }: { children: React.ReactNode }
-) {
-  return &lt;div&gt;{children}&lt;/div&gt;;
-}
-</code></pre>
-<blockquote><p>What is RSC wire format?<br/>
-The server sends a serialized tree (similar to JSON but with “holes”) to the browser, and the browser can do the work of deserializing it, filling the client placeholders with the actual client components, and rendering the end result. <strong>RSCs don’t output HTML.</strong></p>
-<p>Essentially, we're telling React “Hey, I know you're missing the server component code, but don't worry: here's what it rendered”. We send along the rendered value, the virtual representation that was generated by the server. When React loads on the client, it re-uses that description instead of re-generating it.</p>
-<p>How is the Next.js App Router related to Server Components?<br/>
+<blockquote><p>How is the Next.js App Router related to Server Components?<br/>
 If a page uses server-side rendering, the page HTML is generated on each request. Next.js used to allow us to do so by using <code>getServerSideProps</code>, which will be called by the server on every request.</p>
 <p>Next.js 13.4 introduced the App Router with new features, conventions, and support for React Server Components. Components in the app directory are React Server Components by default. <code>"use client"</code> directive used to mark components as Client Components. Server and Client Components can be interleaved in the same component tree, with React handling the merging of both environments.</p>
 <p>Currently in Next.js, a route is either fully static or fully dynamic. If you have just one dynamic part, the whole page becomes dynamic. This means slower page loads even when most content could be static. Partial prerendering (<a href="https://partialprerendering.com">https://partialprerendering.com</a>) lets you mix static and dynamic parts in the same route. At build time, Next.js creates static HTML for as much as it can, and dynamic parts get wrapped in React Suspense boundaries. The static parts show up instantly while dynamic parts load.</p>
@@ -329,7 +229,8 @@ const List = async () =&gt; {
 
 export default List;
 </code></pre>
-<p>Besides a <code>&lt;script&gt;</code> tag that loads up the JS bundle (client components used in our application), we also tells React “Hey, I know you're missing the server components code, but don't worry: here's what it rendered”.</p>
+<p>What is RSC wire format? The server sends a serialized tree (similar to JSON but with “holes”) to the browser, and the browser can do the work of deserializing it, filling the client placeholders with the actual client components, and rendering the end result. <strong>RSCs don’t output HTML.</strong></p>
+<p>Essentially, we're telling React “Hey, I know you're missing the server component code, but don't worry: here's what it rendered”. We send along the rendered value, the virtual representation that was generated by the server. When React loads on the client, it re-uses that description instead of re-generating it.</p>
 <pre><code class="lang-jsx">app.get("/:path", async (req, res) =&gt; {
   const page = await import(
     join(process.cwd(), "dist", "pages", req.params.path)
@@ -377,36 +278,35 @@ const escapeJsx = (key, value) =&gt; {
   }
 }
 </code></pre>
-<p>Note that if we directly send <code>renderToString(&lt;Component&gt;)</code> to the client, React will complain <em>"Error: Objects are not valid as a React child (found: [object Promise])"</em>. The code doesn't support RSC yet. We need transform JSX into an object that client React can recognize, which the function <code>createReactTree</code> does.</p>
+<p>Note that if we directly send <code>renderToString(&lt;Component&gt;)</code> to the client, React will complain <em>"Error: Objects are not valid as a React child (found: [object Promise])"</em>. Before <code>renderToString</code>, we need to go through the React tree, find async components, wait for their data, unwrap them, and then turn them into a string. This is what the function <code>createReactTree</code> does.</p>
 <pre><code class="lang-js">async function createReactTree(jsx) {
-  if (
-    typeof jsx === "string" ||
-    typeof jsx === "number" ||
-    typeof jsx === "boolean" ||
-    jsx == null
-  ) {
+  if (['string', 'number', 'boolean'].includes(typeof jsx)) {
     return jsx;
-  } else if (Array.isArray(jsx)) {
-    return Promise.all(jsx.map((child) =&gt; renderJSXToClientJSX(child)));
-  } else if (jsx != null &amp;&amp; typeof jsx === "object") {
+  } 
+  if (Array.isArray(jsx)) {
+    return await Promise.all(jsx.map(createReactTree));
+  }
+  if (typeof jsx === "object") {
     if (jsx.$$typeof === Symbol.for("react.element")) {
       if (typeof jsx.type === "string") {
         return {
           ...jsx,
-          props: await renderJSXToClientJSX(jsx.props),
+          props: await createReactTree(jsx.props),
         };
-      } else if (typeof jsx.type === "function") {
+      }
+      if (typeof jsx.type === "function") {
         const Component = jsx.type;
         const props = jsx.props;
-        const returnedJsx = await Component(props);
-        return renderJSXToClientJSX(returnedJsx);
-      } else throw new Error("Not implemented.");
+        const rendered = await Component(props);
+        return createReactTree(rendered);
+      }
     } else {
+      // just an object and that is props (unwrap and wait for them)
       return Object.fromEntries(
         await Promise.all(
           Object.entries(jsx).map(async ([propName, value]) =&gt; [
             propName,
-            await renderJSXToClientJSX(value),
+            await createReactTree(value),
           ])
         )
       );
@@ -414,8 +314,7 @@ const escapeJsx = (key, value) =&gt; {
   } else throw new Error("Not implemented");
 }
 </code></pre>
-<blockquote><p>The goal on the client is to reconstruct the React element tree. It is much easier to accomplish this from this format than from html, where we’d have to parse the HTML to create the React elements. Note that the reconstruction of the React element tree is important, as this allows us to merge subsequent changes to the React tree with minimal commits to the DOM.</p>
-</blockquote>
+<p>The client receives this pre-resolved JSX along with the server-rendered HTML markup. During hydration, the client reconstructs the React element tree from the serialized JSX data, allowing React to take control of the DOM and handle subsequent user interactions and state changes efficiently.</p>
 <pre><code class="lang-js">// We need to hydrate the root with the initial client JSX on the client.
 const root = hydrateRoot(document, getInitialClientJSX());
 
@@ -435,33 +334,64 @@ function reviveJSX(key, value) {
     return value;
   }
 }
+
+const navigate = (to: string) =&gt; {
+  // server sends jsx tree to the client and client render it,
+  // leading to smooth navigation
+  // {
+  //   $$typeof: "$",
+  //   props: { children: [{ $$typeof: "$", type: "body" ... },
+  //   type: "html"
+  // }
+  fetch(`${to}&amp;jsx`)
+    .then((r) =&gt; r.text())
+    .then((data) =&gt; {
+      root.render(JSON.parse(data, revive));
+    });
+};
+
+window.addEventListener("click", (e: any) =&gt; {
+  if (e.target.tagName !== "A") return;
+
+  e.preventDefault();
+  window.history.pushState(null, '', e.target.href);
+  navigate(e.target.href);
+});
 </code></pre>
 <p>Must-read articles on React Server Components:</p>
 <ul>
 <li><a href="https://www.joshwcomeau.com/react/server-components">https://www.joshwcomeau.com/react/server-components</a></li>
 <li><a href="https://github.com/reactwg/server-components/discussions/5">https://github.com/reactwg/server-components/discussions/5</a></li>
-<li><a href="https://vercel.com/blog/understanding-react-server-components">https://vercel.com/blog/understanding-react-server-components</a></li>
-<li><a href="https://www.youtube.com/watch?v=CvAySC5ex9c">https://www.youtube.com/watch?v=CvAySC5ex9c</a></li>
+<li><a href="https://devongovett.me/blog/parcel-rsc.html">https://devongovett.me/blog/parcel-rsc.html</a></li>
 </ul>
-<h2>React Server Actions</h2>
-<p>React Server Actions allow you to run asynchronous code directly on the server. They eliminate the need to create API endpoints to mutate your data. Instead, you write asynchronous functions that execute on the server and can be invoked from your Client or Server Components. <em>(Server actions let us put our API endpoint back into the component boundary in the same way that server components let us move <code>getServerSideProps</code> into the component boundary.)</em></p>
-<p>An advantage of invoking a Server Action within a Server Component is progressive enhancement - forms work even if JavaScript is disabled on the client.</p>
-<pre><code class="lang-js">// Server Component
-export default function Page() {
-  async function create(formData: FormData) {
-    'use server';
+<h3>Why Does RSC Integrate with a Bundler</h3>
+<p>Consider this <code>&lt;Counter&gt;</code> tag. How do you serialize it?</p>
+<pre><code class="lang-jsx">import { Counter } from './client';
 
-    // Logic to mutate data...
-  }
+&lt;Counter initialCount={10} /&gt;
 
-  return &lt;form action={create}&gt;...&lt;/form&gt;;
+// client component
+'use client';
+import { useState, useEffect } from 'react';
+
+export function Counter({ initialCount }) {
+  const [count, setCount] = useState(initialCount);
+  // ...
 }
 </code></pre>
-<p>Behind the scenes, Server Actions create a POST API endpoint. This is why you don't need to create API endpoints manually when using Server Actions. Server actions are different from regular server-side code. They are specifically designed to be invoked from the client-side, usually through form submissions or other user interactions. If you need to "expose" server functions to the client, you can use <code>"use server"</code>.</p>
+<p>It’s reasonable to assume its code is being served by our app as a static JS asset—which we can refer to in the JSON. It’s almost like a <code>&lt;script&gt;</code> tag:</p>
+<pre><code class="lang-js">{
+  type: '/src/client.js#Counter', // "Load src/client.js and grab Counter"
+  props: {
+    initialCount: 10
+  }
+}
+</code></pre>
+<p>On the client, you could load it by generating a <code>&lt;script&gt;</code> tag. However, loading imports one by one from their source files over the network is inefficient. You don’t want to create a waterfall. We already know how to fix this from two decades of working on client-side applications: bundling.</p>
+<p>For this reason, RSC integrates with bundlers.</p>
 <ul>
-<li>Next.js creates a unique identifier for each server action. This identifier links the client-side request to the correct server-side function.</li>
-<li>Next.js automatically generates an API endpoint for each server action. These endpoints are created during the compilation process and are not visible in your codebase. The generated endpoints handle the incoming requests from the client and route them to the corresponding server action. The request includes a special header called "Next-Action" which contains the unique identifier of the server action.</li>
-<li>Server Actions integrate with Next.js' caching and revalidation architecture. <code>revalidatePath</code> accepts a relative URL string where it will clear the cache and revalidate the data for that path after a server action.</li>
+<li>First, during the build, their job is to find the files with <code>'use client'</code> and to actually create the bundle chunks for those entry points.</li>
+<li>Then, on the server, these bindings teach React how to send modules to the client. For example, a bundler might refer to a module like <code>'chunk123.js#Counter'</code>.</li>
+<li>On the client, they teach React how to ask the bundler runtime to load those modules.</li>
 </ul>
-<blockquote><p><em>Server Actions have officially been renamed to Server Functions.</em> Until September 2024, we referred to all Server Functions as “Server Actions”. If a Server Function is passed to an action prop or called from inside an action then it is a Server Action, but not all Server Functions are Server Actions. The naming in this documentation has been updated to reflect that Server Functions can be used for multiple purposes.</p>
-</blockquote>
+<p>Thanks to these three things, React Server will know how to serialize a module when it encounters one—and the React Client will know how to deserialize it. The API to serialize a tree with the React Server is exposed via bundler bindings.</p>

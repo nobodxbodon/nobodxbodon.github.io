@@ -13,7 +13,7 @@
 </ul>
 <h2>版本信息</h2>
 <ul>
-<li>成都理工大学超算平台 Red Hat 4.8.5-36</li>
+<li>Red Hat 4.8.5-36</li>
 <li>conda 4.10.3</li>
 <li>测序数据来自 <a href="https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&amp;acc=SRR25909836&amp;display=metadata">NCBI ACC=SRR25909836</a></li>
 <li>参考基因组和注释文件来自 <a href="http://plants.ensembl.org/index.html">Ensembl Plants</a></li>
@@ -40,7 +40,7 @@
 <p>只需要使用 conda 就可以安装所有需要的软件，主要使用的软件有以下一些：</p>
 <ul>
 <li><strong>sra-tools</strong>：快速下载 NCBI SRA 数据。</li>
-<li><strong>fastQc</strong>：测序数据质量检测与控制。</li>
+<li><strong>fastqc</strong>：测序数据质量检测与控制。</li>
 <li><strong>multiqc</strong>：合并质量检测报告。</li>
 <li><strong>trimmomatic</strong>：过滤低质量序列。</li>
 <li><strong>hisat2</strong>：转录组数据的比对。</li>
@@ -48,20 +48,19 @@
 <li><strong>featureCounts</strong>：对基因的信息进行计数统计。</li>
 </ul>
 <p>先创建 conda 虚拟环境，安装所需要的软件。</p>
-<pre><code>
-创建完成后激活环境即可使用：
-
-```bash
-conda activate rna-seq
+<pre><code class="lang-bash">conda create -n rna-seq
+</code></pre>
+<p>创建完成后激活环境即可使用：</p>
+<pre><code class="lang-bash">conda activate rna-seq
 </code></pre>
 <p>如果想自己安装也可以，用下列命令：</p>
-<pre><code class="lang-bash">conda install bioconda::sra-tools
-conda install bioconda::fastqc
-conda install bioconda::trimmomatic
-conda install bioconda::samtools
-conda install bioconda::hisat2
-conda install bioconda::subread
-conda install bioconda::multiqc
+<pre><code class="lang-bash">conda install -c bioconda sra-tools
+conda install -c bioconda fastqc
+conda install -c bioconda trimmomatic
+conda install -c bioconda samtools
+conda install -c bioconda hisat2
+conda install -c bioconda subread
+conda install -c bioconda multiqc
 </code></pre>
 <h2>数据获取与预处理</h2>
 <h3>测序数据下载</h3>
@@ -86,31 +85,35 @@ SRR5830634
 <pre><code class="lang-bash">prefetch --option-file SRR_Acc_List.txt
 </code></pre>
 <p>由于数据比较大，可以使用 nohup 命令挂在后台下载：</p>
-<pre><code class="lang-bash">nohup prefetch -O . $(&lt;SRR_Acc_List.txt) &amp;
+<pre><code class="lang-bash">nohup prefetch --option-file SRR_Acc_List.txt &amp;
 </code></pre>
 <p>刚刚下载好的数据是 sra 格式的，使用 sratools 将其拆分：</p>
-<pre><code class="lang-bash">fastq-dump --gzip --split-3 SRR25909836.sra
+<pre><code class="lang-bash">fastq-dump --gzip --split-files SRR25909836.sra
 </code></pre>
 <ul>
 <li><code>--gzip</code> 是将拆分的 fastq 文件压缩归档为 gz 格式。</li>
-<li><code>--split-3</code> 是将文件拆分为正向序列和逆向序列。</li>
+<li><code>--split-files</code> 是将文件拆分为正向序列和逆向序列（对于双端测序数据）。</li>
 </ul>
 <p>如果数据比较多，就写一个 bash 脚本：</p>
 <pre><code class="lang-bash">#!/bin/bash
-mkdir -p SRR fastqgz
+mkdir -p sra_files fastq_files
+# 假设 SRR_Acc_List.txt 在当前目录
+prefetch --option-file SRR_Acc_List.txt
+# prefetch 会为每个 SRR 创建一个单独的目录，里面包含 sra 文件
+# 将所有 sra 文件移动到一个集中的地方
 cat SRR_Acc_List.txt | while read id; do
-    mv -f "${id}/${id}.sra" ./SRR/
+    mv ./${id}/${id}.sra ./sra_files/
 done
 
-cd SRR || exit
+# 批量转换
+cd sra_files || exit
 for i in *.sra; do
-    fastq-dump --gzip --split-3 "$i" -O ../fastqgz
+    fastq-dump --gzip --split-files "$i" -O ../fastq_files
 done
 </code></pre>
 <h3>参考基因组及注释文件</h3>
 <p>植物的基因组和注释文件一般在 <a href="http://plants.ensembl.org/index.html">Ensembl Plants</a> 下载，用 wget 或 curl 都可以，文件体积不大：</p>
 <pre><code class="lang-bash">wget https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/fasta/oryza_sativa/dna/Oryza_sativa.IRGSP-1.0.dna.toplevel.fa.gz
-
 wget https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/gff3/oryza_sativa/Oryza_sativa.IRGSP-1.0.57.gff3.gz
 </code></pre>
 <p>然后解压：</p>
@@ -121,9 +124,9 @@ gzip -d Oryza_sativa.IRGSP-1.0.dna.toplevel.fa.gz
 <pre><code class="lang-bash">mv Oryza_sativa.IRGSP-1.0.dna.toplevel.fa oryza_sativa.fa
 mv Oryza_sativa.IRGSP-1.0.57.gff3 oryza_sativa.gff3
 </code></pre>
-<h2>FastQc 质控</h2>
+<h2>FastQC 质控</h2>
 <h3>常用参数</h3>
-<pre><code class="lang-bash">fastqc [-o output dir] [--(no)extract] [-f fastq|bam|sam] [-c contaminant file] seqfile1 .. seqfileN
+<pre><code class="lang-bash">fastqc [-o output_dir] [--(no)extract] [-f fastq|bam|sam] [-c contaminant_file] seqfile1 .. seqfileN
 </code></pre>
 <ul>
 <li>-o --outdir：FastQC 生成的报告文件的储存路径，生成的报告的文件名是根据输入来定的</li>
@@ -138,7 +141,7 @@ mv Oryza_sativa.IRGSP-1.0.57.gff3 oryza_sativa.gff3
 <pre><code class="lang-bash">fastqc SRR25909836_1.fastq.gz
 </code></pre>
 <p>当然，数据比较多的时候还是挂在后台批处理然后等着就行</p>
-<pre><code class="lang-bash">nohup fastqc SRR*.fastq.gz &amp;
+<pre><code class="lang-bash">nohup fastqc ./*.fastq.gz -o ./fastqc_report &amp;
 multiqc ./fastqc_report # 将多个质量检测报告合并
 </code></pre>
 <p>程序运行完成后会输出一堆 html 文件和 zip 压缩包，html 是网页版报告，zip 是本地宝报告，下载到本地用浏览器打开就可以看到质量检测报告了</p>
@@ -159,7 +162,6 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 </ul>
 <p><strong>Basic Statistics</strong></p>
 <p><img alt="" src="/i/20230907191139.jpg"/></p>
-<p>每个位置的碱基的测序质量</p>
 <ul>
 <li>Encoding：指测序平台的版本和相应的编码版本号</li>
 <li>Total Sequences：总的 reads 数</li>
@@ -185,7 +187,7 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 <ul>
 <li>tile：每一次测序荧光扫描的最小单位</li>
 <li>横轴代表 101 个碱基的位置</li>
-<li>纵轴是 tail 的 Index 编号</li>
+<li>纵轴是 tile 的 Index 编号</li>
 </ul>
 <p>检查 reads 中每一个碱基位置在不同的测序小孔之间的偏离度，蓝色表示低于平均偏离度，偏离度小，质量好；越红表示偏离平均质量越多，质量也越差，如果出现质量问题可能是短暂的，如有气泡产生，也可能是长期的，如在某一小孔中存在残骸，问题不大，可以看到我的这个数据几乎没有瑕疵</p>
 <p><strong>Per sequence quality scores</strong></p>
@@ -193,7 +195,7 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 <p>每条序列质量得分的分布情况</p>
 <ul>
 <li>横轴是平均质量得分</li>
-<li>纵轴是每条序列 GC 含量对应的数量</li>
+<li>纵轴是每条序列对应的数量</li>
 <li>当测序质量峰值小于 27（错误率 0.2%）时报"WARN"</li>
 <li>当峰值小于 20（错误率 1%）时报"FAIL"</li>
 </ul>
@@ -252,7 +254,6 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 <ul>
 <li>PE：双端测序文件过滤</li>
 <li>SE：单端测序文件过滤</li>
-<li>-baseout：输出目录</li>
 <li>-threads：线程数，最大是 CPU 核数</li>
 <li>-trimlog：生成日志名</li>
 <li>-quiet：静默模式</li>
@@ -261,34 +262,38 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 <li>LEADING：如果低于阈值质量，则在 reads 起始处剪切碱基</li>
 <li>TRAILING：如果低于阈值质量，则在 reads 末尾处剪切碱基</li>
 <li>CROP：将 reads 从末尾切割为指定长度</li>
-<li>HEADCROP：从 reads 剪切后低于指定长度，则删除</li>
+<li>HEADCROP：从 reads 起始处剪切指定数量的碱基</li>
 <li>MINLEN：如果 reads 低于指定长度，则删除</li>
 <li>TOPHRED33：将质量得分转换为 Phred-33</li>
 <li>TOPHRED64：将质量得分转换为 Phred-64</li>
 </ul>
 <h3>过滤低质量序列</h3>
 <p>我使用的是下面的命令，需要根据自己的文件进行调整</p>
-<pre><code class="lang-bash">trimmomatic PE -threads 1 -phred33 SRR25909836_1.fastq.gz SRR25909836_2.fastq.gz -summary SRR25909836.summary -baseout SRR25909836.fastq.gz LEADING:3 TRAILING:3 SLIDINGWINDOW:5:20 HEADCROP:13 MINLEN:36
+<pre><code class="lang-bash">trimmomatic PE -threads 4 -phred33 SRR25909836_1.fastq.gz SRR25909836_2.fastq.gz \
+SRR25909836_1P.fastq.gz SRR25909836_1U.fastq.gz \
+SRR25909836_2P.fastq.gz SRR25909836_2U.fastq.gz \
+-summary SRR25909836.summary \
+LEADING:3 TRAILING:3 SLIDINGWINDOW:5:20 HEADCROP:13 MINLEN:36
 </code></pre>
 <p>解释一下这些参数</p>
 <ul>
 <li>trimmomatic PE: 运行 Trimmomatic 的命令行接口，并指定输入文件是配对的 PE (paired-end) reads</li>
-<li>-threads 1: 指定使用 1 个线程进行处理</li>
+<li>-threads 4: 指定使用 4 个线程进行处理</li>
 <li>-phred33: 指定输入文件的 Phred 质量值编码是 Phred-33</li>
-<li>SRR25909836_1.fastq.gz 和 SRR25909836_2.fastq.gz: 输入的配对 FASTQ 文件，SRR25909836_1.fastq.gz 是第一条 reads 的文件，SRR25909836_2.fastq.gz 是第二条 reads 的文件</li>
-<li>-summary oryza_sativa.summary: 生成一个名为 oryza_sativa.summary 的文件，其中包含了程序运行的详细统计信息</li>
-<li>-baseout trimmed: 输出文件的基本名称，后面会加上一些后缀来区分不同的输出文件</li>
+<li>SRR25909836_1.fastq.gz 和 SRR25909836_2.fastq.gz: 输入的配对 FASTQ 文件</li>
+<li>SRR25909836_1P.fastq.gz 和 SRR25909836_2P.fastq.gz: 成对的、存活下来的读段输出文件</li>
+<li>SRR25909836_1U.fastq.gz 和 SRR25909836_2U.fastq.gz: 未成对的、存活下来的读段输出文件</li>
+<li>-summary SRR25909836.summary: 生成一个名为 SRR25909836.summary 的文件，其中包含了程序运行的详细统计信息</li>
 <li>LEADING:3: 移除每条 reads 开头的低质量碱基，如果碱基质量低于 3，就被去除</li>
 <li>TRAILING:3: 移除每条 reads 末尾的低质量碱基，如果碱基质量低于 3，就被去除</li>
 <li>SLIDINGWINDOW:5:20: 对每条 reads 进行滑动窗口的质量修剪，如果窗口内的平均质量小于 20，窗口内的所有碱基就会被去除，窗口的大小为 5</li>
 <li>HEADCROP:13: 去除每条 reads 开头的 13 个碱基</li>
 <li>MINLEN:36: 去除所有长度小于 36 的 reads</li>
 </ul>
-<p>-phred33 之后的两个是正向和反向的测序文件</p>
-<p>会看到五个输出文件 SRR25909836_1P.fastq.gz、SRR25909836_2P.fastq.gz、SRR25909836_1U.fastq.gz、SRR25909836_2U.fastq.gz、oryza_sativa.summary</p>
+<p>处理后会得到五个输出文件 <code>SRR25909836_1P.fastq.gz</code>、<code>SRR25909836_2P.fastq.gz</code>、<code>SRR25909836_1U.fastq.gz</code>、<code>SRR25909836_2U.fastq.gz</code>、<code>SRR25909836.summary</code></p>
 <ul>
-<li>SRR25909836_1P.fastq.gz、SRR25909836_2P.fastq.gz 这两个文件包含那些在两个末端都通过质量控制的序列配对，这两个文件是过滤后的测序数据，可以用这两个文件进行后续的测序数据分析</li>
-<li>SRR25909836_1U.fastq.gz、SRR25909836_2U.fastq.gz 两个文件包含那些只有一端通过质量控制的序列，这就是我们说的"单一通过"（unpaired pass）输出</li>
+<li><code>SRR25909836_1P.fastq.gz</code>、<code>SRR25909836_2P.fastq.gz</code> 这两个文件包含那些在两个末端都通过质量控制的序列配对，这两个文件是过滤后的测序数据，可以用这两个文件进行后续的测序数据分析</li>
+<li><code>SRR25909836_1U.fastq.gz</code>、<code>SRR25909836_2U.fastq.gz</code> 两个文件包含那些只有一端通过质量控制的序列，这就是我们说的"单一通过"（unpaired pass）输出</li>
 <li>summary 提供了关于 Trimmomatic 运行的详细信息，它包括以下几类信息<ul>
 <li>输入的读数量</li>
 <li>裁剪因引物/接头污染或低质量得分而去除的读数量</li>
@@ -308,16 +313,16 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 <ul>
 <li>-p 4 是指占用 4 线程</li>
 <li>oryza_sativa.fa 即前面我重命名的参考基因组序列文件</li>
-<li>oryza_sativa 就是参考基因组序列文件，fa 前面的内容</li>
+<li>oryza_sativa 是索引文件的前缀名</li>
 </ul>
-<p>建立完成之后就可以看到系统中多了一个 oryza_sativa 文件夹，cd 进去就可以看到 8 个以 ht2 为拓展名的文件，要将参考基因组序列文件也放到这个文件夹</p>
+<p>建立完成之后就可以看到在当前目录下生成了 8 个以 .ht2 为拓展名的文件。</p>
 <h3>常用参数</h3>
 <ul>
 <li>-x：参考基因组索引文件的前缀</li>
 <li>-1：正向测序文件</li>
 <li>-2：反向测序文件</li>
 <li>-S：输出文件名（sam 文件）</li>
-<li>-P：线程数</li>
+<li>-p：线程数</li>
 <li>-t：打印加载索引文件和对齐读取所需的时间</li>
 <li>--dta-cufflinks：出来的结果更适合 cufflinks 处理 （主要用于基因表达量的计算和差异表达基因的寻找）</li>
 <li>--no-unal：不记录没比对上的 reads</li>
@@ -325,13 +330,12 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 </ul>
 <h3>进行比对</h3>
 <p>我使用的命令如下（使用经过过滤的测序数据）：</p>
-<pre><code class="lang-bash">hisat2 -x oryza_sativa/oryza_sativa -p 5 -1 SRR25909836_1P.fastq.gz -2 RR25909836_2P.fastq.gz -S SRR25909836.sam
+<pre><code class="lang-bash">hisat2 -x oryza_sativa -p 5 -1 SRR25909836_1P.fastq.gz -2 SRR25909836_2P.fastq.gz -S SRR25909836.sam
 </code></pre>
-<p>注意-x 后跟索引文件，不加拓展名，保证 ht2 文件和 fa 文件的文件名一致即可，这里由于前面过滤后的序列是没有拓展名的，所以会提示 Warning: Unsupported file format，不影响结果</p>
+<p>注意-x 后跟索引文件的前缀，不加拓展名。</p>
 <p><img alt="" src="/i/20230907203952.jpg"/></p>
 <p>运行完毕后便得到 sam 文件，还会输出一段信息</p>
-<pre><code class="lang-bash">z -S oryza_sativa.sam
-21675765 reads; of these:
+<pre><code>21675765 reads; of these:
   21675765 (100.00%) were paired; of these:
     2281601 (10.53%) aligned concordantly 0 times
     18927559 (87.32%) aligned concordantly exactly 1 time
@@ -349,17 +353,17 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 </code></pre>
 <p>这些输出记录包含以下信息：</p>
 <ul>
-<li>总共有 21675765 个读取序列</li>
-<li>所有读取序列中 100.00%都成对存在（即是成对端 (read pairs) 序列）</li>
-<li>成对端序列中 10.53%的序列没有成功比对到基因组上</li>
-<li>87.32%的序列只比对到了基因组上的一个位置</li>
-<li>2.15%的序列比对到了基因组上的多个位置</li>
-<li>对于没有成功比对的成对端序列，有 10.88%者的序列不一致地（非正确配对的）比对到了基因组上一个位置</li>
-<li>有的序列无法一致地或不一致地比对，这些序列占所有没有成功比对的成对端序列的 2033427 对，它们一共包含 4066854 个"pairs"序列<ul>
-<li>在这些"pairs"序列中，</li>
-<li>58.71%的序列没有比对到任何地方</li>
-<li>39.83%的序列比对到了基因组上的一个位置</li>
-<li>1.46%的序列比对到了基因组上的多个位置</li>
+<li>总共有 21675765 对读长</li>
+<li>所有读长中 100.00%都成对存在（即是成对端 (read pairs) 序列）</li>
+<li>成对端序列中 10.53%的配对未能协调地比对到基因组上</li>
+<li>87.32%的配对只协调地比对到了基因组上的一个位置</li>
+<li>2.15%的配对比对到了基因组上的多个位置</li>
+<li>对于未能协调比对的配对，有 10.88%的配对以不一致的方式（非正确配对的）比对到基因组上</li>
+<li>有的配对无法协调地或不一致地比对，这些序列占所有没有成功比对的成对端序列的 2033427 对，它们一共包含 4066854 个单端读长<ul>
+<li>在这些单端读长中，</li>
+<li>58.71%没有比对到任何地方</li>
+<li>39.83%比对到了基因组上的一个位置</li>
+<li>1.46%比对到了基因组上的多个位置</li>
 </ul>
 </li>
 <li>整体上的比对成功率为 94.49%</li>
@@ -392,9 +396,9 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 </ul>
 <h3>排序压缩</h3>
 <p>我使用的是以下命令</p>
-<pre><code class="lang-bash">samtools sort -n -@ 5 SRR25909836.sam -o SRR25909836.bam
+<pre><code class="lang-bash">samtools sort -@ 5 SRR25909836.sam -o SRR25909836.sorted.bam
 </code></pre>
-<p>运行完成后会得到一个 bam 文件</p>
+<p>运行完成后会得到一个 <code>sorted.bam</code> 文件。默认按坐标排序。</p>
 <h2>featureCounts 生成基因计数表</h2>
 <h3>常用参数</h3>
 <ul>
@@ -402,22 +406,23 @@ multiqc ./fastqc_report # 将多个质量检测报告合并
 <li>-o：输出文件的路径</li>
 <li>-p：如果序列数据来自于 paired-end RNA-seq，使用此参数</li>
 <li>-B：只保留同时映射到同一基因组特征（例如，基因或外显子）的片段</li>
-<li>-C：不包括由基因间跨越引起的 reads</li>
-<li>-s：设置 strand-specific read 计数，如果使用 0，表示非特异性；如果使用 1，表示第一链特异性；如果使用 2，表示第二链特异性</li>
-<li>-Q：包含比对质量达到特定阈值的 reads，默认值为 10</li>
-<li>-g：制定 GTF 特性类型，例如，gene, transcript 等</li>
-<li>-F：制定输入文件格式，例如，BAM, SAM 等</li>
+<li>-C：不包括映射到不同染色体的 read pairs</li>
+<li>-s：设置 strand-specific read 计数，如果使用 0，表示非特异性；如果使用 1，表示正向特异性；如果使用 2，表示反向特异性</li>
+<li>-Q：只统计比对质量达到特定阈值的 reads，默认值为 0</li>
+<li>-g：指定 GTF/GFF 文件中用于计数的元特征（meta-feature）属性类型，例如 <code>gene_id</code></li>
+<li>-t：指定 GTF/GFF 文件中用于计数的特征类型，例如 <code>exon</code> 或 <code>gene</code></li>
+<li>-T：线程数</li>
 </ul>
 <h3>计数统计</h3>
 <p>我使用的是以下命令</p>
-<pre><code class="lang-bash">featureCounts -T 5 -t exon -g Name -a oryza_sativa.gff3 -o counts -p SRR25909836.bam
+<pre><code class="lang-bash">featureCounts -T 5 -p -t exon -g gene_id -a oryza_sativa.gff3 -o counts.txt SRR25909836.sorted.bam
 </code></pre>
-<p>oryza_sativa.gff3 就是最初下载的注释文件，如果要统计多个文件的话，在-p 后面跟上就可以，会生成 counts、counts.summary 两个文件，</p>
-<p>counts.summary 文件是计数统计情况</p>
+<p><code>oryza_sativa.gff3</code> 就是最初下载的注释文件。如果要统计多个文件的话，将多个 BAM 文件名跟在命令最后即可。会生成 <code>counts.txt</code>、<code>counts.txt.summary</code> 两个文件。</p>
+<p><code>counts.txt.summary</code> 文件是计数统计情况</p>
 <p><img alt="" src="/i/20230907202859.jpg"/></p>
-<p>counts 文件是基因的具体信息</p>
+<p><code>counts.txt</code> 文件是基因的具体信息</p>
 <p><img alt="" src="/i/20230907203131.jpg"/></p>
-<p>我这里只有一组数据，所以数量统计也只有一列，通常做 RNA-Seq 时是需要多组数据进行分析的，将 bam 文件跟在-p 参数后面即可。</p>
+<p>我这里只有一组数据，所以数量统计也只有一列，通常做 RNA-Seq 时是需要多组数据进行分析的，将多个 bam 文件名列在命令的最后即可。</p>
 <h2>参考</h2>
 <ul>
 <li><a href="https://zhuanlan.zhihu.com/p/47722164">RNASeq 原始数据质量控制-FastQC</a></li>

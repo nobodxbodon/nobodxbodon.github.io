@@ -11,16 +11,6 @@ console.log(sentence)
 // still logs "Vue is awesome"
 // should log "React is awesome" if 'sentence' is reactive.
 </code></pre>
-<h3>Why Vue need to use <code>.value</code> to access the ref property?</h3>
-<p>The <code>.value</code> syntax is used in Vue 3 to access the value of a ref property because refs are designed to be reactive objects rather than simple values. When you create a ref, you are actually creating an object with a single property named <code>value</code>. The <code>value</code> property holds the actual value that the ref represents, and any changes to the <code>value</code> property trigger reactivity. When we access the ref directly, we are accessing the object, not the value.</p>
-<p>When you create a reactive object with <code>reactive()</code>, you can access its properties directly using dot notation, without needing to use <code>.value</code>. This is because reactive objects use JavaScript's built-in getters and setters to intercept property access and modification, allowing Vue to track dependencies and trigger reactivity as needed.</p>
-<ul>
-<li><code>reactive()</code> only takes objects, NOT JS primitives.</li>
-<li><code>ref()</code> is calling <code>reactive()</code> behind the scenes.</li>
-<li><code>ref()</code> has a <code>.value</code> property for reassigning, <code>reactive()</code> does not have this and therefore CANNOT be reassigned.</li>
-</ul>
-<h3>Why Vue component data needs to be a function?</h3>
-<p>To ensure that each instance has its own unique set of data, the data option in a component must be a function that returns an object, rather than an object itself. This is because the object returned from a function is created every time a new instance of the component is created, while an object assigned directly to the data option would be shared across all instances. Methods, computed property definitions, and lifecycle hooks are created and stored only once, and run against every instance of a component.</p>
 <h3>Shortcomings of React <code>useState()</code></h3>
 <p>React <code>useState()</code> returns a state, the value. This means that <code>useState()</code> has no idea how the state value is used inside the component. The implication is that once you notify React of state change through a call to <code>setState()</code>, React has no idea which part of the page has changed and therefore must re-render the whole component.</p>
 <p>It's worth noting that while React may re-render the entire component, it does so efficiently. React uses virtual DOM diffing to minimize the amount of work required to update the DOM. This means that even if a component has a large number of elements, React can update only the parts of the DOM that have changed, resulting in a fast and efficient re-render.</p>
@@ -29,18 +19,38 @@ console.log(sentence)
 </blockquote>
 <h3>Vue reactivity implementation</h3>
 <p>&lt;img alt="Vue3 reactivity" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/ba9fd338-ae71-43ab-88cc-52086aa8700a.png" width="650" /&gt;</p>
-<pre><code class="lang-js">// https://www.youtube.com/watch?v=HezB8UEU5Rg
-let activeEffect = null
-let dep = new Set()
+<pre><code class="lang-js">let activeEffect = null
+
+// targetMap: WeakMap&lt;target, depsMap&gt;
+// depsMap: Map&lt;key, dep&gt;
+// dep: Set&lt;effect&gt;
+const targetMap = new Map()
 
 function track(target, key) {
   if (activeEffect) {
-    // in reality, get the dep from depsMap of targetMap
+    let depsMap = targetMap.get(target)
+    if (!depsMap) {
+      depsMap = new Map()
+      targetMap.set(target, depsMap)
+    }
+
+    let dep = depsMap.get(key)
+    if (!dep) {
+      dep = new Set()
+      depsMap.set(key, dep)
+    }
+
     dep.add(activeEffect)
   }
 }
 
 function trigger(target, key) {
+  const depsMap = targetMap.get(target)
+  if (!depsMap) return
+
+  const dep = depsMap.get(key)
+  if (!dep) return
+
   dep.forEach(effect =&gt; effect())
 }
 
@@ -66,10 +76,15 @@ function effect(fn) {
   activeEffect = null
 }
 
+// targetMap: Map {
+//   product → depsMap: Map {
+//     'price' → Set { effect1, effect2 }
+//     'quantity' → Set { effect1, effect3 }
+//   }
+// }
 let product = reactive({ price: 10, quantity: 4 })
 let total = 0
 
-// watcher
 effect(() =&gt; {
   total = product.price * product.quantity
   console.log('total changed ', total)
@@ -78,54 +93,64 @@ effect(() =&gt; {
 product.quantity = 5
 product.price = 12
 </code></pre>
-<p>&lt;img alt="Vue2 reactivity" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/6a6e5dab-2f12-4dd2-ab94-f47dec512c71.png" width="650" /&gt;</p>
-<pre><code class="lang-js">let target = null
-let product = { price: 10, quantity: 4 }
-let total = 0
+<blockquote><p>Purpose of <code>if (activeEffect)</code> check and <code>activeEffect = null</code></p>
+<ol>
+<li>prevent dependency collection outside of the effect. Prevents unrelated property accesses from being tracked. <em>e.g. <code>console.log(product.price)</code> is just reading, not inside an effect.</em></li>
+<li>Avoid memory leaks.</li>
+</ol>
+</blockquote>
+<p>&lt;br&gt;
+&lt;img alt="Vue2 reactivity" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/6a6e5dab-2f12-4dd2-ab94-f47dec512c71.png" width="650" /&gt;</p>
+<pre><code class="lang-js">let activeEffect = null
 
 class Dep {
   constructor() {
-    this.subscribers = []
+    this.subscribers = new Set()
   }
-  depend () {
-    if (target &amp;&amp; !this.subscribers.includes(target)) {
-      this.subscribers.push(target)
+
+  depend() {
+    if (activeEffect) {
+      this.subscribers.add(activeEffect)
     }
   }
+
   notify() {
-    this.subscribers.forEach(sub =&gt; sub())
+    this.subscribers.forEach(effect =&gt; effect())
   }
 }
 
-Object.keys(product).forEach(key =&gt; {
-  let value = product[key]
+function defineReactive(target) {
+  Object.keys(target).forEach(key =&gt; {
+    let value = target[key]
+    const dep = new Dep()
 
-  const dep = new Dep()
-  Object.defineProperty(product, key, {
-    get() {
-      dep.depend()
-      return value
-    },
-    set(newVal) {
-      if (newVal !== value) {
-        value = newVal
-        dep.notify()
+    Object.defineProperty(target, key, {
+      get() {
+        dep.depend() // track logic
+        return value
+      },
+      set(newVal) {
+        if (newVal !== value) {
+          value = newVal
+          dep.notify() // trigger logic
+        }
       }
-    }
+    })
   })
-})
 
-function watcher(fn) {
-  target = fn
-  target()
-  // ensures that each watcher only collects the dependencies it directly uses
-  target = null
+  return target
 }
 
-// 1. update computed properties
-// 2. trigger watch callbacks 
-// 3. creates a watcher for the component's render function
-watcher(() =&gt; {
+function effect(fn) {
+  activeEffect = fn
+  activeEffect()
+  activeEffect = null
+}
+
+let product = defineReactive({ price: 10, quantity: 4 })
+let total = 0
+
+effect(() =&gt; {
   total = product.price * product.quantity
   console.log('total changed ', total)
 })
@@ -141,3 +166,43 @@ product.price = 12
 <blockquote><p>Vue wraps an observed array’s mutation methods (<code>push</code>, <code>pop</code>, <code>unshift</code>, <code>shift</code>, etc) so they will trigger view updates.</p>
 </blockquote>
 <p>To work around this, you can use <code>Vue.set(object, propertyName, value)</code> method instead. (<code>this.$set</code> instance method is an alias to the global <code>Vue.set</code>)</p>
+<h3>Computed implementation</h3>
+<p>A computed property depends on any reactive values accessed inside its <code>getter</code>. In short, it’s a cached formula with automatic invalidation:</p>
+<ol>
+<li>First access: run the getter, store the result, mark <code>dirty = false</code>.</li>
+<li>No dependency changes: just return the stored value (no recomputation).</li>
+<li>Dependency changes: scheduler sets <code>dirty = true</code> so the next access will recompute.</li>
+</ol>
+<pre><code class="lang-js">function computed(getter) {
+  // 缓存计算函数执行后的返回值
+  let value
+  // 缓存过期标志
+  let dirty = true
+
+  // 这里用一个 effect 包裹 getter，配置 {lazy: true}，表示不会立刻执行
+  const runner = effect(() =&gt; {
+    value = getter()
+  }, {
+    lazy: true,
+    scheduler() {
+      dirty = true
+      // 把 computed 的变化向外广播，让依赖它的 effect 重新跑
+      trigger(obj, 'value')
+    }
+  })
+
+  const obj = {
+    get value() {
+      if (dirty) {
+        dirty = false
+        runner()
+        // 别人依赖 computed 的时候做的事
+        track(obj, 'value')
+      }
+      return value
+    }
+  }
+
+  return obj
+}
+</code></pre>

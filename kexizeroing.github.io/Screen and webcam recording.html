@@ -1,14 +1,5 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/screen-webcam-recording.md">仓库源文</a>，<a href="https://kexizeroing.github.io/screen-webcam-recording">站点原文</a></h2>
-<p>Let's explore how far browser technology has come in the way of screen sharing and recording, and attempt to create a tool that would allow us to quickly create short-form technical video content. All of this is powered by browser APIs using no external services. The original article is <a href="https://formidable.com/blog/2022/screen-webcam-mixing-recording">here</a>.</p>
-<p>This experimental web app is <a href="https://clips.formidable.dev">Clips</a> and it supports:</p>
-<ul>
-<li>capturing/sharing your screen/window</li>
-<li>capturing your webcam</li>
-<li>capturing your mic audio</li>
-<li>adjusting the position/sizing of the captured screen/webcam on the video canvas</li>
-<li>choosing from different background/layout options, including audio-visualization background</li>
-<li>recording the video in your browser</li>
-</ul>
+<p>Let's explore how far browser technology has come in the way of screen sharing and recording, and attempt to create a tool that would allow us to quickly record a short video of our screen or webcam.  All of this is powered by browser APIs using no external services.</p>
 <h3>Capturing the screen</h3>
 <p>To allow the user to capture their screen, we can use the <code>MediaDevices.getDisplayMedia()</code> method available to us on the <code>navigator</code> global in modern browsers.</p>
 <pre><code class="lang-js">const captureScreen = async () =&gt; {
@@ -18,7 +9,7 @@
   });
 }
 </code></pre>
-<p>Now we have reference to a <code>MediaStream</code> instance returned from <code>getDisplayMedia</code>, and we’ll eventually want to use this stream to draw the captured display onto our canvas. However, the canvas API does not handle any sort of video decoding – so we’ll pass this media stream into an HTML5 <code>&lt;video&gt;</code> element as its <code>srcObject</code>, and then use a reference to this <code>&lt;video&gt;</code> element to draw the video’s pixels onto our canvas via <code>CanvasRenderingContext2D.drawImage</code>.</p>
+<p>Now we have reference to a <code>MediaStream</code> instance returned from <code>getDisplayMedia</code>, and we’ll eventually want to use this stream to draw the captured display onto our canvas. However, the canvas API does not handle any sort of video decoding – so we’ll pass this media stream into an HTML5 <code>&lt;video&gt;</code> element as its <code>srcObject</code> property.</p>
 <pre><code class="lang-js">let screenShareVideoRef: HTMLVideoElement;
 
 const captureScreen = async () =&gt; {
@@ -26,10 +17,12 @@ const captureScreen = async () =&gt; {
     video: true,
   });
 
-  // connect stream to video element via srcObject
   screenShareVideoRef.srcObject = screenShareStream;
 }
 </code></pre>
+<blockquote><p><code>srcObject</code> is used to assign a a live media stream (like from a webcam or screen share) to a media element. You can convert a stream to a <code>src</code> only if you record the stream into a Blob, and then use <code>URL.createObjectURL</code>. But for live video, always use <code>srcObject</code>.</p>
+<p><code>src</code> used with URLs: File URLs, Remote URLs, Blob URLs</p>
+</blockquote>
 <h3>Capturing the webcam</h3>
 <p>We want to allow the user to select which webcam they’d like to use, but in order to do this we need to show the user which webcams are available to choose from. In order to show the user which webcams are available, we first need to request permission to access the list of available webcams.</p>
 <pre><code class="lang-js">// list webcam devices
@@ -55,14 +48,12 @@ const connectToWebcam = async (deviceId: string) =&gt; {
 }
 </code></pre>
 <blockquote><p><code>getUserMedia()</code> is a powerful feature which can only be used in secure contexts; in insecure contexts, <code>navigator.mediaDevices</code> is undefined. A secure context is a page loaded using HTTPS or the <code>file://</code> URL scheme, or a page loaded from <code>localhost</code>.</p>
-<p>In addition, user permission is always required to access the user's audio and video inputs. Only a window's top-level document context for a valid origin can even request permission to use it. Otherwise, the user will never even be asked for permission to use the input devices.</p>
 </blockquote>
 <p>Similar to our screen share stream, we want to use the result of this video stream in our canvas, so we’ll need to pass this stream along to a <code>&lt;video&gt;</code> element for decoding for later use in our canvas drawing.</p>
 <pre><code class="lang-js">let webcamVideoRef: HTMLVideoElement;
 
 const connectToWebcam = async (deviceId: string) =&gt; {
   const webcamStream = await navigator.mediaDevices.getUserMedia(/* ... */);
-  // use input stream as src for video element
   webcamVideoRef.srcObject = webcamStream;
 }
 </code></pre>
@@ -95,22 +86,19 @@ const connectToAudioInput = async (deviceId: string) =&gt; {
 </code></pre>
 <p>Since our mic stream does not produce any sort of visuals, we do not need to attach this media stream to any sort of <code>&lt;video&gt;</code> or <code>&lt;audio&gt;</code> element.</p>
 <h3>Combining the screen and webcam streams</h3>
-<p>At this point we’ve got video streams for our screen share and webcam. We want to combine these two video streams together in a way that we can record the output and add nice visual effects. To do this, we’ll use HTML canvas and <code>CanvasRenderingContext2D</code>. We’ll use the <code>drawImage</code> method of our canvas context to paint our video streams onto our canvas. Our general approach will be to set up a <code>requestAnimationFrame</code> loop for painting our video displays onto our canvas so that our canvas stays up to date with our video streams.</p>
+<p>At this point we’ve got video streams for our screen share and webcam. We want to combine these two video streams together in a way that we can record the output and add nice visual effects. To do this, we’ll use HTML canvas. We’ll use the <code>drawImage</code> method of our canvas context to paint our video streams onto our canvas. Our general approach will be to set up a <code>requestAnimationFrame</code> loop for painting our video displays onto our canvas so that our canvas stays up to date with our video streams.</p>
 <pre><code class="lang-js">const canvas = document.querySelector("canvas");
 const ctx = canvas.getContext("2d");
 
-// kick off the drawing process 
 const startDrawing = () =&gt; {
   requestAnimationFrame(loop);
 }
 
-// requestAnimationFrame loop. Each frame, we draw to the canvas.
 const loop = () =&gt; {
   draw();   
   requestAnimationFrame(loop);
 }
 
-// our drawing function
 const draw = () =&gt; {
   const { width, height } = canvas;
 
@@ -131,7 +119,7 @@ const draw = () =&gt; {
 <h3>Creating a Recording</h3>
 <p>Once we have our pixels dancing on our canvas, and our microphone audio stream captured, we can start to stitch these together to create an actual recording. Something we could upload to, say, YouTube.</p>
 <p>Modern browsers have some support for the <code>MediaRecorder</code> API which is an interface for recording media. The <code>MediaRecorder</code> API works by consuming a single <code>MediaStream</code> and outputting <code>Blob</code> chunks over time. We can then use those <code>Blob</code> chunks to create a video output.</p>
-<p>We need to generate a <code>MediaStream</code> from our canvas element, which we can do via the <code>canvas.captureStream</code> method – and then combine that with our mic <code>MediaStream</code> to create a single combined media stream. To combine <code>MediaStream</code> instances, we extract out the <code>MediaStreamTrack</code> instances we want to combine together and pass them in an array to the constructor of <code>MediaStream</code> to create a new stream with those specific tracks.</p>
+<p>First we need to generate a <code>MediaStream</code> from our canvas element, which we can do via the <code>canvas.captureStream</code> method, and then combine that with our mic <code>MediaStream</code> to create a single combined media stream. To combine <code>MediaStream</code> instances, we extract out the <code>MediaStreamTrack</code> instances we want to combine together and pass them in an array to the constructor of <code>MediaStream</code> to create a new stream with those specific tracks.</p>
 <pre><code class="lang-js">// create a MediaStream from our canvas
 // the `30` here is frames per second, feel free to set your own FPS
 const canvasStream = canvas.captureStream(30);
@@ -168,6 +156,8 @@ recorder.onstop = () =&gt; {
 }
 </code></pre>
 <p>The <code>MediaRecorder</code> <code>mimeType</code> option supposedly allows you to specify a media type, but Chromium-based browsers and FireFox <a href="https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/web_tests/fast/mediarecorder/MediaRecorder-isTypeSupported.html?q=MediaRecorder-isTypeSupported&amp;ss=chromium">only seem to support webm</a>. This means you’re more-or-less forced into creating <code>.webm</code> videos – a video format that’s not as widely adopted as other formats like <code>.mp4</code>. Many video editing softwares do not handle <code>.webm</code> videos, therefore it’s a struggle to do any sort of post-processing or editing on the generated video files.</p>
+<blockquote><p>WebM is an open media file format designed for the web. It is an open-source project sponsored by Google. WebM files consist of video streams compressed with the VP8 or VP9 video codec, audio streams compressed with the Vorbis or Opus audio codecs, and WebVTT text tracks. Read more at: <a href="https://www.webmproject.org/about/faq">https://www.webmproject.org/about/faq</a></p>
+</blockquote>
 <p>The <code>.webm</code> video blobs generated from the <code>MediaRecorder</code> API in Chromium-based browsers are missing the <code>duration</code> video metadata – which means browsers or video players cannot properly seek these videos because they don’t know how long the video is, and many platforms will reject them as uploads. Open source to the rescue. <a href="https://github.com/yusitnikov/fix-webm-duration">fix-webm-duration</a> is a library that allows you to manually pass in a video duration and it’ll adjust the blob’s metadata accordingly. Therefore, to get a usable video file – you’ll need to manually track the start/end time of the video recording – and then monkey patch the duration metadata accordingly.</p>
 <pre><code class="lang-js">import fixWebmDuration from "fix-webm-duration";
 
@@ -192,9 +182,6 @@ recorder.onstop = async () =&gt; {
   const patchedBlob = patchBlob(recordedBlob, duration);
 }
 </code></pre>
-<blockquote><p>WebM is an open media file format designed for the web. It is an open-source project sponsored by Google. WebM files consist of video streams compressed with the VP8 or VP9 video codec, audio streams compressed with the Vorbis or Opus audio codecs, and WebVTT text tracks. Read more at: <a href="https://www.webmproject.org/about/faq">https://www.webmproject.org/about/faq</a></p>
-<p>VP8 and VP9 are highly-efficient video compression technologies developed by the WebM Project; Vorbis and Opus are open-source audio compression technologies.</p>
-</blockquote>
 <h3>Generating a download</h3>
 <p>To automatically download the blob as a video file, we’ll use the standard technique of using <code>URL.createObjectURL</code> to create an object URL, generating an anchor DOM element with this URL as its <code>href</code>, simulating a click on that anchor tag (which will trigger a download of the blob), and then discard the anchor tag.</p>
 <pre><code class="lang-js">recorder.onstop = async () =&gt; {
@@ -232,5 +219,5 @@ recorder.onstop = async () =&gt; {
 <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/MediaStream">https://developer.mozilla.org/en-US/docs/Web/API/MediaStream</a></li>
 <li><a href="https://www.mux.com/blog">https://www.mux.com/blog</a></li>
 <li><a href="https://github.com/alyssaxuu/screenity">https://github.com/alyssaxuu/screenity</a></li>
-<li><a href="https://github.com/coffeefuelbump/openai-real-time-api-example-corbinbrown">https://github.com/coffeefuelbump/openai-real-time-api-example-corbinbrown</a></li>
+<li><a href="https://clips.formidable.dev">https://clips.formidable.dev</a></li>
 </ul>

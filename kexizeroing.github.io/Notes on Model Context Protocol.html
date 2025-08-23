@@ -3,35 +3,44 @@
 <p>Early AI assistants were limited to text generation, unable to interact with external tools or real-time data. The introduction of function calling and plugins in 2023 allowed models to execute code, browse the web, and interact with APIs, marking the shift toward AI agents. However, each integration was fragmented, requiring custom implementations for different tools, making scaling difficult.</p>
 <p>MCP, introduced by Anthropic in late 2024, solves this problem by providing a unified protocol for AI-tool interactions. Instead of custom adapters for each tool, MCP allows developers to expose functionality once, making it accessible to any AI supporting MCP. It also eliminates the inefficiencies of tool-specific APIs by offering a structured, self-describing interface. This enables seamless, scalable AI-tool connectivity, much like how USB standardized device connections.</p>
 <blockquote><p>This isn't something that you couldn't do before. You could technically write a bunch of code to provide any model with relevant function call definitions, and then implement those functions to do the things the model asks for. But for one, this was very tedious. You'd have to figure out how to do it from scratch each time. Each implementation might be different. And this would all be in code, your Claude desktop app couldn't access these functions.</p>
+<p>MCP adds another layer: your tools are hosted outside your app, on a separate server. MCP servers make sense when you want your context and tools to be shared across many apps, models, or environments.</p>
 </blockquote>
 <h3>MCP is not magic</h3>
 <p>MCP isn't magic — it's a standard way for AI to discover and use tools without learning every API's specific details. An MCP server is like a menu of tools. Each tool has a name, a description, a schema defining what info it needs, and the actual code that makes the API calls. AI applications (like Claude or Cline) can dynamically query these servers to execute tasks such as reading files, querying databases, or creating new integrations.</p>
-<pre><code>User                App                        LLM               MCP Server
-
-                    ------------ initialize connection   ------------&gt; 
-                    &lt;----------- response with available tools -------
---- send query ----&gt;
-                    -- send query with MCP tools -&gt;
-                    &lt;-- response with tool call ---
-                    -------------- send tool call -------------------&gt;
-                    &lt;------------ responds with tool response --------
-                    ---- send tool response ------&gt;
-                    &lt;- response with final answer -
-&lt;-- final answer ---
-</code></pre>
-<blockquote><p>How similar is this to tool calling? Tool calling lets LLMs invoke functions to interact with the real world, typically within the same process. MCP enables tool execution in a separate process, either locally or remotely, fully decoupling the server from the client.</p>
-<p>Most MCP servers work "locally" (over a mechanism called <code>stdio</code>): you download a copy of the source code and run the code on your own computer. Servers rely on a command line tool either <code>npx</code> or <code>uvx</code> to download and run the server's code on your local machine.</p>
+<blockquote><p>Most MCP servers work "locally" (over a mechanism called <code>stdio</code>): you download a copy of the source code and run the code on your own computer. Servers rely on a command line tool either <code>npx</code> or <code>uvx</code> to download and run the server's code on your local machine.</p>
 </blockquote>
 <h3>MCP server and client</h3>
 <p>MCP uses a client-server design where applications can connect to multiple resources.</p>
 <p>The <strong>MCP host</strong> is the program that's going to access the MCP servers. This might be Claude Desktop, Cursor, Windsurf, or any other application that supports MCP. Any application implementing the MCP protocol to allow connections to MCP servers is a host.</p>
-<p>On this host, you're going to run one or multiple <strong>MCP clients</strong> - each client will maintain a relationship to a single MCP server. When the host starts up, each client will connect to an MCP server. See <a href="https://www.pulsemcp.com/clients">https://www.pulsemcp.com/clients</a></p>
-<p>The <strong>MCP server</strong> is the most interesting concept for 99% of us. The server is the program that exposes a set of capabilities to the host application. If you want to allow a host to read emails, you can connect it to a Gmail MCP Server. If you want the host to post in Slack, you connect it to a Slack MCP Server. If you have some custom functionality you want an LLM to perform, you can build a new MCP server. The server could be running locally, or it could be running on a remote server. See <a href="https://www.pulsemcp.com/servers">https://www.pulsemcp.com/servers</a></p>
-<blockquote><p>You can also check out these <a href="https://block.github.io/goose/docs/category/tutorials">Goose tutorials</a>, showing you exactly how you can use some of the popular MCP servers with Goose, or use Goose's Tutorial extension to get extra help walking you through using or building extensions.</p>
-</blockquote>
+<p>On this host, you're going to run one or multiple <strong>MCP clients</strong> - each client will maintain a relationship to a single MCP server. The host creates a client instance to communicate with a specific MCP server, and the client handles the low-level details of the protocol.</p>
+<p>The <strong>MCP server</strong> is the most interesting concept for 99% of us. The server is the program that exposes a set of capabilities to the host application. If you want to allow a host to read emails, you can connect it to a Gmail MCP Server. If you want the host to post in Slack, you connect it to a Slack MCP Server. If you have some custom functionality you want an LLM to perform, you can build a new MCP server. The server could be running locally, or it could be running on a remote server.</p>
 <p>The client connects to its server using a <strong>transport</strong>. This transport is responsible for sending messages between the client and the server. There are currently two supported transports. You can communicate via <code>stdio</code> - in other words, via the terminal. Or you can communicate through HTTP via server-sent events. This is useful if you want to run your server on a remote machine.</p>
-<p>The <strong>protocol</strong> defines JSON message formats, based on JSON-RPC 2.0, for communication between client and server. The client launches the MCP server as a subprocess. The server reads JSON-RPC messages from its standard input (stdin) and sends messages to its standard output (stdout).</p>
+<blockquote><p>Transports are how the model talks to your MCP server. Today, StreamableHTTP is the main one. The model uses standard HTTP to hit a URL and create a connection. Optionally, it also allows the use of SSE on the side for real time notifications. The other popular transport is stdio, used in local or CLI environments where the model and tools share the same process.</p>
+</blockquote>
+<p>The <strong>protocol</strong> defines JSON message formats, based on JSON-RPC 2.0, for communication between client and server. This simple contract allows for incredible flexibility. Your server doesn’t need to know anything about the LLM, and the LLM doesn’t need to know anything about your server’s internal implementation. They just need to speak the common language of MCP.</p>
 <pre><code class="lang-json">// Client sends...
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list"
+}
+
+// Server sends back...
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "tools": [
+    {
+      "name": "createGitHubIssue",
+      "description": "Create a GitHub issue",
+      "inputSchema": {
+        ...
+      },
+    }
+  ]
+}
+
+// Client sends...
 {
   "jsonrpc": "2.0",
   "id": 2,
@@ -66,12 +75,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 export const server = new McpServer({
-  name: "Weather Service",
+  name: "weather-mcp-server",
   version: "1.0.0",
 });
 
 server.tool(
   "getWeather",
+  "Tool to get the weather for a city",
   { city: z.string().describe('The city to get the weather for') },
   async ({ city }) =&gt; {
     // await fetch('wheather API') 
@@ -85,6 +95,25 @@ server.tool(
       ],
     };
   },
+);
+</code></pre>
+<blockquote><p>The <code>register*</code> methods (<code>registerTool</code>, <code>registerPrompt</code>, <code>registerResource</code>) are the recommended approach for new code. The older methods (<code>tool</code>, <code>prompt</code>, <code>resource</code>) remain available for backwards compatibility. The optional <code>title</code> field for better UI presentation. The title is used as a display name, while <code>name</code> remains the unique identifier.</p>
+</blockquote>
+<pre><code class="lang-js">// Using registerTool (recommended)
+server.registerTool(
+  "fetch-weather",
+  {
+    title: "Weather Fetcher",
+    description: "Get weather data for a city",
+    inputSchema: { city: z.string() }
+  },
+  async ({ city }) =&gt; {
+    const response = await fetch(`https://api.weather.com/${city}`);
+    const data = await response.text();
+    return {
+      content: [{ type: "text", text: data }]
+    };
+  }
 );
 </code></pre>
 <p>The stdio transport enables communication through standard input/output streams. This is particularly useful for local integrations and command-line tools.</p>
@@ -125,6 +154,13 @@ app.listen(port, () =&gt; {
       "command": "node",
       "args": [
         "/ABSOLUTE/PATH/TO/PARENT/FOLDER/weather/build/index.js"
+      ]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking",
       ]
     }
   }
@@ -193,6 +229,7 @@ Until now, support for MCP was limited to Claude Desktop through local servers. 
 <li>Your existing API descriptions are probably not ready for LLM consumption. Writing for LLM is different than writing for humans.</li>
 <li>APIs are designed for resource management, not for humans. LLMs are human-like.</li>
 </ol>
+<p>Each tool should do one thing and do it well. The <code>name</code> and <code>description</code> of your tools and their parameters are your primary interface with the LLM. Be clear, concise, and unambiguous. Log every single tool invocation. Record the tool name, the exact parameters it was called with, and the result it returned. This is invaluable for debugging.</p>
 <h3>References and further reading</h3>
 <ul>
 <li><a href="https://github.com/modelcontextprotocol/typescript-sdk">https://github.com/modelcontextprotocol/typescript-sdk</a></li>

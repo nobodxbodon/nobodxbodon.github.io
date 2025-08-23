@@ -11,18 +11,16 @@
 </ul>
 <h3>Init options</h3>
 <ul>
-<li><strong>method</strong>: e.g., GET, POST. Note that the <code>Origin</code> header is not set on Fetch requests with a method of HEAD or GET. (GET is default)</li>
+<li><strong>method</strong>: e.g., GET, POST, PUT, HEAD. (GET is default)</li>
 <li><strong>headers</strong>: Any headers you want to add to your request, contained within a <code>Headers</code> object or an object literal.</li>
 <li><strong>body</strong>: Any body that you want to add to your request. Note that a request using the GET or HEAD method cannot have a body.</li>
 <li><strong>mode</strong>: The mode you want to use for the request, e.g., <code>cors</code>, <code>no-cors</code>, or <code>same-origin</code>. (<code>cors</code> is default)</li>
 <li><strong>credentials</strong>: The request credentials you want to use for the request, e.g., <code>omit</code>, <code>same-origin</code>, or <code>include</code>. To automatically send cookies for the current domain, this option must be provided. (<code>same-origin</code> is default)</li>
 </ul>
-<p>In addition, the <code>keepalive</code> option can be used to allow the request to outlive the page. Fetch with the <code>keepalive</code> flag is a replacement for the <code>Navigator.sendBeacon()</code> API.</p>
 <pre><code class="lang-javascript">async function postData(url = '', data = {}) {
   const response = await fetch(url, {
     method: 'POST',
     cache: 'no-cache',
-    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json'
     },
@@ -125,7 +123,7 @@ controller.abort('user cancellation')
   if (err.name === "TimeoutError") {
     console.error("Timeout: It took more than 5 seconds to get the result.");
   } else if (err.name === "AbortError") {
-    console.error("Fetch aborted by user action"),
+    console.error("Fetch aborted by user action");
   } else if (err.name === "TypeError") {
     console.error("AbortSignal.timeout() method is not supported");
   }
@@ -146,16 +144,6 @@ const req = await fetch('/api/data', {
 <li><a href="https://github.com/sindresorhus/ky">Ky</a> is a tiny and elegant HTTP client based on the browser Fetch API.</li>
 <li><a href="https://github.com/L-Blondy/up-fetch">upfetch</a> is an advanced fetch client builder with standard schema validation, automatic response parsing, smart defaults and more.</li>
 </ul>
-<p>Make a fetch request with schema validation. The response is already parsed and properly typed based on the schema.</p>
-<pre><code class="lang-js">import { z } from 'zod'
-
-const posts = await upfetch('/posts/1', {
-  schema: z.object({
-    id: z.number(),
-    title: z.string(),
-  }),
-})
-</code></pre>
 <h2>POST Requests</h2>
 <p>The HTTP POST method sends data to the server. The type of the body of the request is indicated by the <code>Content-Type</code> header.</p>
 <p>When using cURL, <code>-d</code> means transfer payload, <code>-H</code> is the header info included in requests, <code>GET</code> is the default one, use <code>-X</code> to support other HTTP verbs.</p>
@@ -191,25 +179,36 @@ Content-Disposition: attachment; filename="picture.png"
 Content-Disposition: attachment; filename="picture.png"
 </code></pre>
 <p>Means "This is a PNG image. Please save it as a file, preferably named <code>picture.png</code>".</p>
-<p>Use <code>multipart/form-data</code> when your form includes any <code>&lt;input type="file"&gt;</code> elements. <strong>Characters are NOT encoded</strong> (No encoding means you save a lot of CPU cycles and keeps the total body size small). This is important when the form has a file upload control. You want to send the file binary and this ensures that bitstream is not altered.</p>
+<p>Use <code>multipart/form-data</code> when your form includes any <code>&lt;input type="file"&gt;</code> elements. <strong>Characters are NOT encoded</strong> (No encoding means you save a lot of CPU cycles and keeps the total body size small). This is important because you want to send the file binary and this ensures that bitstream is not altered.</p>
 <ul>
 <li>Fields are separated by the given boundary string. The browser must choose a boundary that will not appear in any of the fields, so this is why the boundary may vary between requests.</li>
 <li>Every field gets some sub headers before its data: <code>Content-Disposition: form-data</code>, the field name, the filename, followed by the data.</li>
 </ul>
 <p>&lt;img alt="form-data" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/008vxvgGly1h7pzihd80yj31440gy40l.jpg" width="700"&gt;</p>
-<h3>Process the form data</h3>
+<h3>Process the form data in Node.js</h3>
 <ol>
 <li><p>What does <code>body-parser</code> do with express? Originally, there was only <code>body-parser</code>, not <code>express.json()</code>. <code>body-parser</code> extracts the entire body portion of an incoming request stream and exposes it on <code>req.body</code>. As of Express version 4.16+, their own <code>body-parser</code> implementation is now included in the default Express package so there is no need for you to download another dependency.</p>
-<pre><code class="lang-js"> app.use(express.json());
- // Parsing the URL-encoded data with the `querystring` library (when false) or the `qs` library (when true). To be simple,`querystring` cannot parse nested object.
- // test the differences: https://stackblitz.com/edit/node-xa27zd?file=index.js
+<pre><code class="lang-js"> // for JSON
+ app.use(express.json());
+
+ // for form data
  app.use(express.urlencoded({ extended: false }));
 </code></pre>
+<blockquote><p>About <code>{ extended: false }</code>:</p>
+<ul>
+<li><code>false</code>: uses the <strong>querystring</strong> library (simpler, doesn't support nested objects).</li>
+<li><code>true</code>: uses the <strong>qs</strong> library (more complex, supports nested objects).</li>
+</ul>
+<p>Test the differences: <a href="https://stackblitz.com/edit/node-xa27zd?file=index.js">https://stackblitz.com/edit/node-xa27zd?file=index.js</a></p>
+</blockquote>
 </li>
+</ol>
+<ol>
 <li><p>However, <code>body-parser</code> does not handle multipart bodies. <a href="https://github.com/expressjs/multer">Multer</a> is a Node.js middleware for handling <code>multipart/form-data</code>, which is primarily used for uploading files.</p>
 <pre><code class="lang-js"> const express = require('express')
  const multer  = require('multer')
- // where to upload the files. In case you omit the options object, the files will be kept in memory and never written to disk.
+ // where to upload the files.
+ // In case you omit the options object, the files will be kept in memory and never written to disk.
  const upload = multer({ dest: 'uploads/' })
 
  const app = express()
@@ -227,7 +226,11 @@ Content-Disposition: attachment; filename="picture.png"
 <p>GET data is appended to the URL as a query string, so there is a hard limit to the amount of data you can transfer. <em>GET is idempotent</em>. POST data is included in the body of the HTTP request and isn't visible in the URL. As such, there's no limit to the amount of data you can transfer over POST.</p>
 <p>Responses to the POST method aren’t kept by most caches; if you send information in the path or query via GET, caches can store that information for the future.</p>
 <p>&lt;img alt="http-post-get" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/post-get-others.png" width="460"&gt;</p>
-<p>As far as security, <strong>POST method is not more secure than GET as it also gets sent unencrypted over network</strong>. HTTPS encrypts the data in transit and the remote server will decrypt it upon receipt; it protects against any 3rd parties in the middle being able to read or manipulate the data. A packet sniffer will show that the HTTP message sent over SSL is encrypted on the wire.</p>
+<p>As far as security, both GET and POST are equally insecure when sent over plain HTTP — all data is visible to anyone intercepting the network traffic. Only HTTPS makes the request secure in transit, for both GET and POST. A packet sniffer will just see encrypted binary blobs, not readable content.</p>
+<ol>
+<li>HTTPS encrypts the URL path, query string, headers, and body — everything after the domain name.</li>
+<li>HTTPS + Set custom DNS to 8.8.8.8 or 1.1.1.1 and your traffic is always private.</li>
+</ol>
 <blockquote><p>Should data in an HTTPS request appear as encrypted in Chrome developer tools? The browser is obviously going to know what data it is sending, and the Chrome developer tools wouldn't be very helpful if they just showed the encrypted data. These tools are located in the network stack before the data gets encrypted and sent to the server.</p>
 </blockquote>
 <p>JSONP doesn't support other methods than GET and also doesn't support custom headers. It basically use a script tag (the domain limitation is ignored) and pass a special parameter that tells the server a little bit about your page. Then the server is able to wrap up its response in a way that your page can handle.</p>
@@ -263,8 +266,6 @@ console.log(myHeaders.get('X-Custom-Header')); // ['ProcessThisImmediately', 'An
 myHeaders.delete('X-Custom-Header');
 console.log(myHeaders.get('X-Custom-Header')); // null
 </code></pre>
-<blockquote><p><code>Content-Length</code> header indicates the size of the message body, in bytes. <code>Buffer.byteLength()</code> returns the byte length of those elements (a character can take up more than one byte).</p>
-</blockquote>
 <p>A fetch metadata request header like <code>Sec-Fetch-Dest</code>, <code>Sec-Fetch-Mode</code>, <code>Sec-Fetch-Site</code> provides additional information about the context from which the request originated. These headers are prefixed with <code>Sec-</code>, and hence have <a href="https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_header_name">forbidden header names</a>. As such, they cannot be modified from JavaScript.</p>
 <ul>
 <li><code>Sec-Fetch-Mode</code> allows a server to distinguish between: requests originating from a user navigating between HTML pages, and requests to load images and other resources. For example, this header would contain <code>navigate</code> for top level navigation requests, while <code>no-cors</code> is used for loading an image.</li>
@@ -293,7 +294,7 @@ try {
   console.log("Error: Body already consumed");
 }
 </code></pre>
-<p>Another important thing to note is that <code>Response.body</code> is a <code>ReadableStream</code> of the body contents.</p>
+<p>Another important thing to note is that <strong><code>Response.body</code> is a <code>ReadableStream</code> of the body contents</strong>.</p>
 <ul>
 <li>The <code>getReader()</code> approach gives you more fine-grained control.</li>
 <li>The <code>for await...of</code> syntax is more concise and uses the response body's async iterator interface internally.</li>
@@ -328,138 +329,42 @@ for await (const chunk of response.body) {
   processVideoChunk(chunk);
 }
 </code></pre>
-<pre><code class="lang-js">// An example to fetch image with progress indicator
-// https://github.com/AnthumChris/fetch-progress-indicators
-
-const elProgress = document.getElementById('progress');
-
-fetch('https://fetch-progress.anthum.com/30kbps/images/sunrise-baseline.jpg')
-.then(response =&gt; {
-  const contentEncoding = response.headers.get('content-encoding');
-  const contentLength = response.headers.get(contentEncoding ? 'x-file-size' : 'content-length');
-  if (contentLength === null) {
-    throw Error('Response size header unavailable');
-  }
-
-  const total = parseInt(contentLength, 10);
+<pre><code class="lang-js">// Fetch with progress example
+fetch(url).then(async response =&gt; {
+  const total = +response.headers.get("Content-Length");
   let loaded = 0;
 
-  return new Response(
-    new ReadableStream({
-      // This method is called immediately when the object is constructed
-      start(controller) {
-        const reader = response.body.getReader();
-
-        read();
-        function read() {
-          reader.read().then(({ done, value }) =&gt; {
-            if (done) {
-              controller.close();
-              return; 
-            }
-            loaded += value.byteLength;
-            elProgress.innerHTML = Math.round(loaded / total * 100) + '%';
-            controller.enqueue(value);
-            read();
-          }).catch(error =&gt; {
-            console.error(error);               
-          })
-        }
-      }
-    })
-  );
-})
-.then(response =&gt; response.blob())
-.then(data =&gt; {
-  document.getElementById('img').src = URL.createObjectURL(data);
-})
-</code></pre>
-<h3>Understand fetch in chunks</h3>
-<p><a href="https://github.com/tomayac/fetch-in-chunks">fetch-in-chunks</a> is a utility for fetching large files in chunks with support for parallel downloads and progress tracking.</p>
-<pre><code class="lang-js">const VIDEO_URL =
-  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-
-const video = document.querySelector('video');
-const progress = document.querySelector('progress');
-
-const blob = await fetchInChunks(VIDEO_URL, {
-  progressCallback: (done, total) =&gt; {
-    progress.value = done / total;
-  },
-});
-
-video.src = URL.createObjectURL(blob);
-video.controls = true;
-video.play();
-</code></pre>
-<p>The key point in <code>fetchInChunks</code> is a parallel chunk-based file downloading system.</p>
-<pre><code class="lang-js">let chunks = [];
-let queue = [];
-let downloadedBytes = 0;
-
-async function processQueue() {
-  let start = 0;
-  while (start &lt; fileSize) {
-    // First Check
-    if (queue.length &lt; maxParallelRequests) {
-      let end = Math.min(start + chunkSize - 1, fileSize - 1);
-      let actualStart = start;
-
-      // A. Create the promise but don't wait for it
-      let promise = fetchChunk(url, start, end, signal)
-        .then((chunk) =&gt; {
-          // C. This runs later when chunk downloads
-          chunks.push({ start: actualStart, chunk });
-          downloadedBytes += chunk.byteLength;
-
-          if (progressCallback) {
-            progressCallback(downloadedBytes, fileSize);
+  const reader = response.body.getReader();
+  const stream = new ReadableStream({
+    start(controller) {
+      function read() {
+        reader.read().then(({ done, value }) =&gt; {
+          if (done) {
+            controller.close();
+            return;
           }
-          // Remove this promise from queue when done
-          queue = queue.filter((p) =&gt; p !== promise);
-        })
-
-      // B. Immediately add to queue and continue
-      queue.push(promise);
-      start += chunkSize;
+          // Content-Length and byteLength are not directly comparable 
+          // if compression is involved
+          loaded += value.byteLength;
+          console.log(`Progress: ${Math.round(loaded / total * 100)}%`);
+          controller.enqueue(value);
+          read();
+        });
+      }
+      read();
     }
-
-    // Second Check
-    if (queue.length &gt;= maxParallelRequests) {
-      // D. Wait for any download to complete before continuing
-      await Promise.race(queue);
-    }
-  }
-
-  await Promise.all(queue);
-}
-
-// 1. fetchChunk() returns immediately with a Promise, not waiting for download
-// 2. Multiple chunks download simultaneously
-// 3. Promise.race() only blocks when queue is full
-// 4. Each .then() callback executes when its chunk completes
-// 5. Final Promise.all() ensures all downloads finish
-</code></pre>
-<pre><code class="lang-js">async function getFileSize(url, signal) {
-  const response = await fetch(url, { method: 'HEAD', signal });
-  if (!response.ok) {
-    throw new Error('Failed to fetch the file size');
-  }
-  const contentLength = response.headers.get('content-length');
-  return parseInt(contentLength, 10);
-}
-
-async function fetchChunk(url, start, end, signal) {
-  const response = await fetch(url, {
-    headers: { Range: `bytes=${start}-${end}` },
-    signal,
   });
-  if (!response.ok &amp;&amp; response.status !== 206) {
-    throw new Error('Failed to fetch chunk');
-  }
-  return await response.arrayBuffer();
-}
+
+  return new Response(stream);
+}).then(res =&gt; res.text())
+  .then(data =&gt; console.log("Done"));
 </code></pre>
+<blockquote><p>Why need new ReadableStream?</p>
+<ol>
+<li><code>response.body</code> is a locked stream once <code>.getReader()</code> is called. You can't use <code>.text()</code> / <code>.json()</code> / <code>.blob()</code> on response anymore. It is now exclusively controlled by that reader.</li>
+<li>You consume and lock the original stream. So, if you still want to use the data, you must reconstruct a new stream: read from original reader and enqueue chunks into new stream.</li>
+</ol>
+</blockquote>
 <h2>Cross-Origin Resource Sharing</h2>
 <p>A web application executes a cross-origin HTTP request when it requests a resource that has a different origin (domain, protocol, or port) from its own. For security reasons, browsers restrict cross-origin HTTP requests initiated from scripts. XMLHttpRequest and the Fetch API follow the same-origin policy, which means that a web application using those APIs can only request resources from the same origin unless the response from other origins includes the right CORS headers.</p>
 <p>CORS works by adding new HTTP headers that let servers describe which origins are permitted to read that information from a web browser. Additionally, for HTTP request methods other than <code>GET</code>, or <code>POST</code> with certain MIME types, the specification mandates that browsers <strong>"preflight"</strong> the request, soliciting supported methods from the server with the HTTP <code>OPTIONS</code> request method, and then, upon "approval" from the server, sending the actual request. Servers can also inform clients whether "credentials" (such as Cookies and HTTP Authentication) should be sent with requests.</p>
@@ -476,8 +381,7 @@ async function fetchChunk(url, start, end, signal) {
 <li>Apart from the headers automatically set by the user agent, the only headers which are allowed are those defined as a “CORS-safelisted request-header”, which are: <code>Accept</code>, <code>Accept-Language</code>, <code>Content-Language</code>, <code>Content-Type</code>, etc.</li>
 <li>The only allowed values for the <code>Content-Type</code> header are: <code>application/x-www-form-urlencoded</code>, <code>multipart/form-data</code>, <code>text/plain</code></li>
 </ul>
-<p>To allow the simple requests to access the resource, the <code>Access-Control-Allow-Origin</code> header should contain the value that was sent in the request's <code>Origin</code> header.</p>
-<p>The <code>Origin</code> request header indicates the origin (scheme, hostname, and port) that caused the request. It is similar to the <code>Referer</code> header, but does not disclose the path, and may be null. Broadly speaking, <strong>user agents add the <code>Origin</code> request header to cross origin requests or same-origin requests except for GET or HEAD requests</strong>.</p>
+<p>To allow the simple requests to access the resource, the <code>Access-Control-Allow-Origin</code> header should contain the value that was sent in the request's <code>Origin</code> header. The <code>Origin</code> request header indicates the origin (scheme, hostname, and port) that caused the request. <strong>User agents add the <code>Origin</code> request header to cross origin requests or same-origin requests except for GET or HEAD requests</strong>.</p>
 <h3>Preflight requests</h3>
 <p>Preflight requests first send an HTTP request by the <code>OPTIONS</code> method to the resource on the other domain, to determine if the actual request is safe to send. <code>OPTIONS</code> is an HTTP/1.1 method that is used to determine further information from servers, and is a safe method, meaning that it can't be used to change the resource.</p>
 <pre><code>OPTIONS /doc HTTP/1.1
@@ -521,4 +425,4 @@ Content-Type: text/plain
 <p>The <code>crossorigin</code> attribute, valid on the <code>&lt;audio&gt;</code>, <code>&lt;img&gt;</code>, <code>&lt;link&gt;</code>, <code>&lt;script&gt;</code>, and <code>&lt;video&gt;</code> elements, provides support for CORS, defining how the element handles cross-origin requests. There are actually three possible values for the <code>crossorigin</code> attribute: <code>anonymous</code>, <code>use-credentials</code>, and an "missing value default" that can only be accessed by omitting the attribute. The default value causes the browser to skip CORS entirely, which is the normal behavior (<code>Sec-Fetch-Mode: no-cors</code>).</p>
 <p><strong>When to use <code>crossorigin</code>?</strong></p>
 <p>Developers think "this request is going to another origin, so it must need the <code>crossorigin</code> attribute". But that’s not what the attribute is for—<code>crossorigin</code> is used to define the CORS policy for the request. <code>crossorigin=anonymous</code> (or a bare <code>crossorigin</code> attribute) will never exchange any user credentials (e.g. cookies); <code>crossorigin=use-credentials</code> will always exchange credentials. Unless you know that you need it, you almost never need the latter. But when do we use the former?</p>
-<p>If the resulting request for a file would be CORS-enabled, you would need <code>crossorigin</code> on the corresponding preconnect. In DevTools, if you look at the resource’s request headers: <code>Sec-Fetch-Mode: no-cors</code>, the preconnect doesn’t currently need a <code>crossorigin</code> attribute. It does need <code>crossorigin</code> if it’s marked <code>Sec-Fetch-Mode: cors</code>.</p>
+<p>Use <code>crossorigin="anonymous"</code> only when the resource server supports CORS and you need to access or manipulate the content—such as reading image pixels on a canvas or loading web fonts. In these cases, the server must respond with the appropriate <code>Access-Control-Allow-Origin</code> header for the browser to grant access. If you're simply loading a script, image, or other resource for display without needing to interact with its data, you typically don't need the crossorigin attribute.</p>

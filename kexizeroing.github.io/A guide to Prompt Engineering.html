@@ -131,19 +131,9 @@ the word farduddle is:</p>
 <li>The format you use also plays a key role in performance, even if you just use random labels, this is much better than no labels at all.</li>
 <li>Few-shot can be expensive in terms of token usage and restricts the input length due to limited context length.</li>
 </ul>
-<p>Furthermore, chat is not a radically new feature, but rather a way in which auto-completion is being utilized. For example, in <a href="https://github.com/ggerganov/llama.cpp">llama.cpp</a> (which rewriting the Python code to C++, so it runs significantly faster even on CPUs), we can find a file <code>chat-with-bob.txt</code> in the <code>prompts/</code> subfolder. It contains the following content:</p>
-<pre><code>Transcript of a dialog, where the User interacts with an Assistant named Bob. Bob is helpful, kind, honest, good at writing, and never fails to answer the User's requests immediately and with precision.
-
-User: Hello, Bob.
-Bob: Hello. How may I help you today?
-User: Please tell me the largest city in Europe.
-Bob: Sure. The largest city in Europe is Moscow, the capital of Russia.
-User:
-</code></pre>
-<p>The chat mode feeds the AI assistant's conversation transcript to the network for completion, starting with a prompt, followed by a sample format (question, answer). This creates the entire illusion of chat, even though the model is still just completing the "transcript" of a conversation between a human and AI.</p>
 <h3>Chain-of-Thought Prompting</h3>
 <p>It seems like few-shot prompting is not enough to get reliable responses for the type of reasoning problem. Chain-of-Thought (CoT) prompting enables complex reasoning capabilities through intermediate reasoning steps. You can combine it with few-shot prompting to get better results on more complex tasks that require reasoning before responding.</p>
-<p>&lt;img alt="chain-of-thought" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/008vOhrAly1hcqvzcmxovj31080h2n0i.jpg" width="650"&gt;</p>
+<p>&lt;img alt="chain-of-thought" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/008vOhrAly1hcqvzcmxovj31080h2n0i.jpg" width="700"&gt;</p>
 <p>Prompt:</p>
 <blockquote><p>The odd numbers in this group add up to an even number: 4, 8, 9, 15, 12, 2, 1.<br/>
 A: Adding all the odd numbers (9, 15, 1) gives 25. The answer is False.<br/>
@@ -215,12 +205,6 @@ She was born with a silver spoon in her mouth.
 </code></pre>
 </li>
 </ul>
-<h3>Prefill Claude's response for greater output control</h3>
-<p>When using Claude, you have the ability to guide its responses by prefilling the <code>Assistant</code> message. Your API request doesn't have to end with a 'user' turn. You can include an 'assistant' turn at the end of the messages array, and Claude will then start its response as if it already output the text you prefilled. This technique allows you to direct Claude’s actions, skip preambles, enforce specific formats like JSON or XML, and even help Claude maintain character consistency in role-play scenarios.</p>
-<ul>
-<li>Prefilling <code>{</code> forces Claude to directly output the JSON object.</li>
-<li>Prefilling a bracketed <code>[ROLE_NAME]</code> can remind Claude stay in character.</li>
-</ul>
 <h3>Prompt tips for OpenAI’s new o1</h3>
 <p>OpenAI's latest release, o1, unlocks new reasoning capabilities, but there’s a catch: prompts should be fundamentally different than the way you prompt GPT-3 and GPT-4, due to the new Chain-of-Thought architecture.</p>
 <p>These models perform best with straightforward prompts. Some prompt engineering techniques, like few-shot prompting or instructing the model to "think step by step," may not enhance performance and can sometimes hinder it. Here are some best practices:</p>
@@ -290,75 +274,80 @@ response = client.beta.prompt_caching.messages.create(
 </code></pre>
 <p>When you make an API call with these additions, we check if the designated parts of your prompt are already cached from a recent query. If so, we use the cached prompt, speeding up processing time and reducing costs.</p>
 <p>Place static content (system instructions, context, tool definitions) at the beginning of your prompt. Mark the end of the reusable content for caching using the <code>cache_control</code> parameter. The cache has a 5-minute lifetime, refreshed each time the cached content is used.</p>
-<h3>What is LLM-as-a-Judge</h3>
-<p>LLM-as-a-Judge is a solution that uses LLMs to evaluate LLM responses based on any specific criteria of your choice. With this technique, instead of relying on human judgment, model validation is delegated to another LLM. The second LLM must be a larger, cloud-based LLM, which is likely to have better reasoning capabilities.</p>
-<pre><code>IMPROVED_JUDGE_PROMPT = """
-You will be given a user_question and system_answer couple.
-Your task is to provide a 'total rating' scoring how well the system_answer answers the user concerns expressed in the user_question.
-Give your answer on a scale of 1 to 4, where 1 means that the system_answer is not helpful at all, and 4 means that the system_answer completely and helpfully addresses the user_question.
+<h3>Claude System Prompts</h3>
+<p>Claude includes a System Prompts release notes section in its docs. This section logs updates made to the default system prompts used on Claude.ai and in the mobile apps. The system prompt does not affect the API. Check it out here: <a href="https://docs.anthropic.com/en/release-notes/system-prompts">https://docs.anthropic.com/en/release-notes/system-prompts</a></p>
+<h2>OpenAI Responses vs. Chat Completions</h2>
+<p>The Responses API and Chat Completions API are two different ways to interact with OpenAI's models. As model capabilities evolve, the Responses API is a flexible foundation for building action-oriented applications, with built-in tools: Web search, File search, Computer use. <em>Currently the file search and computer use tools are only available using the new Responses API.</em></p>
+<pre><code class="lang-js">// api-mode=chat
+import OpenAI from "openai";
+const client = new OpenAI();
 
-Here is the scale you should use to build your answer:
-1: The system_answer is terrible: completely irrelevant to the question asked, or very partial
-2: The system_answer is mostly not helpful: misses some key aspects of the question
-3: The system_answer is mostly helpful: provides support, but still could be improved
-4: The system_answer is excellent: relevant, direct, detailed, and addresses all the concerns raised in the question
+const completion = await client.chat.completions.create({
+  model: "gpt-4.1",
+  messages: [
+    {
+      role: "user",
+      content: "Write a one-sentence bedtime story about a unicorn.",
+    },
+  ],
+});
 
-Provide your feedback as follows:
-
-Feedback:::
-Evaluation: (your rationale for the rating, as a text)
-Total rating: (your rating, as a number between 1 and 4)
-
-You MUST provide values for 'Evaluation:' and 'Total rating:' in your answer.
-
-Now here are the question and answer.
-
-Question: {question}
-Answer: {answer}
-
-Provide your feedback. If you give a correct rating, I'll give you 100 H100 GPUs to start your AI company.
-Feedback:::
-Evaluation: """
+console.log(completion.choices[0].message.content);
 </code></pre>
+<pre><code class="lang-js">// api-mode=responses
+import OpenAI from "openai";
+const client = new OpenAI();
+
+const response = await client.responses.create({
+  model: "gpt-4.1",
+  input: [
+    {
+      role: "user",
+      content: "Write a one-sentence bedtime story about a unicorn.",
+    }
+  ]
+});
+
+console.log(response.output_text);
+</code></pre>
+<p>The Chat Completions API is an industry standard for building AI applications, and we intend to continue supporting this API indefinitely. If you don't need built-in tools for your application, you can confidently continue using Chat Completions.</p>
+<blockquote><p>There are many providers that are <code>openai</code> compatible. They will give their end points, and you can reuse existing OpenAI clients by switching up the "base URL" property to point to the custom server instead of OpenAI's servers.</p>
+</blockquote>
+<h3>Structured Outputs</h3>
+<p>You might want to extract information from text, classify data, or generate synthetic data. Structured Outputs is available in latest large language models, starting with GPT-4o.</p>
+<pre><code class="lang-js">const ResearchPaperExtraction = z.object({
+  title: z.string(),
+  authors: z.array(z.string()),
+  abstract: z.string(),
+  keywords: z.array(z.string()),
+});
+
+const response = await openai.responses.parse({
+  model: "gpt-4o-2024-08-06",
+  input: [
+    {
+      role: "system",
+      content:
+        "You are an expert at structured data extraction. You will be given unstructured text from a research paper and should convert it into the given structure.",
+    },
+    { role: "user", content: "..." },
+  ],
+  text: {
+    format: zodTextFormat(ResearchPaperExtraction, "research_paper_extraction"),
+  },
+});
+
+// import { zodResponseFormat } from 'openai/helpers/zod';
+// await openai.chat.completions.parse({
+//   model: "",
+//   messages: [],
+//   response_format: zodResponseFormat(ResearchPaperExtraction, "research_paper_extraction"),
+// });
+
+const research_paper = response.output_parsed;
+</code></pre>
+<p>The AI SDK standardises structured object generation across model providers with the <code>generateObject</code> and <code>streamObject</code> functions.</p>
 <h2>Fine-tuning</h2>
 <p>GPT-3 has been pre-trained on a vast amount of text from the open internet. When given a prompt with just a few examples, it can often intuit what task you are trying to perform and generate a plausible completion. This is often called "few-shot learning."</p>
 <p>Fine-tuning improves on few-shot learning by training on many more examples than can fit in the prompt, letting you achieve better results on a wide number of tasks. Once a model has been fine-tuned, you won't need to provide examples in the prompt anymore. This saves costs and enables lower-latency requests.</p>
-<blockquote><p>In fact, ChatGPT will say that it doesn't know a thing. This is because it was fine-tuned to follow a conversational pattern. Fine-tuning is slow, difficult, and expensive. It is 100x more difficult than prompt engineering. So what is fine-tuning good for then? If you need a highly specific and reliable pattern (ChatGPT is a pattern, Email is a pattern, JSON/HTML/XML is a pattern), then fine-tuning is what you need.</p>
-</blockquote>
-<h3>An ELI5 explanation for LoRA</h3>
-<p>Finetuning pre-trained LLMs is an effective method to tailor these models to suit specific business requirements and align them with target domain data. However, as LLMs are “large,” updating multiple layers in a transformer model can be very expensive, so researchers started developing parameter-efficient alternatives. <strong>Low-rank adaptation (LoRA)</strong> is such a technique.</p>
-<p>When we train fully connected (i.e., “dense”) layers in a neural network, the weight matrices usually have full rank, which is a technical term meaning that a matrix does not have any linearly dependent (i.e., “redundant”) rows or columns. In contrast, low rank means that the matrix has redundant rows or columns.</p>
-<p>The key in LoRA lies in this hypothesis: any fine tuning of a dense layer actually only adds a low rank weight matrix deltaW to the existing trained weight matrix W. It’s proved and validated in LoRA and previous studies, even if W has a rank of 12288, deltaW just need to have a rank of 1 or 2 to retain similar performance.</p>
-<p>So the fine tuning is simplified to training deltaW, which has the same number of weights as the original weight W. But we can exploit the fact that deltaW a low rank matrix, which can be decomposed to to the multiplication of two low rank matrix A &amp; B. If W is 12288x12288, the deltaW only need to have 12288x1 + 1x12288 weights, resulting in only 1/6144 weights need to be trained.</p>
-<h3>OpenAI Fine-tuning capability</h3>
-<p>Fine-tuning lets you get more out of the models available through the API. Once you have determined that fine-tuning is the right solution, you’ll need to prepare data for training the model. You provide a list of training examples and the model learns from those examples to predict the completion to a given prompt. Your data must be a JSONL document, where each line is a prompt-completion pair corresponding to a training example.</p>
-<ul>
-<li>Large (ideally thousands or tens of thousands of examples)</li>
-<li>High-quality (consistently formatted and cleaned of incomplete or incorrect examples)</li>
-<li>Representative (training data should be similar to the data upon which you’ll use your model)</li>
-<li>Sufficiently specified (containing enough information in the input to generate what you want to see in the output)</li>
-</ul>
-<pre><code class="lang-json">{"prompt": "burger --&gt;", "completion": " edible"}
-{"prompt": "paper towels --&gt;", "completion": " inedible"}
-{"prompt": "vino --&gt;", "completion": " edible"}
-{"prompt": "bananas --&gt;", "completion": " edible"}
-{"prompt": "dog toy --&gt;", "completion": " inedible"}
-</code></pre>
-<pre><code># Prepare training data
-# CSV, TSV, XLSX, JSON file -&gt; output into a JSONL file ready for fine-tuning
-openai tools fine_tunes.prepare_data -f &lt;LOCAL_FILE&gt;
-
-# Create a fine-tuned model
-openai api fine_tunes.create -t &lt;TRAIN_FILE_ID_OR_PATH&gt; -m &lt;BASE_MODEL&gt;
-
-# List all created fine-tunes
-openai api fine_tunes.list
-
-# Retrieve the state of a fine-tune. The resulting object includes
-# job status (which can be one of pending, running, succeeded, or failed)
-# and other information
-openai api fine_tunes.get -i &lt;YOUR_FINE_TUNE_JOB_ID&gt;
-
-# Use a fine-tuned model
-openai api completions.create -m &lt;FINE_TUNED_MODEL&gt; -p &lt;YOUR_PROMPT&gt;
-</code></pre>
+<p>A popular technique for fine-tuning is LoRA (Low-Rank Adaptation). LoRA allows you to fine-tune large language models efficiently by injecting a small number of trainable parameters into the model without modifying the original weights. In simple terms, "low-rank" means a simpler or smaller version of something big. In machine learning, large matrices (tables of numbers) are often used to represent information. Sometimes, the information in a large matrix can be closely approximated using smaller, simpler matrices. This is called a low-rank approximation.</p>

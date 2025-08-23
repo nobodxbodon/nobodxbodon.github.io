@@ -63,6 +63,7 @@ let x = 'outer value';
 <li>Since arrow functions do not bind <code>this</code>, the methods <code>call()</code> or <code>apply()</code> can only pass in parameters. <code>thisArg</code> is ignored.</li>
 <li>Arrow functions don't have <code>arguments</code>. This array-like object was a workaround to begin with, which now has solved with a rest parameter. </li>
 <li>Arrow functions cannot be used as constructors and will throw an error when used with keyword <code>new</code>.</li>
+<li>Arrow functions cannot use <code>yield</code> within their body and cannot be created as generator functions.</li>
 </ol>
 <pre><code class="lang-js">const shape = {
   radius: 10,
@@ -204,36 +205,31 @@ Object.prototype.toString.call(new Map())     // '[object Map]'
 <li><code>Number.isInteger()</code> returns true if the given value is an integer, otherwise return false. If the value is NaN or Infinity, return false.</li>
 <li><code>Number.isNaN()</code> determines whether the passed value is the number value NaN, and returns false if the input is not of the Number type. Note that <code>Number.isNaN()</code> doesn't attempt to convert the parameter to a number, so non-numbers always return false.</li>
 </ul>
-<blockquote><p>The <code>length</code> property of an array is a 32-bit unsigned integer, which limits the maximum number of entries an array can have. Because the length property represents the number of entries, and it’s zero-based, the maximum length is <code>2^32 - 1</code>.</p>
-<p>Tweet IDs are big numbers, bigger than <code>2^53</code>. The Twitter API now returns them as both integers and strings, so that in Javascript you can just use the string ID, but if you tried to use the integer version in JS, things would go very wrong. This particular issue doesn’t happen in Python, because Python has integers. Read more about <a href="https://jvns.ca/blog/2023/01/13/examples-of-floating-point-problems/">Examples of floating point problems</a>.</p>
-</blockquote>
 <h3>Deal with floating point number precision</h3>
-<p>Avoiding Integers and Floats for Monetary Values:</p>
-<ul>
-<li><strong>Floats:</strong> Using floats for monetary values is risky because of the inherent imprecision of floating-point arithmetic. Since floats are represented in binary, some decimal values can't be accurately represented, which leads to small rounding errors.</li>
-<li><strong>Integers:</strong> While integers avoid the precision issue of floats, they are not ideal unless you are consistently working with values like cents (e.g., 100 = $1.00). This approach requires converting back and forth between dollars and cents, which can introduce unnecessary complexity.</li>
-</ul>
 <ol>
-<li>Using Decimals. Decimals represent exact decimal numbers, avoiding the imprecision that floats can introduce. Many programming languages have libraries or data types (e.g., Python’s <code>decimal.Decimal</code>, Java’s <code>BigDecimal</code>) that offer this precision. JavaScript does not natively support decimals, but third-party libraries like <code>decimal.js</code> offer arbitrary-precision decimal support. Decimals are stored differently from floats. They store numbers as base-10 (decimal) fractions. They typically store three components: <em>Mantissa</em>, <em>Exponent</em>, and <em>Sign</em>, that preserves its exact value without converting to binary.</li>
-</ol>
-<pre><code>Example Decimal Storage: Let's say you store the number `123.45` as a decimal:
-
-Mantissa: 12345
-Exponent: -2
-Sign: Positive
-</code></pre>
-<ol>
+<li><p>JavaScript’s Number type uses binary floating-point, which can introduce precision errors with decimal values like <code>0.1 + 0.2</code>. Decimal libraries like <code>decimal.js</code> avoid this by representing numbers in base-10, preserving exact decimal values <em>(represent decimal numbers as strings or arrays of digits, and perform manual arithmetic in base-10)</em>.</p>
+</li>
 <li><p>You need to replace equality tests with comparisons that allow some amount of tolerance. Do not do <code>if (x == y) { ... }</code>. Instead do <code>if (abs(x - y) &lt; myToleranceValue) { ... }</code>.</p>
 </li>
 <li><p><code>toPrecision()</code> returns a string representing this number to the specified number of significant digits.</p>
 </li>
 </ol>
-<pre><code class="lang-js">const fixNumber = num =&gt; Number(num.toPrecision(5));
+<pre><code class="lang-js">const n = 123.456;
+
+n.toFixed(2);  // '123.46'
+n.toFixed(5);  // '123.45600'
+n.toPrecision(4); // '123.5'
+n.toPrecision(5); // '123.46'
+
+const fixNumber = num =&gt; Number(num.toPrecision(5));
 
 // fixNumber(0.3 - 0.1) =&gt; 0.2
 // fixNumber(0.0003 - 0.0001) =&gt; 0.0002
 // fixNumber(0.57 * 100) =&gt; 57
 </code></pre>
+<ol>
+<li><code>Math.trunc()</code> function returns the integer part of a number by removing any fractional digits. Unlike <code>Math.floor()</code>, <code>Math.ceil()</code>, or <code>Math.round()</code>, it truncates (cuts off) the dot and the digits to the right of it, no matter whether the argument is a positive or negative number.</li>
+</ol>
 <h3>Why <code>[] + {}</code> is <code>"[object Object]"</code></h3>
 <p>Firstly convert both operands to primitive values, and try <code>valueOf()</code> followed by <code>toString()</code>. If either of them is a string, do <code>String(a) + String(b)</code>, otherwise do <code>Number(a) + Number(b)</code>.</p>
 <p>In the case of <code>{}</code>, it first tries to call <code>valueOf</code> on the object but that returns <code>{}</code>. Since <code>typeof {} === "object"</code>, it then calls <code>toString</code> and gets <code>"[object Object]"</code>. In the case of <code>[]</code>, calling <code>valueOf</code> returns <code>[]</code>, and since <code>typeof [] === "object"</code>, it calls <code>toString</code> and the return value of <code>Array.prototype.toString()</code> on an empty array is an empty string.</p>
@@ -275,14 +271,6 @@ function Person() {
 
 var p = new Person();
 </code></pre>
-<p>Figure out what the <code>"this"</code> is referencing:</p>
-<ol>
-<li>Is there an object to the left of the dot? If so, that's what the "this" keyword is referencing. (Implicit Binding)</li>
-<li>Was the function invoked with "call", "apply", or "bind"? If so, it'll explicitly state what the "this" keyword is referencing. (Explicit Binding)</li>
-<li>Was the function invoked using the "new" keyword? If so, the "this" keyword is referencing the newly created object that was made by the JavaScript interpreter. (new Binding)</li>
-<li>Is "this" inside of an arrow function? If so, its reference may be found lexically in the enclosing scope. (Lexical Binding)</li>
-<li>Are you in "strict mode"? If yes, the "this" keyword is undefined. If not, "this" is referencing the "window" object. (window Binding)</li>
-</ol>
 <h3>Function.prototype.call() / apply()</h3>
 <p>While the syntax of <code>call()</code> function is almost identical to that of <code>apply()</code>, the fundamental difference is that <code>call()</code> accepts an argument list, while <code>apply()</code> accepts a single array of arguments (or an array-like object). They provide a new value of <code>this</code> to the function. With call or apply, you can write a method once and then inherit it in another object, without having to rewrite the method for the new object. If the first argument is not passed, the value of <code>this</code> is bound to the global object (the value of <code>this</code> will be undefined in strict mode).</p>
 <pre><code class="lang-js">const numbers = [5, 6, 2, 3, 7];
@@ -361,29 +349,9 @@ var addThirtySeven = addArguments.bind(null, 37);
 
 var result2 = addThirtySeven(5);  // 37 + 5 = 42 
 var result3 = addThirtySeven(5, 10);  // 37 + 5 = 42 , second argument is ignored
-
-// setTimeout, explicitly bind this to the callback function
-function LateBloomer() {
-  this.petalCount = Math.floor(Math.random() * 12) + 1;
-}
-
-LateBloomer.prototype.bloom = function() {
-  setTimeout(this.declare.bind(this), 1000);
-};
-
-LateBloomer.prototype.declare = function() {
-  console.log('flower with ' + this.petalCount + ' petals!');
-};
-
-var flower = new LateBloomer();
-flower.bloom();  // after 1 second, triggers the 'declare' method
 </code></pre>
 <h2>Custom Event</h2>
-<p>The Event interface represents an event which takes place in the DOM. An event can be triggered by the user action or generated by APIs to represent the progress of an asynchronous task. It can also be triggered programmatically, such as by calling the <code>HTMLElement.click()</code> method of an element, or by defining the event, then sending it to a specified target using <code>EventTarget.dispatchEvent()</code>.</p>
-<blockquote><p>If you inspect the <code>HTMLElement</code> prototype chain, you'll discover it inherits from <code>Element</code>, <code>Node</code> and <code>EventTarget</code>. Thanks to the <code>EventTarget</code> interface, you can subscribe to an element's DOM events via <code>addEventListener</code>.</p>
-</blockquote>
 <p>Unlike "native" events, which are fired by the DOM and invoke event handlers <strong>asynchronously</strong> via the event loop, <strong><code>dispatchEvent()</code> invokes event handlers synchronously</strong>. All applicable event handlers will execute and return before the code continues on after the call to <code>dispatchEvent()</code>.</p>
-<p><code>isTrusted</code> is a read-only property that is only set to true if the event was dispatched by the user agent, which means that it was triggered by the user, such as a copy event triggered by the user pressing <code>Cmd + C</code>. This is in contrast to a synthetic event programmatically dispatched via <code>dispatchEvent()</code>, where <code>e.isTrusted</code> is false.</p>
 <p>Events can be created with the <code>Event</code> constructor. This constructor is supported in most modern browsers. To add more data to the event object, the <code>CustomEvent</code> interface exists and the <code>detail</code> property can be used to pass custom data.</p>
 <pre><code class="lang-js">// Adding custom data
 const pizzaEvent = new CustomEvent("pizzaDelivery", {
@@ -407,6 +375,8 @@ const eventAwesome = new CustomEvent('awesome', {
 form.addEventListener('awesome', e =&gt; console.log(e.detail.text()));
 textarea.addEventListener('input', e =&gt; e.target.dispatchEvent(eventAwesome));
 </code></pre>
+<blockquote><p>The <code>isTrusted</code> property of an event is a read-only Boolean that is true only for events generated by the browser, typically in response to a real user action, like a mouse click or keypress. In contrast, if an event is programmatically created and dispatched using <code>dispatchEvent()</code>, then <code>event.isTrusted</code> will be false, because it's not a result of a genuine user interaction.</p>
+</blockquote>
 <p>The most common approaches available to remove event listeners:</p>
 <ul>
 <li>Use <code>removeEventListener()</code> if the callback function is assigned to a variable and within easy reach of where the listener was added.</li>
@@ -424,26 +394,6 @@ button.addEventListener(
 );
 
 controller.abort();
-</code></pre>
-<pre><code class="lang-js">useEffect(() =&gt; {
-  const controller = new AbortController()
-
-  window.addEventListener('resize', handleResize, {
-    signal: controller.signal,
-  })
-  window.addEventListener('hashchange', handleHashChange, {
-    signal: controller.signal,
-  })
-  window.addEventListener('storage', handleStorageChange, {
-    signal: controller.signal,
-  })
-
-  return () =&gt; {
-    // Calling `.abort()` removes ALL event listeners
-    // associated with `controller.signal`.
-    controller.abort()
-  }
-}, [])
 </code></pre>
 <h2>Destructuring assignments</h2>
 <p>The destructuring assignment syntax is a JavaScript expression that makes it possible to unpack values from arrays, or properties from objects, into distinct variables.</p>
@@ -634,26 +584,6 @@ var p1 = encodeURIComponent("http://example.org/?a=12&amp;b=55")
 var url = "http://example.net/?param1=" + p1 + "&amp;param2=99";
 // http://example.net/?param1=http%3A%2F%2Fexample.org%2F%Ffa%3D12%26b%3D55&amp;param2=99
 </code></pre>
-<pre><code class="lang-js">// Real use case: handles URL redirection for login
-let nextParam = location.pathname;
-if (location.search) {
-  nextParam += location.search;
-}
-location.href = '/web/?next=' + encodeURIComponent(nextParam) + '&amp;type=3';
-
-// after login in `/web` page
-let $next = GetQueryString('next')
-if (GetQueryString('type') &amp;&amp; $next) {
-  $next = decodeURIComponent($next);
-
-  if ($next.indexOf('?') &gt; -1) {
-    $next += '&amp;date=' + Date.now()
-  } else {
-    $next += '?date=' + Date.now()
-  }
-  location.href = location.origin + $next
-}
-</code></pre>
 <h2>JSON stringify and parse</h2>
 <p><code>JSON.stringify(value, replacer, space)</code> converts a value to the JSON notation that the value represents, optionally replacing values if a replacer function is specified or optionally including only the specified properties if a replacer array is specified.</p>
 <ul>
@@ -700,6 +630,16 @@ JSON.stringify({ uno: 1, dos: 2 }, null, '\t');
 //     "dos": 2
 // }'
 </code></pre>
+<p><code>JSON.stringify</code> throws if one attempts to encode an object with circular references.</p>
+<pre><code class="lang-js">function hasCircularReference(obj) {
+  try {
+    JSON.stringify(obj);
+    return false;
+  } catch (e) {
+    return true;
+  }
+}
+</code></pre>
 <p><code>JSON.parse(text[, reviver])</code> parses a JSON string, constructing the JavaScript value or object described by the string. An optional reviver function can be provided to perform a transformation on the resulting object before it is returned. <strong><code>JSON.parse()</code> does not allow trailing commas and single quotes.</strong></p>
 <pre><code class="lang-js">JSON.parse('{}');              // {}
 JSON.parse('true');            // true
@@ -720,6 +660,9 @@ JSON.parse('{"1": 1, "2": 2, "3": {"4": 4, "5": {"6": 6}}}', (key, value) =&gt; 
 });
 // 1 2 4 6 5 3 ""
 </code></pre>
+<blockquote><p>In most cases the document is not really corrupt, but isn’t valid JSON because JSON is very strict. You can use <a href="https://github.com/josdejong/jsonrepair">jsonrepair</a> to repair invalid JSON documents.</p>
+<p>This library is basically an extended JSON parser. It parses the provided JSON document character by character, reading it into a data structure. When it encounters a parse error, instead of throwing an error, it looks whether this error has a cause that is solvable. For example, when encountering two unexpected characters <code>//</code>, it knows that this is a comment, and it will skip the comment and move on.</p>
+</blockquote>
 <h2>Symbol</h2>
 <p>Symbol is a primitive data type and the <code>Symbol()</code> function returns a value of type symbol. It resembles a built-in object class, but is incomplete as a constructor because it does not support the syntax <code>new Symbol()</code>.</p>
 <p><strong>Every symbol value returned from <code>Symbol()</code> is unique.</strong> A symbol value may be used as an identifier for object properties, which is the data type's primary purpose. Symbol can have an optional description, but for debugging purposes only. Symbols are guaranteed to be unique. Even if we create many symbols with the same description, they are different values.</p>
@@ -884,7 +827,7 @@ calc.next(7);   // {value: 14, done: false}
 calc.next(100); // {value: 14000, done: true}
 </code></pre>
 <h3>Iterator helper methods</h3>
-<p>The new proposal introduces a collection of new methods on the Iterator prototype, to allow general usage and consumption of iterators. All of the iterator-producing methods in this proposal are <strong>lazy</strong>. They will only consume the iterator when they need the next item from it.</p>
+<p>The new standard in ES2025 introduces a collection of new methods on the Iterator prototype, to allow general usage and consumption of iterators. All of the iterator-producing methods in this proposal are <strong>lazy</strong>. They will only consume the iterator when they need the next item from it.</p>
 <pre><code class="lang-js">function* naturals() {
   let i = 0;
   while (true) {
@@ -939,8 +882,8 @@ result // [0, 1, 2, 3, 4]
 naturals().find(v =&gt; v &gt; 1); // 2
 </code></pre>
 <h2>Promise</h2>
-<p>A <code>Promise</code> is a proxy for a value not necessarily known when the promise is created. The Promise object represents the eventual completion or failure of an asynchronous operation and its success value or failure reason. Instead of immediately returning the final value, the asynchronous method returns a promise to supply the value at some point in the future.</p>
-<p>A Promise is in one of these states: <code>pending</code>, <code>fulfilled</code>, <code>rejected</code>. A promise is said to be <code>settled</code> if it is either fulfilled or rejected, but not pending. A pending promise can either be fulfilled with a value or rejected with an error. When either of these options happens, the associated handlers queued up by a promise's <code>then</code> method are called. Note that <strong>promises are guaranteed to be asynchronous</strong>, so an action for an already "settled" promise will occur only after the stack has cleared and a clock-tick has passed. <strong>Promise executor functions should not be async</strong> (Don't do any awaiting inside the Promise constructor).</p>
+<p>The Promise object represents the eventual completion or failure of an asynchronous operation and its success value or failure reason. Instead of immediately returning the final value, the asynchronous method returns a promise to supply the value at some point in the future.</p>
+<p>A Promise is in one of these states: <code>pending</code>, <code>fulfilled</code>, <code>rejected</code>. A promise is said to be <code>settled</code> if it is either fulfilled or rejected, but not pending. A pending promise can either be fulfilled with a value or rejected with an error. When either of these options happens, the associated handlers queued up by a promise's <code>then</code> method are called. Note that <strong>promises are guaranteed to be asynchronous</strong>, so an action for an already "settled" promise will occur only after the stack has cleared and a clock-tick has passed. Promise executor functions should not be async (don't do any awaiting inside the Promise constructor).</p>
 <pre><code class="lang-js">let p = function() {
   return new Promise(function(resolve, reject) {
     setTimeout(() =&gt; resolve('foo'), 300);
@@ -959,6 +902,12 @@ console.log("immediate logging");
 </code></pre>
 <p>The methods <code>promise.then()</code>, <code>promise.catch()</code>, and <code>promise.finally()</code> are used to associate further asynchronous action with a promise that becomes settled. <strong>These methods also return a newly generated promise object, which can be used for chaining.</strong></p>
 <p><code>Promise.resolve()</code> returns a Promise object that is resolved with a given value. <code>Promise.reject()</code> method returns a Promise object that is rejected with a given reason.</p>
+<blockquote><p>Promise.resolve(p):</p>
+<ul>
+<li>If p is a real Promise, <code>Promise.resolve(p)</code> returns the same Promise instance, without wrapping or modifying it.</li>
+<li>If p is a plain value, it returns a Promise resolved with that value.</li>
+</ul>
+</blockquote>
 <pre><code class="lang-js">Promise.resolve('foo')
   // 1. Receive "foo", concatenate "bar" to it, and resolve that to the next then
   .then(function(string) {
@@ -1084,8 +1033,8 @@ Promise.race([p3, p4]).then(function(value) {
 //   {status: "fulfilled", value: 99},
 //   {status: "rejected",  reason: Error: an error}
 // ]
-</code></pre>
-<pre><code class="lang-js">// use Promise.allSettled() for async error handling
+
+// use Promise.allSettled() for async error handling
 const profilePromise = fetch(endpoint).then(response =&gt; response.json());
 const [ result ] = await Promise.allSettled([profilePromise]);
 
@@ -1113,21 +1062,6 @@ Promise.any([pErr, pSlow, pFast]).then((value) =&gt; {
   console.log(value);  // Done quick
 });
 </code></pre>
-<p>Promise with the concurrency control: <a href="https://github.com/sindresorhus/promise-fun">https://github.com/sindresorhus/promise-fun</a></p>
-<pre><code class="lang-js">import pMap from 'p-map';
-
-const urls = [
-  'https://sindresorhus.com',
-  'https://avajs.dev',
-  'https://github.com',
-  ...
-];
-
-const mapper = url =&gt; fetchStats(url); //=&gt; Promise
-
-const result = await pMap(urls, mapper, {concurrency: 5});
-console.log(result);
-</code></pre>
 <p>Implement a basic JavaScript Promise class from scratch, including the ability to resolve, reject, and chain promises using <code>.then()</code> and <code>.catch()</code> methods.</p>
 <pre><code class="lang-js">class MyPromise {
   constructor(executor) {
@@ -1151,39 +1085,7 @@ console.log(result);
       }
     };
 
-    try {
-      executor(resolve, reject);
-    } catch (error) {
-      reject(error);
-    }
-  }
-
-  _handleCallback(callback) {
-    const { onFulfilled, onRejected, resolve, reject } = callback;
-
-    if (this.state === 'fulfilled') {
-      if (typeof onFulfilled === 'function') {
-        try {
-          const result = onFulfilled(this.value);
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
-      } else {
-        resolve(this.value);
-      }
-    } else if (this.state === 'rejected') {
-      if (typeof onRejected === 'function') {
-        try {
-          const result = onRejected(this.value);
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
-      } else {
-        reject(this.value);
-      }
-    }
+    executor(resolve, reject);
   }
 
   then(onFulfilled, onRejected) {
@@ -1198,16 +1100,30 @@ console.log(result);
     });
   }
 
-  catch(onRejected) {
-    return this.then(null, onRejected);
-  }
+  // Take whatever that callback function returns,
+  // and use it to resolve the new promise that then() created.
+  _handleCallback(callback) {
+    const { onFulfilled, onRejected, resolve, reject } = callback;
 
-  static resolve(value) {
-    return new MyPromise(resolve =&gt; resolve(value));
-  }
-
-  static reject(reason) {
-    return new MyPromise((_, reject) =&gt; reject(reason));
+    if (this.state === 'fulfilled') {
+      if (typeof onFulfilled === 'function') {
+        const result = onFulfilled(this.value);
+        if (result instanceof MyPromise) {
+          result.then(resolve, reject);
+        } else {
+          resolve(result);
+        }
+      } else {
+        resolve(this.value);
+      }
+    } else if (this.state === 'rejected') {
+      if (typeof onRejected === 'function') {
+        // assume onRejected returns a value, not a promise
+        resolve(onRejected(this.value));
+      } else {
+        reject(this.value);
+      }
+    }
   }
 }
 </code></pre>
@@ -1219,29 +1135,11 @@ console.log(result);
 <li>The <code>await</code> keyword is only valid inside async functions.</li>
 <li>Use of <code>async / await</code> enables the use of ordinary <code>try / catch</code> blocks around asynchronous code.</li>
 </ul>
-<pre><code class="lang-js">// Helper buddy for removing async/await try/catch
-function safeAwait(promise) {
-  return promise.then(data =&gt; {
-    if (data instanceof Error) return [data]
-    return [null, data]
-  }).catch(err =&gt; [err])
-}
-
-// const [ err, data ] = await safeAwait(myPromise())
-</code></pre>
 <blockquote><p>Top level await (introduced in ES2022):<br/>
 You can use the <code>await</code> keyword on its own (outside of an async function) at the top level of a module.</p>
 <p>It only works in JavaScript modules, not in CommonJS (<code>require</code>) or traditional <code>&lt;script&gt;</code> tags without <code>type="module"</code>. Also, <code>.cjs</code> files in Node.js don’t support top-level await.</p>
 </blockquote>
-<p>Now you should understand why the below code will throw an error. The <code>useEffect</code> hook isn't expecting us to return a promise. It expects us to return either nothing or a cleanup function. A quick fix is to create a separate async function within our effect.</p>
-<pre><code class="lang-js">React.useEffect(async () =&gt; {
-  const url = `${API}/get-profile?id=${userId}`
-  const res = await fetch(url)
-  const json = await res.json()
-  setUser(json)
-}, [userId])
-</code></pre>
-<p>Another common mistake is to use <code>forEach</code> loop with async functions. The <code>forEach</code> loop is synchronous, meaning it doesn’t wait for the inner async function to complete. To fix this, you can use a <code>for...of</code> loop with <code>await</code>.</p>
+<p>Another common mistake is to use <code>forEach</code> loop with async functions. The <code>forEach</code> loop is synchronous, meaning it doesn’t wait for the inner async function to complete. So the loop completes immediately, even if the await inside hasn't resolved yet. To fix this, you can use a <code>for...of</code> loop with <code>await</code>.</p>
 <pre><code class="lang-js">const userIds = [1, 2, 3];
 // Wrong
 async function fetchUsers() {
@@ -1259,10 +1157,7 @@ async function fetchUsers() {
   }
 }
 </code></pre>
-<pre><code class="lang-js">// wait 1 second
-// await new Promise(resolve =&gt; setTimeout(resolve, 1000));
-
-function resolveAfter2Seconds() {
+<pre><code class="lang-js">function resolveAfter2Seconds() {
   return new Promise(resolve =&gt; {
     setTimeout(function() {
       resolve("slow")
@@ -1323,31 +1218,9 @@ async function parallel() {
 </code></pre>
 <blockquote><p>Concurrency is when two or more tasks can start, run, and complete in overlapping time periods. It doesn't necessarily mean they'll ever be running at the same instant. For example, multitasking on a single-core machine. Parallelism is when tasks literally run at the same time, e.g., on a multicore processor.</p>
 </blockquote>
-<pre><code class="lang-ts">// try...catch for await
-function catchError&lt;T&gt;(promise: Promise&lt;T&gt;): Promise&lt;[undefined, T] | [Error]&gt; {
-  return promise
-    .then(data =&gt; {
-      return [undefined, data] as [undefined, T]
-    })
-    .catch(err =&gt; {
-      return [err]
-    })
-}
-
-const [error, user] = await catchError(getUser(1))
-if (error) {
-  console.error('There was an error:', error.message)
-} else {
-  console.log(user)
-}
-</code></pre>
 <h3><code>for await...of</code></h3>
 <p>The <code>for await..of</code> loop is a handy tool when working with asynchronous operations. It allows us to iterate over the results of promises or asynchronous generators in a more readable and intuitive way.</p>
-<p>When a <code>for await...of</code> loop iterates over an iterable, it first gets the iterable's <code>[Symbol.asyncIterator]()</code> method and calls it, which returns an async iterator. If it does not exist, it then looks for an <code>[Symbol.iterator]()</code> method, which returns a sync iterator. The sync iterator returned is then wrapped into an async iterator by wrapping every object returned from the <code>next()</code> method into a resolved or rejected promise. The loop then repeatedly calls the final async iterator's <code>next()</code> method and awaits the returned promise, producing the sequence of values to be assigned to variable.</p>
-<ul>
-<li><code>for await...of</code> works on both sync and async iterables, while <code>for...of</code> only works on sync iterables.</li>
-<li>If the iterable is a sync iterable that yields promises, <code>for await...of</code> would produce a sequence of resolved values, while <code>for...of</code> would produce a sequence of promises.</li>
-</ul>
+<p>When using <code>for await...of</code>, it first looks for an async iterator via <code>[Symbol.asyncIterator]()</code>. If it exists, the loop uses it directly. If not, it falls back to the regular <code>[Symbol.iterator]()</code> and wraps each value in a promise. This allows the loop to handle both async and sync iterables. Each item is awaited before the loop continues, so promises are automatically unwrapped. In contrast, <code>for...of</code> only works with sync iterables and does not await promises.</p>
 <pre><code class="lang-js">const LIMIT = 3;
 
 const asyncIterable = {
@@ -1358,11 +1231,7 @@ const asyncIterable = {
         const done = i === LIMIT;
         const value = done ? undefined : i++;
         return Promise.resolve({ value, done });
-      },
-      return() {
-        // This will be reached if the consumer called 'break' or 'return' early in the loop.
-        return { done: true };
-      },
+      }
     };
   },
 };
@@ -1373,47 +1242,3 @@ const asyncIterable = {
   }
 })();
 </code></pre>
-<h2>What is a JavaScript test</h2>
-<pre><code class="lang-js">import { assert, describe, expect, it } from 'vitest'
-
-describe('suite name', () =&gt; {
-  it('foo', () =&gt; {
-    assert.equal(Math.sqrt(4), 2)
-  })
-
-  it('bar', () =&gt; {
-    expect(1 + 1).eq(2)
-  })
-})
-</code></pre>
-<blockquote><p>Before, we needed to write lots of defensive code to check if we passed weird things into methods. Now, we can use Typescript to make sure that never happens. We still need to test our business logic, but by using Typescript, we can write fewer unit tests.</p>
-</blockquote>
-<pre><code class="lang-js">import { expect, test } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { userEvent } from '@testing-library/user-event'
-import Link from '../components/Link.jsx'
-
-test('Link changes the state when hovered', async () =&gt; {
-  render(
-    &lt;Link page="http://antfu.me"&gt;Anthony Fu&lt;/Link&gt;,
-  )
-
-  const link = screen.getByText('Anthony Fu')
-
-  expect(link).toHaveAccessibleName('Link is normal')
-
-  await userEvent.hover(link)
-
-  expect(link).toHaveAccessibleName('Link is hovered')
-
-  await userEvent.unhover(link)
-
-  expect(link).toHaveAccessibleName('Link is normal')
-})
-</code></pre>
-<ul>
-<li><a href="https://jestjs.io">Jest</a> is a JavaScript testing framework built on top of Jasmine and maintained by Meta. It works out of the box for most JavaScript projects. Jest finds tests, runs the tests, and determines whether the tests passed or failed. Additionally, it offers functions for test suites, test cases, and assertions.</li>
-<li><a href="https://vitest.dev">Vitest</a> is a popular alternative to Jest, especially when being used in Vite. It also comes with a test runner, test suites (describe-block), test cases (it-block), and assertions (expect).</li>
-<li><a href="https://github.com/testing-library/react-testing-library">React Testing Library</a> is not a test runner. It provides virtual DOMs for testing React components. If you are using create-react-app, Jest and React Testing Library comes by default with the installation. Enzyme and React Testing Library are two similar things and alternatives to each other.</li>
-<li><a href="https://github.com/microsoft/playwright">Playwright</a> enables reliable end-to-end testing for modern web apps. It allows testing Chromium, Firefox and WebKit with a single API. Playwright is built to enable cross-browser web automation. Headless execution is supported for all browsers on all platforms.</li>
-</ul>
