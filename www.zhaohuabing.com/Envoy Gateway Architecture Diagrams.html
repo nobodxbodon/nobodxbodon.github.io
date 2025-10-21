@@ -9,3 +9,90 @@ these together to help myself quickly get a clearer picture of Envoy Gateway’s
 <p>I'll keep updating this post to include more diagrams.</p>
 <h2>Overview</h2>
 <p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/www.zhaohuabing.com/content/./envoy-gateway-architecture.png"/></p>
+<h2>Envoy OAuth Code Flow</h2>
+<pre><code class="lang-mermaid">sequenceDiagram
+    participant U as User (End User)
+    participant B as User-Agent (Browser)
+    participant E as Envoy
+    participant A as Authorization Server
+    participant P as Application
+
+    U-&gt;&gt;B: Open https://myapp.example.com
+    B-&gt;&gt;E: HTTP GET / Host: myapp.example.com
+    E-&gt;&gt;E: validate access and id token in cookie using HMAC
+    alt no valid token
+        E-&gt;&gt;E: generate csrf_token and state
+        E-&gt;&gt;E: generate code_verifier and code_challenge
+        E-&gt;&gt;B: HTTP 302 Redirect to Authorization Server with csrf_token and code_challenge in cookies
+        B-&gt;&gt;A: Authorization request
+        A-&gt;&gt;B: Redirect to user login page
+        U-&gt;&gt;B: Submit user credentials
+        B-&gt;&gt;A: User login request
+        alt user authenticated
+            A-&gt;&gt;B: Redirect to callback with authorization code
+            B-&gt;&gt;E: Authorization code callback with csrf_token in cookie
+            E-&gt;&gt;E: validate csrf_token in the state against the one in cookie
+            E-&gt;&gt;A: Token request with code_verifier
+            A-&gt;&gt;E: Access token (+ id token + refresh token)
+            E-&gt;&gt;B: HTTP 302 Redirect to original URL with access and id token in cookies
+            B-&gt;&gt;E: HTTP GET / Host: myapp.example.com with access and id token in cookies
+            E-&gt;&gt;P: Forward request with user identity in header
+            P--&gt;&gt;E: Response
+            E--&gt;&gt;B: Response
+        else user not authenticated
+            A-&gt;&gt;B: Redirect to login page with error
+        end
+    else valid token
+        E-&gt;&gt;P: Forward request with user identity in header
+        P--&gt;&gt;E: Response
+        E--&gt;&gt;B: Response
+    end
+</code></pre>
+<h2>AI Gateway MCP Auth Flow</h2>
+<p>Enable centralized access control at the gateway for backend MCP servers that do not natively support the MCP authorization spec:</p>
+<pre><code class="lang-mermaid">sequenceDiagram
+    participant B as User-Agent (Browser)
+    participant C as Client
+    participant G as MCP Gateway (Resource Server)
+    participant M1 as MCP Server1
+    participant M2 as MCP Server2
+    participant A as Authorization Server
+
+    C-&gt;&gt;G: MCP request without token
+    G-&gt;&gt;C: HTTP 401 Unauthorized with WWW-Authenticate header
+    Note over C: Extract resource_metadata URL from WWW-Authenticate
+
+    C-&gt;&gt;G: Request Protected Resource Metadata
+    G-&gt;&gt;C: Return metadata
+
+    Note over C: Parse metadata and extract authorization server(s)&lt;br/&gt;Client determines AS to use
+
+    C-&gt;&gt;A: GET /.well-known/oauth-authorization-server
+    A-&gt;&gt;C: Authorization server metadata response
+
+    alt Dynamic client registration
+        C-&gt;&gt;A: POST /register
+        A-&gt;&gt;C: Client Credentials
+    end
+
+    Note over C: Generate PKCE parameters&lt;br/&gt;Include resource parameter
+    C-&gt;&gt;B: Open browser with authorization URL + code_challenge + resource
+    B-&gt;&gt;A: Authorization request with resource parameter
+    Note over A: User authorizes
+    A-&gt;&gt;B: Redirect to callback with authorization code
+    B-&gt;&gt;C: Authorization code callback
+    C-&gt;&gt;A: Token request + code_verifier + resource
+    A-&gt;&gt;C: Access token (+ refresh token)
+    C-&gt;&gt;G: MCP request with access token
+    G-&gt;&gt;G: verify the access token
+    Note over G,G: We can implment fine-grained access control here
+    G-&gt;&gt;M1: MCP request
+    M1--&gt;&gt;G: MCP response
+    G--&gt;&gt;C: MCP response
+    Note over C,G: MCP communication continues with valid token
+    C-&gt;&gt;G: MCP request with access token
+    G-&gt;&gt;M2: MCP request
+    M2--&gt;&gt;G: MCP response
+    G--&gt;&gt;C: MCP response
+    Note over C,G: MCP communication continues with valid token
+</code></pre>

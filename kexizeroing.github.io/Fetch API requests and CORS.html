@@ -296,8 +296,8 @@ try {
 </code></pre>
 <p>Another important thing to note is that <strong><code>Response.body</code> is a <code>ReadableStream</code> of the body contents</strong>.</p>
 <ul>
-<li>The <code>getReader()</code> approach gives you more fine-grained control.</li>
-<li>The <code>for await...of</code> syntax is more concise and uses the response body's async iterator interface internally.</li>
+<li>The <code>getReader()</code> approach gives you more fine-grained control. This lets you get the response chunk-by-chunk, so you can start processing it as you receive it.</li>
+<li>The <code>for await...of</code> syntax is more concise and uses the response body's async iterator interface internally. The chunks are <code>Uint8Array</code>, but you can use TextDecoder to get the chunks as text.</li>
 </ul>
 <pre><code class="lang-js">const response = await fetch("large-file.mp4");
 const reader = response.body.getReader();
@@ -326,7 +326,7 @@ const blob = await response.blob();
 // Good: Process in chunks
 const response = await fetch("huge-video.mp4");
 for await (const chunk of response.body) {
-  processVideoChunk(chunk);
+  processChunk(chunk);
 }
 </code></pre>
 <pre><code class="lang-js">// Fetch with progress example
@@ -359,6 +359,7 @@ fetch(url).then(async response =&gt; {
 }).then(res =&gt; res.text())
   .then(data =&gt; console.log("Done"));
 </code></pre>
+<p>Note that this all falls down if the response has a <code>Content-Encoding</code>, because in that case the <code>Content-Length</code> represents the encoded size, but the chunks are decoded chunks. This means your downloaded value is likely to exceed the content length value.</p>
 <blockquote><p>Why need new ReadableStream?</p>
 <ol>
 <li><code>response.body</code> is a locked stream once <code>.getReader()</code> is called. You can't use <code>.text()</code> / <code>.json()</code> / <code>.blob()</code> on response anymore. It is now exclusively controlled by that reader.</li>

@@ -1,325 +1,6 @@
 <h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/_draft.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/_draft">站点原文</a></h2>
 <h1>draft</h1>
 <pre><code class="lang-plaintext">
-如何实现一个web服务器
-    拓扑结构
-        星型
-        环型
-        总线
-            以太网
-        ...
-    模型
-        七层模型 (由 OSI 提出的)
-            应用层 Application
-            表示层 Presentation
-                负责转化数据格式，并处理数据加密和数据压缩。
-                其实 tls 这这种协议可以归类到这一层里
-            会话层 Session
-                主要是用来管理网络设备的会话连接，建立会话，保持会话，断开会话
-            传输层 Transport
-            网际层 Internet/Network
-            数据链路层 Link/Data link/Network interface
-            物理层 Hardware/Physical
-        四层模型 ip/tcp
-            应用层
-            传输层
-            网际层
-            网络接口层
-        五层模型
-            应用层 -&gt; data (数据)
-            传输层 -&gt;
-                TCP -&gt; segment (段)
-                UDP -&gt; datagram (数据报文)
-            网际层 -&gt; packet (包)
-            数据链路层 -&gt; frame (帧)
-            物理层 -&gt; bit (比特)
-        各层常用的协议
-            应用层
-                http
-                    0.9 1.0 1.1 2 3
-                mqtt
-                telnet
-                    rfc 97 137 153 318
-                        854 855 856 857 859 860 861
-                        2217
-                ftp
-                dns
-                nntp
-                    网络新闻传输协议（Network News Transfer Protocol）
-                    USENET 和 NNTP 的关系，大概就是 网站 和 http 的关系差不多
-                irc
-                xmpp
-                ntp (Network Time Protocol) 网络时间协议
-                PTP (Precision Time Protocol) 精确时间协议
-                dhcp
-                    DHCP（Dynamic Host Configuration Protocol）动态主机配置协议
-                    DHCP 是基于客户端-服务器模式的标准协议，由RFC 2131定义
-                    它允许服务器集中管理IP地址池，自动为网络中的主机（如计算机、手机等）分配临时或永久的IP地址及相关配置
-                    服务器控制一段IP地址范围（地址池），客户端接入网络时自动获取IP地址、子网掩码、网关和DNS服务器等信息
-                    DHCP采用四步交互流程（DORA模型）完成地址分配： 
-                        Discover ：客户端广播请求，寻找可用的DHCP服务器。
-                            客户端在未获得 IP 地址时，会通过 UDP 广播 （目标地址 255.255.255.255 或子网广播地址）发送 DHCP Discover  消息，寻找可用的 DHCP 服务器。
-                            此时客户端完全不知道服务器的存在，因此使用广播确保消息能被同一链路中的所有设备（包括潜在的 DHCP 服务器）接收。
-                        Offer ：服务器响应并提供IP地址及相关配置。
-                        Request ：客户端正式请求使用提供的地址。
-                        Acknowledge ：服务器确认分配，完成绑定
-                    DHCP客户端和服务器通过UDP端口68（客户端）和67（服务器）通信
-                WHOIS
-                RDAP (Registration Data Access Protocol, 注册数据访问协议)
-                smtp
-                pop3
-                imap
-                echo
-                discard
-                daytime
-                chargen
-                time
-            传输层
-                tcp
-                    建立连接 三次握手
-                        客户端 -&gt; 服务端 syn
-                        服务端 -&gt; 客户端 syn+ack
-                        客户端 -&gt; 服务端 ack
-                        为什么是三次握手？
-                        如果是两次握手会有什么问题？
-                    断开连接 四次挥手
-                        主动关闭 -&gt; 被动关闭 fin
-                        被动关闭 -&gt; 主动关闭 ack
-                        被动关闭 -&gt; 主动关闭 fin
-                        主动关闭 -&gt; 被动关闭 ack
-                        主动关闭的那一边，在发送 ack 后还会等待 2msl 才会进入 closed 状态
-                        被动关闭的那一边，在收到 ack 后就会立即进入 closed 状态
-                        多数情况下都是客户端主动关闭的
-                        为什么是四次握手？
-                        如果少于四次握手会有什么问题？
-                        为什么发送 ack 后还要等待 2msl 才会进入 closed 状态？
-                    状态
-                        LISTEN SYN-SENT SYN-RECEIVED
-                        ESTABLISHED
-                        FIN-WAIT-1 FIN-WAIT-2 CLOSE-WAIT LAST-ACK TIME-WAIT CLOSED
-                    标志符
-                        syn ack fin rst
-                        发送 rest ，会立即释放连接，会丢弃发送缓冲区和接收缓冲区的数据，不需要等待对方ack确认
-                    流量控制
-                        滑动窗口
-                    拥堵控制
-                        慢启动 与 拥塞避免
-                            TCP 慢启动 / 14KB 规则 ？
-                        快重传 与 快恢复
-                    三个半事件
-                        连接建立
-                        连接断开
-                        消息到达
-                        消息发送完毕（这是半个事件）
-                    沾包
-                        根本原因
-                        什么情况下会发生
-                        解决方式
-                        为什么udp没有沾包
-                    tcp的异常中断
-                        程序崩溃
-                            操作系统会代为发送四次挥手
-                        主机宕机
-                            没有重启
-                                发送端在发送数据等待ack超时后，会强制关闭连接
-                            有重启
-                                接收端回复 rest 报文，然后重新建立连接
-                        还要考虑 KeepAlive ？
-                            可以参考主机宕机的情况
-                            如果发送端一直没有发送数据，且没有keepalive，且应用层没有心跳，那么发送端的连接会一直保持，会浪费一点内存
-                            其实只要重启的速度足够快，且 连接的socket 重新载入内存里，那么另一侧是不会感受到连接中断过的
-                        如果客户端的ip有变化，例如 手机网络经过切换
-                            那么，服务端会返回一个 rest ，然后重新建立连接
-                        如果客户端访问服务端没有开放的端口
-                            服务端可能会丢弃客户端的请求，然后客户端等待超时后自己关闭连接
-                            服务端也可能直接返回 rest 包
-                            这种请求也有可能被前面的防火墙挡下来了，根本到不了监听端口的服务端程序
-                udp
-                    udp 协议是无连接的，不需要握手建立连接，数据发送后，服务器端不会返回确认信息
-                    udp 的数据包发出去就不管的了，没有握手，挥手，ack
-                    也可以在应用层里实现 tcp 的那套可靠传输机制
-                icmp
-                    ping traceroute/tracert
-            网际层
-                ip v4 v6
-                ARP
-                    ARP inARP GARP RARP
-                IPsec
-            数据链路层
-                以太网 (Ethernet)
-                    以太网帧又分为 Ethernet II 和 IEEE 802.3
-                    关注 Ethernet II 就可以了
-                        帧间隙 来区分不同的 帧
-        各层对应的硬件
-            网关 (gateway)
-            路由器 (route)
-            交换器/交换机 (switch)
-            桥接器/网桥 (network bridge)
-            集线器 (ethernet hub 又或者 简称 hub)
-            中继器 (repeater)
-            调制解调器 (modem modulator-demodulator 调制器-解调器)
-            和安全相关的硬件
-                IPS (Intrusion Prevention System) 入侵检测（旁路部署）
-                IDS (Intrusion Detection System) 入侵防御（串行部署）
-                FW (FireWall) 防火墙
-                WAF (Web Application FireWall) 网页应用防火墙
-                UTM (Unified Threat Management) 统一威胁管理
-        按照规模划分的网络类型
-            pan
-            lan
-                vlan
-                wlan
-            can
-            man
-            wan
-            更多
-                ban
-                san
-                han
-                ran
-                Backbone
-                ipx
-            从两个计算机直连到广域网
-    载波侦听多路访问
-        Carrier Sense Multiple Access CSMA
-        载波侦听多路访问／碰撞检测（CSMA/CD）
-            CSMA with Collision Detection
-        载波侦听多路访问／碰撞避免（CSMA/CA）
-            CSMA with Collision Avoidance
-    路由表和路由算法
-        静态路由
-        动态路由
-            迪达拉算法
-            距离向量路由协议（Distance Vector Routing Protocol）：
-                RIP（Routing Information Protocol）和IGRP（Interior Gateway Routing Protocol），它们使用跳数作为衡量指标。
-            链路状态路由协议（Link State Routing Protocol）：
-                OSPF（Open Shortest Path First）和IS-IS（Intermediate System to Intermediate System），它们通过交换链路状态信息来构建网络拓扑图。
-    tcp 和 udp
-    什么是socket
-        socket 的中文翻译是套接字
-        network socket 网络套接字
-        五元组（five-element tuple）: 源地址 源端口 目标地址 目标端口 传输层协议
-            一个五元组，优惠称为套接字对（socket pairs）
-        SOCK_DGRAM 数据报套接字 用在UDP
-        SOCK_STREAM 流套接字 用在TCP
-        SOCK_RAW 原始套接字 除了UDP和TCP之外的传输层协议，例如 icmp
-    从socket里读写内容
-        一些限制
-            输入输出只考虑 asni ，多字节编码不好处理，这里只关注网络连接
-            一次通讯数据包最大的长度为 255 ，因为分包操作也挺麻烦的
-        基本套路
-            建立连接
-                socket
-                setsockopt
-                服务端
-                    bind
-                    listen
-                    accept
-                客户端
-                    connect
-            发送和接收数据
-                read / write -&gt; 通用的文件描述符操作函数
-                recv / send -&gt; TCP
-                recvfrom / sendto -&gt; UDP
-            关闭连接
-                shutdown -&gt; 一般只用于socket
-                    可以选择关闭读 关闭写 关闭读写，调用后 socket 就会关闭
-                close -&gt; 通用的文件描述符操作函数
-                    调用后无法读写，但 socket 未必会关闭，
-                    调用后 socket 的引用计数会减1，只有当 socket 的引用计数为0时才会关闭连接
-                比较保险的方式是先调用 shutdown 再调用 close
-            io复用
-                select poll epoll
-        只输出一个 helloworld
-        能接收多次连接的 helloworld
-        能同时接收多个连接的 helloworld
-        实现最简单的五个协议
-            echo (RFC 862) 7 回显服务，把收到的数据发回客户端
-            discard (RFC 863) 9 丢弃所有收到的数据
-            chargen (RFC 864) 19 服务端 accept 连接之后，不停地发送测试数据
-            daytime (RFC 867) 13 务端 accept 连接之后，以字符串形式发送当前时间，然后主动断开连接
-            time (RFC 868) 87 服务端 accept 连接之后，以二进制形式发送当前时间的32位时间戳，然后主动断开连接
-            只考虑 tcp 的
-            用 netcat 作为客户端
-        然后是基于 telnet 的 echo
-        然后是基于 telnet 的聊天室
-        nc telnet http proxy
-    http 服务器
-        http 协议
-            0.9 1.0 1.1 2 3
-            请求码 和 响应码
-            mime
-            缓存
-        基本套路
-            建立连接
-            接收数据
-            解释请求
-                请求行
-                请求头
-                请求体
-            处理数据
-            构造响应
-                响应行
-                响应头
-                响应体
-            输出响应
-            根据实际情况决定 关闭连接 或 保持连接
-        进程模型
-            单进程单线程
-            单进程多线程
-            多进程单线程
-            多进程多线程
-            io 多路复用
-                select
-                poll
-                epoll
-                    水平触发 (level trigger, LT)
-                    边缘触发 (edge trigger, ET)
-        具体类型
-            静态
-            动态
-                cgi
-                fastcgi
-            代理
-                socket 双写
-                位置
-                    反向代理
-                    正向代理
-                类型
-                    http代理
-                        RFC 2616 7230 7231 7235
-                    sockt代理
-                        RFC 1928 SOCKS5
-                    pac
-                        https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Proxy_servers_and_tunneling
-            websocket
-                WebSocket Secure (wss)
-            相关的rfc
-                https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Resources_and_specifications
-            认证 和 授权
-            流量控制
-        TLS
-            1.2
-            1.3
-    其它
-        带宽 和 宽带 和 位宽 的联系与区别
-        代理 网关 隧道 的区别，还有 VPN 和 端口转发
-            代理 proxy
-                「代为处理」
-                代理的类型和作用域
-                在各种系统上的代理设置
-                    windows
-                    linux
-                    安卓
-                正向代理/转发代理 forward proxy
-                反向代理 reverse proxy
-            网关 gateway
-                「网络关口」「网络海关」
-            隧道 tunnel
-            端口转发 port forwarding
-            虚拟专用网 (Virtual Private Network , VPN)
-            虚拟私有云 (Virtual Private Cloud , VPC)
-            透明 transparent
 
 以开发软件为目标的计算机入门简明指南
     计算机入门的前置知识
@@ -339,6 +20,7 @@
                 https://github.com/yujiangshui/A-Programmers-Guide-to-English
                 https://a-programmers-guide-to-english.harryyu.me/
         抽象是一个重要的概念，封装是一个重要的概念，递归是一个重要的概念
+        总结起来就是 数学+英语+三个概念（抽象，封装，递归）
     计算机学科的相关概念
         计算理论（Theory of computation）
         计算理论的三个主要问题
@@ -459,6 +141,9 @@
             鼠标 - 输入设备
             屏幕 - 输出设备
             音箱 - 输出设备
+        计算机组成原理和计算机体系结构的区别
+            计算机组成(Computer Organization) 主要研究计算机由哪些部分组成
+            计算机体系结构(Computer Architecture) 主要研究怎么设计 CPU
     操作系统
         环境变量
         抽象的操作系统
@@ -658,6 +343,7 @@
                 解释 properties ini yaml json xml md
                 一个简单的脚本语言
                 正则表达式
+    数据结构和算法
     数据库
         抽象的数据库
             平面 flat
@@ -681,18 +367,27 @@
         mysql 的一般使用
             explain sql
     计算机网络
+        什么是通讯？
         网络模型
         各层中的协议
         使用系统api来读写网卡中的数据
-    数据结构和算法
     软件工程
+        项目管理
+            软件开发模型、软件过程模型、以及软件开发方法
+        软件测试
+        CI/CD
     中间件
+        各种网络服务（例如 http服务器）
         定时任务
         缓存
         队列
         全文搜索引擎
     虚拟机和容器
     集群和分布式
+    交互设计
+        与人交互
+        与其它程序交互
+        cli tui api gui
     一些工具
         git 的一般使用
             github gitlab gitee 其它的 git 服务
@@ -1769,136 +1464,6 @@ vscode的使用技巧
     对项目发展的预期是怎样的
     大多数情况下，开发效率比运行效率重要
         因为大多数情况下，硬件成本比人力成本低
-电子邮件
-    名词
-        email
-        e-mail
-        Electronic Mail
-        电子的 邮件
-        电子邮件
-        电邮
-    组成
-        mta mua mda
-    主流的操作系统都有预装邮件客户端（mua）
-        Microsoft Mail 更早的，从dos时代开始
-        Windows Messaging 95 ， win95里的 ie3.0 也可以作为mua，这个mua后续发展出 Outlook Express
-        Outlook Express 98-xp
-        Windows Live Mail vista-7
-        Windows Mail 8-11
-        Outlook For Windows 10-11
-        unix/linux 里的 mailx
-        iOS 安卓 winphone 塞班 S40 都有预装邮件客户端，就像浏览器一样是一个重要的系统组件
-如何搭建一个邮件服务器
-    单机的在不同用户间发送邮件
-        apt install -y mailutils
-        这句命令安装的是 exim
-        如无意外，安装完后就能直接用 sendmail mail mailx 命令了
-            mail 和 mailx 链接到 mail.mailutils
-            sendmail 链接到 exim4
-            增加一个用户 useradd -m user1
-        发送邮件给其它用户
-            使用 mailx 命令发送
-            echo "test mail content" | mailx -s "test mail subject" root
-            echo 邮件内容 | mailx -s 邮件主题 用户名
-            使用 sendmail 命令发送
-            echo -e "From: root\nTo: root\nSubject: 问候\n\n我是 root 用户，这是一封用 sendmail 命令发送的邮件。" | sendmail -t
-            sendmail -t &lt;&lt;EOF
-            From: root
-            To: root
-            Subject: 问候
-
-            我是 root 用户，这是一封用 sendmail 命令发送的邮件。
-            EOF;
-        查看用户的邮件
-            mail -u root
-            mail -u 用户名
-            mail -f /var/spool/mail/mail
-            mail -f /var/mail/mail root用户要用这种方式才能查看接收的邮件
-            mail -f 用于保存邮件的文件路径
-            mail -f /var/mail/user1
-        邮件保存的位置
-            目录
-                /var/spool/mail 这个目录会软连接到 /var/mail
-                /var/mail 这个是实际的目录
-            文件
-                /var/mail/root
-                /var/mail/mail
-                /var/mail/用户名
-        日志
-            日志文件的目录
-                /var/log/exim4
-            日志文件
-                /var/log/exim4/mainlog
-            预防万一可以先事先新建一个
-                ls -l /var/log/exim4
-                mkdir -p /var/log/exim4
-                touch /var/log/exim4/mainlog
-                chmod 777 /var/log/exim4/mainlog
-            查看日志
-                cat /var/log/exim4/mainlog
-    在局域网里自娱自乐
-        至少需要搭建 smtp 和 imap
-            至少要开启这两个端口 smtp(25) imap(143)
-            最好再加上这两个 smtps(587) imaps(993)
-            还有这几个 smtps(465) pop3(110) pop3s(995) smtp(2525)
-                587 才是标准的 smtps 端口 rfc3207
-                465 比 587 更早出现
-                    465 是一开连接就启用 tls
-                    465 很长一段时间都不是标准，直到 rfc8314
-                    587 是连接完成后再通过 STARTTLS命令 启用 tls
-                        除了 smtps 之外，还有不少的协议使用这种明文命令的形式启用 tls
-                        这种 tls 被称为 机会型TLS（Opportunistic TLS）
-                有些电子邮件服务通过端口 2525 提供 SMTP 传输。但它并不是电子邮件的标准端口
-        假设已经安装好 exim
-            修改配置文件
-            启动
-            尝试通过ip发送邮件
-    能收发外网的邮件
-        除了 搭建 smtp 和 imap 之外，还要做好域名的解释
-        域名解释才是最困难的部分
-            域名解释
-                A 记录
-                    @ 指向 ip
-                CNAME 记录
-                    mail 指向 A 记录
-                MX 记录
-                    @ 指向 CNAME 记录
-                TXT 记录
-                    spf dkim dmarc DANE MTA-STS
-                PTR 记录
-                    域名 指向 ip
-            各种代理
-                mua webmail RainLoop
-                mta exim Postfix sendmail
-                    amavisd-new 调度 ClamAV 和 SpamAssassin
-                    ClamAV 邮件反病毒
-                    SpamAssassin 过滤垃圾邮件
-                mda Dovecot
-                msa
-                mra
-                maa
-            opendkim
-            还有更多？ bimi RUA RUF MTA-STS TLS-RPT
-        要确保这几个端口的开放
-            25 465 143 993
-            除了安全组，防火墙，还要向运营商确认这几个端口有没有开放
-    mta
-        Mail Transfer Agent(邮件传输代理)
-            这个是邮件系统的核心
-            主要用于
-                接收邮件
-                把邮件转发给其它mta
-                把邮件转发给mda或保存在本地
-            常见的 mta 有三种
-                sendmail
-                    最古老的 mta 之一
-                    可以通过命令行发送邮件
-                    可以作为 smtp 服务器运行
-                postfix
-                    Postfix 是为了替代 Sendmail 而设计的，提供了更现代化的特性和更高的安全性
-                    兼容一部分 sendmail 的命令
-                exim4
-                    兼容一部分 sendmail 的命令
 如何实现一个搜索引擎？
     搜索引擎的原理
         分词（word segmentation）
@@ -2088,21 +1653,6 @@ KiB 和 KB 和 Kb 和 Kbps 的联系与区别
             特别是口语里只会说 xxK 或 xxM 很少会说 xxKiB 这种
         在编程开发中，尽量使用 KiB
         http://www.elecfans.com/tools/zijiehuansuan.html
-带宽 和 宽带 和 位宽 的联系与区别
-    带宽（Bandwidth）一开始的意思是电磁波频率的范围，最高频率和最低频率之间的差值
-    在计算机领域中的带宽一般是指数据传输的速度，包括但不限于，网速，内存速度，接口速度
-    计算机领域的带宽，其实是在描述理论上的最高速度
-        例如 512Kbps 的带宽，是指最高速度达到 512Kbps ，实际上的速度应该是会小于等于 512Kbps 的
-    带宽的单位是 bps
-    宽带（Broadband）是指较宽的带宽，一般是指比较快的网速
-        最开始是把 56Kbps 以上的带宽称为宽带，56kbps 以下的称为窄带（Narrowband）
-        后来又变成了 512Kbps 以上的带宽才能称为宽带
-        再后来又变成了 4Mbps 以上的带宽才能称为宽带
-        感觉宽带就是一个营销术语
-        ps 墙内的运营商的家用宽带一般都是指下行速度
-    位宽是指一次能传输的数据量，就是一次能传输的比特位数
-        例如， 64位的位宽就是指一次能传输64个比特位，通常位简称为 64位（64bit）
-        内存带宽一般是 内存频率*内存位宽 ，显存带宽也是一样的计算
 浏览器引擎 渲染引擎 js引擎 的联系与区别
     各种名词
         浏览器（Browser）
@@ -2212,6 +1762,13 @@ KiB 和 KB 和 Kb 和 Kbps 的联系与区别
             GNOME Web
         CEF
             Chromium Embedded Framework
+    旧时代的插件
+        ActiveX
+        Silverlight
+        Flash
+        applet
+        https://github.com/ruffle-rs/ruffle 一个用Rust编程语言编写的Adobe Flash Player模拟器
+        https://github.com/leaningtech/cheerpj-meta 用 WebAssembly 来运行 java ，包括 java web start 和 applet
 程序 软件 应用 的联系与区别
     英文
         软件 software
@@ -4271,6 +3828,7 @@ ELF格式
 从零开始学习数学建模
     我总想找到一种方法来应对所有类型的算法面试题
     或者说我总想找到一种方法来应对所有考试时遇到的数学题
+    或者说我总想找到一种方法来应对所有考试时遇到的问题
     我们为什么可以把题目归类为一类相似的问题？
     题型的数量是不是可以无限地增加？
     数学建模需要哪些前置的知识？
@@ -4292,6 +3850,33 @@ ELF格式
         预测
         分类
         最优化
+    经典的机器学习算法
+        线性回归算法 (Linear Regression)
+        支持向量机算法 (Support Vector Machine, SVM)
+        最近邻居/k-近邻算法 (K-Nearest Neighbors, KNN)
+        逻辑回归算法 (Logistic Regression)
+        决策树算法 (Decision Tree)
+        k-平均算法 (K-Means)
+        随机森林算法 (Random Forest)
+        朴素贝叶斯算法 (Naive Bayes)
+        降维算法 (Dimensional Reduction)
+        梯度增强算法 (Gradient Boosting)
+        遗传算法（Genetic Algorithm, GA）
+        模拟退火（Simulated annealing, SA）
+        蒙特卡罗方法（Monte Carlo method）
+        马尔可夫链（Markov chain）
+        隐马尔可夫模型（Hidden Markov Model, HMM）
+    各种 人工智能/机器学习/深度学习/数据分析/数据挖掘 的模型
+    这些模型各自的应用场景和优缺点
+        这些模型有哪些经典的应用
+    这些模型所对应的算法和算法对应的数学原理
+        这些数学理论如何和机器学习的模型联系起来
+        这些机器学习的模型如何和数学理论联系起来
+        就是要双向连接
+    这些模型在不同条件下的分类
+        例如 有没有监督 训练样本有没有标签 是不是线性模型 用于分类还是用于预测 是不是概率模型 是不是生成式模型 是单模型还是集成模型
+    这些 模型/算法 的发展历史
+        例如 由谁提出的，在哪篇论文最先提到，有哪些变体
 leetcode做题的一般套路
     要把问题抽象成数学问题
         要抽象成类似这样的函数
@@ -4567,6 +4152,10 @@ leetcode做题的一般套路
         Python R Julia Fortran SQL
         Spyder Jupyter RStudio
         Excel Octave MATLAB Mathematica SAS SPSS stata
+        PowerQuery
+            excel 2010 和 2013 pq 可以作为免费的加载项
+            excel 2016 pq就内置在 excel 了
+            pq 也可以用在免费的 Power BI Desktop 里
     相关的职业
         数据科学家（Data scientist）
             数据科学家分析复杂的数字数据，帮助企业做出决策。
@@ -4828,6 +4417,9 @@ leetcode做题的一般套路
             苏姿丰
             梁见后 超微电脑（Super Micro Computer） 主要是做服务器的
             梁文峰
+            Alexandr Wang
+        其它
+            Georgi Gerganov
     相关的框架
         python的库
             Torch
@@ -4858,6 +4450,7 @@ leetcode做题的一般套路
             https://github.com/apachecn/ailearning
             https://github.com/apachecn/ai-roadmap
         AI工具集 https://ai-bot.cn/
+        多智能体框架 https://github.com/geekan/MetaGPT
         google 的机器学习教程 https://developers.google.com/machine-learning?hl=zh-cn
         tensorflow 的教程 https://www.tensorflow.org/resources/learn-ml?hl=zh-cn
     Kaggle
@@ -4892,14 +4485,60 @@ leetcode做题的一般套路
             openwebui
             https://github.com/ollama-ui/ollama-ui
 财政、经济、金融、股票、基金、量化
-    期货 etf qdii
+    交易 货币 贷款 存款 汇兑 股票 债券 外汇 期货 基金
+    基础资产（Underlying Asset）
+    ETF（Exchange Traded Fund）——交易型开放式指数基金
+    QDII（Qualified Domestic Institutional Investor）——合格境内机构投资者
+    FOF（Fund of Funds）——基金中的基金
+    LOF（Listed Open-ended Fund）——上市型开放式基金
+    CEF（Closed-End Fund）——封闭式基金
+        中国基金法规定，开放式基金必须“可申购赎回”，封闭式基金仅限于有固定期限的封闭运作（如 3 年、5 年封闭期），到期后转开放或清算。
+        中国市场上所谓的“封闭式基金”其实是定期开放式基金（如 3 年封闭期），到期后可赎回，不上市交易。
+    金融衍生品/金融衍生工具
+        Derivative（衍生品）
+        港澳称金融衍生产品
+        台湾称衍生性金融商品
+        金融衍生品是以一种或多种基础资产为标的，其价值取决于这些基础资产价格或指标表现的金融合约
+        什么是 标的 ？
+        什么是 金融合约 ？
+        四大类衍生品
+            期货 期权 远期合约 交换（Swaps）
+    什么是 回测
+    什么是 因子挖掘
+        因子（Factor） 是指能够解释资产收益差异的可量化特征
+        因子挖掘（Factor Mining） 是指通过系统化的数据科学和统计方法，
+        从原始数据中识别、构建和验证能够预测资产收益差异的特征变量（即“因子”）的过程。
+        这些因子是量化策略的核心基础，用于构建多因子模型以获取超额收益。
+        经典因子示例：
+            价值因子：市盈率（PE）、市净率（PB）、股息率。
+            动量因子：过去12个月收益率、短期价格趋势。
+            规模因子：公司市值大小。
+            质量因子：ROE（净资产收益率）、资产负债率。
+        因子挖掘的核心目标 
+            发现新因子：从传统数据（如财务报表、行情数据）或另类数据（如卫星图像、社交媒体情绪、供应链数据、文本新闻）中提取未被广泛认知的预测信号。
+            优化现有因子：改进传统因子的计算方式（如将“市盈率”与“盈利增长”结合，构建“动态价值因子”）。
+            提升策略鲁棒性：通过多因子组合降低单一因子失效的风险。
     有哪些可以提供数据的网站
         新浪财经
         东方财富
+        雅虎财经(Yahoo Finance)
+        google财经 但数据似乎比 微软和雅虎 都要少
         同化顺
         雪球 https://xueqiu.com/stock/screener
         微软 https://www.msn.com/zh-cn/money/explorecenter
-        腾讯证券里也有数据，但要在微信里用，感觉作用不是很大
+        腾讯财经 http://qt.gtimg.cn/q=sh600000 https://sqt.gtimg.cn//?q=sh000001
+        openctp
+            https://github.com/openctp/openctp 这个仓库里有不少接口
+            http://www.openctp.cn/
+            CTP （China Trading Platform 中国交易平台）
+            CTP 是由上期技术（上海期货信息技术有限公司）开发的一套标准化金融交易接口
+                CTP 最初由中国金融期货交易所（CFFEX）推出，主要用于期货、期权等衍生品的程序化交易。
+                它提供了一套标准的 API 接口（即 CTP API），供开发者编写自动化交易程序，连接期货公司柜台系统进行行情获取、下单、撤单等操作。
+                传统上，个人开发者或机构常使用“SimNow”平台提供的模拟环境来测试基于 CTP 接口的程序。
+    股票交易和分析软件
+        同花顺 大智慧 指南针 东方财富 信达通 钱龙 腾讯自选股
+        通达信 - 被许多民间高手和游资使用，职业交易者较为青睐
+            因为最大优势就是职业抄手的通达信界面全是根据自己的看盘习惯和风格重新定制的；其次基本上所有指标都可以兼容
     同花顺都有哪些产品和服务
         电脑软件
             免费
@@ -4910,7 +4549,8 @@ leetcode做题的一般套路
         saas平台
             问财
             顾投平台
-            量化回测 supermind https://quant.10jqka.com.cn/view/
+            量化回测 supermind https://quant.10jqka.com.cn/view/ 这个好像有新闻数据的
+            量化策略平台 backtest https://backtest.10jqka.com.cn/backtest/app.html
     有哪些量化交易的平台，即使只有回测或模拟盘也可以
         www.fmz.com
         PandaAI 量化因子库
@@ -4921,12 +4561,41 @@ leetcode做题的一般套路
             https://github.com/bbfamily/abu
         QUANTAXIS
             https://github.com/yutiansut/QUANTAXIS
+        bigquant 的知识库 https://bigquant.com/wiki/home
     github 相关的仓库
         TradingAgents：基于多智能体大语言模型的金融交易框架 https://github.com/TauricResearch/TradingAgents
         基于多智能体LLM的中文金融交易框架 - TradingAgents中文增强版  https://github.com/hsliuping/TradingAgents-CN
         强化学习交易股票 https://github.com/sunnyswag/StockRL
         Qlib是一个面向人工智能的量化投资平台,旨在实现潜力,利用人工智能技术在定量投资中创造价值,从探索想法到实施生产。
             https://github.com/microsoft/qlib
+FIRE和财富自由和躺平
+    生活水平的分级
+        赤贫 贫穷 温饱 小康 中产 富裕 极富
+    财富自由
+        不需要工作的前提下可以一直保持 富裕或以上 的生活水平
+    躺平
+        定义1：财富自由
+        定义2：成年人不再积极赚钱/学生不再积极提高成绩
+        https://github.com/phodal/tangping
+    FIRE
+        定义
+            Financial independence,Retire early（财务独立，提早退休）
+            通过降低物欲，过极简的生活，迅速攒够生活费的25倍，靠4%的利息生活，
+            达到逃离“不开心”的工作，去追求自己喜欢的生活方式。
+            4% 是收益率减通胀率，不是理财的收益4%
+            FIRE 并没有明确提及生活水平，笔者认为至少都要有 小康 的水平吧
+        分类
+            FatFIRE 肥FIRE
+                进入 FIRE 后依然保持中产或以上的生活水平
+            RegularFIRE 传统FIRE
+                有计划地储蓄，储蓄达到一定金额后通过投资理财的被动收入支付生活成本
+                一般目标金额通常是 一年生活费的25倍 ， 一般假设投资理财一年会有 4%收益
+            LeanFIRE 瘦FIRE
+                尽力储蓄，以求尽快进入FIRE状态，强调很高的储蓄率和很低的生活费
+            BaristaFIRE 咖啡师FIRE
+                储蓄达到一定金额后，辞去传统的工作，从事某种形式的兼职，通过储蓄的投资理财和兼职收入达到FIRE的状态
+            CoastFIRE 滑行FIRE
+                储蓄达到一定金额后，不再积极储蓄，然后由投资理财让这笔储蓄通过投资理财在计划退休年龄达到可以FIRE的金额
 MySQL 和 PostgreSQL
     比较 MySQL 和 PostgreSQL
         pg 和 mysql 在语法有一些差异
@@ -5419,6 +5088,12 @@ termux
     LXC 和 LXD
     各种镜像格式
         raw qcow qcow2 cow vdi vmdk vpc(vhd) vhdx
+    在浏览器中的虚拟机
+        https://busybox.net/live_bbox/live_bbox.html
+        https://copy.sh/v86/
+        https://bellard.org/jslinux/
+        https://github.com/leaningtech/webvm/
+        但大多都无法直接联网
 linux 应用的一般安装套路
     编译源码
         ./configure
@@ -5636,11 +5311,13 @@ linux 应用的一般启动套路
         软件打包和分发
         容器文件技术
     一些例子
-        apt install zip unzip 7z-full 7z-rar
-            7z-full 是 7z 的常规版，如果要让 7z 支持 rar 格式还需要格外安装 7z-rar
+        apt install zip unzip p7zip-full p7zip-rar
+            p7zip-full 是 7z 的常规版，如果要让 7z 支持 rar 格式还需要格外安装 p7zip-rar
+            7z 的包名还可能是 7z-full p7z-full
         把当前目录下的 wp-plugin 文件或目录 压缩成 wp-plugin.zip 文件
             zip -r wp-plugin.zip wp-plugin
             7z a -tzip wp-plugin.zip wp-plugin
+            7z x wp-plugin.zip
 wordpress
     word press 文字出版社
     word n. 文字
@@ -5927,6 +5604,7 @@ windiows里的各种常用软件
             腾讯电脑管家
             金山
             瑞星
+            北信源
             PC-cillin，是由趋势科技Trend Micro所研发的防毒软件。当初命名意味着PC的盘尼西林
         国外
             windows defender
@@ -6505,6 +6183,15 @@ nas
     航空（Aeronautical Engineering） 大气层内的飞行
     航天（Spaceflight） 大气层外的飞行
     气象（meteorology） 做天气预报的
+    天文台（Astronomical observatories）
+        研究和观测天文现象的机构
+        光学天文台
+            光学天文望远镜
+        射电天文台
+            射电天文望远镜
+    气象台（Weather station）
+        做天气预报的机构
+        香港天文台实际上是香港的气象台。虽然天文台会向市民发放天文资讯，但仍以提供气象服务为主
 物理
     物质 能量 时间 空间
     物质本质上是 能量
@@ -6769,7 +6456,7 @@ nas
         音频 Audio
         动画 Animation
     medium
-    流媒体
+    流媒体（Streaming media）
     媒介
     媒体 media
     超媒体 Hypermedia
@@ -6802,6 +6489,8 @@ nas
             媒体 是指 分发 信息的 机构 或 个人，
                 例如 出版社 电台 电视台 自媒体
     媒质 又是 什么？
+广播和电视
+
 从ed到perl还有正则表达式
     qed ed ex vi vim grep sed awk perl
     qed
@@ -6925,6 +6614,7 @@ nas
                     brackets
                 vscode 是基于 Monaco Editor
                 brackets 是基于 Code Mirror
+                GitLab 的 编辑器也是用 CodeMirror ，GitLab 在 2019 年左右（大约 12.0 版本）将编辑器从 CodeMirror 迁移到了 Monaco Editor
         视图
             源码（source code）
             分屏预览（SV, Split View）
@@ -7641,7 +7331,7 @@ Hello what what is the first thing, and I am am scq000.
     对过去发生的事的评价
     过去的政治
 企业
-    总务 业务 管理
+    总务 业务 管理 财务 法务
 电子支付，区块链，数字货币
     名词
         数字货币 digital currency
@@ -7974,7 +7664,6 @@ hello 算法 https://github.com/krahets/hello-algo
 程序员做饭指南 https://github.com/Anduin2017/HowToCook
 人体系统调优不完全指南 https://github.com/zijie0/HumanSystemOptimization
 程序员延寿指南 https://github.com/geekan/HowToLiveLonger
-多智能体框架 https://github.com/geekan/MetaGPT
 开源软件指南
     https://github.com/github/opensource.guide
     https://opensource.guide/zh-hans/
@@ -8010,6 +7699,11 @@ cmd 下
 git add articleList.json sitemap.xml rss.xml README.md; git commit -m "update auxiliary"
 
 git reset --soft 884444e1fe8f918ffe1ab5ee53799a9a89d98869
+
+
+查看 github 仓库 start 数量
+https://www.star-history.com/#f2h2h1/f2h2h1.github.io&amp;Date
+
 
 php updateMetadata.php
 

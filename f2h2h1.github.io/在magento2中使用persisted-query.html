@@ -1,0 +1,173 @@
+<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/在magento2中使用persisted-query.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/在magento2中使用persisted-query">站点原文</a></h2>
+<h1>在magento2中使用persisted-query</h1>
+<h2>什么是 persisted query</h2>
+<p><a href="https://github.com/scandipwa/persisted-query">Github - scandipwa/persisted-query</a></p>
+<p><a href="https://packagist.org/packages/scandipwa/persisted-query">Packagist - scandipwa/persisted-query</a></p>
+<p><code>scandipwa/persisted-query</code> 是一个用于提升 magento2 graphql 响应速度的库。
+大致原理是，把请求的解释缓存在 redis ，把响应的结果缓存在 <code>full page cache</code> (通常是 varnish) 。
+只用于 <code>query</code> ，不用于 <code>mutation</code></p>
+<p><code>persisted-query</code> 依赖</p>
+<ul>
+<li>Redis</li>
+<li>Varnish</li>
+<li>PHP ext-phpredis</li>
+</ul>
+<h2>安装</h2>
+<ol>
+<li><p>通过 composer 安装</p>
+<pre><code>composer require scandipwa/persisted-query:^2.2
+</code></pre>
+</li>
+<li><p>修改配置文件 <code>app/etc/env.php</code> ，在 <code>cache</code>中加上这一段</p>
+<pre><code> 'persisted-query' =&gt; [
+     'redis' =&gt; [
+         'host' =&gt; 'localhost',
+         'scheme' =&gt; 'tcp',
+         'port' =&gt; '6379',
+         'database' =&gt; '5'
+     ]
+ ],
+</code></pre>
+</li>
+<li><p>修改配置文件 <code>app/etc/config.php</code></p>
+<pre><code>'ScandiPWA_PersistedQuery' =&gt; 1,
+</code></pre>
+</li>
+<li><p>安装完后记得运行构建命令。大致例子，仅供参考</p>
+<pre><code class="lang-bash">php bin/magento setup:upgrade &amp;&amp; \
+php bin/magento setup:di:compile &amp;&amp; \
+php bin/magento setup:static-content:deploy -f &amp;&amp; \
+php bin/magento indexer:reindex &amp;&amp; \
+php bin/magento cache:flush;
+</code></pre>
+</li>
+</ol>
+<h2>使用</h2>
+<p>大致的使用流程</p>
+<ol>
+<li><p>先发送一次 PUT 请求</p>
+<ul>
+<li>url 里需要带上一个 hash 参数， hash 的值是一个随机数，这个值不能重复<pre><code>https://localhost/graphql?hash=2443957263
+</code></pre>
+</li>
+<li><p>PUT 请求成功后会返回 201</p>
+<pre><code>HTTP/1.1 201 Created
+Content-Type: application/json
+Content-Length: 55
+
+{"error":false,"code":"1","message":"Query registered"}
+</code></pre>
+</li>
+</ul>
+</li>
+<li>后续发送 GET 请求， GET 请求中也需要带上 hash 参数<ul>
+<li>后续的 GET 请求才会有具体的数据</li>
+</ul>
+</li>
+</ol>
+<p>关键代码的位置
+vendor/scandipwa/persisted-query/src/Plugin/PersistedQuery.php</p>
+<p>可以通过这个 http 头设置过期时间 <code>SW-cache-age</code> ，这是设置 查询的过期时间</p>
+<p>如果没有特别的设置，缓存在刷新时才会失效</p>
+<ul>
+<li>刷新查询<pre><code>  bin/magento scandipwa:pq:flush
+</code></pre>
+</li>
+<li>刷新响应<pre><code>  bin/magento cache:flush persisted_query_response
+</code></pre>
+</li>
+</ul>
+<p>缓存无效时会返回 401</p>
+<pre><code>HTTP/1.1 410 Gone
+Content-Type: application/json
+Content-Length: 61
+
+{"error":true,"code":"410","message":"Query hash is unknown"}
+</code></pre>
+<h3>不带参数的请求</h3>
+<ol>
+<li>先发送一次 PUT 请求<pre><code class="lang-bash"> curl 'https://localhost/graphql?hash=2443957263' \
+   -X 'PUT' \
+   -H 'accept: */*' \
+   -H 'content-type: application/json' \
+   --data-raw ''
+</code></pre>
+</li>
+<li>后续发送 GET 请求<pre><code class="lang-bash"> curl -X 'GET' 'https://localhost/graphql?hash=2443957263'
+</code></pre>
+</li>
+</ol>
+<h3>带参数的请求</h3>
+<ol>
+<li>先发送一次 PUT 请求<pre><code class="lang-bash"> curl 'https://localhost/graphql?hash=2443957282' \
+ -X 'PUT' \
+ -H 'accept: */*' \
+ -H 'content-type: application/json' \
+ -H 'Cookie: XDEBUG_SESSION=vscode;' \
+ -d '{
+     "query": "query GetProductsBySkus($_filter:ProductAttributeFilterInput!, $_pageSize:Int) { products(search: \"*\", filter: $_filter, pageSize: $_pageSize ) { items { id uid sku name image { url } url_key url_suffix stock_status categories { uid name } } } }"
+ }'
+</code></pre>
+</li>
+<li>后续发送 GET 请求<pre><code class="lang-bash"> curl -X 'GET' 'https://localhost/graphql?hash=2443957282&amp;_filter=%257B%2522sku%2522%253A%257B%2522in%2522%253A%255B%2522sku1%2522%252C%2522sku2%2522%252C%2522sku3%2522%255D%257D%257D&amp;_pageSize=1'
+</code></pre>
+</li>
+</ol>
+<h3>如何构造一个带参数的请求</h3>
+<p>假设这是原本的请求</p>
+<pre><code>curl 'https://localhost/graphql' \
+  -X 'POST' \
+  -H 'accept: */*' \
+  -H 'content-type: application/json' \
+  -H 'Cookie: XDEBUG_SESSION=vscode;' \
+  -d '{
+    "query": "query GetProductsBySkus($_filter:ProductAttributeFilterInput!, $_pageSize:Int) { products(search: \"*\", filter: $_filter, pageSize: $_pageSize ) { items { id uid sku name image { url } url_key url_suffix stock_status categories { uid name } } } }",
+    "variables":{"_filter":{"sku":{"in":["sku1","sku2","sku3"],"_pageSize":1}}}
+}'
+</code></pre>
+<ol>
+<li>删除请求体中的 <code>variables</code></li>
+<li>把请求的方法改成 <code>PUT</code></li>
+<li>url 中加上 hash 参数</li>
+<li>这是最后的结果<pre><code>curl 'https://localhost/graphql?hash=2443957282' \
+-X 'PUT' \
+-H 'accept: */*' \
+-H 'content-type: application/json' \
+-H 'Cookie: XDEBUG_SESSION=vscode;' \
+-d '{
+ "query": "query GetProductsBySkus($_filter:ProductAttributeFilterInput!, $_pageSize:Int) { products(search: \"*\", filter: $_filter, pageSize: $_pageSize ) { items { id uid sku name image { url } url_key url_suffix stock_status categories { uid name } } } }",
+}'
+</code></pre>
+</li>
+</ol>
+<p>后续的请求中，把 <code>variables</code> 转换为 url编码，再直接加在 url 里</p>
+<pre><code>curl -X 'GET' 'https://localhost/graphql?hash=2443957282&amp;_filter=%257B%2522sku%2522%253A%257B%2522in%2522%253A%255B%2522sku1%2522%252C%2522sku2%2522%252C%2522sku3%2522%255D%257D%257D&amp;_pageSize=1'
+</code></pre>
+<p>这是把 <code>variables</code> 转换为 url编码 的伪代码</p>
+<pre><code class="lang-php">$variables = '{"_filter":{"sku":{"in":["sku1","sku2","sku3"]}},"_pageSize":1}';
+
+$variables = json_decode($variables, true);
+
+foreach ($variables as $key =&gt; $value) {
+    $variables[$key] = urlencode(json_encode($value));
+}
+
+echo http_build_query($variables);
+</code></pre>
+&lt;!--
+
+php -a &lt;&lt;- 'EOF'
+$variables='{"_filter":{"sku":{"in":["sku1","sku2","sku3"]}},"_pageSize":1}';
+echo http_build_query(array_map(fn($value) =&gt; urlencode(json_encode($value)), json_decode($variables, true)));
+EOF
+
+node &lt;&lt;- 'EOF'
+const variables = '{"_filter":{"sku":{"in":["sku1","sku2","sku3"]}},"_pageSize":1}';
+console.log(Object.entries(JSON.parse(variables)).map(([key, value]) =&gt; `${encodeURIComponent(key)}=${encodeURIComponent(JSON.stringify(value))}`).join('&amp;'));
+EOF
+
+echo '{"_filter":{"sku":{"in":["sku1","sku2","sku3"]}},"_pageSize":1}' | \
+python -c "import sys;import json;import urllib.parse;variables=sys.stdin.read();
+print('&amp;'.join(f'{urllib.parse.quote(key)}={urllib.parse.quote(json.dumps(value, separators=(',', ':')))}' for key, value in json.loads(variables).items()))"
+
+--&gt;

@@ -181,6 +181,31 @@ app.listen(3000, () =&gt; {
   console.info("App is live on port 3000");
 });
 </code></pre>
+<p><code>renderToString</code> returns a string immediately, so it does not support streaming content as it loads. If you use Node.js, use <code>renderToPipeableStream</code>.</p>
+<ul>
+<li>React will inject your bootstrap <code>&lt;script&gt;</code> tags into the resulting HTML stream.</li>
+<li>Use <code>&lt;Suspense&gt;</code> boundary to wrap the parts of your app that may take longer to load. React will send the remaining HTML along with an inline <code>&lt;script&gt;</code> tag that replaces the loading fallback with that HTML.</li>
+<li>Streaming allows the user to start seeing the content even before all the data has loaded on the server. The HTML content from the server will get progressively revealed before any of the <code>&lt;script&gt;</code> tags load.</li>
+<li>The part of your app outside of any <code>&lt;Suspense&gt;</code> boundaries is called the shell. It determines the earliest loading state that the user may see. The <code>onShellReady</code> callback fires when the entire shell has been rendered. Usually, you’ll start streaming then.</li>
+<li>If an error occurs while rendering the shell, React won’t have any meaningful HTML to send to the client. Override <code>onShellError</code> to send a fallback HTML that doesn’t rely on server rendering as the last resort.</li>
+</ul>
+<pre><code class="lang-js">app.use('/', (request, response) =&gt; {
+  const { pipe } = renderToPipeableStream(&lt;App /&gt;, {
+    bootstrapScripts: ['/main.js'],
+    onShellReady() {
+      response.setHeader('content-type', 'text/html');
+      pipe(response);
+    },
+    onShellError(error) {
+      response.statusCode = 500;
+      response.setHeader('content-type', 'text/html');
+      response.send('&lt;h1&gt;Something went wrong&lt;/h1&gt;'); 
+    },
+  });
+});
+</code></pre>
+<blockquote><p>If you use Deno or a modern edge runtime with Web Streams, use <code>renderToReadableStream</code>. The async call to <code>renderToReadableStream</code> will resolve to a stream as soon as the entire shell has been rendered. Usually, you’ll start streaming then by creating and returning a response with that stream: <code>return new Response(stream, { headers: { 'Content-Type': 'text/html' } });</code>.</p>
+</blockquote>
 <h2>Write React Server Components from Scratch</h2>
 <p>Before React Server Components, all React components are “client” components — they are all run in the browser. RSC makes it possible for some components to be rendered by the server, and some components to be rendered by the browser. Server Components are not a replacement for SSR. They render exclusively on the server. Their code isn't included in the JS bundle, and so they never hydrate or re-render. With only SSR, we haven't been able to do server-exclusive work within our components (e.g. access database), because that same code would re-run in the browser.</p>
 <ul>
@@ -387,6 +412,7 @@ export function Counter({ initialCount }) {
   }
 }
 </code></pre>
+<p>&lt;img alt="use client" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/bundle-use-client.png" width="750"&gt;</p>
 <p>On the client, you could load it by generating a <code>&lt;script&gt;</code> tag. However, loading imports one by one from their source files over the network is inefficient. You don’t want to create a waterfall. We already know how to fix this from two decades of working on client-side applications: bundling.</p>
 <p>For this reason, RSC integrates with bundlers.</p>
 <ul>

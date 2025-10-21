@@ -1,0 +1,101 @@
+<h2><a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/_posts/2025-09-20-Linux修改WiFi监管数据.md">仓库源文</a>，<a href="https://young-lord.github.io/posts/linux-wireless-regdb">站点原文</a></h2>
+<h2>免责声明</h2>
+<p>编写本文时，作者全程处于越南，且已获得相应行为的授权，没有进行任何绕过当地监管的行为。本文所述内容仅供学习和研究使用，请遵守你所在地区的无线电管制相关法律法规，请勿进行任何违法活动。作者不对因使用本文内容而产生的任何后果负责。</p>
+<h2>背景</h2>
+<p>由于我所在的越南的学校中，校园WiFi设置了AP隔离，导致设备间不能使用KDE Connect或LocalSend等软件，因此我需要在电脑端开一个热点来使手机连接。（在Windows上挺方便的，Linux怎么就这么麻烦呢？）</p>
+<p>根据<a href="https://eonun.com/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/Linux/Linux%E5%BC%80%E5%90%AFwifi%E5%92%8C%E7%83%AD%E7%82%B9%E5%8F%8C%E7%94%A8/">相关教程</a>，对于我当前的设备而言，若要在连接WiFi的同时开启热点，开启的热点必须所连WiFi使用同一信道。</p>
+<p>使用以下命令尝试开启热点：</p>
+<pre><code class="lang-console"># /usr/bin/iw dev wlp98s0 interface add wlan0_ap type managed addr 11:19:26:08:17:11
+# sudo create_ap wlan0_ap wlp98s0 "LY Hotspot" "Young-Lord Blog" --freq-band 5 -c `iw wlp98s0 info | grep channel | head -n1 | cut -f2 -d" "` --ieee80211ax
+</code></pre>
+<p>（关于此处的获取信道，理论上也可使用<code>iwgetid -c -r</code>，但在我的实际测试中，后者有概率返回空值）</p>
+<p>失败。</p>
+<p>根据<a href="https://wiki.archlinux.org/title/Network_configuration/Wireless#Respecting_the_regulatory_domain">Arch Wiki</a>，配置好监管域：</p>
+<pre><code class="lang-console">$ sudo pacman -S wireless-regdb
+$ sudo iw reg set VN
+$ iw reg get
+global
+country VN: DFS-FCC
+        (2402 - 2482 @ 40), (N/A, 20), (N/A)
+        (5170 - 5250 @ 80), (N/A, 17), (N/A)
+        (5250 - 5330 @ 80), (N/A, 24), (0 ms), DFS
+        (5490 - 5730 @ 80), (N/A, 24), (0 ms), DFS
+        (5735 - 5835 @ 80), (N/A, 30), (N/A)
+</code></pre>
+<p>此时，对于大部分频段，可以正常工作，但对于<code>52</code>等依赖于<a href="https://en.wikipedia.org/wiki/Dynamic_frequency_selection">DFS</a>的信道，仍然无法工作:</p>
+<pre><code class="lang-plaintext">hostapd command-line interface: hostapd_cli -p /tmp/create_ap.wlan0_ap.conf.r8rNb0ye/hostapd_ctrl
+Frequency 5260 (primary) not allowed for AP mode, flags: 0x979 RADAR
+Primary frequency not allowed
+ap0: IEEE 802.11 Configured channel (52) or frequency (5260) (secondary_channel=0) not found from the channel list of the current mode (2) IEEE 802.11a
+ap0: IEEE 802.11 Hardware does not support configured channel
+Could not select hw_mode and channel. (-3)
+ap0: interface state UNINITIALIZED-&gt;DISABLED
+ap0: AP-DISABLED 
+ap0: Unable to setup interface.
+ap0: interface state DISABLED-&gt;DISABLED
+ap0: AP-DISABLED 
+ap0: CTRL-EVENT-TERMINATING 
+hostapd_free_hapd_data: Interface ap0 wasn't started
+nl80211: deinit ifname=ap0 disabled_11b_rates=0
+</code></pre>
+<p>本文旨在解除这一限制，使得在合法合规的前提下，能够在硬件不支持的设备（如我的笔记本电脑）上使用DFS信道。</p>
+<h2>正文</h2>
+<p>较早（&lt;4.15）版本的Linux内核中需要使用<a href="https://wireless.docs.kernel.org/en/latest/en/developers/regulatory/crda.html#status">CRDA (Central Regulatory Domain Agent)</a>对监管数据进行管理，而在较新版本的内核中，CRDA已不再需要，监管数据直接由<a href="https://www.kernel.org/doc/html/v6.16/driver-api/80211/cfg80211.html">cfg80211</a>处理。</p>
+<p>目前，Arch Linux中与<code>cfg80211</code>相关的内核配置为：</p>
+<pre><code class="lang-console">$ zcat /proc/config.gz | grep CFG80211
+CONFIG_CFG80211=m
+# CONFIG_CFG80211_DEVELOPER_WARNINGS is not set
+CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=y
+CONFIG_CFG80211_USE_KERNEL_REGDB_KEYS=y
+CONFIG_CFG80211_DEFAULT_PS=y
+CONFIG_CFG80211_DEBUGFS=y
+CONFIG_CFG80211_CRDA_SUPPORT=y
+CONFIG_CFG80211_WEXT=y
+</code></pre>
+<p>可以看到，<code>cfg80211</code>已作为模块被启用，并且监管数据库需要签名。</p>
+<h3>禁用监管数据库签名验证</h3>
+<p>这部分内容挺乱来的，不过它工作™。更新Linux内核后需要重新操作，目前我没有什么好的解决方案。</p>
+<p>两个小节的方案二选一即可。</p>
+<h4>修改源代码</h4>
+<p>首先<a href="https://wiki.archlinux.org/title/Kernel/Arch_build_system">获取一份当前内核源码</a>，进入<code>net/wireless</code>目录。</p>
+<p>修改<code>reg.c</code>，将其中的<code>#ifdef CONFIG_CFG80211_REQUIRE_SIGNED_REGDB</code>改为<code>#ifdef CONFIG_CFG80211_REQUIRE_SIGNED_REGDB_DUCK</code>。</p>
+<p>使用<code>make -C /lib/modules/$(uname -r)/build M=$(pwd) modules -j$(nproc)</code>编译，得到<code>cfg80211.ko</code>。</p>
+<p>使用<code>sudo make -C /lib/modules/$(uname -r)/build M=$(pwd) INSTALL_MOD_STRIP=1 modules_install &amp;&amp; sudo depmod</code>替换掉当前的<code>cfg80211</code>模块。</p>
+<p>可以使用<code>modinfo -n cfg80211</code>验证当前正在使用的模块路径，其应当为<code>/lib/modules/$(uname -r)/updates/cfg80211.ko.zst</code>。</p>
+<p>（如果不使用<code>make modules_install</code>，而是直接压缩<code>cfg80211.ko</code>并覆盖原先的<code>/lib/modules/$(uname -r)/kernel/net/wireless/cfg80211.ko.zst</code>，也可以达到预期效果）</p>
+<h4>直接修改证书</h4>
+<p>直接把<code>/lib/modules/$(uname -r)/kernel/net/wireless/cfg80211.ko.zst</code>解压，patch其中硬编码的证书，然后重新压缩回去即可。实操难度有点大所以就不写具体过程了（如果你成功了建议给我发个PR）。顺带一提证书是<code>X.509 DER</code>格式的，可以在内核源码的<code>net/wireless/certs</code>目录下找到，可以用<code>openssl x509 -in cert.bin -text -noout</code>解析。</p>
+<h3>修改监管数据</h3>
+<p>下载一份<a href="https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git">wireless-regdb</a>：<code>git clone https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git</code></p>
+<p>开个Python虚拟环境，安装<code>m2crypto</code>，或者你要是喜欢<code>aur/python-m2crypto</code>也行。</p>
+<p>打开<code>db.txt</code>，找到对应国家的监管数据，修改。此处只需删去<code>, DFS</code>即可。删去前请确保你已经完全理解此操作后果并且自愿承担法律责任。修改结果如下所示：</p>
+<pre><code class="lang-plaintext">country VN: DFS-FCC
+        (2402 - 2482 @ 40), (20)
+        (5170 - 5250 @ 80), (17)
+        (5250 - 5330 @ 80), (24)
+        (5490 - 5730 @ 80), (24)
+        (5735 - 5835 @ 80), (30)
+</code></pre>
+<p>完成后，构建并安装：<code>make maintainer-clean &amp;&amp; make &amp;&amp; sudo make install</code></p>
+<h3>使用新的监管数据</h3>
+<p>重启，随后使用<code>iw reg</code>设置、查询监管域，结果如下：</p>
+<pre><code class="lang-console">$ sudo iw reg set VN
+$ iw reg get
+global
+country VN: DFS-FCC
+        (2402 - 2482 @ 40), (N/A, 20), (N/A)
+        (5170 - 5250 @ 80), (N/A, 17), (N/A)
+        (5250 - 5330 @ 80), (N/A, 24), (0 ms)
+        (5490 - 5730 @ 80), (N/A, 24), (0 ms)
+        (5735 - 5835 @ 80), (N/A, 30), (N/A)
+</code></pre>
+<p>开启热点测试，成功。</p>
+<h3>善后</h3>
+<p>记得屏蔽<code>wireless-regdb</code>的自动更新，在<code>/etc/pacman.conf</code>的<code>IgnorePkg</code>里加一条就行，或者用<code>NoUpgrade</code>阻止监管数据被更新。不过如果没有一个自动化patch<code>cfg80211</code>的方案的话，这样做可能只会让你每次内核更新后都用回最严格的监管数据……</p>
+<div class="license">
+  <p>本文遵守 <a itemprop="license" rel="license" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA-4.0</a> 许可协议。<a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/README.md#%E5%A3%B0%E6%98%8E">（不允许转载至简书或 CSDN）</a>
+    <a rel="license" aria-label="详细了解协议内容" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+<!--        <img alt="CC BY-NC-SA-4.0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" />-->
+    </a>
+  </p>
+</div>

@@ -1,0 +1,132 @@
+<h2><a href="https://github.com/caol64/caol64.github.io/blob/master/content/posts/2025/2025-10-15-say-goodbye-to-npm-tokens-embrace-more-secure-github-actions-trusted-publishing.md">仓库源文</a>，<a href="https://babyno.top/posts/2025/10/15/say-goodbye-to-npm-tokens-embrace-more-secure-github-actions-trusted-publishing">站点原文</a></h2>
+<p>近期，npm 启动了一系列旨在增强生态系统安全性的重要更新。核心变化之一是逐步淘汰传统的、长期有效的经典访问令牌，并鼓励开发者转向一种更安全、更现代的发布方式：<strong>可信发布 (Trusted Publishing)</strong>。</p>
+<p>如果你还在 CI/CD 工作流中使用 <code>NPM_TOKEN</code>，那么现在是时候进行升级了。本教程将引导你完成从传统令牌发布到将 GitHub Actions 设置为可信发布者的完整迁移过程。</p>
+<h2>为什么需要改变？</h2>
+<p>传统的 npm 令牌存在几个关键安全风险：</p>
+<ul>
+<li><strong>长期有效</strong>：一旦泄露，攻击者可以持续访问你的账户，直到令牌被手动撤销。</li>
+<li><strong>权限过大</strong>：经典令牌通常拥有账户的完全写入权限，远超发布所需。</li>
+<li><strong>泄露风险</strong>：这些令牌必须作为 <code>secret</code> 存储在 CI/CD 平台中，存在因配置不当或在日志中意外暴露的风险。</li>
+</ul>
+<p>可信发布通过 OpenID Connect (OIDC) 解决了这些问题。它在 npm 和你的 CI/CD 提供商（如 GitHub Actions）之间建立信任关系，允许你的工作流通过临时的、自动生成的短效凭据进行身份验证，从而彻底告别长期令牌。</p>
+<h2>迁移步骤</h2>
+<p>迁移过程非常简单，只需在 npmjs.com 上进行配置，并对你的 GitHub Actions 工作流文件进行少量修改。</p>
+<h3>第 1 步：在 npmjs.com 上配置可信发布者</h3>
+<ol>
+<li>登录 <a href="https://www.npmjs.com">npmjs.com</a> 并导航到你想要配置的包。</li>
+<li>进入包的 “<strong>Settings</strong>”（设置）页面。</li>
+<li>在侧边栏找到 “<strong>Trusted Publishers</strong>”（可信发布者）部分。</li>
+<li>在 “<strong>Select your publisher</strong>”（选择你的发布者）下，点击 <strong>GitHub Actions</strong> 按钮。</li>
+<li>填写以下字段：<ul>
+<li><strong>Organization or user</strong>：你的 GitHub 用户名或组织名。</li>
+<li><strong>Repository</strong>：你的仓库名称。</li>
+<li><strong>Workflow filename</strong>：你用于发布的工作流文件名（例如 <code>publish.yml</code> 或 <code>release.yml</code>）。<strong>注意：</strong> 只需填写文件名，且必须包含 <code>.yml</code> 或 <code>.yaml</code> 扩展名。</li>
+<li><strong>Environment name</strong> (可选)：如果你使用了 GitHub Environments 来保护部署，请填写环境名称。</li>
+</ul>
+</li>
+</ol>
+<p><img alt="GitHub Actions 可信发布者配置表单" src="https://docs.npmjs.com/packages-and-modules/securing-your-code/trusted-publisher-github-actions.png"/></p>
+<p>配置完成后，npm 就准备好接受来自你指定 GitHub Actions 工作流的发布请求了。</p>
+<h3>第 2 步：更新你的 GitHub Actions 工作流</h3>
+<p>接下来，修改你的发布工作流 <code>.yml</code> 文件。</p>
+<p><strong>修改前：</strong>
+你当前的工作流可能如下所示，依赖于 <code>secrets.NPM_TOKEN</code>：</p>
+<pre><code class="lang-yaml">name: Publish Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+</code></pre>
+<p><strong>修改后：</strong>
+你需要进行以下三处关键改动：</p>
+<ol>
+<li><strong>移除 <code>NODE_AUTH_TOKEN</code></strong>：<code>npm publish</code> 步骤不再需要它。</li>
+<li><strong>添加 <code>permissions</code></strong>：在工作流顶部或 <code>job</code> 级别添加 <code>permissions</code> 块，并授予 <code>id-token: write</code> 权限。这是允许 GitHub Actions 生成 OIDC 令牌的关键。</li>
+<li><strong>(可选但推荐) 确保 npm 版本</strong>：可信发布需要 <code>npm</code> CLI <code>v11.5.1</code> 或更高版本。添加一个步骤来更新 npm 是一个好习惯。</li>
+</ol>
+<pre><code class="lang-yaml">name: Publish Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 1. 添加 OIDC 令牌所需的权限
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # 2. (推荐) 确保 npm 版本足够新
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - run: npm ci
+
+      # 3. 直接运行 npm publish，无需令牌
+      - run: npm publish
+</code></pre>
+<p>提交这些更改后，当你的工作流再次运行时，<code>npm publish</code> 命令会自动检测 OIDC 环境并使用它进行身份验证。</p>
+<h2>如何处理私有依赖？</h2>
+<p>一个常见的场景是，你的项目依赖于私有的 npm 包。请注意，<strong>可信发布仅适用于 <code>npm publish</code> 命令</strong>。对于安装私有依赖（例如运行 <code>npm ci</code>），你仍然需要一个令牌。</p>
+<p>最佳实践是创建一个<strong>只读 (Read-only)</strong> 的细粒度访问令牌，并将其用于安装依赖。这样即使令牌泄露，其危害也极其有限。</p>
+<p>你的工作流将如下所示：</p>
+<pre><code class="lang-yaml"># ... (前面的配置相同)
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # ... (checkout, setup-node, update npm)
+
+      # 使用只读令牌安装私有依赖
+      - run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_READ_ONLY_TOKEN }}
+
+      # 发布时无需令牌，将自动使用 OIDC
+      - run: npm publish
+</code></pre>
+<h2>最后一步：锁定包以获得最高安全性</h2>
+<p>在你成功通过可信发布发布了一个版本后，为了最大化安全性，建议你在 npm 上禁止该包使用传统令牌进行发布。</p>
+<ol>
+<li>再次进入包的 <strong>Settings</strong> → <strong>Publish Access</strong>。</li>
+<li>选择 <strong>“Require two-factor authentication and forbid tokens”</strong> （要求双重身份验证并禁止令牌）。</li>
+<li>点击 <strong>Update package settings</strong> 保存。</li>
+</ol>
+<p>此设置不会影响你的可信发布工作流，但会阻止任何人（包括你自己）使用传统令牌发布此包的新版本。</p>
+<h2>迁移的好处</h2>
+<ul>
+<li><strong>无需再管理 <code>NPM_TOKEN</code></strong>：你可以从 GitHub <code>secrets</code> 中删除旧的发布令牌。</li>
+<li><strong>显著提升安全性</strong>：消除了因长期令牌泄露而导致账户被盗用的风险。</li>
+<li><strong>自动生成来源证明</strong>：当你使用可信发布时，npm 会自动为你的包生成来源证明 (provenance)，这向你的用户提供了关于包构建来源和方式的可验证信息，极大地增强了供应链的安全性。</li>
+</ul>
+<h2>总结</h2>
+<p>npm 正在向更安全的未来迈进，而迁移到可信发布是其中至关重要的一步。这个过程不仅简单，而且能从根本上消除一整类常见的安全漏洞。请尽快检查你的发布工作流，并按照本教程进行迁移，以确保你的包和用户都能得到更好的保护。</p>

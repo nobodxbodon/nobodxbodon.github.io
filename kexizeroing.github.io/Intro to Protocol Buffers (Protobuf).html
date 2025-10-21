@@ -1,0 +1,160 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/intro-to-protobuf.md">仓库源文</a>，<a href="https://kexizeroing.github.io/intro-to-protobuf">站点原文</a></h2>
+<h2>Background</h2>
+<p>Protocol Buffers (a.k.a., protobuf) are Google’s language-neutral, platform-neutral, and extensible mechanism for serializing structured data. You define your data structure once in a <code>.proto</code> file, then use generated source code to easily read and write that structured data across different languages and platforms.</p>
+<p>For example, a Java program on one platform can serialize data according to a <code>.proto</code> definition, and a Python application on another platform can deserialize that data and access specific values.</p>
+<p>Unlike JSON, Protobuf encodes data in a compact binary format, making it much smaller and faster to serialize and deserialize. It enforces a strict schema, providing type safety and supporting forward and backward compatibility, so you can safely evolve your data structures over time.</p>
+<blockquote><p>Protocol Buffers is primarily a specification (or protocol) for serializing structured data, but it comes with multiple components that can make it feel like a library (<code>protoc</code> = compiler that generates code based on the spec; Language-specific runtime = library to work with messages)</p>
+</blockquote>
+<h2>Installing Protobuf</h2>
+<p>To install protobuf, you need to install the protocol compiler (used to compile <code>.proto</code> files) and the protobuf runtime for your chosen programming language.</p>
+<ul>
+<li>The Protobuf compiler (<code>protoc</code>) is written in C++. For non-C++ users, the easiest way to install it is by downloading a prebuilt binary from the GitHub release page and adding it to your system PATH.</li>
+<li>Each programming language requires its runtime library to work with the generated code. Some languages may also need additional plugins for code generation, e.g., <code>protoc-gen-ts_proto</code> for TypeScript.</li>
+<li>The runtime library provides the functionality to serialize and deserialize messages. Without it, the generated code only defines the message structure and cannot encode or decode data. The runtime implements the actual logic for handling the Protobuf binary format.</li>
+</ul>
+<h2>Understanding <code>.proto</code> files</h2>
+<p>A <code>.proto</code> file defines the structure of data (like JSON schema) and optionally RPC services (like API endpoints). It tells Protobuf how to serialize and deserialize data.</p>
+<pre><code class="lang-proto">// Define a message
+message Person {
+  string name = 1;  // field #1
+  int32 id = 2;     // field #2
+  string email = 3; // field #3
+}
+
+// Define a service (for RPC calls)
+service PersonService {
+  rpc GetPerson(GetPersonRequest) returns (Person);
+}
+
+// Another message used by the service
+message GetPersonRequest {
+  int32 id = 1;
+}
+</code></pre>
+<p>A <code>message</code> defines a structured data type. Each field has a type (<code>string</code>, <code>int32</code>, <code>bool</code>, another message, etc.), a name, and a field number (<code>= 1</code>, <code>= 2</code>). Field numbers are unique identifiers used in the binary encoding to efficiently identify each field. Once a <code>.proto</code> file is published, do not change field numbers, as they ensure backward compatibility.</p>
+<blockquote><p>When Protobuf encodes data, it stores the field numbers rather than the field names. This allows older programs to safely ignore any new fields they don’t recognize while still processing the fields they do know.</p>
+</blockquote>
+<p>Some keywords:</p>
+<ul>
+<li><code>optional</code> - field may or may not be present</li>
+<li><code>required</code> - field must be present (proto2 only, deprecated in proto3)</li>
+<li><code>repeated</code> means an array/list of values</li>
+<li><code>enum</code> - defines enumerated values</li>
+<li><code>map</code> - key-value pairs (e.g., <code>map&lt;string, int32&gt;</code>)</li>
+<li><code>package</code> - namespace for your messages</li>
+</ul>
+<p>A <code>service</code> defines RPC methods. Each rpc line defines one endpoint with input and output message types. It includes a method name, request message type, and response message type. For gRPC (Google’s RPC framework), the compiler generates:</p>
+<ul>
+<li>Client stub: code that lets you call <code>GetUser</code> or <code>CreateUser</code> like local functions.</li>
+<li>Server interface: definitions you implement on the server to handle incoming RPC calls.</li>
+</ul>
+<h2>Generating code from <code>.proto</code> files</h2>
+<pre><code class="lang-sh">brew install protobuf
+protoc --version
+
+# or manually install
+sudo cp ~/Downloads/protoc-33.0-osx-aarch_64/bin/protoc /usr/local/bin
+
+# --js_out=... -&gt; Tells protoc to generate JavaScript code
+# import_style=commonjs,binary -&gt; Options controlling how JS is generated
+# :./src/generated -&gt; Output directory
+# src/proto/user.proto  -&gt; Your source .proto file
+protoc --js_out=import_style=commonjs,binary:./src/generated src/proto/user.proto
+
+# protoc-gen-js: program not found or is not executable
+# https://github.com/protocolbuffers/protobuf-javascript/issues/127#issuecomment-1204202844
+
+# Generate *.ts source files for the given *.proto types
+npm install ts-proto
+
+protoc \
+    --plugin="./node_modules/.bin/protoc-gen-ts_proto" \
+    --ts_proto_opt=esModuleInterop=true \
+    --ts_proto_out="./src/generated" \
+    src/proto/user.proto
+</code></pre>
+<p>Let’s build a realistic complete example that includes both messages and a service.</p>
+<pre><code class="lang-proto">syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+// Defines namespace "example"
+package example; 
+
+// --- Messages ---
+message GetUserRequest {
+  int32 id = 1;
+}
+
+message User {
+  int32 id = 1;
+  string name = 2;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+}
+
+// --- Service ---
+service UserService {
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc ListUsers(google.protobuf.Empty) returns (ListUsersResponse);
+}
+</code></pre>
+<p>The generated code will include:</p>
+<ul>
+<li>TypeScript interfaces for all messages (<code>User</code>, <code>GetUserRequest</code>, etc.)</li>
+<li>A ready-to-use <code>UserServiceClientImpl</code> class (for gRPC-Web)</li>
+<li>Encode/decode/fromJSON/toJSON helpers</li>
+</ul>
+<p>If your backend exposes protobuf over HTTP (not gRPC):</p>
+<pre><code class="lang-ts">import { GetUserRequest, User } from "../generated/user";
+
+// create a request message
+const req: GetUserRequest = { id: 1 };
+
+// serialize to binary
+const bytes = GetUserRequest.encode(req).finish();
+
+// send request
+const response = await fetch("/api/user/get", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-protobuf" },
+  body: bytes,
+});
+
+// receive and decode
+const buffer = new Uint8Array(await response.arrayBuffer());
+const user = User.decode(buffer);
+
+console.log(user.name);
+</code></pre>
+<p>If your backend exposes gRPC-Web, use it in your frontend:</p>
+<pre><code class="lang-ts">import { UserServiceClientImpl, GetUserRequest } from "../generated/user";
+import { GrpcWebImpl } from "../generated/grpc_web"; // generated helper
+
+const rpc = new GrpcWebImpl("https://your-server.example.com", {
+  debug: true,
+});
+const client = new UserServiceClientImpl(rpc);
+
+// call the service
+const user = await client.GetUser({ id: 1 });
+console.log(user.name);
+</code></pre>
+<h2>Protobuf and gRPC</h2>
+<p>gRPC is a high-performance communication framework like REST, but more efficient and strongly typed. It allows one program (like your frontend) to call a function that actually runs on another computer (like your backend), almost as if it were a local call.</p>
+<p>gRPC has two sides: a server side, and a client side that is able to dial a server. The server exposes RPCs (i.e. functions that you can call remotely). gRPC uses protobuf as its wire format and API contract. When you combine them, code generators produce client and server stubs that handle serialization/deserialization and network communication automatically.</p>
+<p>For example:</p>
+<pre><code class="lang-js">// looks like a local function call...
+const user = await getUser({ id: 123 });
+</code></pre>
+<p>But behind the scenes, this does much more:</p>
+<ol>
+<li>The frontend serializes <code>{ id: 123 }</code> into a binary protobuf message.</li>
+<li>It sends that message over the network (using HTTP/2 or gRPC-Web).</li>
+<li>The backend receives and deserializes it into a <code>GetUserRequest</code> object.</li>
+<li>The backend executes the <code>GetUser</code> function.</li>
+<li>The backend returns a serialized protobuf response (<code>User</code>) back to the client.</li>
+<li>The client deserializes that binary data into a usable TypeScript object.</li>
+</ol>
+<p>Normal gRPC (used by backend-to-backend communication) runs over HTTP/2. Browsers can’t fully control HTTP/2 like servers can. That means you can’t directly call a gRPC service from browser JavaScript using <code>fetch()</code> or <code>XMLHttpRequest</code>. To bridge this gap, gRPC-Web provides a browser-compatible variant of gRPC that wraps the same protobuf messages in a simplified wire format browsers can handle.</p>

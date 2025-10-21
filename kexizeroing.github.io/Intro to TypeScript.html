@@ -94,7 +94,9 @@ import { type xyz } from "xyz";
 <li><a href="https://deno.com/blog/intro-to-tsconfig">https://deno.com/blog/intro-to-tsconfig</a></li>
 <li><a href="https://github.com/tsconfig/bases">https://github.com/tsconfig/bases</a></li>
 </ul>
-<blockquote><p><code>json</code> doesn't normally allow comments, but comments are valid in <code>tsconfig.json</code>. It's officially supported by TypeScript, and VSCode understands it too. What's going on here is <a href="https://github.com/microsoft/node-jsonc-parser">jsonc</a>, or "JSON with JavaScript style comments", a proprietary format used by a bunch of Microsoft products, most notably Typescript and VSCode.</p>
+<blockquote><p><code>json</code> doesn't normally allow comments, but comments are valid in <code>tsconfig.json</code>. It's officially supported by TypeScript, and VSCode understands it too. What's going on here is <a href="https://github.com/microsoft/node-jsonc-parser">jsonc</a>, or "JSON with Comments", a proprietary format used by a bunch of Microsoft products, most notably Typescript and VSCode. For example, VS Code’s <code>settings.json</code> file is actually <code>settings.jsonc</code>.</p>
+<p>JSON5 is a superset of JSON that makes JSON more human-friendly, not just comments but also relaxed rules for quoting. It's also a subset of ES5, so valid JSON5 files will always be valid ES5.</p>
+<p>They’re both formats/specs (and usually implemented as libraries) that extend standard JSON for developer convenience.</p>
 </blockquote>
 <p>By the way, <code>jsconfig.json</code> is a descendant of <code>tsconfig.json</code>. The presence of <code>jsconfig.json</code> file in a directory indicates that the directory is the root of a JavaScript project.</p>
 <h2>Structural typing</h2>
@@ -256,6 +258,17 @@ const p = {
   depht: 11 // &lt;-- fine
 };
 const q: Dimensions = p; // also fine
+
+declare function handleRequest(url: string, method: "GET" | "POST"): void;
+// Error: Argument of type 'string' is not assignable to parameter of type '"GET" | "POST"'.
+// req.method is inferred to be string
+const req = { url: "https://example.com", method: "GET" };
+handleRequest(req.url, req.method);
+
+// fix: 
+const req = { url: "https://example.com", method: "GET" as "GET" };
+// or
+const req = { url: "https://example.com", method: "GET" } as const;
 </code></pre>
 <p><strong>Summary of Type vs Interface:</strong>
 <a href="https://www.totaltypescript.com/type-vs-interface-which-should-you-use">https://www.totaltypescript.com/type-vs-interface-which-should-you-use</a></p>
@@ -395,6 +408,7 @@ type MyCompProps = ComponentProps&lt;typeof MyComp&gt;
 </code></pre>
 <p><strong>Type hierarchy</strong>: TypeScript sets <code>any</code> as the default type for any value or parameter that is not explicitly typed or can’t be inferred. You will rarely need to declare something as <code>any</code> (<strong>you may need the type <code>unknown</code></strong>, which is a safe type). <code>null</code> and <code>undefined</code> are bottom values. (nullish values are excluded from all types if the option <code>strictNullChecks</code> is active in <code>tsconfig.json</code>). The very bottom of the type hierarchy is <code>never</code>. <code>never</code> doesn’t accept a single value at all <em>(only assignable to itself)</em> and is used for situations that should never occur. You cannot assign anything to <code>never</code>, except for <code>never</code> itself. However, you can assign <code>never</code> to anything.</p>
 <p><code>any</code> doesn't really fit into our definition of 'wide' and 'narrow' types. It's not really a type at all - it's a way of opting out of TypeScript's type checking. By marking a variable as <code>any</code>, you're telling the compiler to ignore any type errors that might occur. Using <code>any</code> is considered harmful by most of the community.</p>
+<p>When you don’t specify a type, and TypeScript can’t infer it from context, the compiler will typically default to <code>any</code>. You usually want to avoid this. Use the compiler flag <code>noImplicitAny</code> to flag any implicit <code>any</code> as an error.</p>
 <pre><code>                    unknown
        /        /     |      \       \       \
       /        /      |       \       \       \
@@ -405,11 +419,7 @@ type MyCompProps = ComponentProps&lt;typeof MyComp&gt;
        \________\_______\_______\____/______/
                     never
 </code></pre>
-<p>The empty object type <code>{}</code> is unique. Instead of representing an empty object, it actually represents anything that isn't <code>null</code> or <code>undefined</code>. <code>{}</code> can accept a number of other types: string, number, boolean, function, symbol, and objects containing properties.</p>
-<ul>
-<li>Primitives are <code>{}</code>, and <code>{}</code> doesn't mean object. <em>(a string is a valid <code>{}</code>)</em></li>
-<li>The only difference between <code>{}</code> and <code>unknown</code> is that <code>unknown</code> contains every single JavaScript value, including <code>null</code> and <code>undefined</code>.</li>
-</ul>
+<p>The empty object type <code>{}</code> is unique. Instead of representing an empty object, it actually represents anything that isn't <code>null</code> or <code>undefined</code>. <code>{}</code> can accept a number of other types: string, number, boolean, function, symbol, and objects containing properties. The only difference between <code>{}</code> and <code>unknown</code> is that <code>unknown</code> contains every single JavaScript value, including <code>null</code> and <code>undefined</code>.</p>
 <p><strong>Value Types</strong>: We can narrow down primitive types to values.</p>
 <pre><code class="lang-ts">// Type is string, because the value can change.
 let conference = 'conference';

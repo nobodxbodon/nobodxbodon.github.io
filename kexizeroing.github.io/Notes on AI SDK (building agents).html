@@ -1,8 +1,5 @@
 <h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/notes-on-ai-sdk.md">仓库源文</a>，<a href="https://kexizeroing.github.io/notes-on-ai-sdk">站点原文</a></h2>
-<p>This is my learning notes from the <a href="https://www.youtube.com/watch?v=kDlqpN1JyIw">AI Engineer workshop</a> tutorial by Nico Albanese.</p>
-<blockquote><p>AI SDK is like an ORM for LLMs. It provides a simple interface to interact with different LLM providers, making it easy to switch between them without changing your code.</p>
-<p>Here is an Gemini AI SDK Cheatsheet: <a href="https://patloeber.com/gemini-ai-sdk-cheatsheet">https://patloeber.com/gemini-ai-sdk-cheatsheet</a>. It has code snippets to start building with Gemini and the AI SDK.</p>
-</blockquote>
+<p>AI SDK is like an ORM for LLMs. It provides a simple interface to interact with different LLM providers, making it easy to switch between them without changing your code. The first part of this post is my learning notes from the <a href="https://www.youtube.com/watch?v=kDlqpN1JyIw">AI Engineer workshop</a> tutorial by Nico Albanese.</p>
 <h2>Generate Text</h2>
 <p>Make your first LLM call.</p>
 <pre><code class="lang-js">import { openai } from '@ai-sdk/openai'
@@ -199,22 +196,40 @@ main();
       definitions: z.array(z.string()),
     }),
   })
-  console.log(result.object.definitions)
-  // [
-  //   'An AI agent is ...',
-  //   'An AI agent is ...',
-  //   'An AI agent is ...'
-  // ]
+  console.log(JSON.stringify(result.object, null, 2));
+  // {
+  //   "definitions": [
+  //     "An AI agent is ...",
+  //     "An AI agent is ...",
+  //     "An AI agent is ..."
+  //   ]
+  // }
 }
-</code></pre>
-<p>Furthermore, we can use the <code>describe</code> function to help refine the generation.</p>
-<pre><code class="lang-js">await generateObject({
-  model: openai("gpt-4o-mini"),
-  prompt: "Please come up with 3 definitions for AI agents.",
+
+// Generate an array
+const { object } = await generateObject({
+  model: openai('gpt-4.1'),
+  output: 'array',
   schema: z.object({
-    definitions: z.array(z.string().describe("Use as much jargon as possible. It should be completely incoherent.")),
+    name: z.string(),
+    class: z
+      .string()
+      .describe('Character class, e.g. warrior, mage, or thief.'),
+    description: z.string(),
   }),
-})
+  prompt: 'Generate 3 hero descriptions for a fantasy role playing game.',
+});
+
+// Generate an enum
+const { object } = await generateObject({
+  model: openai('gpt-4.1'),
+  output: 'enum',
+  enum: ['action', 'comedy', 'drama', 'horror', 'sci-fi'],
+  prompt:
+    'Classify the genre of this movie plot: ' +
+    '"A group of astronauts travel through a wormhole in search of a ' +
+    'new habitable planet for humanity."',
+});
 </code></pre>
 <h2>Deep Research</h2>
 <p>The rough steps will be:</p>
@@ -367,6 +382,7 @@ for (const query of queries) {
 }
 </code></pre>
 <h2>Building agents with the AI SDK</h2>
+<p>At its core, an agent can be defined with this simple equation: <code>agent = llm + memory + planning + tools + while loop</code></p>
 <p>Below is the code taken from <a href="https://www.youtube.com/watch?v=V55AJYctIAY">Vercel Ship 2025 workshop</a> also by Nico Albanese, building a coding agent with the new AI SDK 5.</p>
 <pre><code class="lang-js">import { generateText, stepCountIs, tool } from "ai";
 import z from "zod/v4";
@@ -470,32 +486,165 @@ export async function codingAgent(prompt: string) {
 </code></pre>
 <p>Note that if you omit <code>stopWhen</code>, the tool is called but you get an empty response. The reason is that the language model can generate either text or tool call. It doesn't do both at the same time. So in this case, the language model generates a tool call, we execute the tool and have a tool result. But our step is complete, and by default every request you make with the AI SDK will just be one single step. With the SDK, you can describe the stop conditions for when this loop should stop using <code>stopWhen</code> property.</p>
 <p>Without the SDK, you have to manually wrap the entire call in a while loop, manage message history, and define some stop conditions.</p>
-<blockquote><p>At its core, an agent can be defined with this simple equation:</p>
-<p>agent = llm + memory + planning + tools + while loop</p>
+<h2>AI SDK UI</h2>
+<p>AI SDK UI provides abstractions that simplify the complex tasks of managing chat streams and UI updates on the frontend, enabling you to develop dynamic AI-driven interfaces more efficiently. With three main hooks — <code>useChat</code>, <code>useCompletion</code>, and <code>useObject</code>.</p>
+<ul>
+<li>The <code>useChat</code> hook enables the streaming of chat messages from your AI provider. It manages the states for input, messages, status, error and more for you.</li>
+<li>The <code>convertToModelMessages</code> function is used to transform an array of UI messages from the <code>useChat</code> hook into an array of <code>ModelMessage</code> objects, which are compatible with AI core functions like <code>streamText</code>.</li>
+</ul>
+<blockquote><p><a href="https://ai-sdk.dev/elements/overview">AI Elements</a> is a component library and custom registry built on top of shadcn/ui to help you build AI-native applications faster. It provides pre-built components like conversations, messages and more.</p>
 </blockquote>
-<pre><code class="lang-js">export async function completeWithTools(args) {
-  const completion = await openai.chat.completions.create(args)
+<pre><code class="lang-js">// app/api/chat/route.ts
+import { streamText, convertToModelMessages, type UIMessage } from "ai";
+import { openai } from "@ai-sdk/openai";
 
-  if (completion.choices[0].message.tool_calls) {
-    const toolCalls = completion.choices[0].message.tool_calls;
-    args.messages.push(completion.choices[0].message);
+export async function POST(req: Request) {
+  const { messages }: { messages: UIMessage[] } = await req.json();
 
-    await Promise.all(toolCalls.map(async (toolCall) =&gt; {
-      const toolArgs = JSON.parse(toolCall.function.arguments);
-      const result = await tools.functions[toolCall.function.name](toolArgs);
+  const result = streamText({
+    model: openai("gpt-5-nano"),
+    // messages: convertToModelMessages(messages),
+    messages: [
+      // Here to add system message or few-shot examples
+      {
+        role: "system",
+        content: "You are a helpful coding assistant.",
+      },
+      ...convertToModelMessages(messages),
+    ],
+  });
 
-      args.messages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: result
-      });
-    }))
-
-    // This recursion creates a natural "while" loop
-    // that continues until the LLM decides it has completed the task.
-    return completeWithTools(args)
-  }
-
-  return completion
+  // Converts the result to a streamed response object with a UI message stream
+  return result.toUIMessageStreamResponse();
 }
+</code></pre>
+<pre><code class="lang-js">"use client";
+import { useState } from "react";
+import { useChat } from "@ai-sdk/react";
+
+export default function ChatPage() {
+  const [input, setInput] = useState("");
+  // Defaults to DefaultChatTransport with `/api/chat` endpoint.
+  // useChat({
+  //   transport: new DefaultChatTransport({
+  //     api: '/api/chat',
+  //   }),
+  // });
+  const { messages, sendMessage, status, error, stop } = useChat();
+
+  // `messages` is an array of UIMessage
+  // [
+  //   {
+  //     id: "msg-1",
+  //     role: "user",
+  //     parts: [{ type: "text", text: "What is React?" }],
+  //   },
+  //   {
+  //     id: "msg-2",
+  //     role: "assistant",
+  //     parts: [{ type: "text", text: "React is a JavaScript library..." }],
+  //   },
+  //   {
+  //     id: "msg-3",
+  //     role: "user",
+  //     parts: [{ type: "text", text: "Can you give me an example?" }],
+  //   }
+  // ]
+
+  const handleSubmit = (e: React.FormEvent&lt;HTMLFormElement&gt;) =&gt; {
+    e.preventDefault();
+    sendMessage({ text: input });
+    setInput("");
+  };
+
+  return (
+    &lt;div&gt;
+      {error &amp;&amp; &lt;div&gt;{error.message}&lt;/div&gt;}
+      {messages.map((message) =&gt; (
+        &lt;div key={message.id}&gt;
+          &lt;div&gt;{message.role === "user" ? "User: " : "AI: "}&lt;/div&gt;
+          {message.parts.map((part, index) =&gt; {
+            switch (part.type) {
+              case "text":
+                return (
+                  &lt;div key={`${message.id}-${index}`}&gt;{part.text}&lt;/div&gt;
+                );
+              default:
+                return null;
+            }
+          })}
+        &lt;/div&gt;
+      ))}
+      {(status === "submitted" || status === "streaming") &amp;&amp; (
+        &lt;div&gt;Loading...&lt;/div&gt;
+      )}
+
+      &lt;form onSubmit={handleSubmit}&gt;
+        &lt;input value={input} onChange={(e) =&gt; setInput(e.target.value)} /&gt;
+        {status === "submitted" || status === "streaming" ? (
+          &lt;button onClick={stop}&gt;Stop&lt;/button&gt;
+        ) : (
+          &lt;button
+            type="submit"
+            disabled={status !== "ready"}
+          &gt;
+            Send
+          &lt;/button&gt;
+        )}
+      &lt;/form&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<p>For tool call UI, The <code>parts</code> array of assistant messages contains tool parts with typed names like <code>tool-getWeather</code>.</p>
+<pre><code class="lang-js">// Check `type ToolUIPart` in ai/dist/index.d.ts
+{ message.parts.map((part, index) =&gt; {
+  switch (part.type) {
+    case "text":
+      return (
+        &lt;div key={`${message.id}-${index}`}&gt;
+          {part.text}
+        &lt;/div&gt;
+      );
+    // type: `tool-${NAME}`
+    case "tool-getWeather":
+      switch (part.state) {
+        // [STATE: input-streaming] Receiving weather request...
+        // {
+        //   "city": "Beijing"
+        // }
+        case "input-streaming":
+          return (
+            &lt;div key={`${message.id}-getWeather-${index}`}&gt;
+              Receiving weather request...
+              &lt;pre&gt;{JSON.stringify(part.input, null, 2)}&lt;/pre&gt;
+            &lt;/div&gt;
+          );
+        // [STATE: input-available] Getting weather for Beijing...
+        case "input-available":
+          return (
+            &lt;div key={`${message.id}-getWeather-${index}`}&gt;
+              Getting weather for {part.input.city}...
+            &lt;/div&gt;
+          );
+        // [STATE: output-available] Weather: 80F and sunny
+        case "output-available":
+          return (
+            &lt;div key={`${message.id}-getWeather-${index}`}&gt;
+              &lt;div&gt;Weather: {part.output}&lt;/div&gt;
+            &lt;/div&gt;
+          );
+        case "output-error":
+          return (
+            &lt;div key={`${message.id}-getWeather-${index}`}&gt;
+              Error: {part.errorText}
+            &lt;/div&gt;
+          );
+        default:
+          return null;
+      }
+    default:
+      return null;
+  }
+})}
 </code></pre>

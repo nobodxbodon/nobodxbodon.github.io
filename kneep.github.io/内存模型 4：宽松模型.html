@@ -1,0 +1,100 @@
+<h2><a href="https://github.com/kneep/kneep.github.io/blob/master/content/posts/memory-model/relaxed-model/index.md">仓库源文</a>，<a href="https://kneep.github.io/posts/memory-model/relaxed-model/">站点原文</a></h2>
+<h2>介绍</h2>
+<p>在 TSO 这一篇中谈到过，给内存模型松绑，有助于硬件设计上实现更多的优化，TSO 对 SC 的一种顺序进行了松绑。如果我们进一步松绑，有机会带来更多的优化。比如，在分析 TSO 的优化的时候有一个场景，写指令发生在读指令之前，但生效却在之后，因为中间加了一层缓存。对于写指令来说，这个缓存是先进先出的（FIFO），因为对于 TSO 来说，写之间的顺序是强制的。如果我们松绑了写之间的顺序，那么这个缓存就没必要是先进先出，这样会带来更多的优化机会。本篇我们介绍宽松的内存模型，有不少处理器都采用了这种模型，为了叙述方便，我们就把它统称为 RMC（Relaxed Memory Model）。</p>
+<h2>场景分析</h2>
+<p>考虑以下代码：</p>
+<pre><code class="lang-c">// Core C1
+S1: data1 = NEW;
+S2: data2 = NEW;
+S3: flag = SET;
+</code></pre>
+<pre><code class="lang-c">// Core C2
+L1: r1 = flag
+B1: if (r1 != SET) goto L1;
+L2: r2 = data1;
+L3: r3 = data2;
+</code></pre>
+<p>如果你熟悉操作系统，那么很可能已经看出，<code>flag</code>就是一个自旋锁（spinlock）。这个锁的作用，就是确保<code>r2</code>和<code>r3</code>都能得到<code>NEW</code>值。</p>
+<p>要使<code>r2</code>得到<code>NEW</code>，那么以下执行序列必须得到保证：<code>S1 -&gt; S3 -&gt; L1 -&gt; L2</code>。同理，要使<code>r3</code>得到<code>NEW</code>，则<code>S2 -&gt; S3 -&gt; L1 -&gt; L3</code>。在 SC 和 TSO 两种内存模型下，这都可以得到保证。但是，SC 和 TSO 还额外保证了<code>S1 -&gt; S2</code>和<code>L2 -&gt; L3</code>，<strong>这种保证是没有必要的</strong>，所以我们有了第三种内存模型 RMC。</p>
+<p>在 RMC 下，除了对同一地址的读写，其他的操作之间都是没有顺序保证的，所以上面的场景是无法产生预期效果的，我们还是需要借助 FENCE 来保证顺序：</p>
+<pre><code class="lang-c">// Core C1
+S1: data1 = NEW;
+S2: data2 = NEW;
+F2: FENCE
+S3: flag = SET;
+</code></pre>
+<pre><code class="lang-c">// Core C2
+L1: r1 = flag
+B1: if (r1 != SET) goto L1;
+F2: FENCE
+L2: r2 = data1;
+L3: r3 = data2;
+</code></pre>
+<p><img alt="" src="/Users/xuanwu/work/聚聚/中文博客集锦/源数据/博客聚合/kneep.github.io/content/posts/img/rmc1.svg"/></p>
+<h2>形式化定义</h2>
+<p>先来定义<code>FENCE</code>，和 TSO 是一样的：</p>
+<ol>
+<li>如果 <code>L(a) &lt;p FENCE</code>，则 <code>L(a) &lt;m FENCE</code> （<code>Load -&gt; FENCE</code>）</li>
+<li>如果 <code>S(a) &lt;p FENCE</code>，则 <code>S(a) &lt;m FENCE</code> （<code>Store -&gt; FENCE</code>）</li>
+<li>如果 <code>FENCE &lt;p FENCE</code>，则 <code>FENCE &lt;m FENCE</code> （<code>FENCE -&gt; FENCE</code>）</li>
+<li>如果 <code>FENCE &lt;p L(a)</code>，则 <code>FENCE &lt;m L(a)</code> （<code>FENCE -&gt; Load</code>）</li>
+<li>如果 <code>FENCE &lt;p S(a)</code>，则 <code>FENCE &lt;m S(a)</code> （<code>FENCE -&gt; Store</code>）</li>
+</ol>
+<p>RMC 要求保证对同一地址的操作顺序：</p>
+<ol>
+<li>如果<code>L1(a) &lt;p L2(a)</code>，则<code>L1(a) &lt;m L2(a)</code>（同一地址<code>Load -&gt; Load</code>）</li>
+<li>如果<code>L(a) &lt;p S(a)</code>，则<code>L(a) &lt;m S(a)</code>（同一地址<code>Load -&gt; Store</code>）</li>
+<li>如果<code>S1(a) &lt;p S2(a)</code>，则<code>S1(a) &lt;m S2(a)</code>（同一地址<code>Store-&gt;Store</code>）</li>
+</ol>
+<p>至于同一地址<code>Store-&gt;Load</code>的规则，和 TSO 是一样的：
+针对同一内存地址，读（<code>Load</code>）会得到 <code>&lt;m</code> 中最近一次写（<code>Store</code>）的值，或者同一处理器上一个尚位于 Write Buffer 中的值：
+{{&lt; katex &gt;}}
+$$
+{L(a) = MAX_{&lt;m} { S(a)\ |\ S(a) \text{  &lt;m  } L(a)} \text{ or } S(a) \text{  &lt;p  } L(a)}
+$$</p>
+<p>除此以外，其他的顺序没有保证。</p>
+<table>
+<thead><tr>
+<th style="text-align:center"></th>
+<th style="text-align:center">Load 2</th>
+<th style="text-align:center">Store 2</th>
+<th style="text-align:center">RMW 2</th>
+<th style="text-align:center">FENCE 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><strong>Load 1</strong></td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center">Yes</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>Store 1</strong></td>
+<td style="text-align:center">B</td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center">Yes</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>RMW 1</strong></td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center"><strong>A</strong></td>
+<td style="text-align:center">Yes</td>
+</tr>
+<tr>
+<td style="text-align:center"><strong>FENCE 1</strong></td>
+<td style="text-align:center">Yes</td>
+<td style="text-align:center">Yes</td>
+<td style="text-align:center">Yes</td>
+<td style="text-align:center">Yes</td>
+</tr>
+</tbody>
+</table>
+<p>这里引入了一个新的符号 <strong>A</strong>，代表了仅保证对相同地址的操作的顺序。</p>
+<h2>总结</h2>
+<p>在这种内存模型下，编程变得更困难了。</p>
+<p>程序员需要想清楚很多事情，人为地把一个个<code>FENCE</code>码放在代码的合适位置，确保实现出来的逻辑真正符合设计意图。同时，<code>FENCE</code>是有成本的，所以又要反过来思考哪些地方不需要<code>FENCE</code>，避免滥用。总结起来一句话——用最少的<code>FENCE</code>实现完全正确的代码逻辑。</p>
+<p>在嵌入式领域中最流行的 ARM 处理器就属于这类模型。</p>

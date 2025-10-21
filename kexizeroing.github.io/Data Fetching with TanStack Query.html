@@ -68,6 +68,7 @@ function Bookmarks({ category }) {
 }
 </code></pre>
 <blockquote><p><code>useEffect</code> callback cannot be async. React expects <code>useEffect(() =&gt; {})</code> to return nothing or a cleanup function — not a Promise. So if you need <code>await</code>, you must define an inner async function and call it inside the effect.</p>
+<p>In development, you will see two fetches in the Network tab. There is nothing wrong with that. Even though there is an extra request, it won’t affect the state thanks to the <code>if (!active)</code> check. In production, there will only be one request.</p>
 </blockquote>
 <p>In reality, we still need to think about:</p>
 <ol>
@@ -203,43 +204,8 @@ function App() {
   );
 }
 </code></pre>
-<pre><code class="lang-jsx">// besides `useQuery`, there's also `useMutation`
-function App() {
-  const postQuery = useQuery({
-    queryKey: ['post'],
-    queryFn: () =&gt; fetch(...).then(res =&gt; res.json()),
-  })
-
-  // const queryClient = useQueryClient()
-  const newPostMutation = useMutation({
-    mutationFn: async (newTitle) =&gt; {
-      const response = await fetch(...)
-      return response.json()
-    },
-    onSuccess: (data) =&gt; {
-      // update the cache
-      queryClient.invalidateQueries({ queryKey: ['post'] })
-    },
-    onError: () =&gt; {
-      // roll back the optimistic update
-    },
-    onSettled: () =&gt; {
-      // always run this, regardless of success or error
-    },
-  })
-
-  return (
-    &lt;div&gt;
-      { postQuery.data.map(post =&gt; &lt;div key={post.id}&gt;{post.title}&lt;/div&gt;) }
-      &lt;button
-        disabled={newPostMutation.isLoading}
-        onClick={() =&gt; newPostMutation.mutate('My new post')}&gt;
-        Create new
-      &lt;/button&gt;
-    &lt;/div&gt;
-  )
-}
-</code></pre>
+<p>In most examples, we create the <code>QueryClient</code> outside the App component, which makes it referentially stable. The <code>QueryClient</code> holds the <code>QueryCache</code>, so if you create a new client, you also get a new cache, which will be empty.</p>
+<p>The <code>QueryClientProvider</code> puts the created <code>QueryClient</code> into React Context to distribute it throughout your app. You can best read it with <code>useQueryClient</code>.</p>
 <pre><code class="lang-js">// pagination example
 const {
   data,
@@ -261,3 +227,57 @@ const {
 <blockquote><p><a href="https://pinia-colada.esm.dev">Pinia Colada</a> is the smart data fetching layer for Vue.js. You don't even need to learn Pinia to use Pinia Colada because it exposes its own composables.</p>
 <p>Pinia Colada shares similarities with TanStack Query and has adapted some of its APIs for easier migration. However, Pinia Colada is tailored specifically for Vue, resulting in a lighter library with better and official integrations like Data Loaders. If you're familiar with TanStack Query, you'll find Pinia Colada intuitive and easy to use. The size of Pinia Colada is much smaller.</p>
 </blockquote>
+<h2>Mutations</h2>
+<p>TanStack Query exports a <code>useMutation</code> hook.</p>
+<p>Usually when a mutation in your app succeeds, it's very likely that there are related queries in your application that need to be invalidated and possibly refetched to account for the new changes from your mutation. To do this, you can use <code>useMutation</code>'s <code>onSuccess</code> options and the client's <code>invalidateQueries</code> function.</p>
+<p>The idea of optimistic updates is to fake the success of a mutation even before we have sent it to the server. Once we get a successful response back, all we have to do is invalidate our view again to see the real data. In case the request fails, we're going to roll back our UI to the state from before the mutation.</p>
+<pre><code class="lang-jsx">function App() {
+  const postQuery = useQuery({
+    queryKey: ['post'],
+    queryFn: () =&gt; fetch(...).then(res =&gt; res.json()),
+  })
+
+  const queryClient = useQueryClient()
+
+  const newPostMutation = useMutation({
+    mutationFn: async (newTitle) =&gt; {
+      const response = await fetch(...)
+      return response.json()
+    },
+    // 1. This function will fire before the mutation function is fired and is passed the same variables the mutation function would receive.
+    // 2. Useful to perform optimistic updates to a resource in hopes that the mutation succeeds.
+    // 3. Return a value that will later be passed to both onError and onSettled handlers, useful for rolling back optimistic updates.
+    onMutate: (variables) =&gt; {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['post'] })
+      // Snapshot the previous value
+      const previousPosts = queryClient.getQueryData(['post'])
+      // Optimistically update to the new value
+      queryClient.setQueryData(['post'], old =&gt; [...old, { id: Date.now(), title: variables }])
+      // Return a context object with the snapshotted value
+      return { previousPosts }
+    },
+    onSuccess: (data) =&gt; {
+      // update the cache
+      queryClient.invalidateQueries({ queryKey: ['post'] })
+    },
+    onError: (error, variables, context) =&gt; {
+      // roll back the optimistic update
+    },
+    onSettled: () =&gt; {
+      // always run this, regardless of success or error
+    },
+  })
+
+  return (
+    &lt;div&gt;
+      { postQuery.data.map(post =&gt; &lt;div key={post.id}&gt;{post.title}&lt;/div&gt;) }
+      &lt;button
+        disabled={newPostMutation.isPending}
+        onClick={() =&gt; newPostMutation.mutate('My new post')}&gt;
+        Create new
+      &lt;/button&gt;
+    &lt;/div&gt;
+  )
+}
+</code></pre>
