@@ -1,0 +1,917 @@
+<h2><a href="https://github.com/kneep/kneep.github.io/blob/master/content/posts/lua-tutorial/index.md">仓库源文</a>，<a href="https://kneep.github.io/posts/lua-tutorial/">站点原文</a></h2>
+<h2>数据类型</h2>
+<p>Lua 有八种基础数据类型：<code>nil</code>、<code>boolean</code>、<code>number</code>、<code>string</code>、<code>userdata</code>、<code>function</code>、<code>thread</code>和<code>table</code>。用<code>type</code>函数可以打印数据类型：</p>
+<pre><code class="lang-lua">print(type("Hello world"))  --&gt; string
+print(type(10.4 * 3))       --&gt; number
+print(type(print))          --&gt; function
+print(type(type))           --&gt; function
+print(type(true))           --&gt; boolean
+print(type(nil))            --&gt; nil
+print(type(type(X)))        --&gt; string
+</code></pre>
+<h3>空值</h3>
+<p>类型名：<code>nil</code>。</p>
+<ul>
+<li>空值只有一个值<code>nil</code></li>
+<li>通常用于代表一个变量没有有效的值</li>
+<li>全局变量赋初值前是<code>nil</code></li>
+<li>全局变量赋<code>nil</code>可以导致其被删除</li>
+</ul>
+<h3>布尔</h3>
+<p>类型名：<code>boolean</code>。</p>
+<p>布尔有两个合法值：<code>true</code>、<code>false</code>。</p>
+<ul>
+<li><code>false</code>和<code>nil</code>被视作<code>false</code></li>
+<li>其余所有值被视作<code>true</code>，包括数字<code>0</code>和空字符串（警觉）</li>
+</ul>
+<h3>数字</h3>
+<p>类型名：<code>number</code>。</p>
+<p>代表实数（双精度浮点数）。Lua 无整数类型。表示法实例：</p>
+<pre><code>4     0.4     4.57e-3     0.3e12     5e+20
+</code></pre>
+<h3>字符串</h3>
+<p>类型名：<code>string</code>。可以存储二进制数据，中间有<code>0</code>值也没关系。</p>
+<p>字符串是不可变类型。如要修改，必须创建新的字符串。</p>
+<pre><code class="lang-lua">a = "one string"
+b = string.gsub(a, "one", "another")  -- change string parts
+print(a)       --&gt; one string
+print(b)       --&gt; another string
+</code></pre>
+<p>使用单引号或双引号表示，同一程序应只用一种，保持风格一致。</p>
+<pre><code class="lang-lua">a = "a line"
+b = 'another line'
+</code></pre>
+<p>支持类似 C 语言的转义符。
+| 转义符 | 意义 |
+|:-----------:|:------:|
+| \a | bell |
+| \b | back space |
+| \f | form feed |
+| \n | newline |
+| \r | carriage return |
+| \t | horizontal tab |
+| \v | vertical tab |
+| \\ | backslash |
+| \" | double quote |
+| \' | single quote |</p>
+<p>多行字符串可以用<code>[[</code>和<code>]]</code>包括起来：</p>
+<pre><code class="lang-lua">page = [[
+     &lt;html&gt;
+     &lt;head&gt;
+     &lt;title&gt;An HTML Page&lt;/title&gt;
+     &lt;/head&gt;
+     &lt;body&gt;
+      &lt;a href="http://www.lua.org"&gt;Lua&lt;/a&gt;
+     &lt;/body&gt;
+     &lt;/html&gt;
+     ]]
+write(page)
+</code></pre>
+<p>为避免代码中本身就有<code>[[</code>和<code>]]</code>，可以在两个方括号之间加不限数量的<code>=</code>，比如<code>[===[</code>和<code>]===]</code>，但<code>=</code>数量必须匹配。</p>
+<p>数字和字符串可以自动转换。字符转数字：</p>
+<pre><code class="lang-lua">print("10" + 1)         --&gt; 11
+print("10 + 1")         --&gt; 10 + 1
+print("-5.3e-10" * "2")   --&gt; -1.06e-09
+print("hello" + 1)      -- ERROR (cannot convert "hello")
+</code></pre>
+<p>数字转字符：</p>
+<pre><code class="lang-lua">print(10 .. 20)         --&gt; 1020
+</code></pre>
+<h3>表</h3>
+<p>类型名：<code>table</code>。</p>
+<p>表本质上是关联数组，其他编程语言也叫映射（map）或字典（dictionary）。</p>
+<ul>
+<li>表的索引可以是除了<code>nil</code>以外的所有值</li>
+<li>表没有固定的大小，可以动态添加元素</li>
+<li>表是 Lua 最主要（也是唯一）的数据构造方式，用它可以实现普通数组、符号表、集合、队列等很多机制</li>
+<li>表既不是变量，也不是值，它是对象</li>
+<li>表传递的是引用（或指针），对象传递的都是引用</li>
+</ul>
+<p>表的构造方式：</p>
+<pre><code class="lang-lua">a = {}
+a["x"] = 10
+b = a           -- 'b' refers to the same table as 'a'
+print(b["x"])   --&gt; 10
+b["x"] = 20
+print(a["x"])   --&gt; 20
+a = nil         -- only ’b’ still refers to the table
+b = nil         -- no references left to the table
+</code></pre>
+<p>类似全局变量，表的成员如果没有初始化，值是<code>nil</code>；重新赋值<code>nil</code>后，成员会被删除。</p>
+<pre><code class="lang-lua">a = {}          -- empty table
+-- create 1000 new entries
+for i = 1, 1000 do a[i] = i * 2 end
+print(a[9])     --&gt; 18
+a["x"] = 10
+print(a["x"])   --&gt; 10
+print(a["y"])   --&gt; nil
+</code></pre>
+<p><code>a.name</code>和<code>a["name"]</code>是等价的：</p>
+<pre><code class="lang-lua">a.x = 10    -- same as a["x"] = 10
+print(a.x)  -- same as print(a["x"])
+print(a.y)  -- same as print(a["y"])
+</code></pre>
+<p>注意<code>a.x</code>和<code>a["x"]</code>等价，但和<code>a[x]</code>不等价！</p>
+<pre><code class="lang-lua">a = {}
+x = "y"
+a[x] = 10           -- put 10 in field "y"
+print(a[x]) --&gt; 10  -- value of field "y"
+print(a.x)  --&gt; nil -- value of field "x" (undefined)
+print(a.y)  --&gt; 10  -- value of field "y"
+</code></pre>
+<p>使用整数作为索引，就是传统的数组：</p>
+<pre><code class="lang-lua">-- read 10 lines storing them in a table
+a = {}
+for i = 1, 10 do
+    a[i] = io.read()
+end
+</code></pre>
+<p>理论上，索引是任何数字都可以，但 Lua 的索引一般从 1 开始。并且有一些工具会以来这种表示。用<code>#</code>可以返回数组的最后一个索引（也是大小）：</p>
+<pre><code class="lang-lua">-- print the lines
+for i = 1, #a do
+  print(a[i])
+end
+</code></pre>
+<p>更多的用法：</p>
+<pre><code class="lang-lua">print(a[#a])    -- prints the last value of list 'a'
+a[#a] = nil     -- removes this last value
+a[#a+1] = v     -- appends 'v' to the end of the list
+</code></pre>
+<p>对于有「洞」的数组来说，不要去求大小：</p>
+<pre><code class="lang-lua">a = {}
+a[10000] = 1
+</code></pre>
+<p>未初始化的成员是<code>nil</code>，而<code>#</code>计算大小是看<code>nil</code>值。对于有「洞」的数组，可以用<code>table.maxn</code>来获取最大的正数索引值：</p>
+<pre><code class="lang-lua">a = {}
+a[10000] = 1
+print(table.maxn(a))          --&gt; 10000
+</code></pre>
+<p>注意，数字<code>0</code>、字符串<code>"0"</code>，作为索引，都是不同的值，也就是代表了表中不同的元素，忽略这点，很容易引入难以觉察的 bug：</p>
+<pre><code class="lang-lua">i = 10; j = "10"; k = "+10"
+a = {}
+a[i] = "one value"
+a[j] = "another value"
+a[k] = "yet another value"
+print(a[j])            --&gt; another value
+print(a[k])            --&gt; yet another value
+print(a[tonumber(j)])  --&gt; one value
+print(a[tonumber(k)])  --&gt; one value
+</code></pre>
+<h3>函数</h3>
+<p>类型名：<code>function</code>。</p>
+<p>函数是 Lua 的内置数据类型，可以赋给变量。</p>
+<h3>用户数据和线程</h3>
+<p>后续再讨论。</p>
+<h2>表达式</h2>
+<h3>算术运算</h3>
+<p>双目运算符：<code>+</code>（加）、<code>-</code>（减）、<code>*</code>（乘）、<code>/</code>（除）、<code>^</code>（指数）、<code>%</code>（模）</p>
+<p>单目运算符：<code>-</code>（取反）</p>
+<p>运算符都支持实数，<code>x ^ 0.5</code>是求<code>x</code>的平方根。</p>
+<h3>关系运算</h3>
+<p><code>&lt;</code>、<code>&gt;</code>、<code>&lt;=</code>、<code>&gt;=</code>、<code>==</code>、<code>~=</code></p>
+<p>关系运算符返回<code>true</code>或<code>false</code>。<code>==</code>测试相等，<code>~=</code>测试不等。相同类型的数据才能比较，不同类型的数据不相等。<code>nil</code>只跟自己相等。对于<code>table</code>、<code>userdata</code>、<code>function</code>，比较的是引用而不是值：</p>
+<pre><code class="lang-lua">a = {}; a.x = 1; a.y = 0
+b = {}; b.x = 1; b.y = 0
+c = a
+print(a == c)   --&gt; true
+print(a ~= b)   --&gt; true
+</code></pre>
+<p><code>&lt;</code>、<code>&gt;</code>、<code>&lt;=</code>、<code>&gt;=</code>只能用于数字和字符串。</p>
+<h3>逻辑运算</h3>
+<p><code>and</code>、<code>or</code>、<code>not</code>。求值时，<code>false</code>和<code>nil</code>被视作<code>false</code>，其他被视作<code>true</code>。</p>
+<ul>
+<li><code>and</code>：如果第一个参数为<code>false</code>，则返回第一个参数，否则返回第二个参数。</li>
+<li><code>or</code>：如果第一个参数为<code>true</code>，则返回第一个参数，否则返回第二个参数。<pre><code class="lang-lua">print(4 and 5)          --&gt; 5
+print(nil and 13)       --&gt; nil
+print(false and 13)     --&gt; false
+print(4 or 5)           --&gt; 4
+print(false or 5)       --&gt; 5
+</code></pre>
+</li>
+</ul>
+<p><code>and</code>和<code>or</code>都采用「短路求值（short-cut evaluation）」的方式，即——非必要不求值。</p>
+<pre><code class="lang-lua">x = x or v
+--&gt; equals to
+if not x then x = v end
+</code></pre>
+<pre><code class="lang-lua">max = (x &gt; y) and x or y    --&gt; equals a ? b : c in C
+</code></pre>
+<h3>连接</h3>
+<p><code>..</code>用于连接字符串，如果操作数是数字，会转成字符串。</p>
+<pre><code class="lang-lua">print("Hello " .. "World")  --&gt; Hello World
+print(0 .. 1)               --&gt; 01
+</code></pre>
+<p>字符串是不可变的，所以<code>..</code>会产生新的字符串。</p>
+<pre><code class="lang-lua">a = "Hello"
+print(a .. " World")   --&gt; Hello World
+print(a)               --&gt; Hello
+</code></pre>
+<h3>优先级</h3>
+<p>运算符优先级如下：</p>
+<pre><code>^
+not # -(单目) * / %
++ -
+..
+&lt; &gt; &lt;= &gt;= ~= == and
+or
+</code></pre>
+<p>每行代表一种优先级，从上到下优先级递减。双目运算符中，<code>^</code>和<code>..</code>为「右结合」，其余为「左结合」。</p>
+<h3>表构造器</h3>
+<p>最简单的是空构造<code>{}</code>。</p>
+<p>列表构造：</p>
+<pre><code class="lang-lua">days = {"Sunday", "Monday", "Tuesday", "Wednesday",
+    "Thursday", "Friday", "Saturday"}
+</code></pre>
+<p>再次注意索引是从 1 开始的。</p>
+<pre><code class="lang-lua">print(days[4]) --&gt; Wednesday
+</code></pre>
+<p>记录表构造：</p>
+<pre><code class="lang-lua">a = {x=10, y=20}
+--&gt; equals to
+a = {}; a.x=10; a.y=20
+</code></pre>
+<p>事后添加成员：</p>
+<pre><code class="lang-lua">w = {x=0, y=0, label="console"}
+x = {math.sin(0), math.sin(1), math.sin(2)}
+w[1] = "another field"      -- add key 1 to table ’w’
+x.f = w                     -- add key "f" to table ’x’
+print(w["x"])               --&gt; 0
+print(w[1])                 --&gt; another field
+print(x.f[1])               --&gt; another field
+w.x = nil                   -- remove field "x"
+</code></pre>
+<p>列表和记录表可以混用：</p>
+<pre><code class="lang-lua">polyline = {color = "blue", thickness = 2, npoints = 4,
+              {x = 0,   y = 0},
+              {x = -10, y = 0},
+              {x = -10, y = 1},
+              {x = 0,   y = 1}
+}
+</code></pre>
+<p>上面初始化后：</p>
+<pre><code class="lang-lua">print(polyline[2].x)    --&gt; -10
+print(polyline[4].y)    --&gt; 1
+</code></pre>
+<p>还有一种更通用的方式，把索引放在<code>[]</code>中：</p>
+<pre><code class="lang-lua">opnames = {["+"] = "add", ["-"] = "sub",
+        ["*"] = "mul", ["/"] = "div"}
+i = 20; s = "-"
+a = {[i+0] = s, [i+1] = s..s, [i+2] = s..s..s}
+print(opnames[s])    --&gt; sub
+print(a[22])         --&gt; ---
+</code></pre>
+<p>最后一个成员后面可以加<code>,</code>：</p>
+<pre><code class="lang-lua">a = {[1]="red", [2]="green", [3]="blue",}
+</code></pre>
+<p>在构造器中也可以使用<code>;</code>分隔成员：</p>
+<pre><code class="lang-lua">{x = 10, y = 45; "one", "two", "three"}
+</code></pre>
+<p>可以用于隔离不同类型的数据。</p>
+<h2>语句</h2>
+<h3>赋值</h3>
+<p>基本的赋值：</p>
+<pre><code class="lang-lua">a = "hello" .. "world"
+t.n = t.n + 1
+</code></pre>
+<p>可以同时给多个变量赋值：</p>
+<pre><code class="lang-lua">a, b = 10, 2 * x
+</code></pre>
+<p>在这种情况下，Lua 会先做完所有的求值，再进行赋值：</p>
+<pre><code class="lang-lua">x, y = y, x                -- swap ’x’ for ’y’
+a[i], a[j] = a[j], a[i]    -- swap ’a[i]’ for ’a[j]’
+</code></pre>
+<p>如果变量数更多，多余的变量赋<code>nil</code>。如果值的数量更多，多余的值会被丢弃。</p>
+<pre><code class="lang-lua">a, b, c = 0, 1
+print(a, b, c)          --&gt; 0 1 nil
+a, b = a + 1, b + 1, b + 2    -- value of b+2 is ignored
+print(a, b)             --&gt; 1 2
+a, b, c = 0
+print(a, b, c)          --&gt; 0 nil nil
+</code></pre>
+<p>把多个变量同时初始化为 0，必须这么写：</p>
+<pre><code class="lang-lua">a, b, c = 0, 0, 0
+print(a, b, c)         --&gt; 0   0   0
+</code></pre>
+<p>多变量同时赋值，并不能提升性能。但有时候会需要这种写法，比如交换变量的值，或者接收多个函数返回值。</p>
+<h3>局部变量</h3>
+<p>局部变量使用<code>local</code>。</p>
+<pre><code class="lang-lua">j = 10         -- global variable
+local i = 1    -- local variable
+</code></pre>
+<p>局部变量的作用域限定在控制块、函数或文件中。</p>
+<pre><code class="lang-lua">x = 10
+local i = 1         -- local to the chunk
+while i &lt;= x do
+  local x = i * 2   -- local to the while body
+  print(x)          --&gt; 2, 4, 6, 8, ...
+  i = i + 1
+end
+
+if i &gt; 20 then
+  local x         -- local to the "then" body
+  x = 20
+  print(x + 2)    -- (would print 22 if test succeeded)
+else
+  print(x)        --&gt; 10  (the global one)
+end
+print(x)          --&gt; 10  (the global one)
+</code></pre>
+<p>可以用<code>do-end</code>来限定作用域：</p>
+<pre><code class="lang-lua">do
+  local a2 = 2 * a
+  local d = (b^2 - 4 * a * c)^(1 / 2)
+  x1 = (-b + d) / a2
+  x2 = (-b - d) / a2
+end          -- scope of ’a2’ and ’d’ ends here
+print(x1, x2)
+</code></pre>
+<h3>控制结构</h3>
+<h4>if-then-else</h4>
+<pre><code class="lang-lua">if a &lt; 0 then a = 0 end
+
+if a &lt; b then return a else return b end
+
+if line &gt; MAXLINES then
+  showpage()
+  line = 0
+end
+</code></pre>
+<p>如果要嵌套，使用<code>elseif</code>：</p>
+<pre><code class="lang-lua">if op == "+" then
+  r = a + b
+elseif op == "-" then
+  r = a - b
+elseif op == "*" then
+  r = a * b
+elseif op == "/" then
+  r = a / b
+else
+  error("invalid operation")
+end
+</code></pre>
+<h4>while</h4>
+<pre><code class="lang-lua">local i = 1
+while a[i] do
+  print(a[i])
+  i = i + 1
+end
+</code></pre>
+<h4>repeat</h4>
+<pre><code class="lang-lua">-- print the first non-empty input line
+repeat
+  line = os.read()
+until line ~= ""
+print(line)
+</code></pre>
+<p><strong>在循环体中声明的局部变量，在循环条件中也是有效的，这个大多数编程语言都不一样。</strong></p>
+<pre><code class="lang-lua">local sqr = x / 2
+repeat
+  sqr = (sqr + x/sqr) / 2
+  local error = math.abs(sqr^2 - x)
+until error &lt; x/10000         -- ’error’ still visible here
+</code></pre>
+<h4>for（数字）</h4>
+<p>针对数字的<code>for</code>语句形式：</p>
+<pre><code class="lang-lua">for var = exp1, exp2, exp3 do
+  &lt;something&gt; 
+end
+</code></pre>
+<p><code>exp1</code>和<code>exp2</code>是起点和终点，<code>exp3</code>是步长，步长可省略，如省略，则默认是 1。</p>
+<pre><code class="lang-lua">for i = 1, f(x) do print(i) end
+for i = 10, 1, -1 do print(i) end
+</code></pre>
+<p>如果不想要上限，可以用<code>math.huge</code>：</p>
+<pre><code class="lang-lua">for i = 1, math.huge do
+  if (0.3 * i^3 - 20 * i^2 - 500 &gt;= 0) then
+    print(i)
+    break
+  end
+end
+</code></pre>
+<p>有两点需要注意：</p>
+<ul>
+<li><code>exp1</code>、<code>exp2</code>、<code>exp3</code>三个表达式，只会在循环开始前求值一次</li>
+<li>循环变量的作用域只在循环中有效，不要在循环后使用它<pre><code class="lang-lua">for i = 1, 10 do print(i) end
+max = i      -- probably wrong! ’i’ here is global
+</code></pre>
+如果一定要记录循环变量，则需要借助其他变量：<pre><code class="lang-lua">-- find a value in a list
+local found = nil
+for i = 1, #a do
+if a[i] &lt; 0 then
+  found = i
+  break
+end
+end
+print(found)
+</code></pre>
+</li>
+</ul>
+<h4>for（泛型）</h4>
+<p>泛型版本的<code>for</code>用来遍历迭代器返回的值。</p>
+<pre><code class="lang-lua">-- print all values of array ’a’
+for i, v in ipairs(a) do print(v) end
+</code></pre>
+<p><code>ipairs</code>是 Lua 基础库提供的一个迭代器，可以遍历数组。每次<code>i</code>得到的是索引值，<code>v</code>得到的是跟索引关联的内容。</p>
+<pre><code class="lang-lua">-- print all keys of table ’t’
+for k in pairs(t) do print(k) end
+</code></pre>
+<p>Lua 标准库提供了一些迭代器：<code>io.lines</code>（迭代文件的每一行）、<code>pairs</code>（迭代表所有名值对）、<code>ipairs</code>（迭代数组所有索引和值）、<code>string.gmatch</code>（迭代字符串的每个词），等等。自己也可以实现迭代器，后面详述。</p>
+<h4>break 和 return</h4>
+<p><code>break</code>和<code>return</code>用于跳出控制块。<code>break</code>用于结束循环，<code>return</code>用于返回函数。两者都只能出现在代码块的最后，如果有时候处于调试目的，需要在函数一开头就返回，可以把<code>return</code>放在<code>do-end</code>里面。</p>
+<pre><code class="lang-lua">function foo ()
+  return --&lt;&lt; SYNTAX ERROR
+  -- 'return' is the last statement in the next block
+  do return end -- OK
+  &lt;other statements&gt;
+end
+</code></pre>
+<h2>函数</h2>
+<p>定义：</p>
+<pre><code class="lang-lua">function add (a)
+  local sum = 0
+    for i, v in ipairs(a) do
+      sum = sum + v
+    end
+  return sum
+end
+</code></pre>
+<p>包括函数名、参数列表和函数体。参数类似局部变量。调用函数的参数个数可以跟定义的不一样，规则类似多个变量一起赋值。</p>
+<pre><code class="lang-lua">function f(a, b) return a or b end
+
+f(3)        -- a=3, b=nil
+f(3, 4)     -- a=3, b=4
+f(3, 4, 5)  -- a=3, b=4   (5 is discarded)
+</code></pre>
+<p>有时候参数需要默认值：</p>
+<pre><code class="lang-lua">function incCount (n)
+  n = n or 1
+  count = count + n
+end
+</code></pre>
+<h3>多返回值</h3>
+<p>子字符串的起始和结束位置：</p>
+<pre><code class="lang-lua">s, e = string.find("hello Lua users", "Lua")
+print(s, e)   --&gt; 7      9
+</code></pre>
+<p>同时返回最大数的值和索引：</p>
+<pre><code class="lang-lua">function maximum (a)
+  local mi = 1          -- index of the maximum value
+  local m = a[mi]       -- maximum value
+  for i, val in ipairs(a) do
+    if val &gt; m then
+      mi = i; m = val
+    end
+  end
+  return m, mi
+end
+print(maximum({8,10,23,12,5}))  --&gt; 23 3
+</code></pre>
+<p>返回值规则：</p>
+<ul>
+<li>调用函数作为语句，则丢弃所有返回值</li>
+<li>在表达式中调用函数，只保留第一个返回值</li>
+<li>在一个表达式的列表中调用函数，并且此函数是最后一个或唯一的元素，则返回所有返回值。列表的场景：<ul>
+<li>多变量赋值</li>
+<li>函数调用的参数</li>
+<li>表构造</li>
+<li>返回值列表</li>
+</ul>
+</li>
+</ul>
+<p>考虑以下函数定义：</p>
+<pre><code class="lang-lua">function foo0 () end                    -- returns no results
+function foo1 () return "a" end         -- returns 1 result
+function foo2 () return "a","b" end     -- returns 2 results
+</code></pre>
+<p>函数返回值的典型场景：</p>
+<pre><code class="lang-lua">x, y = foo2()           -- x="a", y="b"
+x = foo2()              -- x="a", "b" is discarded
+x, y, z = 10, foo2()    -- x=10, y="a", z="b"
+
+x, y = foo0()        -- x=nil, y=nil
+x, y = foo1()        -- x="a", y=nil
+x, y, z = foo2()      -- x="a", y="b", z=nil
+
+x, y = foo2(), 20      -- x="a", y=20
+x, y = foo0(), 20, 30  -- x=nil, y=20, 30 is discarded
+</code></pre>
+<p>函数返回值作为另一个函数的入参时：</p>
+<pre><code class="lang-lua">print(foo0())           --&gt;
+print(foo1())           --&gt; a
+print(foo2())           --&gt; ab
+print(foo2(), 1)        --&gt; a1
+print(foo2() .. "x")    --&gt; ax
+</code></pre>
+<p>最后一行，<code>foo2</code>出现在表达式中，所以只有一个返回值。</p>
+<p>作为构造参数：</p>
+<pre><code class="lang-lua">t = {foo0()}    -- t = {}  (an empty table)
+t = {foo1()}    -- t = {"a"}
+t = {foo2()}    -- t = {"a", "b"}
+</code></pre>
+<p>如果列表多于一个元素，还是返回一个值：</p>
+<pre><code class="lang-lua">t = {foo0(), foo2(), 4} -- t[1] = nil, t[2] = "a", t[3] = 4
+</code></pre>
+<p>作为函数调用作为另一个函数的返回值，返回所有值：</p>
+<pre><code class="lang-lua">function foo (i)
+  if i == 0 then return foo0()
+  elseif i == 1 then return foo1()
+  elseif i == 2 then return foo2()
+  end
+end
+print(foo(1))   --&gt; a
+print(foo(2))   --&gt; a b
+print(foo(0))   -- (no results)
+print(foo(3))   -- (no results)
+</code></pre>
+<p>如果想强制返回一个值，可以在函数调用外面加<code>()</code>：</p>
+<pre><code class="lang-lua">print((foo0()))     --&gt; nil
+print((foo1()))     --&gt; a
+print((foo2()))     --&gt; a
+</code></pre>
+<p><code>unpack</code>是一个特殊的返回多个值的函数，它返回一个数组的各个元素，从索引 1 开始：</p>
+<pre><code class="lang-lua">print(unpack{10, 20, 30})    --&gt; 10   20   30
+a, b = unpack{10, 20, 30}    -- a=10, b=20, 30 is discarded
+</code></pre>
+<p>用<code>unpack</code>可以构造更「通用」的函数调用，不必明确提供参数：</p>
+<pre><code class="lang-lua">f = string.find
+a = {"hello", "ll"}
+f(unpack(a))    --&gt; 3, 4
+</code></pre>
+<h3>不定参数</h3>
+<pre><code class="lang-lua">function add (...)
+  local s = 0
+  for i, v in ipairs{...} do
+    s = s + v 
+  end
+  return s
+end
+print(add(3, 4, 10, 25, 12))    --&gt; 54
+</code></pre>
+<p>可变参数列表称为<code>varargs</code>，使用<code>...</code>表示，访问这些参数也用<code>...</code>。确定的参数可以视作不定参数的特殊情况：</p>
+<pre><code class="lang-lua">function foo (a, b, c)
+--&gt;
+function foo (...)
+  local a, b, c = ...
+</code></pre>
+<p>恒等函数：</p>
+<pre><code class="lang-lua">function id (...) return ... end
+</code></pre>
+<p>在函数前添加日志：</p>
+<pre><code class="lang-lua">function foo1 (...)
+  print("calling foo:", ...)
+  return foo(...)
+end
+</code></pre>
+<p>结合字符串格式化<code>string.format</code>和写文件接口<code>io.write</code>，把格式化字符串写入文件：</p>
+<pre><code class="lang-lua">function fwrite (fmt, ...)
+  return io.write(string.format(fmt, ...))
+end
+</code></pre>
+<p>这里，在<code>...</code>之前出现了一个额外的参数<code>fmt</code>。只有后面的参数才会进入<code>varargs</code>：</p>
+<pre><code class="lang-lua">fwrite()                -- fmt = nil, no varargs
+fwrite("a")             -- fmt = "a", no varargs
+fwrite("%d%d", 4, 5)    -- fmt = "%d%d", varargs = 4 and 5
+</code></pre>
+<p>如果我们需要迭代<code>varargs</code>，可以像前面的<code>add</code>一样做。但是有时候<code>varargs</code>里面包含了有效的<code>nil</code>，这时候就需要使用<code>select</code>。</p>
+<pre><code class="lang-lua">for i=1, select('#', ...) do
+  local arg = select(i, ...) -- get i-th parameter
+  &lt;loop body&gt;
+end
+</code></pre>
+<p><code>select("#",...)</code>返回参数的准确个数，包括<code>nil</code>。</p>
+<h3>参数命名</h3>
+<p>Lua 基于<strong>顺序</strong>来传递参数，第一个实参传递给第一个形参，第二个实参传递给第二个形参，以此类推。有时候传递参数记不住顺序，需要指定名字。以下代码是错误的：</p>
+<pre><code class="lang-lua">-- invalid code
+rename(old = "temp.lua", new = "temp1.lua")
+</code></pre>
+<p>Lua 没有这种语法。但我们可以把参数打包到<strong>表</strong>里面：</p>
+<pre><code class="lang-lua">rename{old = "temp.lua", new = "temp1.lua"}
+</code></pre>
+<p>可以这样来引用参数：</p>
+<pre><code class="lang-lua">function rename (arg)
+  return os.rename(arg.old, arg.new)
+end
+</code></pre>
+<p>当函数需要很多参数，并且大多数参数是可选的时候，这种传递方法会非常简洁灵活。比如说，创建一个 GUI 程序的窗口，通常需要很多参数：</p>
+<pre><code class="lang-lua">w = Window{ x = 0, y = 0, width = 300, height = 200,
+            title = "Lua", background = "blue",
+            border = true
+          }
+</code></pre>
+<p>函数实现的例子：</p>
+<pre><code class="lang-lua">function Window (options)
+  -- check mandatory options
+  if type(options.title) ~= "string" then
+    error("no title")
+  elseif type(options.width) ~= "number" then
+    error("no width")
+  elseif type(options.height) ~= "number" then
+    error("no height")
+  end
+  -- everything else is optional
+  _Window(options.title,
+          options.x or 0,     -- default value
+          options.y or 0,     -- default value
+          options.width, options.height,
+          options.background or "white",   -- default
+          options.border      -- default is false (nil)
+        )
+end
+</code></pre>
+<h2>深入理解函数</h2>
+<p>在 Lua 中，函数是「一级类型」，这意味着 Lua 像对待数字、字符串一样对待函数，函数可以保存到变量和表中，可以作为参数传递，可以作为返回值返回。Lua 同时具备了静态作用域，这以为着函数可以访问外层作用域的变量，并且支持函数式编程。</p>
+<p>以下例子说明了函数名，只是个名字而已：</p>
+<pre><code class="lang-lua">a = {p = print}
+a.p("Hello World")  --&gt; Hello World
+print = math.sin    -- 'print' now refers to the sine function
+a.p(print(1))       --&gt; 0.841470
+sin = a.p           -- 'sin' now refers to the print function
+sin(10, 20)         --&gt; 10      20
+</code></pre>
+<p><code>print</code>只是一个保存了打印函数的变量名而已。通常我们会这样定义函数：</p>
+<pre><code class="lang-lua">function foo (x)  return 2 * x  end
+</code></pre>
+<p>但实际上，这只是下面这种方式的「语法糖」而已：</p>
+<pre><code class="lang-lua">foo = function (x)  return 2 * x  end
+</code></pre>
+<p>从第二种定义方式看，就很容易理解函数也只不过是个变量。<code>function(x) body</code>是个构造器，返回的结果叫做「匿名函数」。</p>
+<p><code>table.sort</code>用于对表进行排序，它接受一个函数作为参数判断元素的排序规则：</p>
+<pre><code class="lang-lua">network = {
+  {name = "grauna",  IP = "210.26.30.34"},
+  {name = "arraial", IP = "210.26.30.23"},
+  {name = "lua",     IP = "210.26.23.12"},
+  {name = "derain",  IP = "210.26.23.20"},
+}
+
+table.sort(network, function (a,b) return (a.name &gt; b.name) end)
+</code></pre>
+<p>更复杂的例子，估算函数的导数：</p>
+<pre><code class="lang-lua">function derivative (f, delta)
+  delta = delta or 1e-4
+  return function (x)
+           return (f(x + delta) - f(x))/delta
+         end
+end
+
+c = derivative(math.sin)
+print(math.cos(10), c(10))
+--&gt;   -0.83907152907645   -0.83904432662041
+</code></pre>
+<h3>闭包</h3>
+<p>当一个函数在另一个函数的内部声明的时候，前者能访问后者的所有局部变量。假设我们要实现一个函数，根据成绩等第给学生排序：</p>
+<pre><code class="lang-lua">names = {"Peter", "Paul", "Mary"}
+grades = {Mary = 10, Paul = 7, Peter = 8}
+table.sort(names, function (n1, n2)
+  return grades[n1] &gt; grades[n2]        -- compare the grades
+end)
+</code></pre>
+<p>如果我们要实现一个函数来完成这项工作：</p>
+<pre><code class="lang-lua">function sortbygrade (names, grades)
+  table.sort(names, function (n1, n2)
+    return grades[n1] &gt; grades[n2]      -- compare the grades
+  end)
+end
+</code></pre>
+<p>这里微妙的是传给<code>table.sort</code>的匿名函数可以访问<code>grades</code>，而<code>grades</code>既非全局，也非局部变量（对匿名函数来说）。再看一个例子：</p>
+<pre><code class="lang-lua">function newCounter ()
+  local i = 0
+  return function ()    -- anonymous function
+           i = i + 1
+           return i
+         end
+end
+
+c1 = newCounter()
+print(c1())  --&gt; 1
+print(c1())  --&gt; 2
+i = i + 1
+</code></pre>
+<p>在这个例子中，匿名函数引用了一个非局部变量<code>i</code>，并且，使用<code>i</code>的时候，它已经出了作用域了。Lua 通过「闭包」来正确处理这种场景。「闭包」是指一个函数加上其需要访问的所有非局部变量。</p>
+<pre><code class="lang-lua">c2 = newCounter()
+print(c2())  --&gt; 1
+print(c1())  --&gt; 3
+print(c2())  --&gt; 2
+</code></pre>
+<p><code>c1</code>和<code>c2</code>是同一函数的不同闭包，它们各自拥有一份自己的<code>i</code>。通过闭包来制作一个安全沙箱的例子：</p>
+<pre><code class="lang-lua">do
+  local oldOpen = io.open
+  local access_OK = function (filename, mode)
+    &lt;check access&gt;
+  end
+  io.open = function (filename, mode)
+    if access_OK(filename, mode) then
+      return oldOpen(filename, mode)
+    else
+      return nil, "access denied"
+    end
+  end
+end
+</code></pre>
+<h3>非全局函数</h3>
+<p>函数不仅可以赋给全局变量，也可以赋给表和局部变量。之前已经看过一些把函数赋给表成员的例子，多数 Lua 的库都是这么实现的：</p>
+<pre><code class="lang-lua">Lib = {}
+Lib.foo = function (x,y) return x + y end
+Lib.goo = function (x,y) return x - y end
+</code></pre>
+<p>也可以用构造器：</p>
+<pre><code class="lang-lua">Lib = {
+  foo = function (x,y) return x + y end,
+  goo = function (x,y) return x - y end
+}
+</code></pre>
+<p>Lua 还提供了另外一种语法：</p>
+<pre><code class="lang-lua">Lib = {}
+function Lib.foo (x,y) return x + y end
+function Lib.goo (x,y) return x - y end
+</code></pre>
+<p>函数赋给局部变量时，被限定在一个作用域内，这对于定义「包」很有用。</p>
+<pre><code class="lang-lua">local f = function (&lt;params&gt;)
+  &lt;body&gt;
+end
+local g = function (&lt;params&gt;)
+  &lt;some code&gt;
+  f() -- 'f' is visible here &lt;some code&gt;
+end
+</code></pre>
+<p>对于局部函数，可以用语法糖来简化：</p>
+<pre><code class="lang-lua">local function f (&lt;params&gt;)
+  &lt;body&gt;
+end
+</code></pre>
+<p>考虑以下递归函数的定义：</p>
+<pre><code class="lang-lua">local fact = function (n)
+  if n == 0 then return 1
+  else return n * fact(n - 1)   -- buggy
+  end
+end
+</code></pre>
+<p>这种定义是无法正常工作的。当编译<code>fact(n - 1)</code>的时候，局部的<code>fact</code>尚未定义，所以它用的是全局的<code>fact</code>。所以你必须这样定义：</p>
+<pre><code class="lang-lua">local fact
+fact = function (n)
+  if n == 0 then return 1
+  else return n * fact(n - 1)
+  end
+end
+</code></pre>
+<p>这样就知道需要调用的是局部的<code>fact</code>。不用担心<code>fact</code>的值，因为到调用的时候，它已经得到了正确的值。上面的语法糖版本能正确处理这种情况：</p>
+<pre><code class="lang-lua">local function foo (&lt;params&gt;) &lt;body&gt; end
+</code></pre>
+<p>实际被展开为：</p>
+<pre><code class="lang-lua">local foo
+foo = function (&lt;params&gt;) &lt;body&gt; end
+</code></pre>
+<p>但是，它无法处理间接递归的情况，间接递归需要这么定义：</p>
+<pre><code class="lang-lua">local f, g    -- 'forward' declarations
+function g () &lt;some code&gt; f()
+end
+function f () &lt;some code&gt; g()
+end
+</code></pre>
+<h3>尾调用</h3>
+<p>如果一个函数的最后以调用另一个函数结束，叫做「尾调用」。比如：</p>
+<pre><code class="lang-lua">function f (x)  return g(x)  end
+</code></pre>
+<p>尾调用不会占用额外的栈空间，所以嵌套使用尾调用的数量不用受限。以下函数不管<code>n</code>有多大，都不会有栈溢出。</p>
+<pre><code class="lang-lua">function foo (n)
+  if n &gt; 0 then return foo(n - 1) end
+end
+</code></pre>
+<p>尾调用的标准是，调用这调用完后，不需要做其他任何事情。以下函数不满足尾调用标准：</p>
+<pre><code class="lang-lua">function f (x)  g(x)  end
+</code></pre>
+<p>因为<code>f</code>调用完<code>g</code>后，还需要丢弃<code>g</code>可能的返回值。以下函数也不满足：</p>
+<pre><code class="lang-lua">return g(x) + 1   -- must do the addition
+return x or g(x)  -- must adjust to 1 result
+return (g(x))     -- must adjust to 1 result
+</code></pre>
+<p>在 Lua 中，只有形如<code>return func(args)</code>的调用才是尾调用。</p>
+<h2>迭代器</h2>
+<h3>迭代器和闭包</h3>
+<p>在 Lua 中，迭代器其实就是函数：每次我们调用这个函数，返回的是集合中的「下一个」元素。</p>
+<p>每种迭代器都需要维护一些内部状态，这样在连续调用的情况下，它才能知道当前的位置，以及下一步如何继续。闭包可以起到这个作用。以下迭代器返回列表的每个值：</p>
+<pre><code class="lang-lua">function values (t)
+  local i = 0
+  return function ()  i = i + 1; return t[i]  end
+end
+</code></pre>
+<p>它跟<code>ipairs</code>略有不同，它不返回元素的索引，只返回值。在这个例子中，<code>values</code>起到了「工厂」的作用。每调用一次这个工厂，它就创建一个新的闭包（就是迭代器），这个闭包维护自己那一份<code>t</code>和<code>i</code>。每次调用这个迭代器，就会返回<code>t</code>里面的下一个元素。在最后一个元素之后，迭代器会返回<code>nil</code>，意味着迭代结束。在<code>while</code>中使用这个迭代器：</p>
+<pre><code class="lang-lua">t = {10, 20, 30}
+iter = values(t)           -- creates the iterator
+while true do
+  local element = iter()   -- calls the iterator
+  if element == nil then break end
+  print(element)
+end
+</code></pre>
+<p>在<code>for</code>里面使用会更方便：</p>
+<pre><code class="lang-lua">t = {10, 20, 30}
+for element in values(t) do
+  print(element)
+end
+</code></pre>
+<p><code>for</code>会自己维护好迭代器的状态：</p>
+<ul>
+<li>内部保存迭代器的函数，就不再需要<code>iter</code>变量</li>
+<li>每次迭代调用一次迭代器</li>
+<li>遇到<code>nil</code>自动终止</li>
+</ul>
+<p>迭代器是写起来难，但用起来简单。下面是一个更复杂的例子：</p>
+<pre><code class="lang-lua">function allwords ()
+  local line = io.read()  -- current line
+  local pos = 1           -- current position in the line
+  return function ()      -- iterator function
+
+
+-- repeat while there are lines
+while line do
+  local s, e = string.find(line, "%w+", pos)
+  if s then           -- found a word?
+  pos = e + 1       -- next position is after this word
+  return string.sub(line, s, e)     -- return the word
+else
+  line = io.read()  -- word not found; try next line
+pos = 1 end
+end
+    return nil
+  end
+end
+</code></pre>
+<h3>泛型 for 的迭代语义</h3>
+<p>泛型<code>for</code>的完整语法：</p>
+<pre><code class="lang-lua">for &lt;var-list&gt; in &lt;exp-list&gt;
+  do &lt;body&gt;
+end
+</code></pre>
+<ul>
+<li><code>var-list</code>：一个或多个变量，逗号分隔</li>
+<li><code>exp-list</code>：一个或多个表达式，逗号分隔
+<code>expplist</code>一般情况下只有一个，生成迭代器的工厂函数。例如：<pre><code class="lang-lua">for k, v in pairs(t) do print(k, v) end
+</code></pre>
+这里，<code>var-list</code>就是<code>k, v</code>，<code>exp-list</code>就是<code>pairs(t)</code>。有时<code>var-list</code>也只有一个，例如：<pre><code class="lang-lua">for line in io.lines() do
+io.write(line, "\n")
+end
+</code></pre>
+我们把第一个变量叫做<em>控制变量</em>。它的值不能是<code>nil</code>，一旦成为<code>nil</code>，循环就结束了。</li>
+</ul>
+<p><code>for</code>首先要做的是，对<code>in</code>后面的表达式求值，求值会产生三个值：迭代器函数、不变状态（invariant state）、控制变量的初值。只有最后一个（或唯一的）表达式能返回多个值，返回值的个数调整为 3，丢弃多余的，或补<code>nil</code>。</p>
+<p>完成初始化后，<code>for</code>不断调用迭代器函数，并把不变状态和控制变量作为参数传过去。然后再把迭代器返回的值赋给变量列表。如果第一个返回值为<code>nil</code>，循环终止。否则就执行循环体部分，并再次调用迭代器，如此循环。下面的循环：</p>
+<pre><code class="lang-lua">for var_1, ..., var_n in &lt;explist&gt; do &lt;block&gt; end
+</code></pre>
+<p>等同于：</p>
+<pre><code class="lang-lua">do
+  local _f, _s, _var = &lt;explist&gt;
+  while true do
+    local var_1, ... , var_n = _f(_s, _var)
+    _var = var_1
+    if _var == nil then break end
+    &lt;block&gt;
+  end
+end
+</code></pre>
+<h3>无状态迭代器</h3>
+<p>无状态迭代器，就是不保存内部状态的迭代器，它只使用不变状态（invariant state）、控制变量两个值来获取下一个元素。如下代码：</p>
+<pre><code class="lang-lua">a = {"one", "two", "three"}
+for i, v in ipairs(a) do
+  print(i, v)
+end
+</code></pre>
+<p>这里的「不变状态」是表对象本身，它在整个迭代过程中是不变的。控制变量保存的是当前的索引值。迭代器的实现如下：</p>
+<pre><code class="lang-lua">local function iter (a, i)
+  i = i + 1
+  local v = a[i]
+  if v then
+    return i, v
+  end
+end
+
+function ipairs (a)
+  return iter, a, 0
+end
+</code></pre>
+<p>当<code>for</code>循环调用<code>ipairs(a)</code>时，会返回三个值：<code>iter</code>函数作为迭代器，<code>a</code>作为不变状态，<code>0</code>作为控制变量的初始值。然后，程序调用<code>iter(a, 0)</code>，它会返回<code>1, a[1]</code>（除非<code>a[1]</code>是<code>nil</code>）。第二次迭代，它调用<code>iter(a, 1)</code>，结果为<code>2, a[2]</code>。如此往复，直到遇到<code>nil</code>。</p>
+<p><code>pairs</code>函数也是类似的：</p>
+<pre><code class="lang-lua">function pairs (t)
+  return next, t, nil
+end
+</code></pre>
+<p>每次迭代调用<code>next(t, k)</code>，<code>k</code>是表<code>t</code>的键值，返回的是表中的下一个键值，以及对应的值。<code>next(t, nil)</code>返回第一对结果。当没有更多元素时，<code>next</code>返回<code>nil</code>。有些人倾向于直接使用<code>next</code>：</p>
+<pre><code class="lang-lua">for k, v in next, t do
+  &lt;loop body&gt;
+end
+</code></pre>
+<p>因为<code>for</code>循环返回三个值，所以上面的循环返回的是<code>next, t, nil</code>，跟调用<code>pairs(t)</code>的效果一样。</p>
+<p>遍历链表也是一个无状态迭代器的例子：</p>
+<pre><code class="lang-lua">local function getnext (list, node)
+  return not node and list or node.next
+end
+function traverse (list)  return getnext, list, nil  end
+</code></pre>
+<p>这里的技巧是把链表的主节点用作不变状态，而当前节点用作控制变量，第一次当前节点是<code>nil</code>，所以会使用<code>list</code>作为当前节点。用法：</p>
+<pre><code class="lang-lua">list = nil
+for line in io.lines() do
+  list = {val = line, next = list}
+end
+for node in traverse(list) do
+  print(node.val)
+end
+</code></pre>

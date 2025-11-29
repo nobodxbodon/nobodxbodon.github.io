@@ -17,28 +17,34 @@
 
 (function() {
     'use strict';
-    // 2025-09-08
+    // 2025-11-05
 
     // 按 xpath 删除节点
     function delByXpath(xpath) {
         try {
-            let tag = document.evaluate(xpath, document).iterateNext();
-            if (tag != null) {
-                tag.parentNode.removeChild(tag);
+            let delArr = [];
+            let tag = document.evaluate(xpath, document);
+            for (let d = tag.iterateNext(); d != null; d = tag.iterateNext()) {
+                delArr.push(d);
+            }
+            for (let i = 0; i &lt; delArr.length; i++) {
+                delArr[i].parentNode.removeChild(delArr[i]);
             }
         } catch {
         }
     }
 
     // 删除页面内 meta 和 script 标签
-    let scriptTag = document.evaluate('//meta | //script | //iframe | //link[@rel != "stylesheet"]', document);
-    let scriptTagArr = [];
-    for (let d = scriptTag.iterateNext(); d != null; d = scriptTag.iterateNext()) {
-        scriptTagArr.push(d);
-    }
-    for (let i = 0; i &lt; scriptTagArr.length; i++) {
-        scriptTagArr[i].parentNode.removeChild(scriptTagArr[i]);
-    }
+    delByXpath('//meta | //script | //iframe | //link[@rel != "stylesheet"]');
+    // 一般还需要删除一些无用的图片，csdn的文章很喜欢在开头或结尾加一些没有用的图片
+
+    // delByXpath('//meta | //script | //iframe | //link | //style');
+    /*
+        把所有样式都删除，以后有空再研究吧
+        图片 max-width:90%
+        code padding:10px
+        blockquote 行内code 表格 也需要修改样式
+    */
 
     // 删除文章详情的样式
     let articleTitle = document.evaluate('//descendant::div[contains(@class,"article-header")]', document).iterateNext();
@@ -48,10 +54,15 @@
         delByXpath('//descendant::a[contains(@class,"href-article-edit slide-toggle")]');
         delByXpath('//descendant::a[contains(@id,"blog_detail_zk_collection")]');
 
-        let articleInfo = document.evaluate('//descendant::div[contains(@class,"article-info-box")]', articleTitle).iterateNext();
+        // 要注意这个 xpath 开头的 . ，没有这个 . 就是全局搜索了
+        let articleInfo = document.evaluate('.//descendant::div[contains(@class,"article-info-box")]/div[contains(@class,"article-bar-top")]', articleTitle).iterateNext();
         if (articleInfo != null) {
             console.log(articleInfo.innerText);
-            articleInfo.innerHTML = "&lt;pre&gt;"+articleInfo.innerText+"&lt;/pre&gt;";
+            articleInfo.innerHTML = "&lt;p&gt;"+articleInfo.innerText+"&lt;/p&gt;";
+        }
+        let articleTag = document.evaluate('.//descendant::div[contains(@class,"article-info-box")]/div[contains(@class,"blog-tags-box")]', articleTitle).iterateNext();
+        if (articleTag != null) {
+            articleTag.innerHTML = "&lt;p&gt;"+articleTag.innerText+"&lt;/p&gt;";
         }
     }
 
@@ -76,6 +87,8 @@
     }
 
     delByXpath('//descendant::div[contains(@id,"treeSkill")]');
+    delByXpath('//descendant::div[contains(@id,"blogExtensionBox")]');
+    delByXpath('//descendant::div[contains(@id,"blogVoteBox")]');
 
     // 令 code 可以复制
     let codeDOM = document.evaluate('//article//pre', document);
@@ -83,11 +96,12 @@
     for (let d = codeDOM.iterateNext(); d != null; d = codeDOM.iterateNext()) {
         codeArr.push(d);
     }
+
     for (let i in codeArr) {
-        let c = document.createElement('textarea');
-        let codeItem = document.evaluate('//code', codeArr[i]).iterateNext();
+        let codeItem = document.evaluate('.//code', codeArr[i]).iterateNext();
         console.log(codeItem);
         if (codeItem != null) {
+            let c = document.createElement('textarea');
             c.value = codeItem.innerText;
             codeArr[i].style.userSelect='auto';
             codeArr[i].style.backgroundColor='rgba(0, 0, 0, 1)';
@@ -872,5 +886,77 @@ python tk + api 版
         })()
     &lt;/script&gt;
 &lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<pre><code class="lang-html">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+
+&lt;head&gt;
+    &lt;meta charset="UTF-8"&gt;
+    &lt;title&gt;确认删除&lt;/title&gt;
+    &lt;style&gt;
+        fieldset {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px;
+            width: 300px;
+            label {
+                cursor: pointer;
+            }
+        }
+    &lt;/style&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+    &lt;fieldset&gt;
+        &lt;legend&gt;Form / Checkbox Required&lt;/legend&gt;
+        &lt;form method="post" action="/delete"&gt;
+            &lt;label&gt;
+                &lt;input type="checkbox" required&gt;
+                &lt;span&gt;确认删除&lt;/span&gt;
+            &lt;/label&gt;
+            &lt;button type="submit"&gt;删除&lt;/button&gt;
+        &lt;/form&gt;
+    &lt;/fieldset&gt;
+    &lt;fieldset&gt;
+        &lt;legend&gt;Checked CSS&lt;/legend&gt;
+        &lt;style&gt;
+            .css-del-confirm button.disabled {
+                pointer-events: none;
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            /* Chrome/Edge/Safari/Firefox support :has() after 2024 */
+            .css-del-confirm:has(:checked) button.disabled {
+                /* Enable button when checkbox is checked */
+                pointer-events: auto;
+                opacity: 1;
+                cursor: pointer;
+            }
+        &lt;/style&gt;
+        &lt;form method="post" action="/delete"&gt;
+
+            &lt;span class="css-del-confirm"&gt;
+                &lt;label&gt;
+                    &lt;input type="checkbox" required&gt;
+                    &lt;span&gt;确认删除&lt;/span&gt;
+                &lt;/label&gt;
+                &lt;button type="submit" class="disabled"&gt;删除&lt;/button&gt;
+            &lt;/span&gt;
+        &lt;/form&gt;
+    &lt;/fieldset&gt;
+    &lt;button popovertarget="my-popover"&gt;Delete&lt;/button&gt;
+    &lt;dialog popover id="my-popover"&gt;
+        &lt;form method="post" action="/delete"&gt;
+            &lt;p&gt;&lt;strong&gt;Delete Confirmation&lt;/strong&gt;&lt;/p&gt;
+            &lt;hr&gt;
+            &lt;p&gt;Are you sure you want to delete&lt;/p&gt;
+            &lt;hr&gt;
+            &lt;button type="submit" class="disabled"&gt;Delete&lt;/button&gt;
+        &lt;/form&gt;
+    &lt;/dialog&gt;
+
+&lt;/body&gt;
+
 &lt;/html&gt;
 </code></pre>

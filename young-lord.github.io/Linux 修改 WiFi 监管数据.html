@@ -57,8 +57,10 @@ CONFIG_CFG80211_WEXT=y
 <p>这部分内容挺乱来的，不过它工作™。更新Linux内核后需要重新操作，目前我没有什么好的解决方案。</p>
 <p>两个小节的方案二选一即可。</p>
 <h4>修改源代码</h4>
-<p>首先<a href="https://wiki.archlinux.org/title/Kernel/Arch_build_system">获取一份当前内核源码</a>，进入<code>net/wireless</code>目录。</p>
-<p>修改<code>reg.c</code>，将其中的<code>#ifdef CONFIG_CFG80211_REQUIRE_SIGNED_REGDB</code>改为<code>#ifdef CONFIG_CFG80211_REQUIRE_SIGNED_REGDB_DUCK</code>。</p>
+<p>首先获取一份当前内核源码：<code>git clone https://github.com/archlinux/linux.git -b v$(uname -r | cut -d- -f1-2) --depth 1 &amp;&amp; cd linux</code></p>
+<p>如果本地已经有一份内核源码：<code>git reset --hard HEAD &amp;&amp; git fetch origin v$(uname -r | cut -d- -f1-2) --depth 1 &amp;&amp; git checkout v$(uname -r | cut -d- -f1-2)</code></p>
+<p>进入<code>net/wireless</code>目录：<code>cd net/wireless</code></p>
+<p>修改<code>reg.c</code>，将其中的<code>#ifdef CONFIG_CFG80211_REQUIRE_SIGNED_REGDB</code>改为<code>#ifdef CONFIG_CFG80211_REQUIRE_SIGNED_REGDB_DUCK</code>：<code>sed -i 's/CONFIG_CFG80211_REQUIRE_SIGNED_REGDB/CONFIG_CFG80211_REQUIRE_SIGNED_REGDB_DUCK/g' reg.c</code></p>
 <p>使用<code>make -C /lib/modules/$(uname -r)/build M=$(pwd) modules -j$(nproc)</code>编译，得到<code>cfg80211.ko</code>。</p>
 <p>使用<code>sudo make -C /lib/modules/$(uname -r)/build M=$(pwd) INSTALL_MOD_STRIP=1 modules_install &amp;&amp; sudo depmod</code>替换掉当前的<code>cfg80211</code>模块。</p>
 <p>可以使用<code>modinfo -n cfg80211</code>验证当前正在使用的模块路径，其应当为<code>/lib/modules/$(uname -r)/updates/cfg80211.ko.zst</code>。</p>
@@ -67,8 +69,8 @@ CONFIG_CFG80211_WEXT=y
 <p>直接把<code>/lib/modules/$(uname -r)/kernel/net/wireless/cfg80211.ko.zst</code>解压，patch其中硬编码的证书，然后重新压缩回去即可。实操难度有点大所以就不写具体过程了（如果你成功了建议给我发个PR）。顺带一提证书是<code>X.509 DER</code>格式的，可以在内核源码的<code>net/wireless/certs</code>目录下找到，可以用<code>openssl x509 -in cert.bin -text -noout</code>解析。</p>
 <h3>修改监管数据</h3>
 <p>下载一份<a href="https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git">wireless-regdb</a>：<code>git clone https://git.kernel.org/pub/scm/linux/kernel/git/wens/wireless-regdb.git</code></p>
-<p>开个Python虚拟环境，安装<code>m2crypto</code>，或者你要是喜欢<code>aur/python-m2crypto</code>也行。</p>
-<p>打开<code>db.txt</code>，找到对应国家的监管数据，修改。此处只需删去<code>, DFS</code>即可。删去前请确保你已经完全理解此操作后果并且自愿承担法律责任。修改结果如下所示：</p>
+<p>开个Python虚拟环境，安装<code>m2crypto</code>，或者要是你喜欢<code>aur/python-m2crypto</code>也行。</p>
+<p>打开<code>db.txt</code>，找到对应国家的监管数据，修改。此处只需删去<code>, DFS</code>即可。删去前请确保你已经完全理解此操作后果并且承担一切法律责任。修改结果如下所示：</p>
 <pre><code class="lang-plaintext">country VN: DFS-FCC
         (2402 - 2482 @ 40), (20)
         (5170 - 5250 @ 80), (17)

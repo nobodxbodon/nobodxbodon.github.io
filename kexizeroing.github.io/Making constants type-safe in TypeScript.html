@@ -1,0 +1,120 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/making-constants-type-safe-in-typescript.md">仓库源文</a>，<a href="https://kexizeroing.github.io/making-constants-type-safe-in-typescript">站点原文</a></h2>
+<p>When working with a fixed set of string constants in TypeScript, there are a few ways to ensure type safety, IDE support, and clean code. This guide explains the differences and trade-offs for <code>const enum</code> and <code>as const</code>.</p>
+<h2>The Scenario</h2>
+<p>You have a set of category IDs that are shared across multiple files:</p>
+<pre><code class="lang-typescript">// Category IDs
+PRESENTATION: 'cat_123',
+POSTER: 'cat_456',
+SOCIAL_POST: 'cat_789',
+</code></pre>
+<p>Your goals are:</p>
+<ol>
+<li>Type safety</li>
+<li>IDE autocomplete</li>
+<li>Easy access via <code>Categories.PRESENTATION</code></li>
+<li>Compatibility for use as object keys or in records</li>
+</ol>
+<h2>Understanding Index Signatures and Mapped Types</h2>
+<p>Before continuing, it helps to understand how TypeScript models object types, specifically the difference between <strong>index signatures</strong> and <strong>mapped types</strong>.</p>
+<h3>Index Signature: <code>{ [key: Type]: Value }</code></h3>
+<ul>
+<li><code>Type</code> must be <code>string</code>, <code>number</code>, or <code>symbol</code></li>
+<li>Allow any number of keys, all optional</li>
+</ul>
+<pre><code class="lang-typescript">const cache: { [key: string]: number } = {};
+cache['item_1'] = 42;
+</code></pre>
+<h3>Mapped Type: <code>{ [K in Type]: Value }</code></h3>
+<ul>
+<li><code>Type</code> can be a <strong>union</strong> or <strong>enum</strong></li>
+<li>Keys are known and fixed, all required unless marked optional</li>
+</ul>
+<pre><code class="lang-typescript">type CacheKey = 'item_1' | 'item_2';
+type Cache = { [K in CacheKey]: number };
+
+const cache: Cache = {
+  item_1: 42,
+  item_2: 99,
+};
+</code></pre>
+<blockquote><p>The built-in <code>Record&lt;K, T&gt;</code> is just a shorthand for a mapped type using <code>[key in K]</code>. Use <code>Record</code> when you just want a clean key–value mapping. Use <code>[key in K]</code> form when you need more control (optional, readonly, etc.).</p>
+</blockquote>
+<h2>Option 1: Object with <code>as const</code></h2>
+<p>When you use <code>as const</code>, TypeScript makes the value deeply readonly and narrows all literals to their exact values.</p>
+<pre><code class="lang-typescript">export const Categories = {
+  PRESENTATION: 'cat_123',
+  POSTER: 'cat_456',
+  SOCIAL_POST: 'cat_789',
+} as const;
+
+export type Category = (typeof Categories)[keyof typeof Categories];
+// Type: 'cat_123' | 'cat_456' | 'cat_789'
+</code></pre>
+<h3>Usage Example</h3>
+<pre><code class="lang-typescript">// Accessing values
+const id = Categories.PRESENTATION; // 'cat_123'
+
+// Works with Record
+const styles: Record&lt;Category, string&gt; = {
+  [Categories.PRESENTATION]: 'Professional',
+  [Categories.POSTER]: 'Creative',
+  [Categories.SOCIAL_POST]: 'Casual',
+};
+</code></pre>
+<h3>Common Pitfall</h3>
+<pre><code class="lang-typescript">// This fails
+const styles: { [key: Category]: string } = { ... };
+// Error: An index signature parameter type cannot be a literal type
+</code></pre>
+<p>You cannot use a literal union type in an <strong>index signature</strong>. However, <code>Record&lt;Category, string&gt;</code> works because it is implemented as a <strong>mapped type</strong>, not an index signature.</p>
+<h2>Option 2: <code>const enum</code></h2>
+<pre><code class="lang-typescript">export const enum Categories {
+  PRESENTATION = 'cat_123',
+  POSTER = 'cat_456',
+  SOCIAL_POST = 'cat_789',
+}
+</code></pre>
+<h3>Usage Example</h3>
+<pre><code class="lang-typescript">// Accessing values
+const id = Categories.PRESENTATION; // 'cat_123'
+
+// Works with Record
+const styles1: Record&lt;Categories, string&gt; = { ... };
+
+// Works with mapped types
+const styles2: { [key in Categories]: string } = { ... };
+</code></pre>
+<p>You cannot use enums in <strong>index signatures</strong> either:</p>
+<pre><code class="lang-typescript">// Invalid
+const styles3: { [key: Categories]: string } = { ... };
+// Error: An index signature parameter type cannot be an enum type
+</code></pre>
+<h3>Notes</h3>
+<ul>
+<li><code>as const</code> creates a plain JavaScript object at runtime.</li>
+<li><code>const enum</code> is erased at compile time (no runtime object) and inlined by the compiler.</li>
+<li><code>enum</code> (non-const) generates extra JavaScript code with reverse mappings.</li>
+<li>Both <code>as const</code> and <code>const enum</code> work with <code>Record</code> and mapped types, but not with index signatures.</li>
+<li>Modern TypeScript projects often prefer <code>as const</code> for simplicity and full runtime visibility.</li>
+</ul>
+<blockquote><p>When you use a regular enum, TypeScript generates JavaScript code at runtime to represent it. A real object exists at runtime, and it holds both directions (forward and reverse mappings) for numeric enums, though for string enums only the forward mapping is generated.</p>
+<p>A <code>const enum</code> is different: it is completely erased at compile time. No runtime object is generated at all — the compiler inlines the values directly.</p>
+</blockquote>
+<pre><code class="lang-typescript">export const enum Category {
+  PRESENTATION = 'cat_123',
+  POSTER = 'cat_456',
+}
+
+const id = Category.PRESENTATION;
+
+// Compiles to:
+const id = "cat_123";
+</code></pre>
+<p>So for a fixed set of string constants, the practical difference between <code>as const</code> and <code>const enum</code> is minimal. The main distinction isn’t what they can express, but how they behave at runtime and during compilation:</p>
+<ul>
+<li><code>as const</code> creates a real JavaScript object. You can inspect, serialize, or iterate over it at runtime.</li>
+<li><code>const enum</code> is compile-time only. It disappears after compilation and cannot be referenced dynamically.</li>
+</ul>
+<h2>Bonus: Runtime Validation with Zod</h2>
+<p>Zod adds a third, practical option that bridges runtime and compile-time checks.</p>
+<p>If you need runtime validation as well as type safety, libraries like Zod go a step further. With Zod, you can define your constants once, validate them at runtime, and infer their types automatically. It’s heavier than <code>as const</code> or <code>const enum</code>, but ideal when values come from external sources like APIs or configs.</p>
