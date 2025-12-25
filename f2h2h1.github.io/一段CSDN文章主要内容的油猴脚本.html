@@ -17,7 +17,7 @@
 
 (function() {
     'use strict';
-    // 2025-11-05
+    // 2025-12-05
 
     // 按 xpath 删除节点
     function delByXpath(xpath) {
@@ -46,6 +46,21 @@
         blockquote 行内code 表格 也需要修改样式
     */
 
+    // 获取作者信息
+    let uid = document.getElementById('uid');
+    let authorAtag = null;
+    if (uid) {
+        let authorName = uid.getAttribute('title');
+        let authorHref = uid.getAttribute('href');
+        authorAtag = document.createElement('a');
+        authorAtag.innerText = authorName;
+        authorAtag.setAttribute('href', authorHref);
+        authorAtag.style.cssText = `
+            color: rgb(0, 0, 238);
+            text-decoration-line: underline;
+        `;
+    }
+
     // 删除文章详情的样式
     let articleTitle = document.evaluate('//descendant::div[contains(@class,"article-header")]', document).iterateNext();
     if (articleTitle != null) {
@@ -63,6 +78,10 @@
         let articleTag = document.evaluate('.//descendant::div[contains(@class,"article-info-box")]/div[contains(@class,"blog-tags-box")]', articleTitle).iterateNext();
         if (articleTag != null) {
             articleTag.innerHTML = "&lt;p&gt;"+articleTag.innerText+"&lt;/p&gt;";
+        }
+
+        if (authorAtag) {
+            articleTitle.appendChild(authorAtag);
         }
     }
 
@@ -83,6 +102,13 @@
             body.appendChild(articleTitle);
         }
         body.appendChild(a);
+
+        // 处理点击查看全文或关注查看全文的情况 展开全文
+        let b = document.evaluate('./div[@id="article_content"]', a).iterateNext();
+        if (b) {
+            b.style.height = 'auto';
+            b.style.height = 'overflow';
+        }
         console.log(body);
     }
 
@@ -109,19 +135,46 @@
             codeArr[i].innerText = c.value;
         }
     }
-    // 令页面的其它内容也可以复制
-    document.querySelectorAll('*').forEach(item =&gt; {
-        item.oncopy = function(e) {
-            e.stopPropagation();
-        }
-    });
 
-    // 滚动条错误
-    document.addEventListener('scroll', function(e) {
-        // e.preventDefault(); // 阻止默认事件
-        e.stopPropagation(); // 阻止事件冒泡
-        return false;
+    let srcdoc = document.documentElement.innerHTML;
+    document.documentElement.innerHTML = ''; // 删除整个页面的内容
+    document.body.style.height = '100%';
+    document.body.style.margin = '0px';
+    var iframe = document.createElement("iframe"); // 使用 iframe 是为了使所有的 js 事件失效
+    Object.assign(iframe.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
+        border: 'none'
     });
+    document.body.appendChild(iframe);
+    iframe.contentWindow.document.write(srcdoc);
+    iframe.contentWindow.focus();
+
+    if (jQuery) {
+        jQuery(window).off('resize');
+    }
+    // // 令页面的其它内容也可以复制
+    // document.querySelectorAll('*').forEach(item =&gt; {
+    //     item.oncopy = function(e) {
+    //         e.stopPropagation();
+    //     }
+    // });
+
+    // // 滚动条错误
+    // document.addEventListener('scroll', function(e) {
+    //     // e.preventDefault(); // 阻止默认事件
+    //     e.stopPropagation(); // 阻止事件冒泡
+    //     return false;
+    // });
+    // document.addEventListener('resize', function(e) {
+    //     console.log(e)
+    //     // e.preventDefault(); // 阻止默认事件
+    //     e.stopPropagation(); // 阻止事件冒泡
+    //     return false;
+    // });
 })();
 </code></pre>
 <p>这两段 油猴脚本 是用于检测，在 gitlab 提交合并请求时，阻止目标为 master 的的合并请求。

@@ -163,41 +163,36 @@ const Component = () =&gt; (
 <li>When you initially load data on an unloaded page (ex. navigating to a new page). Suspense is a way to specify fallbacks instead of content, so it should used in this case.</li>
 <li>When you load new data on a page that has already loaded (ex. tab navigations). In this case, it's bad to hide something the user has already seen. In this case, <code>startTransition</code> lets you show a pending indicator until that render completes, and avoid retriggering Suspense boundaries.</li>
 </ul>
-<pre><code class="lang-jsx">import { Suspense, useState, startTransition, useTransition } from 'react';
-
-function Router() {
-  const [page, setPage] = useState('/');
+<p>Take tab switching as an example. React treats the <code>setTab</code> update as low priority (a “transition update”), meaning:</p>
+<ul>
+<li>React delays committing the new UI until the async work (like data-loading) for that state change is ready.</li>
+<li>If <code>&lt;UserPosts /&gt;</code> suspends, React waits in the background instead of switching tabs and showing fallback.</li>
+<li>The Suspense boundary does not fall back because React hasn’t committed the render that suspends.</li>
+</ul>
+<pre><code class="lang-jsx">function App() {
+  const [tab, setTab] = useState('profile');
   const [isPending, startTransition] = useTransition();
 
-  function navigate(url) {
-    startTransition(() =&gt; {
-      setPage(url);
-    });
-  }
-
-  let content;
-  if (page === '/') {
-    content = (
-      &lt;Suspense fallback={&lt;h2&gt;Loading page...&lt;/h2&gt;}&gt;
-        &lt;IndexPage navigate={navigate} /&gt;
-      &lt;/Suspense&gt;
-    );
-  } else if (page === '/the-beatles') {
-    content = (
-      &lt;Suspense fallback={&lt;h2&gt;Loading page...&lt;/h2&gt;}&gt;
-        &lt;ArtistPage artist={{ id: 'the-beatles' }} /&gt;
-      &lt;/Suspense&gt;
-    );
+  function handleTabChange(newTab) {
+    startTransition(() =&gt; setTab(newTab));
   }
 
   return (
-    &lt;Layout&gt;
-      {isPending &amp;&amp; &lt;div style={{ opacity: 0.7 }}&gt;Loading...&lt;/div&gt;}
-      {content}
-    &lt;/Layout&gt;
+    &lt;div&gt;
+      &lt;nav&gt;
+        &lt;button onClick={() =&gt; handleTabChange('profile')}&gt;Profile&lt;/button&gt;
+        &lt;button onClick={() =&gt; handleTabChange('posts')}&gt;Posts&lt;/button&gt;
+      &lt;/nav&gt;
+      &lt;Suspense fallback={&lt;LoadingSkeleton /&gt;}&gt;
+        &lt;div style={{ opacity: isPending ? 0.7 : 1 }}&gt;
+          {tab === 'profile' ? &lt;UserProfile /&gt; : &lt;UserPosts /&gt;}
+        &lt;/div&gt;
+      &lt;/Suspense&gt;
+    &lt;/div&gt;
   );
 }
 </code></pre>
+<p>The Suspense boundary only shows fallback during a committed render. With a transition, React attempts the new render in memory. It does not commit the render until the async work finishes. This avoids jarring loading screens during navigation. Essentially, <strong>transitions “hold back” the UI update until async work completes, preventing the Suspense boundary from falling back during navigation. (transitions allow React to prepare the next screen in the background)</strong></p>
 <h2>New API <code>useId</code> and <code>useSyncExternalStore</code></h2>
 <p>The <code>useId</code> hook is used to generate unique IDs for elements within a component. This is particularly useful for accessibility purposes, such as linking form inputs with their labels. It ensures that IDs are unique across the entire application, even if the component is rendered multiple times.</p>
 <blockquote><p>Do not call <code>useId</code> to generate keys in a list:</p>

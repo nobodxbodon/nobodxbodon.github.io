@@ -1,0 +1,328 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/oop-with-typescript-generics.md">仓库源文</a>，<a href="https://kexizeroing.github.io/oop-with-typescript-generics">站点原文</a></h2>
+<p>Before we start, let's be clear: what we're learning here is Object-Oriented Programming. TypeScript is just the language expressing these ideas. The same patterns exist in Java, C#, C++, and many other languages.</p>
+<p>The core OOP concepts are:</p>
+<ul>
+<li>Abstraction: Hiding complexity behind simple interfaces</li>
+<li>Polymorphism: Different objects responding to the same message in different ways</li>
+<li>Encapsulation: Objects managing their own internal state</li>
+<li>Dependency Inversion: Depending on abstractions, not concrete implementations</li>
+</ul>
+<p>TypeScript's <code>interface</code> and generics (<code>&lt;T&gt;</code>) are tools to express these OOP concepts with type safety.</p>
+<p>We'll build one complete example and evolve it step by step. Imagine we're designing software for a postal service that handles letters, packages, and fragile items.</p>
+<h2>Abstraction — Defining "What" without "How"</h2>
+<p>Imagine you're a postal worker. Every day, you handle hundreds of items. Some are letters. Some are packages. Some are fragile antiques. But here's the thing: your job is the same regardless of what's inside. The process is identical. Only the content changes. This is the first insight of OOP: behavior can be separated from data.</p>
+<p>In OOP, an interface (or abstract class) captures what something can do without specifying how it does it. (Defining capabilities without implementation details.)</p>
+<pre><code class="lang-ts">// postal-system/deliverable.ts
+
+interface Deliverable {
+  getWeight(): number;
+  getDestination(): Address;
+  getTrackingId(): string;
+}
+</code></pre>
+<p>Any item that "implements" this interface is promising: <em>"I can tell you my weight, destination, and tracking ID."</em></p>
+<h2>Polymorphism — Same Interface, Different Behavior</h2>
+<p>A letter weighs 20 grams. A package weighs 5 kilograms. A piano weighs 300 kilograms. When you call <code>getWeight()</code> on each of them, you get different results. But the code calling <code>getWeight()</code> doesn't need to know what type of item it is.</p>
+<pre><code class="lang-ts">// postal-system/letter.ts
+
+class Letter implements Deliverable {
+  private content: string;
+  private destination: Address;
+  private id: string;
+
+  getWeight(): number {
+    return 0.02; // 20 grams
+  }
+
+  getDestination(): Address {
+    return this.destination;
+  }
+
+  getTrackingId(): string {
+    return this.id;
+  }
+}
+</code></pre>
+<pre><code class="lang-ts">// postal-system/package.ts
+
+class Package implements Deliverable {
+  private items: PhysicalItem[];
+  private destination: Address;
+  private id: string;
+
+  getWeight(): number {
+    return this.items.reduce((sum, item) =&gt; sum + item.weight, 0);
+  }
+
+  getDestination(): Address {
+    return this.destination;
+  }
+
+  getTrackingId(): string {
+    return this.id;
+  }
+}
+</code></pre>
+<p>The Letter and Package are completely different internally. But to the outside world, they look the same — they're both <code>Deliverable</code>. This is polymorphism: "many forms." Code that works with <code>Deliverable</code> works with ALL deliverable items.</p>
+<h2>Generics — Parameterized Types</h2>
+<p>Now we encounter a new problem. Our postal service has warehouses. Some warehouses store letters. Some store packages. Some store frozen goods. We could create: <code>LetterWarehouse</code>, <code>PackageWarehouse</code>, and <code>FrozenGoodsWarehouse</code>. But that's repetitive. The warehouse behavior is identical, only the type of item changes.</p>
+<p>This is where generics enter. A generic is a type parameter, a blank that gets filled in when you use the class.</p>
+<pre><code class="lang-ts">// postal-system/warehouse.ts
+
+interface Warehouse&lt;ItemType&gt; {
+  store(item: ItemType): void;
+  retrieve(id: string): ItemType | undefined;
+  getInventory(): ItemType[];
+}
+</code></pre>
+<p>The <code>&lt;ItemType&gt;</code> is not a real type, it's a placeholder. When you create an actual warehouse, you specify what goes in the blank. Why not just use <code>Warehouse&lt;any&gt;</code> or <code>Warehouse&lt;Deliverable&gt;</code>? Because type safety matters. If you have a <code>Warehouse&lt;Letter&gt;</code>, TypeScript will prevent you from accidentally storing a Package there.</p>
+<p>Furthermore, not everything can go in a warehouse. Only items that are trackable (have an ID) can be stored and retrieved.
+We need to say: <em>"This warehouse can store any type, as long as that type has a tracking ID."</em></p>
+<pre><code class="lang-ts">// postal-system/trackable.ts
+
+interface Trackable {
+  getTrackingId(): string;
+}
+
+// postal-system/warehouse.ts
+
+interface Warehouse&lt;ItemType extends Trackable&gt; {
+  store(item: ItemType): void;
+  retrieve(id: string): ItemType | undefined;
+  getInventory(): ItemType[];
+}
+</code></pre>
+<p>This is bounded polymorphism: polymorphism with limits. Now the warehouse implementation can safely call <code>item.getTrackingId()</code> because TypeScript guarantees that any <code>ItemType</code> will have that method.</p>
+<h2>Layered Abstractions — How real systems work</h2>
+<p>Real systems have layers of abstraction. Let's add a delivery truck to our system. A truck doesn't know about letters or packages directly. It just knows about loading and unloading from warehouses.</p>
+<pre><code class="lang-ts">// postal-system/transport/delivery-truck.ts
+
+class DeliveryTruck&lt;CargoType extends Trackable&gt; {
+  private cargo: CargoType[] = [];
+
+  constructor(
+    private readonly sourceWarehouse: Warehouse&lt;CargoType&gt;,
+    private readonly maxCapacity: number
+  ) {}
+
+  loadFromWarehouse(ids: string[]): void {
+    for (const id of ids) {
+      const item = this.sourceWarehouse.retrieve(id);
+      if (item &amp;&amp; this.cargo.length &lt; this.maxCapacity) {
+        this.cargo.push(item);
+      }
+    }
+  }
+
+  unloadTo(destination: Warehouse&lt;CargoType&gt;): void {
+    for (const item of this.cargo) {
+      destination.store(item);
+    }
+    this.cargo = [];
+  }
+}
+</code></pre>
+<p>Notice that <code>DeliveryTruck&lt;CargoType&gt;</code> doesn't know what <code>CargoType</code> is. It just knows <code>CargoType</code> is <code>Trackable</code> and it comes from a <code>Warehouse&lt;CargoType&gt;</code> and goes to another <code>Warehouse&lt;CargoType&gt;</code>. The truck is completely generic. It could carry letters, packages, frozen goods, or anything else, as long as the types match.</p>
+<h2>The Translator Pattern — Converting between representations</h2>
+<p>Here's another pattern you'll see constantly: translators (also called adapters or mappers). Our postal system has a problem: the warehouse uses internal IDs like <code>WH-00001</code>, but the public tracking website shows codes like <code>TRACK-ABC-123</code>. We need something that translates between representations.</p>
+<pre><code class="lang-ts">// postal-system/tracking/tracking-translator.ts
+
+interface TrackingTranslator&lt;InternalType, PublicType&gt; {
+  toPublic(internal: InternalType): PublicType;
+  toInternal(public: PublicType): InternalType;
+}
+</code></pre>
+<pre><code class="lang-ts">// postal-system/tracking/package-tracking-translator.ts
+
+class PackageTrackingTranslator 
+  implements TrackingTranslator&lt;WarehousePackageRecord, PublicTrackingInfo&gt; 
+{
+  toPublic(internal: WarehousePackageRecord): PublicTrackingInfo {
+    return {
+      trackingCode: this.encodeId(internal.warehouseId),
+      status: this.mapStatus(internal.internalStatus),
+      estimatedDelivery: internal.eta
+    };
+  }
+
+  toInternal(public: PublicTrackingInfo): WarehousePackageRecord {
+    return {
+      warehouseId: this.decodeId(public.trackingCode),
+      internalStatus: this.reverseMapStatus(public.status),
+      eta: public.estimatedDelivery
+    };
+  }
+
+  private encodeId(warehouseId: string): string {
+    // WH-00001 -&gt; TRACK-ABC-123
+    // ... encoding logic
+  }
+
+  private decodeId(trackingCode: string): string {
+    // TRACK-ABC-123 -&gt; WH-00001
+    // ... decoding logic
+  }
+}
+</code></pre>
+<h2>Composition Over Inheritance — Building complex objects</h2>
+<p>Real systems don't just have one interface. They compose multiple interfaces together. A delivery fulfillment center does many things:</p>
+<ul>
+<li>Receives items (from suppliers)</li>
+<li>Stores items (warehouse function)</li>
+<li>Dispatches items (to trucks)</li>
+<li>Tracks items (for customers)</li>
+</ul>
+<pre><code class="lang-ts">interface ItemReceiver&lt;T extends Trackable&gt; {
+  receive(item: T): void;
+  getReceivedToday(): T[];
+}
+
+interface ItemDispatcher&lt;T extends Trackable&gt; {
+  dispatchTo(items: T[], destination: Address): void;
+  getPendingDispatches(): T[];
+}
+</code></pre>
+<pre><code class="lang-ts">// postal-system/fulfillment/fulfillment-center.ts
+
+class FulfillmentCenter&lt;ItemType extends Deliverable&gt;
+  implements 
+    ItemReceiver&lt;ItemType&gt;,
+    Warehouse&lt;ItemType&gt;,
+    ItemDispatcher&lt;ItemType&gt;
+{
+  private inventory: Map&lt;string, ItemType&gt; = new Map();
+  private pendingDispatch: ItemType[] = [];
+
+  // ItemReceiver implementation
+  receive(item: ItemType): void {
+    this.inventory.set(item.getTrackingId(), item);
+  }
+
+  getReceivedToday(): ItemType[] {
+    // ... implementation
+  }
+
+  // Warehouse implementation
+  store(item: ItemType): void {
+    this.inventory.set(item.getTrackingId(), item);
+  }
+
+  retrieve(id: string): ItemType | undefined {
+    return this.inventory.get(id);
+  }
+
+  getInventory(): ItemType[] {
+    return Array.from(this.inventory.values());
+  }
+
+  // ItemDispatcher implementation
+  dispatchTo(items: ItemType[], destination: Address): void {
+    // ... implementation
+  }
+
+  getPendingDispatches(): ItemType[] {
+    return this.pendingDispatch;
+  }
+}
+</code></pre>
+<p>The FulfillmentCenter implements three interfaces. It can be used anywhere that needs an <code>ItemReceiver</code>, or a <code>Warehouse</code>, or an <code>ItemDispatcher</code>. Different parts of the system only see the interface they need. The shipping department sees <code>ItemDispatcher</code>. The inventory team sees <code>Warehouse</code>. The receiving dock sees <code>ItemReceiver</code>.</p>
+<h2>Dependency Injection</h2>
+<p>Instead of a class creating its own dependencies, they're passed in from outside.</p>
+<pre><code class="lang-ts">// postal-system/delivery/delivery-coordinator.ts
+
+class DeliveryCoordinator&lt;ItemType extends Deliverable&gt; {
+  constructor(
+    private readonly warehouse: Warehouse&lt;ItemType&gt;,
+    private readonly translator: TrackingTranslator&lt;ItemType, PublicTrackingInfo&gt;,
+    private readonly dispatcher: ItemDispatcher&lt;ItemType&gt;
+  ) {}
+
+  processDelivery(trackingCode: string): DeliveryResult {
+    // Convert public tracking code to internal representation
+    const internalInfo = this.translator.toInternal({ trackingCode, /* ... */ });
+
+    // Get from warehouse
+    const item = this.warehouse.retrieve(internalInfo.warehouseId);
+
+    if (!item) {
+      return { success: false, reason: 'Item not found' };
+    }
+
+    // Dispatch it
+    this.dispatcher.dispatchTo([item], item.getDestination());
+
+    return { success: true };
+  }
+}
+</code></pre>
+<p>The <code>DeliveryCoordinator</code> doesn't create a warehouse or translator. It receives them through its constructor. Why does this matter?</p>
+<ul>
+<li>Testability: In tests, you can pass in fake implementations</li>
+<li>Flexibility: You can swap implementations without changing the coordinator</li>
+<li>Decoupling: The coordinator doesn't know (or care) about concrete classes</li>
+</ul>
+<p>The complexity exists to achieve flexibility, testability, and maintainability. This is why enterprise codebases look the way they do. It's not TypeScript being complex — it's OOP principles being applied rigorously.</p>
+<h3>React Dependency Injection</h3>
+<p>Imagine our postal service needs a tracking dashboard. The dashboard needs a <code>TrackingController</code> to manage package lookups and status updates. But we don't want the UI to know how tracking works - just what it can do. Components depend on <code>TrackingController</code>, not <code>TrackingControllerImpl</code>. Tests provide fakes. Different environments provide different implementations.</p>
+<pre><code class="lang-ts">// postal-system/tracking/tracking-controller.ts
+
+export interface TrackingController {
+  readonly currentPackage: Package | undefined;
+  lookupPackage(trackingCode: string): Promise&lt;void&gt;;
+  markAsDelivered(): Promise&lt;void&gt;;
+}
+
+export class TrackingControllerImpl implements TrackingController {
+  constructor(
+    private readonly warehouseService: WarehouseService,
+    private readonly deliveryService: DeliveryService,
+  ) {}
+
+  async lookupPackage(trackingCode: string): Promise&lt;void&gt; {
+    // Implementation details hidden from consumers
+  }
+  // ...
+}
+</code></pre>
+<p>An "install function" creates a fully-wired service instance. It encapsulates how to construct something:</p>
+<pre><code class="lang-ts">// postal-system/services/install.ts
+
+function installTrackingController(): TrackingController {
+  const warehouseService = installWarehouseService();
+  const deliveryService = installDeliveryService();
+  return new TrackingControllerImpl(warehouseService, deliveryService);
+}
+</code></pre>
+<p>Components receive services at creation time. The factory <code>createTrackingPanel</code> receives dependencies and returns a component. The component itself has no idea where <code>TrackingController</code> comes from, but just uses it.</p>
+<pre><code class="lang-ts">// postal-system/ui/tracking-panel/create.tsx
+
+export function createTrackingPanel(opts: {
+  trackingController: TrackingController;
+  analytics: AnalyticsClient;
+}) {
+  return function TrackingPanel() {
+    const { trackingController, analytics } = opts;
+
+    const handleLookup = (code: string) =&gt; {
+      analytics.track('package_lookup', { code });
+      trackingController.lookupPackage(code);
+    };
+
+    return &lt;TrackingPanelView controller={trackingController} onLookup={handleLookup} /&gt;;
+  };
+}
+</code></pre>
+<p>At app startup, install functions wire everything together:</p>
+<pre><code class="lang-ts">// postal-system/app/bootstrap.ts
+
+const trackingController = installTrackingController();
+const analyticsService = installAnalyticsService();
+
+const { TrackingPanel } = createTrackingPanel({
+  trackingController,
+  analytics: analyticsService,
+});
+
+// TrackingPanel is now ready to render, fully wired
+</code></pre>
+<p>Swap <code>installTrackingController</code> for a fake version, and the whole app uses fakes, no component changes required.</p>

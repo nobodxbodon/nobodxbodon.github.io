@@ -4,6 +4,7 @@
 <p>For example, a Java program on one platform can serialize data according to a <code>.proto</code> definition, and a Python application on another platform can deserialize that data and access specific values.</p>
 <p>Unlike JSON, Protobuf encodes data in a compact binary format, making it much smaller and faster to serialize and deserialize. It enforces a strict schema, providing type safety and supporting forward and backward compatibility, so you can safely evolve your data structures over time.</p>
 <blockquote><p>Protocol Buffers is primarily a specification (or protocol) for serializing structured data, but it comes with multiple components that can make it feel like a library (<code>protoc</code> = compiler that generates code based on the spec; Language-specific runtime = library to work with messages)</p>
+<p>Serialization is the process of turning a data structure into a sequence of bytes that can be transmitted. JSON, for example, serializes data as human-readable text.</p>
 </blockquote>
 <h2>Installing Protobuf</h2>
 <p>To install protobuf, you need to install the protocol compiler (used to compile <code>.proto</code> files) and the protobuf runtime for your chosen programming language.</p>
@@ -14,6 +15,8 @@
 </ul>
 <h2>Understanding <code>.proto</code> files</h2>
 <p>A <code>.proto</code> file defines the structure of data (like JSON schema) and optionally RPC services (like API endpoints). It tells Protobuf how to serialize and deserialize data.</p>
+<blockquote><p>With JSON, you often send ambiguous or non-guaranteed data. You may encounter a missing field, an incorrect type, or a typo in a key. With Protobuf, that’s impossible. Everything starts with a <code>.proto</code> file that defines the structure of messages precisely.</p>
+</blockquote>
 <pre><code class="lang-proto">// Define a message
 message Person {
   string name = 1;  // field #1
@@ -48,6 +51,14 @@ message GetPersonRequest {
 <li>Client stub: code that lets you call <code>GetUser</code> or <code>CreateUser</code> like local functions.</li>
 <li>Server interface: definitions you implement on the server to handle incoming RPC calls.</li>
 </ul>
+<h3>Compatibility and workflow</h3>
+<p>Think of the <code>.proto</code> file as the contract between frontend and backend. To keep this magic working, you must follow these rules:</p>
+<ol>
+<li>Never change a field number: If <code>name</code> is field <code>1</code>, it must be <code>1</code> forever.</li>
+<li>Never reuse a deleted field number: If you delete field <code>2</code>, do not add a new field with number <code>2</code>. (Use the <code>reserved</code> keyword to prevent this).</li>
+<li>Renaming is fine: You can rename <code>string name = 1;</code> to <code>string full_name = 1;</code>. It only cares about the number <code>1</code>.</li>
+</ol>
+<p>This enables "Contract-First Development," where the <code>.proto</code> file is defined before writing any logic. By generating TypeScript interfaces immediately, the frontend team can build UI components using mock data typed against the contract while the backend team works in parallel. This eliminates dependencies, as the code compiler guarantees that the eventual backend response will match the frontend's expectations perfectly.</p>
 <h2>Generating code from <code>.proto</code> files</h2>
 <pre><code class="lang-sh">brew install protobuf
 protoc --version

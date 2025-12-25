@@ -395,6 +395,17 @@ window.addEventListener("click", (e: any) =&gt; {
 <li><a href="https://github.com/reactwg/server-components/discussions/5">https://github.com/reactwg/server-components/discussions/5</a></li>
 <li><a href="https://devongovett.me/blog/parcel-rsc.html">https://devongovett.me/blog/parcel-rsc.html</a></li>
 </ul>
+<h3>Mental model for RSC</h3>
+<p>RSC introduces an explicit Server/Client component split. Server Components execute only once on the server with zero JS shipped to the client, while Client Components hydrate traditionally. This contrasts with classic SSR where all components run twice (server for HTML, client for hydration).</p>
+<p>Instead of HTML, the server sends a serialized component tree (the "RSC Payload" in Flight format) as a streaming data payload. The client reconstructs the UI from this stream without re-executing component logic.</p>
+<ul>
+<li>We can pre-generate content on the server by invoking <code>renderToPipeableStream</code> to serialize a component.</li>
+<li>Output is split into chunks.</li>
+<li>Chunks reference each other using compact string tokens.</li>
+<li>Promises can be streamed and resolved incrementally.</li>
+<li>Content is deserialized on the client using <code>createFromFetch</code>, which returns a valid JSX.</li>
+</ul>
+<p>Server Components fetch data directly on the server, eliminating client-side waterfalls. The payload includes placeholders (Suspense boundaries) for pending Promises, allowing the server to stream initial UI immediately, then progressively send chunks as async operations resolve. This enables incremental rendering without blocking or requiring full re-renders.</p>
 <h3>RSC deployment</h3>
 <p>React Server Components need a runtime that can execute code on the server. So it has both RSC server runtime and static assets.</p>
 <pre><code>my-app/
@@ -420,6 +431,7 @@ npm run start
 </code></pre>
 <p><code>next build</code> produces both static and server bundles. <code>next start</code> runs the RSC server on Node.js. You can still put your <code>/static</code> folder behind a CDN.</p>
 <h3>Why Does RSC Integrate with a Bundler</h3>
+<p>RSC was only available in Next.js for a while, but other bundlers and frameworks are starting to support it. The good news is Parcel added support for RSC in version 2.9.0.</p>
 <p>Consider this <code>&lt;Counter&gt;</code> tag. How do you serialize it?</p>
 <pre><code class="lang-jsx">import { Counter } from './client';
 
@@ -442,7 +454,7 @@ export function Counter({ initialCount }) {
   }
 }
 </code></pre>
-<p>&lt;img alt="use client" src="https://raw.gitmirror.com/kexiZeroing/blog-images/main/bundle-use-client.png" width="750"&gt;</p>
+<p>&lt;img alt="use client" src="https://raw.githubusercontent.com/kexiZeroing/blog-images/main/bundle-use-client.png" width="750"&gt;</p>
 <p>On the client, you could load it by generating a <code>&lt;script&gt;</code> tag. However, loading imports one by one from their source files over the network is inefficient. You don’t want to create a waterfall. We already know how to fix this from two decades of working on client-side applications: bundling.</p>
 <p>For this reason, RSC integrates with bundlers.</p>
 <ul>
