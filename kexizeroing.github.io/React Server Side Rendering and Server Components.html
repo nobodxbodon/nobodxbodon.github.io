@@ -4,11 +4,11 @@
 <p>Let’s create a simple React component App. We will render this component on the server-side and hydrate it on the client-side.</p>
 <pre><code class="lang-js">// client/components/App/index.js
 
-import React from 'react'
+import React from "react";
 const App = () =&gt; (
   &lt;&gt;
     &lt;div&gt;Hello World&lt;/div&gt;
-    &lt;button onClick={e =&gt; alert('Hello You!')}&gt;Say Hello&lt;/button&gt;
+    &lt;button onClick={e =&gt; alert("Hello You!")}&gt;Say Hello&lt;/button&gt;
   &lt;/&gt;
 );
 
@@ -17,22 +17,24 @@ export default App;
 <p>Then create an Express server and define a route that serves an HTML page when a user visits <code>http://localhost:3000</code>.</p>
 <pre><code class="lang-js">// server/index.js
 
-import React from 'react'
-import ReactDOMServer from 'react-dom/server'
-import express from 'express'
-import App from '../client/components/App'
+import express from "express";
+import React from "react";
+import ReactDOMServer from "react-dom/server";
+import App from "../client/components/App";
 
-const app = express()
-const port = 3000
+const app = express();
+const port = 3000;
 // This is the local static server that serves the client-side bundles.
 const cdnHost = `http://localhost:5000`;
 
-app.get('/', (req, res) =&gt; {
+app.get("/", (req, res) =&gt; {
   // This turns the React component App into an HTML string
-  const jsx = ReactDOMServer.renderToString(&lt;App initialData={someData} /&gt;)
-  const clientBundleStyle = `&lt;link rel="stylesheet" href="${cdnHost}/styles/bundle.css"&gt;`
+  const jsx = ReactDOMServer.renderToString(&lt;App initialData={someData} /&gt;);
+  const clientBundleStyle =
+    `&lt;link rel="stylesheet" href="${cdnHost}/styles/bundle.css"&gt;`;
   // This loads the JS code to “hydrate” the markup with interactivity.
-  const clientBundleScript = `&lt;script src="${cdnHost}/scripts/bundle.js"&gt;&lt;/script&gt;`
+  const clientBundleScript =
+    `&lt;script src="${cdnHost}/scripts/bundle.js"&gt;&lt;/script&gt;`;
 
   res.send(`
     &lt;!DOCTYPE html&gt;
@@ -49,23 +51,23 @@ app.get('/', (req, res) =&gt; {
         ${clientBundleScript}
       &lt;/body&gt;
     &lt;/html&gt;
-  `)
-})
+  `);
+});
 
 app.listen(port, () =&gt; {
-  console.log(`App listening on http://localhost:${port}`)
-})
+  console.log(`App listening on http://localhost:${port}`);
+});
 </code></pre>
 <blockquote><p>The <code>window.__INITIAL_DATA__</code> is used for hydration. When React "hydrates" the server-rendered HTML on the client, it needs the same data that was used on the server. The client doesn't need to re-fetch the same data that the server already used.</p>
 </blockquote>
 <p>In the client-side entry point, we will “hydrate” the React component that was SSR-ed into the root DOM container with the ID "ssr-app".</p>
 <pre><code class="lang-js">// ./client/index.js
 
-import React from 'react';
-import ReactDOM from 'react-dom';
-import App from './components/App';
+import React from "react";
+import ReactDOM from "react-dom";
+import App from "./components/App";
 
-ReactDOM.hydrate(&lt;App /&gt;, document.getElementById('ssr-app'));
+ReactDOM.hydrate(&lt;App /&gt;, document.getElementById("ssr-app"));
 </code></pre>
 <p>It's extremely important that SSR React output (HTML) and CSR React output (HTML) are matching, otherwise React will not be able to render and attach event listeners properly. If you follow semantic HTML principles, most of your app should work even before React has hydrated. Links can be followed, forms can be submitted, accordions can be expanded and collapsed (using <code>&lt;details&gt;</code> and <code>&lt;summary&gt;</code>). For most projects, it's fine if it takes a few seconds for React to hydrate.</p>
 <h3>Where to deploy</h3>
@@ -80,30 +82,28 @@ ReactDOM.hydrate(&lt;App /&gt;, document.getElementById('ssr-app'));
 <h3>React hydration error</h3>
 <p>When the React app runs on the client for the first time, it builds up a mental picture of what the DOM should look like, by mounting all of your components. Then it squints at the DOM nodes already on the page (the server already generated), and tries to fit the two together. Hydration errors affect every server-rendered React app. <em>Dates are often the culprit for hydration mismatches.</em></p>
 <p>To avoid issues, we need to ensure that the hydrated app matches the original HTML. When the React app adopts the DOM during hydration, <code>useEffect</code> hasn't been called yet, and so we're meeting React's expectation. Immediately after this comparison, we trigger a re-render, and this allows React to do a proper reconciliation. It'll notice that there's some new content to render here.</p>
-<pre><code class="lang-tsx">'use client';
+<pre><code class="lang-tsx">"use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from "react";
 
 interface ClientOnlyProps {
   children: React.ReactNode;
 }
 
-const ClientOnly: React.FC&lt;ClientOnlyProps&gt; = ({ 
-  children
+const ClientOnly: React.FC&lt;ClientOnlyProps&gt; = ({
+  children,
 }) =&gt; {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() =&gt; {
     setIsClient(true);
-  }, [])
+  }, []);
 
   if (!isClient) {
-    return null
+    return null;
   }
 
-  return (
-    &lt;&gt;{children}&lt;/&gt;
-  );
+  return &lt;&gt;{children}&lt;/&gt;;
 };
 
 export default ClientOnly;
@@ -114,7 +114,7 @@ export default ClientOnly;
 <li>Add <code>use client</code> and have a <code>useEffect</code> run when mounting the component.</li>
 <li>Use Next <code>next/dynamic</code> to dynamic import the component and disable SSR: <code>dynamic(() =&gt; import('./MyComponent'), { ssr: false })</code>. (use Suspense under the hood)</li>
 </ol>
-<p>Fix Next.js error: Event handlers cannot be passed to client component:<br/>
+<p>Fix Next.js error: Event handlers cannot be passed to client component:\
 You use <code>&lt;Card onClick={() =&gt; console.log(1)} /&gt;</code> to pass a function from the server to the client. The issue here is the function is not serializable. The workaround is to make both of them client components.</p>
 </blockquote>
 <h2>Add File-System Based Routing and Data Fetching into the server</h2>
@@ -125,12 +125,12 @@ You use <code>&lt;Card onClick={() =&gt; console.log(1)} /&gt;</code> to pass a 
 <li>fetch data as early as possible (from client <code>useEffect</code> to the server before rendering)</li>
 <li>renderToString vs. renderToPipeableStream</li>
 </ol>
-<pre><code class="lang-js">import React from "react";
-import express from "express";
+<pre><code class="lang-js">import express from "express";
+import React from "react";
 // renderToPipeableStream is better
-import { renderToString } from "react-dom/server";
 import { readdirSync } from "fs";
 import { join } from "path";
+import { renderToString } from "react-dom/server";
 
 const app = express();
 
@@ -138,7 +138,7 @@ app.use(express.static("./dist"));
 
 const pages = readdirSync(join(process.cwd(), "pages")).map(
   // remove '.tsx' extension
-  file =&gt; file.split(".")[0]
+  file =&gt; file.split(".")[0],
 );
 
 // app.get("/:page", async (req, res) =&gt; {
@@ -165,11 +165,11 @@ pages.forEach((page) =&gt; {
         &lt;script src="/client.js"&gt;&lt;/script&gt;
       &lt;/body&gt;
       &lt;/html&gt;
-    `)
+    `);
 
     // replace `res.send` with `renderToPipeableStream` to use React concurrent features
     // (this change only in framework code)
-    // 
+    //
     // const { pipe } = renderToPipeableStream(&lt;Component {...props} /&gt;, {
     //   bootstrapScripts: ["/client.js"]
     // });
@@ -189,17 +189,17 @@ app.listen(3000, () =&gt; {
 <li>The part of your app outside of any <code>&lt;Suspense&gt;</code> boundaries is called the shell. It determines the earliest loading state that the user may see. The <code>onShellReady</code> callback fires when the entire shell has been rendered. Usually, you’ll start streaming then.</li>
 <li>If an error occurs while rendering the shell, React won’t have any meaningful HTML to send to the client. Override <code>onShellError</code> to send a fallback HTML that doesn’t rely on server rendering as the last resort.</li>
 </ul>
-<pre><code class="lang-js">app.use('/', (request, response) =&gt; {
+<pre><code class="lang-js">app.use("/", (request, response) =&gt; {
   const { pipe } = renderToPipeableStream(&lt;App /&gt;, {
-    bootstrapScripts: ['/main.js'],
+    bootstrapScripts: ["/main.js"],
     onShellReady() {
-      response.setHeader('content-type', 'text/html');
+      response.setHeader("content-type", "text/html");
       pipe(response);
     },
     onShellError(error) {
       response.statusCode = 500;
-      response.setHeader('content-type', 'text/html');
-      response.send('&lt;h1&gt;Something went wrong&lt;/h1&gt;'); 
+      response.setHeader("content-type", "text/html");
+      response.send("&lt;h1&gt;Something went wrong&lt;/h1&gt;");
     },
   });
 });
@@ -213,7 +213,7 @@ app.listen(3000, () =&gt; {
 <li>Client Component: Add interactivity and event listeners (<code>onClick()</code>); Use State and Lifecycle Effects (<code>useState()</code>, <code>useEffect()</code>); Use browser-only APIs.</li>
 </ul>
 <p>A common misconception here is that components with <code>"use client"</code> only run in browser. Client components still get pre-rendered to the initial HTML on the server (SSR). The <code>"use client"</code> doesn't mean the component is "client only", it means that we send the code for this component to the client and hydrate it.</p>
-<blockquote><p>How is the Next.js App Router related to Server Components?<br/>
+<blockquote><p>How is the Next.js App Router related to Server Components?\
 If a page uses server-side rendering, the page HTML is generated on each request. Next.js used to allow us to do so by using <code>getServerSideProps</code>, which will be called by the server on every request.</p>
 <p>Next.js 13.4 introduced the App Router with new features, conventions, and support for React Server Components. Components in the app directory are React Server Components by default. <code>"use client"</code> directive used to mark components as Client Components. Server and Client Components can be interleaved in the same component tree, with React handling the merging of both environments.</p>
 <p>Currently in Next.js, a route is either fully static or fully dynamic. If you have just one dynamic part, the whole page becomes dynamic. This means slower page loads even when most content could be static. Partial prerendering (<a href="https://partialprerendering.com">https://partialprerendering.com</a>) lets you mix static and dynamic parts in the same route. At build time, Next.js creates static HTML for as much as it can, and dynamic parts get wrapped in React Suspense boundaries. The static parts show up instantly while dynamic parts load. Read more at <a href="https://nextjs.org/docs/app/getting-started/cache-components">https://nextjs.org/docs/app/getting-started/cache-components</a>.</p>
@@ -232,7 +232,7 @@ export const gSSP = async () =&gt; {
 };
 </code></pre>
 <pre><code class="lang-jsx">// React Server Components
-// The big difference is that we've never before had a way 
+// The big difference is that we've never before had a way
 // to run server-exclusive code inside our components (component level).
 import React from "react";
 
@@ -274,17 +274,19 @@ export default List;
   //   props: { children: "oh my" },
   //   ...
   // }
-  // 
+  //
   // https://github.com/TejasQ/react-server-components-from-scratch/blob/spoild/server.tsx#L37
   const clientJsx = await createReactTree(
     &lt;Layout bgColor="white"&gt;
       &lt;Component {...req.query} /&gt;
-    &lt;/Layout&gt;
+    &lt;/Layout&gt;,
   );
 
   const html = `${renderToString(clientJsx)}
     &lt;script&gt;
-    window.__INITIAL_CLIENT_JSX_STRING__=\`${JSON.stringify(clientJsx, escapeJsx)}\`;
+    window.__INITIAL_CLIENT_JSX_STRING__=\`${
+    JSON.stringify(clientJsx, escapeJsx)
+  }\`;
     &lt;/script&gt;
     &lt;script src="/client.js" type="module"&gt;&lt;/script&gt;`;
   res.end(html);
@@ -294,20 +296,20 @@ const escapeJsx = (key, value) =&gt; {
   // A Symbol value doesn't "survive" JSON serialization
   // We're going to substutute `Symbol.for('react.element')` with a special string like "$RE"
   if (value === Symbol.for("react.element")) {
-    return "$RE";  // Could be arbitrary. I picked RE for React Element.
+    return "$RE"; // Could be arbitrary. I picked RE for React Element.
   } else if (typeof value === "string" &amp;&amp; value.startsWith("$")) {
     // To avoid clashes, prepend an extra $ to any string already starting with $.
     return "$" + value;
   } else {
     return value;
   }
-}
+};
 </code></pre>
 <p>Note that if we directly send <code>renderToString(&lt;Component&gt;)</code> to the client, React will complain <em>"Error: Objects are not valid as a React child (found: [object Promise])"</em>. Before <code>renderToString</code>, we need to go through the React tree, find async components, wait for their data, unwrap them, and then turn them into a string. This is what the function <code>createReactTree</code> does.</p>
 <pre><code class="lang-js">async function createReactTree(jsx) {
-  if (['string', 'number', 'boolean'].includes(typeof jsx)) {
+  if (["string", "number", "boolean"].includes(typeof jsx)) {
     return jsx;
-  } 
+  }
   if (Array.isArray(jsx)) {
     return await Promise.all(jsx.map(createReactTree));
   }
@@ -332,8 +334,8 @@ const escapeJsx = (key, value) =&gt; {
           Object.entries(jsx).map(async ([propName, value]) =&gt; [
             propName,
             await createReactTree(value),
-          ])
-        )
+          ]),
+        ),
       );
     }
   } else throw new Error("Not implemented");
@@ -433,13 +435,13 @@ npm run start
 <h3>Why Does RSC Integrate with a Bundler</h3>
 <p>RSC was only available in Next.js for a while, but other bundlers and frameworks are starting to support it. The good news is Parcel added support for RSC in version 2.9.0.</p>
 <p>Consider this <code>&lt;Counter&gt;</code> tag. How do you serialize it?</p>
-<pre><code class="lang-jsx">import { Counter } from './client';
+<pre><code class="lang-jsx">import { Counter } from "./client";
 
-&lt;Counter initialCount={10} /&gt;
+&lt;Counter initialCount={10} /&gt;;
 
 // client component
-'use client';
-import { useState, useEffect } from 'react';
+"use client";
+import { useEffect, useState } from "react";
 
 export function Counter({ initialCount }) {
   const [count, setCount] = useState(initialCount);

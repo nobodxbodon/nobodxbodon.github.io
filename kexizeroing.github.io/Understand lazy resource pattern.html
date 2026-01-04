@@ -1,0 +1,78 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/understand-lazy-resource-pattern.md">仓库源文</a>，<a href="https://kexizeroing.github.io/understand-lazy-resource-pattern">站点原文</a></h2>
+<p>As frontend applications grow, the bundle size and initial load time can become significant issues. Standard import statements are eager; they pull code into your bundle and execute it immediately, even if the user never visits that specific tab or opens that modal. To solve this, senior engineers often use the Lazy Resource Pattern. It allows you to define how to build your application’s components without actually building them until they are needed.</p>
+<h2>Lazy Resource</h2>
+<p>Think of a Resource as a "Lazy Box."</p>
+<ol>
+<li>The box starts empty.</li>
+<li>It has a <code>load()</code> button.</li>
+<li>Only when you press the button does the box fetch its contents (code, data, services).</li>
+<li>Once the box is full, it stays full (caching).</li>
+</ol>
+<pre><code class="lang-ts">export interface Resource&lt;T&gt; {
+  /** Returns the resource, loading it if it hasn't been loaded yet. */
+  load(): Promise&lt;T&gt;;
+}
+</code></pre>
+<p><code>LazyResource</code> implements the "Lazy Box" logic. It ensures that no matter how many times you call <code>load()</code>, the expensive work only happens once.</p>
+<pre><code class="lang-ts">class LazyResource&lt;T&gt; implements Resource&lt;T&gt; {
+  private active: Promise&lt;T&gt; | undefined;
+
+  constructor(private recipe: () =&gt; Promise&lt;T&gt;) {}
+
+  async load(): Promise&lt;T&gt; {
+    if (!this.active) {
+      // Execute the "recipe" and cache the resulting promise
+      this.active = this.recipe().catch((err) =&gt; {
+        this.active = undefined; // Clear cache on error to allow retries
+        throw err;
+      });
+    }
+    return this.active;
+  }
+}
+</code></pre>
+<h2>Using Factory</h2>
+<p>Instead of creating resources manually, we use a <code>ResourceFactory</code>. It acts as the authorized creator that wraps the <code>LazyResource</code> engine with infrastructure metadata.</p>
+<pre><code class="lang-ts">interface ResourceFactory {
+  /** Creates a named Resource with built-in tracing */
+  create&lt;T&gt;(args: { 
+    name: string; 
+    load: () =&gt; Promise&lt;T&gt; 
+  }): Resource&lt;T&gt;;
+}
+</code></pre>
+<blockquote><p>The factory returns the interface <code>Resource</code> rather than the concrete class <code>LazyResource</code>. The consumer doesn't need to know how the box works; they only need to know that it has a <code>.load()</code> button.</p>
+</blockquote>
+<p>Think of the <code>LazyResource</code> as the "engine" that handles the state of your "Lazy Box" and the <code>ResourceFactory</code> as the "manager" that builds it. When you call <code>.create()</code>, the factory doesn't just return a raw engine; it returns one that has been pre-configured with tracing tied to your resource name. This delegation means the <code>LazyResource</code> is responsible for ensuring the work only happens once, while the factory is responsible for making sure that work is visible to your monitoring system.</p>
+<h2>The Pattern in Action</h2>
+<p>In a large app, you often have a bootload file. This is the "Composition Root" where you map out your feature's dependencies.
+Instead of passing real objects around, you pass Resources.</p>
+<p>We start by defining resources. Notice the use of dynamic <code>import()</code>, which ensures the code isn't even downloaded until <code>load()</code> is called.</p>
+<pre><code class="lang-ts">// The Factory creates the LazyResource and injects the 'api_client' trace
+const apiClientResource = resourceFactory.create({
+  name: 'api_client',
+  load: async () =&gt; {
+    const { ApiClient } = await import('./api/client');
+    return new ApiClient();
+  },
+});
+
+const authServiceResource = resourceFactory.create({
+  name: 'auth_service',
+  load: async () =&gt; {
+    const [{ AuthService }, api] = await Promise.all([
+      import('./auth/service'),
+      apiClientResource.load(), // Depend on another resource
+    ]);
+    return new AuthService(api);
+  },
+});
+</code></pre>
+<p>Each block is now named and traceable. Every resource is guaranteed to follow the same infrastructure rules (caching, logging, tracing) defined by the factory.</p>
+<h2>Why This Pattern</h2>
+<p>This pattern creates a "pay-as-you-go" architecture where application startup is virtually free. By loading only lightweight <code>Resource</code> definitions, you can define hundreds of features without downloading their code or running their logic until they are actually needed.</p>
+<ul>
+<li>You can define 100 features in your bootload file. If the user only ever uses the "Home" tab, the code for the other 99 features is never downloaded, and their initialization logic is never run.</li>
+<li>If your Sidebar, Header, and Main Content all need the <code>authServiceResource</code>, they all call <code>.load()</code>. The first one starts the engine; the other two simply "wait" on the same promise.</li>
+<li>If a network glitch causes a resource to fail, the catch block resets the cache. The next time the user tries to open that feature, the app will try to download the code again automatically.</li>
+</ul>

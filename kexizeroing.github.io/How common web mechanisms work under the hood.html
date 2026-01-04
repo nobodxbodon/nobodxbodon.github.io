@@ -11,7 +11,7 @@
 <li><a href="#source-maps">Source Maps</a></li>
 </ul>
 <h2>Compile Vue SFC to JS</h2>
-<p>High level compilation process: 
+<p>High level compilation process:
 Parse SFC to blocks -&gt; Compile each block (script, style, template) -&gt; Combine all blocks</p>
 <ul>
 <li><a href="https://jinjiang.dev/slides/understanding-vue-compiler">https://jinjiang.dev/slides/understanding-vue-compiler</a></li>
@@ -19,59 +19,64 @@ Parse SFC to blocks -&gt; Compile each block (script, style, template) -&gt; Com
 <li><a href="https://www.npmjs.com/package/@vue/compiler-sfc">https://www.npmjs.com/package/@vue/compiler-sfc</a></li>
 <li><a href="https://play.vuejs.org">https://play.vuejs.org</a></li>
 </ul>
-<pre><code class="lang-js">import { parse, compileScript, compileTemplate, rewriteDefault } from '@vue/compiler-sfc'
+<pre><code class="lang-js">import {
+  compileScript,
+  compileTemplate,
+  parse,
+  rewriteDefault,
+} from "@vue/compiler-sfc";
 
 function compileSFC(source) {
-  const { descriptor } = parse(source)
-  const { script, template, styles } = descriptor
+  const { descriptor } = parse(source);
+  const { script, template, styles } = descriptor;
 
-  let code = ''
-  let cssCode = ''
+  let code = "";
+  let cssCode = "";
 
   if (script) {
     const scriptBlock = compileScript(descriptor, {
-      id: 'component'
-    })
+      id: "component",
+    });
 
     // rewrites `export default` to use variable '_sfc_main' instead
     const scriptCode = rewriteDefault(
       scriptBlock.content,
-      '_sfc_main'
-    )
-    code += scriptCode + '\n'
+      "_sfc_main",
+    );
+    code += scriptCode + "\n";
   }
 
   if (template) {
     // converts template into a render() function
     const templateResult = compileTemplate({
       source: template.content,
-      id: 'component'
-    })
+      id: "component",
+    });
 
-    code += `\n${templateResult.code}\n`
-    code += `_sfc_main.render = render\n`
+    code += `\n${templateResult.code}\n`;
+    code += `_sfc_main.render = render\n`;
   }
 
   if (styles.length) {
     cssCode = styles.map(style =&gt; {
       // You might want to process CSS with postcss or other tools here
-      return style.content
-    }).join('\n')
+      return style.content;
+    }).join("\n");
 
     code += `
       // Inject styles
       const style = document.createElement('style')
       style.textContent = ${JSON.stringify(cssCode)}
       document.head.appendChild(style)
-    `
+    `;
   }
 
-  code += '\nexport default _sfc_main\n'
+  code += "\nexport default _sfc_main\n";
 
   return {
     js: code,
-    css: cssCode
-  }
+    css: cssCode,
+  };
 }
 </code></pre>
 <pre><code class="lang-js">// Example usage
@@ -136,11 +141,11 @@ const result = compileSFC(sfc)
 <li>Vite pre-bundles dependencies using esbuild.</li>
 <li>Vite serves source code over native ESM. This is essentially letting the browser take over part of the job of a bundler. Vite only needs to transform and serve source code on demand, as the browser requests it.</li>
 </ul>
-<pre><code class="lang-js">import MagicString from 'magic-string';
-import { init, parse as parseEsModule } from 'es-module-lexer';
-import { buildSync, transformSync } from 'esbuild';
+<pre><code class="lang-js">import { init, parse as parseEsModule } from "es-module-lexer";
+import { buildSync, transformSync } from "esbuild";
+import MagicString from "magic-string";
 
-// transform import statements 
+// transform import statements
 // Key point: relative module specifiers must start with ./, ../, or /
 // import xx from 'xx' -&gt; import xx from '/@module/xx'
 async function parseBareImport(code) {
@@ -165,9 +170,12 @@ async function parseBareImport(code) {
   return s.toString();
 }
 
-app.use(async function (req, res) {
+app.use(async function(req, res) {
   if (/\.js(\?|$)(?!x)/.test(req.url)) {
-    let js = fs.readFileSync(path.join(__dirname, removeQuery(req.url)), "utf-8");
+    let js = fs.readFileSync(
+      path.join(__dirname, removeQuery(req.url)),
+      "utf-8",
+    );
     const jsCode = await parseBareImport(js);
 
     res.setHeader("Content-Type", "application/javascript");
@@ -177,7 +185,10 @@ app.use(async function (req, res) {
   }
 
   if (/\.jsx(\?|$)/.test(req.url)) {
-    const jsxContent = fs.readFileSync(path.join(__dirname, removeQuery(req.url)), "utf-8");
+    const jsxContent = fs.readFileSync(
+      path.join(__dirname, removeQuery(req.url)),
+      "utf-8",
+    );
     const transformed = transformSync(jsxContent, {
       loader: "jsx",
       format: "esm",
@@ -192,9 +203,12 @@ app.use(async function (req, res) {
   }
 
   if (/^\/@module\//.test(req.url)) {
-    let pkg = req.url.slice(9);  // the length of "/@module/"
+    let pkg = req.url.slice(9); // the length of "/@module/"
     let pkgJson = JSON.parse(
-      fs.readFileSync(path.join(__dirname, "node_modules", pkg, "package.json"), "utf8")
+      fs.readFileSync(
+        path.join(__dirname, "node_modules", pkg, "package.json"),
+        "utf8",
+      ),
     );
     let entry = pkgJson.module || pkgJson.main;
     let outfile = path.join(__dirname, `esbuild/${pkg}.js`);
@@ -212,7 +226,7 @@ app.use(async function (req, res) {
     res.end(js);
     return;
   }
-})
+});
 </code></pre>
 <h2>React Suspense</h2>
 <p>React Suspense operates on a "throw and catch" pattern:</p>
@@ -346,7 +360,10 @@ module.exports = {
       // path.join(basePath, `${filename}.js`)
       modulePath = this.resolveModule(filename);
     } else {
-      modulePath = this.resolveModule(filename, path.join(process.cwd(), 'src'));
+      modulePath = this.resolveModule(
+        filename,
+        path.join(process.cwd(), "src"),
+      );
     }
 
     const ast = getAST(modulePath);
@@ -361,7 +378,8 @@ module.exports = {
     const outputPath = path.join(this.output.path, this.output.filename);
     let modules = "";
     this.modules.map((_module) =&gt; {
-      modules += `'${_module.filename}': function (require, module, exports) { ${_module.transformCode} },`;
+      modules +=
+        `'${_module.filename}': function (require, module, exports) { ${_module.transformCode} },`;
     });
 
     const bundle = `
@@ -382,7 +400,7 @@ module.exports = {
 
     fs.writeFileSync(outputPath, bundle, "utf-8");
   }
-};
+}
 
 // (function(modules) {
 //   function require(fileName) {
@@ -394,11 +412,11 @@ module.exports = {
 
 //   require('index.js');
 // })({
-//   'index.js': function (require, module, exports) { 
+//   'index.js': function (require, module, exports) {
 //     const { sayHello } = require('greeting.js');
 //     sayHello('World');
 //   },
-//   'greeting.js': function (require, module, exports) { 
+//   'greeting.js': function (require, module, exports) {
 //     function sayHello(name) {
 //       console.log(`Hello, ${name}!`);
 //     }
@@ -449,11 +467,11 @@ module.exports = {
 <li>Babel Plugin + <code>babel.transformSync</code>. You focus only on the transformation logic (<code>visitor</code> function), and let Babel take care of parsing, walking, and generating code.</li>
 </ol>
 <p>The following is the general template of using babel to do code transformation:</p>
-<pre><code class="lang-js">import { parse } from '@babel/parser';
-import traverse from '@babel/traverse';
-import generate from '@babel/generator';
+<pre><code class="lang-js">import generate from "@babel/generator";
+import { parse } from "@babel/parser";
+import traverse from "@babel/traverse";
 
-const code = 'const n = 1';
+const code = "const n = 1";
 
 // parse the code -&gt; ast
 const ast = parse(code);
@@ -462,36 +480,36 @@ const ast = parse(code);
 traverse(ast, {
   enter(path) {
     // in this example change all the variable `n` to `x`
-    if (path.isIdentifier({ name: 'n' })) {
-      path.node.name = 'x';
+    if (path.isIdentifier({ name: "n" })) {
+      path.node.name = "x";
     }
   },
 });
 
 // generate code &lt;- ast
-const output = generate(ast, { /* generator options */ });
+const output = generate(ast, {/* generator options */});
 console.log(output.code); // 'const x = 1;'
 </code></pre>
 <p>Another way is writing a custom plugin (may integrate into build tools). They have the same functional output.</p>
-<pre><code class="lang-js">import babel from '@babel/core';
+<pre><code class="lang-js">import babel from "@babel/core";
 
-const code = 'const n = 1';
+const code = "const n = 1";
 
 const renameVariablePlugin = (options = {}) =&gt; {
-  const { from = 'n', to = 'x' } = options;
+  const { from = "n", to = "x" } = options;
   return {
     visitor: {
       Identifier(path) {
         if (path.node.name === from) {
           path.node.name = to;
         }
-      }
-    }
+      },
+    },
   };
 };
 
 const result = babel.transformSync(code, {
-  plugins: [[renameVariablePlugin, { from: 'n', to: 'x' }]]
+  plugins: [[renameVariablePlugin, { from: "n", to: "x" }]],
 });
 
 console.log(result.code); // 'const x = 1;'

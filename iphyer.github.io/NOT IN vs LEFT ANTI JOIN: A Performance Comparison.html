@@ -1,0 +1,62 @@
+<h2><a href="https://github.com/iphyer/iphyer.github.io/blob/master/_posts/2025-12-27-LeftAntiJoinVSNotIn.md">仓库源文</a>，<a href="https://iphyer.github.io/blog/2025/12/27/LeftAntiJoinVSNotIn">站点原文</a></h2>
+<p>When filtering data based on exclusion criteria, the choice between <code>NOT IN</code> and <code>LEFT ANTI JOIN</code> can significantly impact query performance. This post demonstrates why <code>LEFT ANTI JOIN</code> is typically the better choice.</p>
+<p>&lt; Revised and generated with help of Claude &gt;</p>
+&lt;!--more--&gt;
+
+<h2>Original Approach (Inefficient)</h2>
+<pre><code class="lang-sql">SELECT product_id, product_category
+FROM products_dim
+WHERE region_id = 100
+    AND product_id NOT IN (
+        SELECT product_id
+        FROM products_dim
+        WHERE region_id = 200
+    )
+    AND product_category IS NOT NULL
+</code></pre>
+<h2>Optimized Approach (Recommended)</h2>
+<pre><code class="lang-sql">SELECT a.product_id, a.product_category
+FROM products_dim a
+LEFT ANTI JOIN (
+    SELECT DISTINCT product_id
+    FROM products_dim
+    WHERE region_id = 200
+) b ON a.product_id = b.product_id
+WHERE a.region_id = 100
+    AND a.product_category IS NOT NULL
+</code></pre>
+<h2>Why This Works</h2>
+<p>Both queries return exactly the same result: products from region 100 that don't exist in region 200.</p>
+<h3>Key Differences</h3>
+<table>
+<thead><tr>
+<th>Aspect</th>
+<th>NOT IN</th>
+<th>LEFT ANTI JOIN</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Performance</strong></td>
+<td>Slower, less optimized</td>
+<td>Faster, better optimized by Spark</td>
+</tr>
+<tr>
+<td><strong>Broadcast Risk</strong></td>
+<td>Can trigger unwanted broadcasts</td>
+<td>Better control, prevents large broadcasts</td>
+</tr>
+<tr>
+<td><strong>Execution Plan</strong></td>
+<td>Subquery execution</td>
+<td>Efficient join strategy</td>
+</tr>
+<tr>
+<td><strong>NULL Handling</strong></td>
+<td>Unpredictable with NULLs</td>
+<td>Predictable behavior</td>
+</tr>
+</tbody>
+</table>
+<h3>Bottom Line</h3>
+<p><code>LEFT ANTI JOIN</code> prevents broadcast errors while delivering the same results faster. When working with large datasets, this optimization can make a substantial difference in query execution time and resource utilization.</p>

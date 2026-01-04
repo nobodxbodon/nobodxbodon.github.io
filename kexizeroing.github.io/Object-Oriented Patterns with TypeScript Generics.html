@@ -64,6 +64,8 @@ class Package implements Deliverable {
 }
 </code></pre>
 <p>The Letter and Package are completely different internally. But to the outside world, they look the same — they're both <code>Deliverable</code>. This is polymorphism: "many forms." Code that works with <code>Deliverable</code> works with ALL deliverable items.</p>
+<blockquote><p>A <code>class</code> is both a type and a value. You are creating a JavaScript value (the constructor) that exists at runtime. TypeScript simultaneously creates a type (describing the instance) with the same name that exists only at compile-time.</p>
+</blockquote>
 <h2>Generics — Parameterized Types</h2>
 <p>Now we encounter a new problem. Our postal service has warehouses. Some warehouses store letters. Some store packages. Some store frozen goods. We could create: <code>LetterWarehouse</code>, <code>PackageWarehouse</code>, and <code>FrozenGoodsWarehouse</code>. But that's repetitive. The warehouse behavior is identical, only the type of item changes.</p>
 <p>This is where generics enter. A generic is a type parameter, a blank that gets filled in when you use the class.</p>
@@ -134,14 +136,14 @@ interface TrackingTranslator&lt;InternalType, PublicType&gt; {
 </code></pre>
 <pre><code class="lang-ts">// postal-system/tracking/package-tracking-translator.ts
 
-class PackageTrackingTranslator 
-  implements TrackingTranslator&lt;WarehousePackageRecord, PublicTrackingInfo&gt; 
+class PackageTrackingTranslator
+  implements TrackingTranslator&lt;WarehousePackageRecord, PublicTrackingInfo&gt;
 {
   toPublic(internal: WarehousePackageRecord): PublicTrackingInfo {
     return {
       trackingCode: this.encodeId(internal.warehouseId),
       status: this.mapStatus(internal.internalStatus),
-      estimatedDelivery: internal.eta
+      estimatedDelivery: internal.eta,
     };
   }
 
@@ -149,7 +151,7 @@ class PackageTrackingTranslator
     return {
       warehouseId: this.decodeId(public.trackingCode),
       internalStatus: this.reverseMapStatus(public.status),
-      eta: public.estimatedDelivery
+      eta: public.estimatedDelivery,
     };
   }
 
@@ -185,7 +187,7 @@ interface ItemDispatcher&lt;T extends Trackable&gt; {
 <pre><code class="lang-ts">// postal-system/fulfillment/fulfillment-center.ts
 
 class FulfillmentCenter&lt;ItemType extends Deliverable&gt;
-  implements 
+  implements
     ItemReceiver&lt;ItemType&gt;,
     Warehouse&lt;ItemType&gt;,
     ItemDispatcher&lt;ItemType&gt;
@@ -233,19 +235,22 @@ class FulfillmentCenter&lt;ItemType extends Deliverable&gt;
 class DeliveryCoordinator&lt;ItemType extends Deliverable&gt; {
   constructor(
     private readonly warehouse: Warehouse&lt;ItemType&gt;,
-    private readonly translator: TrackingTranslator&lt;ItemType, PublicTrackingInfo&gt;,
+    private readonly translator: TrackingTranslator&lt;
+      ItemType,
+      PublicTrackingInfo
+    &gt;,
     private readonly dispatcher: ItemDispatcher&lt;ItemType&gt;
   ) {}
 
   processDelivery(trackingCode: string): DeliveryResult {
     // Convert public tracking code to internal representation
-    const internalInfo = this.translator.toInternal({ trackingCode, /* ... */ });
+    const internalInfo = this.translator.toInternal({ trackingCode /* ... */ });
 
     // Get from warehouse
     const item = this.warehouse.retrieve(internalInfo.warehouseId);
 
     if (!item) {
-      return { success: false, reason: 'Item not found' };
+      return { success: false, reason: "Item not found" };
     }
 
     // Dispatch it
@@ -275,7 +280,7 @@ export interface TrackingController {
 export class TrackingControllerImpl implements TrackingController {
   constructor(
     private readonly warehouseService: WarehouseService,
-    private readonly deliveryService: DeliveryService,
+    private readonly deliveryService: DeliveryService
   ) {}
 
   async lookupPackage(trackingCode: string): Promise&lt;void&gt; {
@@ -304,11 +309,16 @@ export function createTrackingPanel(opts: {
     const { trackingController, analytics } = opts;
 
     const handleLookup = (code: string) =&gt; {
-      analytics.track('package_lookup', { code });
+      analytics.track("package_lookup", { code });
       trackingController.lookupPackage(code);
     };
 
-    return &lt;TrackingPanelView controller={trackingController} onLookup={handleLookup} /&gt;;
+    return (
+      &lt;TrackingPanelView
+        controller={trackingController}
+        onLookup={handleLookup}
+      /&gt;
+    );
   };
 }
 </code></pre>

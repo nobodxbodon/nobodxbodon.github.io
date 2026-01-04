@@ -11,7 +11,7 @@ docker exec -it ba76bef03590 bash -l
 </code></pre>
 <pre><code class="lang-sh"># If you want to run PostgreSQL on Docker
 # https://masteringpostgres.com/articles/how-to-install-postgresql
-docker run --name my-postgres-name -e POSTGRES_PASSWORD=mysecretpassword -p 5432:5432 -d postgres
+docker run --name my-postgres-name -e POSTGRES_PASSWORD=mysecretpassword -p 5432:5432 -d postgres:17
 </code></pre>
 <pre><code class="lang-sh">[root@ba76bef03590 /]# mysql
 
@@ -37,7 +37,7 @@ mysql&gt; SELECT * FROM todos;
 cd hello-prisma
 
 npm init -y
-npm install prisma
+npm install prisma @prisma/client
 npx prisma init
 </code></pre>
 <pre><code class="lang-js">// Set the DATABASE_URL in the `.env` file to point to your existing database.
@@ -55,8 +55,8 @@ npx prisma db pull
 # Generate Prisma Client. You can then start querying your database.
 npx prisma generate
 </code></pre>
-<pre><code class="lang-js">import express from "express";
-import { PrismaClient } from "@prisma/client";
+<pre><code class="lang-js">import { PrismaClient } from "@prisma/client";
+import express from "express";
 
 const app = express();
 const client = new PrismaClient();
@@ -98,6 +98,11 @@ app.listen(3000, () =&gt; {
 <p>Running <code>npx prisma init --datasource-provider sqlite</code> creates a new prisma directory with a <code>schema.prisma</code> file. You're now ready to model your data.</p>
 <pre><code># This is your Prisma schema file
 
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
 model Post {
   id        Int      @id @default(autoincrement())
   title     String
@@ -120,7 +125,8 @@ model Post {
   authorId  Int
 }
 
-"author" will not become a column in the database. The way to read this is that "authorId" field references the "id" field on the User model.
+Note: "author" will not become a column in the database.
+The way to read this is that "authorId" field references the "id" field on the User model.
 </code></pre>
 <pre><code>2. many-to-many relationship
 
@@ -148,35 +154,40 @@ model Post {
 </code></pre>
 <p>Prisma ORM is not your database. Running <code>npx prisma db push</code> first time will create SQLite database <code>dev.db</code> that in sync with your schema. <code>npx prisma studio</code> shows you a UI what's in the database, and you can manually add a record there.</p>
 <p>Now that we have a database with some initial data, we can set up Prisma Client and connect it to our database. For <a href="https://www.prisma.io/docs/guides/nextjs">Next.js integration</a>, add a <code>lib/prisma.ts</code> file which creates a Prisma Client (<code>@prisma/client</code>) and attaches it to the global object.</p>
-<pre><code class="lang-js">import prisma from '@/lib/prisma'
+<pre><code class="lang-js">// lib/prisma.ts
+import { PrismaClient } from "@prisma/client";
+
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+
+export const prisma = globalForPrisma.prisma || new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+
+export default prisma;
+</code></pre>
+<blockquote><p>When working with a framework like Next.js, it is important to use a singleton pattern for the Prisma Client instance. Otherwise, you may run into issues with hot reloading and multiple instances of the Prisma Client in development mode.</p>
+</blockquote>
+<pre><code class="lang-js">import prisma from "@/lib/prisma";
 
 export default async function Home() {
   const posts = await prisma.post.findMany();
   return (
     &lt;ul&gt;
-      {posts.map((post) =&gt; (
-        &lt;li key={post.id}&gt;{post.title}&lt;/li&gt;
-      ))}
+      {posts.map((post) =&gt; &lt;li key={post.id}&gt;{post.title}&lt;/li&gt;)}
     &lt;/ul&gt;
   );
 }
 </code></pre>
 <pre><code class="lang-js">// more CRUD
-const post = await prisma.post.findUnique({
-  where: {
-    id: params.id
-  }
-});
-
 const posts = await prisma.post.findMany({
   where: {
     published: true,
     title: {
-      contains: "First"
-    }
+      contains: "First",
+    },
   },
   orderBy: {
-    createdAt: "desc"
+    createdAt: "desc",
   },
   select: {
     id: true,
@@ -189,37 +200,10 @@ const posts = await prisma.post.findMany({
 
 const user = await prisma.user.findUnique({
   where: {
-    email: "test@gmail.com"
+    email: "test@gmail.com",
   },
   include: {
-    posts: true
-  }
-})
-
-export async function createPost(formData: FormData) {
-  await prisma.post.create({
-    data: {
-      title: formData.get("title") as string,
-      content: formData.get("content") as string,
-      author: {
-        connect: {
-          email: "test@gmail.com"
-        }
-      }
-    }
-  });
-  // rerender the view
-  revalidatePath("/posts");
-}
-
-await prisma.post.update({
-  where: { id },
-  data: {
-    title: formData.get("title") as string,
-  }
-})
-
-await prisma.post.delete({
-  where: { id },
-})
+    posts: true,
+  },
+});
 </code></pre>

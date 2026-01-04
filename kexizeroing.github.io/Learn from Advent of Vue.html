@@ -6,14 +6,14 @@
 <h3>Code Structure</h3>
 <p>In a Vue component, <code>&lt;script setup&gt;</code> can be used alongside normal <code>&lt;script&gt;</code> using the options API. It works because the <code>&lt;script setup&gt;</code> block is compiled into the component's <code>setup()</code> function. A normal <code>&lt;script&gt;</code> may be needed, for example, we need to run side effects or create objects that should only execute once in module scope (outside the <code>export default {}</code>).</p>
 <pre><code class="lang-vue">&lt;script&gt;
-console.log('module loaded') // runs ONCE
+console.log("module loaded"); // runs ONCE
 
 export default {
-  name: 'MyComponent',
+  name: "MyComponent",
   created() {
-    console.log('in created') // runs EVERY time component is created
-  }
-}
+    console.log("in created"); // runs EVERY time component is created
+  },
+};
 &lt;/script&gt;
 </code></pre>
 <blockquote><p>Each <code>.vue</code> file is turned into a JavaScript ES module. So:</p>
@@ -50,13 +50,13 @@ const even = computed(() =&gt; (count.value % 2 === 0 ? 'even' : 'odd'));
 </ul>
 </blockquote>
 <p>Adding deep reactivity to a large object can cost you a lot of performance, you can optimize the reactivity in your app by using <code>shallowRef</code>. Here reactivity is only triggered when the <code>value</code> of the <code>ref</code> itself is changed, but modifying any of the nested properties won’t trigger anything.</p>
-<pre><code class="lang-js">const state = shallowRef({ count: 1 })
+<pre><code class="lang-js">const state = shallowRef({ count: 1 });
 
 // does NOT trigger change
-state.value.count = 2
+state.value.count = 2;
 
 // does trigger change
-state.value = { count: 2 }
+state.value = { count: 2 };
 </code></pre>
 <h3>Why Vue need to use <code>.value</code> to access the ref property?</h3>
 <p>The <code>.value</code> syntax is used in Vue 3 to access the value of a ref property because refs are designed to be reactive objects rather than simple values. When you create a ref, you are actually creating an object with a single property named <code>value</code>. The <code>value</code> property holds the actual value that the ref represents, and any changes to the <code>value</code> property trigger reactivity. When we access the ref directly, we are accessing the object, not the value.</p>
@@ -87,7 +87,10 @@ state.value = { count: 2 }
 
     &lt;div class="flex flex-row justify-center"&gt;
       &lt;!-- Create the tree sections --&gt;
-      &lt;div v-for="i in size" class="relative rounded-full bg-green w-16 h-16 -m-2 flex justify-center items-center" /&gt;
+      &lt;div
+        v-for="i in size"
+        class="relative rounded-full bg-green w-16 h-16 -m-2 flex justify-center items-center"
+      /&gt;
     &lt;/div&gt;
   &lt;/div&gt;
 &lt;/template&gt;
@@ -96,7 +99,7 @@ state.value = { count: 2 }
 <h3>Use Composables</h3>
 <blockquote><p>Similar idea to "Copy JSX? Create a component. Copy logic? Create a hook."</p>
 </blockquote>
-<p><strong>How the Vue Composition API replaces Vue Mixins?</strong><br/>
+<p><strong>How the Vue Composition API replaces Vue Mixins?</strong>\
 Normally, a Vue component is defined by a JavaScript object with various properties representing the functionality we need — things like <code>data</code>, <code>methods</code>, <code>computed</code>, and so on. When we want to share the same properties between components, we can extract the common properties into a separate module. Then we can add this mixin to any consuming component by assigning it to the <code>mixin</code> config property. At runtime, Vue will merge the properties of the component with any added mixins.</p>
 <p>Mixins have drawbacks:</p>
 <ol>
@@ -177,111 +180,115 @@ export function useTimeout = (fn, delay, options) =&gt; {
 </ol>
 <pre><code class="lang-js">// `onCleanup` function is also passed to watcher callbacks as the 3rd argument
 watch(searchQuery, (query, oldQuery, onCleanup) =&gt; {
-  searchResults.value = []
+  searchResults.value = [];
 
   const timerId = setTimeout(async () =&gt; {
-    const results = await fetch(`/api/search?q=${query}`)
-    searchResults.value = await results.json()
-  }, 300)
+    const results = await fetch(`/api/search?q=${query}`);
+    searchResults.value = await results.json();
+  }, 300);
 
-  onCleanup(() =&gt; clearTimeout(timerId))
-})
+  onCleanup(() =&gt; clearTimeout(timerId));
+});
 </code></pre>
 <p>Vue calls your cleanup function in two situations: when the watcher is about to run again, and when the watcher stops completely (like when a component unmounts).</p>
 <h3>Watchers callback flush timing</h3>
 <p>Similar to component updates, user-created watcher callbacks are batched to avoid duplicate invocations.</p>
 <p>By default, a watcher's callback is called after parent component updates (if any), and <strong>before</strong> the owner component's DOM updates. This means if you attempt to access the owner component's own DOM inside a watcher callback, the DOM will be in a pre-update state.</p>
 <pre><code class="lang-js">const count = ref(0);
-const countRef = useTemplateRef('countRef'); // Vue 3.5+
+const countRef = useTemplateRef("countRef"); // Vue 3.5+
 const logs = ref([]);
 
 const watchFn = (type) =&gt; () =&gt; {
-  logs.value.push('Watcher type ' + type + ': Count is ' + CountRef.value.innerText);
-}
+  logs.value.push(
+    "Watcher type " + type + ": Count is " + CountRef.value.innerText,
+  );
+};
 
-watch(count, watchFn('pre')); // default, Count is 0
-watch(count, watchFn('post'), { flush: 'post' }); // Count is 1
+watch(count, watchFn("pre")); // default, Count is 0
+watch(count, watchFn("post"), { flush: "post" }); // Count is 1
 // 'sync' runs first, fires synchronously, before any Vue-managed updates
-watch(count, watchFn('sync'), { flush: 'sync' }); // Count is 0
+watch(count, watchFn("sync"), { flush: "sync" }); // Count is 0
 </code></pre>
 <h3>Write better Vue composables</h3>
 <p>We abandon the options API for the composition API, and the idea is not that we write everything the same way as the options API but not having the data/computed/watch options.</p>
 <pre><code class="lang-js">// Common mistake: Grouping by options
 // data
-const originalMessage = ref('Hello World!')
-const isReversed = ref(false)
+const originalMessage = ref("Hello World!");
+const isReversed = ref(false);
 
 // computed
 const message = computed(() =&gt; {
   if (isReversed.value) {
-    return originalMessage.value.split('').reverse().join('')
+    return originalMessage.value.split("").reverse().join("");
   }
-  return originalMessage.value
-})
+  return originalMessage.value;
+});
 
 // watch...
 </code></pre>
 <pre><code class="lang-js">// Let's Refactor it
 // Message-related stuff
-const originalMessage = ref('Hello World!')
-const { toggleReverse, message } = useMessage(originalMessage)
+const originalMessage = ref("Hello World!");
+const { toggleReverse, message } = useMessage(originalMessage);
 
 // create `useMessage.js` file or inline composables
 function useMessage(input) {
-  const originalMessage = toRef(input)
-  const reversedMessage = computed(() =&gt; originalMessage.value.split('').reverse().join(''))
-  const isReversed = ref(false)
+  const originalMessage = toRef(input);
+  const reversedMessage = computed(() =&gt;
+    originalMessage.value.split("").reverse().join("")
+  );
+  const isReversed = ref(false);
 
   function toggleReverse() {
-    isReversed.value = !isReversed.value
+    isReversed.value = !isReversed.value;
   }
   const message = computed(() =&gt; {
     if (isReversed.value) {
-      return reversedMessage.value
+      return reversedMessage.value;
     }
-    return originalMessage.value
-  })
+    return originalMessage.value;
+  });
 
   return {
     toggleReverse,
-    message
-  }
+    message,
+  };
 }
 </code></pre>
 <p>It is possible to use both Options API and Composition API. Although you can access Composition API from the Options API, it’s a one-way street. The Composition API cannot access anything defined through the Options API.</p>
 <pre><code class="lang-js">export default {
   setup() {
-    const darkMode = ref(false)
+    const darkMode = ref(false);
     // We can't access the method
     // this.changeTheme(true)
-    return { darkMode }
+    return { darkMode };
   },
   methods: {
     saveDarkMode() {
-      localStorage.setItem('dark-mode', this.darkMode)
+      localStorage.setItem("dark-mode", this.darkMode);
     },
     changeTheme(val) {
       // We can update values from the Options API
       this.darkMode = val;
-    }
-  }
-}
+    },
+  },
+};
 </code></pre>
 <h3>Writable Computed Refs</h3>
-<pre><code class="lang-js">const firstName = ref('');
-const lastName = ref('');
+<pre><code class="lang-js">const firstName = ref("");
+const lastName = ref("");
 
 const fullName = computed({
   get: () =&gt; `${firstName.value} ${lastName.value}`,
   set: (val) =&gt; {
-    const split = val.split(' '); // ['Michael', 'Thiessen']
-    firstName.value = split[0];   // 'Michael'
-    lastName.value = split[1];    // 'Thiessen'
-  }
+    const split = val.split(" "); // ['Michael', 'Thiessen']
+    firstName.value = split[0]; // 'Michael'
+    lastName.value = split[1]; // 'Thiessen'
+  },
 });
 
-fullName.value = 'Michael Thiessen';
-console.log(lastName.value);      // 'Thiessen'
+fullName.value = "Michael Thiessen";
+console.log(lastName.value); // 'Thiessen'
 </code></pre>
 <p>A common mistake using <code>computed</code> is non reactive value as a dependency. Often developers need some reactivity when working with browser API’s, but the APIs are not reactive. To get around this, we will use VueUse library that adds reactivity to web browser APIs. <em>(VueUse makes non‑reactive browser data reactive by storing it in <code>ref</code> or <code>reactive</code> objects and updating those values using browser event listeners or polling.)</em></p>
 <pre><code class="lang-js">const videoPlayer = ref&lt;HTMLVideoElement&gt;();
@@ -343,10 +350,10 @@ export const AsyncModal = defineAsyncComponent(() =&gt; import("./Modal.vue"));
 &lt;/template&gt;
 
 &lt;script setup&gt;
-  import { ref } from "vue";
-  import { AsyncModal } from "./components/AsyncModal.js";
+import { ref } from "vue";
+import { AsyncModal } from "./components/AsyncModal.js";
 
-  const showModal = ref(false);
+const showModal = ref(false);
 &lt;/script&gt;
 </code></pre>
 <p>The <code>AsyncModal</code> is a wrapper component that only calls the loader function when it is actually rendered on the page.</p>
@@ -365,14 +372,14 @@ export const AsyncModal = defineAsyncComponent(() =&gt; import("./Modal.vue"));
 export default {
   data: () =&gt; ({ show: false }),
   components: {
-    Tooltip: () =&gt; import("./Tooltip")
+    Tooltip: () =&gt; import("./Tooltip"),
     // Tooltip: () =&gt; ({
     //   component: import("./Tooltip"),
     //   loading: AwesomeSpinner,
     //   error: SadFaceComponent,
     //   timeout: 5000,
     // })
-  }
+  },
 };
 &lt;/script&gt;
 </code></pre>
@@ -385,19 +392,19 @@ export default {
 &lt;/div&gt;
 </code></pre>
 <pre><code class="lang-js">// main.js
-const app = createApp(App)
+const app = createApp(App);
 
-app.directive('christmas', (el, binding) =&gt; {
-  const duration = binding.value ?? 2 // the length of the animation in seconds
-  const color = binding.arg ?? 'red-green' // the class to add for the different colors
+app.directive("christmas", (el, binding) =&gt; {
+  const duration = binding.value ?? 2; // the length of the animation in seconds
+  const color = binding.arg ?? "red-green"; // the class to add for the different colors
 
   // this will be called for both `mounted` and `updated`
-  el.classList.add('christmas-text', color)
+  el.classList.add("christmas-text", color);
 
-  el.style.animationDuration = duration + 's'
-})
+  el.style.animationDuration = duration + "s";
+});
 
-app.mount('#app')
+app.mount("#app");
 </code></pre>
 <ul>
 <li><code>el</code> is the DOM element the directive is bound to. You can manipulate it directly to set styles, classes, listeners, etc.</li>
@@ -407,10 +414,10 @@ app.mount('#app')
 <p>It's possible to add global properties to your Vue app in both Vue 2 and Vue 3. Prefixing global properties with a <code>$</code> helps prevent naming conflicts with other variables, and it's a standard convention that makes it easy to spot when a value is global.</p>
 <pre><code class="lang-js">// Vue 3
 const app = createApp({});
-app.config.globalProperties.$myGlobalVariable = 'foo';
+app.config.globalProperties.$myGlobalVariable = "foo";
 
 // Vue 2
-Vue.prototype.$myGlobalVariable = 'foo';
+Vue.prototype.$myGlobalVariable = "foo";
 </code></pre>
 <p>Properties added to <code>globalProperties</code> will be available via the component instance for all components within the application. So if you're using the Options API you'll be able to access them using <code>this.$myGlobalVariable</code>, just like you could with <code>Vue.prototype</code>. They'll also be available in the template without the <code>this</code>, e.g. <code>{{ $myGlobalVariable }}</code>.</p>
 <p>If you're using the Composition API then you'll still be able to use these properties within the template, but you won't have access to the component instance within <code>setup</code>, so these properties won't be accessible there. <em>(Composition API is designed to be context-free and has no access to <code>this</code>.)</em> Application-level <code>provide</code>/<code>inject</code> can be used as an alternative to <code>Vue.prototype</code>.</p>
@@ -426,11 +433,11 @@ const myGlobalVariable = inject('myGlobalVariable')
 <h3>How to Use Provide/Inject</h3>
 <p>Vue’s Provide/Inject API is a powerful feature that allows components to share data without prop drilling. It is not meant for global state management but rather for local component hierarchies.</p>
 <pre><code class="lang-js">// parent component to make data available to its descendants
-const message = ref('Hello from parent');
-provide('sharedMessage', message);
+const message = ref("Hello from parent");
+provide("sharedMessage", message);
 
 // child component consume the provided data
-const sharedMessage = inject('sharedMessage');
+const sharedMessage = inject("sharedMessage");
 </code></pre>
 <ol>
 <li>Provide/Inject is best suited for sharing dependencies like form contexts, themes, or service instances, rather than global state management. If multiple components rely on the same data structure, consider Vuex or Pinia.</li>
@@ -441,27 +448,27 @@ const sharedMessage = inject('sharedMessage');
 <p>Contentless components provide a container, and you have to supply the content. Think of a button, a menu, or a card component. Slots allow you to pass in whatever markup and components you want, and they also are relatively open-ended, giving you lots of flexibility.</p>
 <pre><code class="lang-vue">&lt;!-- NorthPoleDistance.vue --&gt;
 &lt;script setup lang="ts"&gt;
-import { getDistanceKm, getDistanceMiles } from '@/utils/distance'
-import { useGeolocation } from '@vueuse/core'
-import { ref, computed } from 'vue'
+import { getDistanceKm, getDistanceMiles } from "@/utils/distance";
+import { useGeolocation } from "@vueuse/core";
+import { computed, ref } from "vue";
 
-const { coords } = useGeolocation()
+const { coords } = useGeolocation();
 
-const unit = ref&lt;'km' | 'mile'&gt;('mile')
+const unit = ref&lt;"km" | "mile"&gt;("mile");
 
 const distance = computed(() =&gt; {
-  return unit.value === 'km'
+  return unit.value === "km"
     ? getDistanceKm(coords.value.latitude, coords.value.longitude)
-    : getDistanceMiles(coords.value.latitude, coords.value.longitude)
-})
+    : getDistanceMiles(coords.value.latitude, coords.value.longitude);
+});
 
 const toggleUnit = () =&gt; {
-  if (unit.value === 'km') {
-    unit.value = 'mile'
+  if (unit.value === "km") {
+    unit.value = "mile";
   } else {
-    unit.value = 'km'
+    unit.value = "km";
   }
-}
+};
 &lt;/script&gt;
 
 &lt;template&gt;
@@ -475,8 +482,12 @@ const toggleUnit = () =&gt; {
   &lt;div class="container mx-auto px-4"&gt;
     &lt;h2&gt;Example&lt;/h2&gt;
     &lt;NorthPoleDistance v-slot="{ distance, toggleUnit, unit }"&gt;
-      &lt;p&gt;You are currently: {{ distance }} {{ unit }}s away from the North Pole.&lt;/p&gt;
-      &lt;button @click="toggleUnit" class="bg-green text-white px-4 py-2 rounded"&gt;Toggle Unit&lt;/button&gt;
+      &lt;p&gt;
+        You are currently: {{ distance }} {{ unit }}s away from the North Pole.
+      &lt;/p&gt;
+      &lt;button @click="toggleUnit" class="bg-green text-white px-4 py-2 rounded"&gt;
+        Toggle Unit
+      &lt;/button&gt;
     &lt;/NorthPoleDistance&gt;
   &lt;/div&gt;
 &lt;/template&gt;
@@ -502,13 +513,13 @@ export function useCheckboxToggle() {
 &lt;/template&gt;
 
 &lt;script setup&gt;
-  import { ref } from "vue";
+import { ref } from "vue";
 
-  const checkbox = ref(false);
+const checkbox = ref(false);
 
-  const toggleCheckbox = () =&gt; {
-    checkbox.value = !checkbox.value;
-  };
+const toggleCheckbox = () =&gt; {
+  checkbox.value = !checkbox.value;
+};
 &lt;/script&gt;
 </code></pre>
 <h3>Render function</h3>
@@ -519,7 +530,7 @@ export function useCheckboxToggle() {
 <li>Runtime only build: since it doesn't include the compiler, you need to either pre-compiled templates in a compile step, or manually written render functions. The npm package will export this build by default, since when consuming Vue from npm, you will likely be using a compilation step, during which vue-loader will perform the template pre-compilation.</li>
 </ul>
 <pre><code class="lang-vue">&lt;script&gt;
-import { h } from 'vue'
+import { h } from "vue";
 
 export default {
   render() {
@@ -528,9 +539,9 @@ export default {
     // The third argument is either a string for a text node or an array of children VNodes
     return h("div", {}, [
       h("h1", {}, "Render Functions are awesome"),
-      h("p", {class: 'text-blue-400'}, "Some text")
-    ])
-  }
-}
+      h("p", { class: "text-blue-400" }, "Some text"),
+    ]);
+  },
+};
 &lt;/script&gt;
 </code></pre>

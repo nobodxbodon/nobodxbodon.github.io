@@ -11,7 +11,7 @@
 <pre><code>1. Initial Request (Range Support Detection)
 
 Chrome                                            Server
-+------------------------+    ------------&gt;       +-------------------------------------+           
++------------------------+    ------------&gt;       +-------------------------------------+
 | GET /a.mp4 HTTP/1.1    |                        | HTTP/1.1 200 OK                     |
 | Host: example.com      |                        | Accept-Ranges: bytes                |
 +------------------------+                        | Content-Length: 828908177           |
@@ -22,7 +22,7 @@ Chrome                                            Server
 2. Range Request for Initial Chunk
 
 Chrome                                         Server
-+------------------------+   ------------&gt;     +-------------------------------------------+          
++------------------------+   ------------&gt;     +-------------------------------------------+
 | GET /a.mp4 HTTP/1.1    |                     | HTTP/1.1 206 Partial Content              |
 | Host: example.com      |                     | Accept-Ranges: bytes                      |
 | Range: bytes=0-        |                     | Content-Range: bytes 0-1048575/828908177  |
@@ -34,11 +34,24 @@ Chrome                                         Server
 <p><strong>Note that the data being sent from the server is only a small chunk, even though the <code>Range</code> header has value “bytes=0-”.</strong> Chrome and FireFox ask for ranges like <code>bytes=300-</code>, can server side return a smaller-range part, other than part from offset 300 to end of file? The answer is yes. When you play the video, browser will send range request for remaining bytes. Both Chrome and FireFox send range request using byte range (i.e <code>bytes=1867776-</code>) with last-byte-pos value absent.</p>
 <p>If you skip ahead in the video, the browser will cancel the currently on-going response for the video content. It will then use the the video file’s metadata to map your desired new position to a byte offset and use it for a new range request (<code>byte=offset-</code>).</p>
 <p>Browsers will automatically pause playback if decoding fails. If <code>video.error.code === 3</code>, it typically means a media decode failure, often related to corrupted video or unsupported codecs.</p>
-<pre><code class="lang-js">const video = document.querySelector('video');
-video.addEventListener('error', () =&gt; {
-  console.error('Playback error:', video.error);
+<pre><code class="lang-js">const video = document.querySelector("video");
+video.addEventListener("error", () =&gt; {
+  console.error("Playback error:", video.error);
 });
 </code></pre>
+<h2>Streaming</h2>
+<p>Streaming is real-time, and it's more efficient than downloading media files. If a video file is downloaded, a copy of the entire file is saved onto a device's hard drive, and the video cannot play until the entire file finishes downloading. If it's streamed instead, the browser plays the video without actually copying and saving it. The video loads a little bit at a time instead of the entire file loading at once, and the information that the browser loads is not saved locally.</p>
+<p>For streaming, in some cases speed is far more important than reliability. For instance, if someone is in a video conference, they would prefer to interact with the other conference attendees in real time than to sit and wait for every bit of data to be delivered. Therefore, a few lost data packets is not a huge concern, and UDP should be used.</p>
+<p>In other cases, reliability is more important for streaming. For instance, both HTTP live streaming (HLS) and MPEG-DASH are streaming protocols that use TCP for transport. Many video-on-demand services use TCP.</p>
+<p>Live streaming is when the streamed video is sent over the Internet in real time, without first being recorded and stored. The term live streaming usually refers to broadcast live streams: one-to-many connections that go out to multiple users at once. Videoconferencing technologies like FaceTime work on real-time communication (RTC) protocols rather than the protocols used by one-to-many live stream broadcasts.</p>
+<p>These are the main steps that take place behind the scenes in a live stream:</p>
+<ol>
+<li>Live streaming starts with raw video data.</li>
+<li>The segmented video data is compressed and encoded. Common video encoding standards include H.264, H.265, VP9, AV1.</li>
+<li>Streaming video is divided into smaller segments a few seconds in length.</li>
+<li>A CDN should distribute the stream to multiple viewers in different locations. A CDN will also cache each segment of the live stream.</li>
+<li>Each user's device receives, decodes, and decompresses the segmented video data.</li>
+</ol>
 <h2>MP4 and WebM</h2>
 <p>MP4 and WebM formats are what we would call pseudo-streaming or "progressive download”. These formats do not support <strong>adaptive bitrate streaming</strong> (adjusts video quality based on network conditions). If you have ever taken an HTML video element and added a "src” attribute that points to an mp4, most players will progressively download the file. The good thing about progressive downloads is that you don’t have to wait for the player to download the entire file before you start watching. You can click play and start watching while the file is being downloaded in the background. Most players will also allow you to drag the playhead to specific places in the video timeline and the player will use byte-range requests to estimate which part of the file you are attempting to seek.</p>
 <h2>HLS and M3U8</h2>
@@ -54,10 +67,10 @@ video.addEventListener('error', () =&gt; {
 &lt;script&gt;
   // return false on Safari (MSE may not be used)
   if (Hls.isSupported()) {
-    const video = document.getElementById('video');
+    const video = document.getElementById("video");
     const hls = new Hls();
 
-    hls.loadSource('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8');
+    hls.loadSource("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8");
     hls.attachMedia(video);
 
     hls.on(Hls.Events.MANIFEST_PARSED, function () {
@@ -65,9 +78,9 @@ video.addEventListener('error', () =&gt; {
     });
   }
   // this is the MIME type for HLS m3u8 playlists
-  else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
-    video.addEventListener('loadedmetadata', function () {
+  else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+    video.addEventListener("loadedmetadata", function () {
       video.play();
     });
   }
@@ -86,59 +99,64 @@ const url = URL.createObjectURL(myMediaSource);
 videoTag.src = url;
 
 // 1. add source buffers
-const audioSourceBuffer = myMediaSource
-  .addSourceBuffer('audio/mp4; codecs="mp4a.40.2"');
-const videoSourceBuffer = myMediaSource
-  .addSourceBuffer('video/mp4; codecs="avc1.64001e"');
+const audioSourceBuffer = myMediaSource.addSourceBuffer(
+  'audio/mp4; codecs="mp4a.40.2"'
+);
+const videoSourceBuffer = myMediaSource.addSourceBuffer(
+  'video/mp4; codecs="avc1.64001e"'
+);
 
 // 2. download and add our audio/video to the SourceBuffers
 // fragmented mp4 (the advantage of fragmented MP4 is its ability to support DASH)
-fetch("http://server.com/audio.mp4").then(function(response) {
-  return response.arrayBuffer();
-}).then(function(audioData) {
-  audioSourceBuffer.appendBuffer(audioData);
-});
+fetch("http://server.com/audio.mp4")
+  .then(function (response) {
+    return response.arrayBuffer();
+  })
+  .then(function (audioData) {
+    audioSourceBuffer.appendBuffer(audioData);
+  });
 
 // the same for the video SourceBuffer
-fetch("http://server.com/video.mp4").then(function(response) {
-  return response.arrayBuffer();
-}).then(function(videoData) {
-  videoSourceBuffer.appendBuffer(videoData);
-});
+fetch("http://server.com/video.mp4")
+  .then(function (response) {
+    return response.arrayBuffer();
+  })
+  .then(function (videoData) {
+    videoSourceBuffer.appendBuffer(videoData);
+  });
 </code></pre>
 <p>What actually happens in the more advanced video players, is that video and audio data are split into multiple “segments”. These segments can come in various sizes, but they often represent between 2 to 10 seconds of content. Instead of pushing the whole content at once, we can just push progressively multiple segments. Now we do not have to wait for the whole audio or video content to be downloaded to begin playback.</p>
 <pre><code class="lang-js">// fetch a video or an audio segment, and returns it as an ArrayBuffer
 function fetchSegment(url) {
-  return fetch(url).then(function(response) {
+  return fetch(url).then(function (response) {
     return response.arrayBuffer();
   });
 }
 
 // fetching audio segments one after another
 fetchSegment("http://server.com/audio/segment0.mp4")
-  .then(function(audioSegment0) {
+  .then(function (audioSegment0) {
     audioSourceBuffer.appendBuffer(audioSegment0);
   })
-
-  .then(function() {
+  .then(function () {
     return fetchSegment("http://server.com/audio/segment1.mp4");
   })
-  .then(function(audioSegment1) {
+  .then(function (audioSegment1) {
     audioSourceBuffer.appendBuffer(audioSegment1);
   })
-
-  .then(function() {
+  .then(function () {
     return fetchSegment("http://server.com/audio/segment2.mp4");
   })
-  .then(function(audioSegment2) {
+  .then(function (audioSegment2) {
     audioSourceBuffer.appendBuffer(audioSegment2);
-  })
+  });
 
 // same thing for video segments
-fetchSegment("http://server.com/video/segment0.mp4")
-  .then(function(videoSegment0) {
-    videoSourceBuffer.appendBuffer(videoSegment0);
-  });
+fetchSegment("http://server.com/video/segment0.mp4").then(function (
+  videoSegment0
+) {
+  videoSourceBuffer.appendBuffer(videoSegment0);
+});
 </code></pre>
 <p>Many video players have an “auto quality” feature, where the quality is automatically chosen depending on the user’s network and processing capabilities. This behavior is also enabled thanks to the concept of media segments. On the server-side, the segments are actually encoded in multiple qualities, and a web player will then automatically choose the right segments to download as the network or CPU conditions change.</p>
 <p>The most common transport protocols used in a web context:</p>
@@ -205,23 +223,23 @@ GET /video/720p/segment2.mp4
 <p><strong><a href="https://ffmpeg.org">FFMPEG</a></strong> stands for Fast Forward Moving Picture Experts Group. It is a free and open source software project that offers many tools for video and audio processing. It's designed to run on a command line interface, and has many different libraries and programs to manipulate and handle video files. Most video programs include FFMPEG as a part of the video processing pipeline. <em>(FFmpeg powers all online video - Youtube, Facebook, Instagram, Disney+, Netflix etc, all run FFmpeg underneath.)</em></p>
 <p>WebAssembly enables developers to bring new performant functionality to the web from other languages. <a href="https://ffmpegwasm.netlify.app">FFmpeg.wasm</a> (WebAssembly / JavaScript port of FFmpeg) is one of a showcasing of the <a href="https://web.dev/wasm-libraries/">new functionality</a> being made available thanks to WebAssembly. It enables video/audio record, convert and stream right inside browsers. There are two components inside <code>ffmpeg.wasm</code>: <code>@ffmpeg/ffmpeg</code> and <code>@ffmpeg/core</code>. <code>@ffmpeg/ffmpeg</code> contains kind of a wrapper to handle the complexity of loading core and calling low-level APIs. <code>@ffmpeg/core</code> contains WebAssembly code which is transpiled from original FFmpeg C code with minor modifications.</p>
 <pre><code class="lang-js">// AVI to MP4 Demo
-import { writeFile } from 'fs/promises';
-import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
+import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
+import { writeFile } from "fs/promises";
 
 const ffmpeg = createFFmpeg({ log: true });
 
 (async () =&gt; {
   await ffmpeg.load();
-  ffmpeg.FS('writeFile', 'test.avi', await fetchFile('./test.avi'));
-  await ffmpeg.run('-i', 'test.avi', 'test.mp4');
-  await fs.promises.writeFile('./test.mp4', ffmpeg.FS('readFile', 'test.mp4'));
+  ffmpeg.FS("writeFile", "test.avi", await fetchFile("./test.avi"));
+  await ffmpeg.run("-i", "test.avi", "test.mp4");
+  await fs.promises.writeFile("./test.mp4", ffmpeg.FS("readFile", "test.mp4"));
   process.exit(0);
 })();
 </code></pre>
 <p>A <strong><a href="https://api.video/what-is/codec">codec</a></strong> is a hardware or software tool that is used to compress (and decompress) video files. Codec is a blend of coder/decoder. Common video codecs include h.264, h.265, VP8, VP9 and AV1. An efficient codec can deliver high-quality video at lower bitrates.</p>
 <p>The <strong>bitrate</strong> of a file is measured by the number of bits being transmitted over a period of time. For video it is typically measured in kilobytes per second (kbps) or megabytes per second (mbps). Video bitrate is often confused with video resolution terms like 720p, 1080p, 4K, etc. Video resolution is the number of pixels that make up an image on your screen; video bitrate is the amount of information per second in video. A higher bitrate results in better quality but also larger file sizes.</p>
-<blockquote><p>You can estimate file size from bitrate: 
-File Size (MB) = (Bitrate in Mbps × Duration in seconds) ÷ 8<br/>
+<blockquote><p>You can estimate file size from bitrate:
+File Size (MB) = (Bitrate in Mbps × Duration in seconds) ÷ 8\
 For example, a 10-minute 1080p video at 5 Mbps → 5 × 10 × 7.5 = 375 MB</p>
 </blockquote>
 <p><strong>VOD(Video on Demand)</strong> refers to prerecorded videos that viewers can watch anytime they choose, unlike live streams which must be watched in real time. Platforms like YouTube, Netflix, and Amazon Prime Video all offer VOD services, allowing users to play, pause, rewind, and rewatch content freely. VOD can be accessed in two main ways: by streaming the video over the internet (usually using formats like M3U8) or by downloading the full video file to a device (commonly as MP4). Since most VOD content is delivered online, a stable internet connection with good bandwidth is important for smooth playback.</p>

@@ -280,6 +280,7 @@ docker pull ghcr.io/shadowsocks/sslocal-rust:latest</p>
 &lt;!--</p>
 <p>docker inspect --format='{{json .Config.Entrypoint}}'</p>
 <p>nohup ss-local -s host -p 61813 -k windows@163.qq -m chacha20-ietf-poly1305 -l 1080 &gt;&gt; out.log 2&gt;&amp;1 &amp;</p>
+<p>./sslocal -c ss-local-config.json --worker-threads=4 -d</p>
 <p>用于定时启动的脚本</p>
 <pre><code># ssserver-startup.ps1
 $host.UI.RawUI.WindowTitle="ssserver"
@@ -1251,6 +1252,12 @@ nc 理论上也可以实现，但一行代码会写得非常长
 <p>python 的环境变量，除了安装目录之外，还有一个 Script 目录
 但其实一般影响都不大，根目录重要一点</p>
 <p>如果没法把 python 加入环境变量，那么每次调用最好都用绝对路径</p>
+&lt;!--
+alias python=/d/python-3.12.3-embed-amd64/python.exe
+export PATH=/d/python-3.12.3-embed-amd64:$PATH
+export PATH=/d/python-3.12.3-embed-amd64/Scripts:$PATH
+--&gt;
+
 <p>列出 pip 的所有模块</p>
 <pre><code>python -m pip list
 </code></pre>
@@ -1528,18 +1535,87 @@ Environment="HTTP_PROXY=http://127.0.0.1:1081"
 Environment="HTTPS_PROXY=http://127.0.0.1:1081"
 Environment="NO_PROXY=localhost,127.0.0.1,.corp"
 </code></pre>
+<p>,mirror.aliyuncs.com,daocloud.io,baidubce.com,dockerproxy.com,iscas.ac.cn,huecker.io,timeweb.cloud,noohub.ru</p>
+<p>,mirror.aliyuncs.com,daocloud.io,baidubce.com,dockerproxy.com,iscas.ac.cn,huecker.io,timeweb.cloud,noohub.ru</p>
 <p>如果没有 http-proxy.conf 就自己新建一个</p>
 <pre><code>sudo mkdir -p /etc/systemd/system/docker.service.d
 vim /etc/systemd/system/docker.service.d/http-proxy.conf
 </code></pre>
+<p>Environment="http_proxy=<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>"
+Environment="HTTPS_PROXY=<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>"
+Environment="ALL_PROXY=socks5h://127.0.0.1:1080"</p>
+<p>~/docker/daemon.json</p>
+<p>cat /etc/docker/daemon.json
+vim /etc/docker/daemon.json
+tee /etc/docker/daemon.json &lt;&lt;EOF
+{
+  "proxies" : {
+    "http-proxy" : "<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>",
+    "no-proxy" : "localhost,127.0.0.0/8",
+    "https-proxy" : "<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>"
+  }
+}
+EOF</p>
+<p>"mtu": 1300</p>
+<p>{
+    "proxies": {
+        "http-proxy": "<a href="http://192.168.0.10:10809">http://192.168.0.10:10809</a>",
+        "https-proxy": "<a href="http://192.168.0.10:10809">http://192.168.0.10:10809</a>",
+        "no-proxy": "*.test.example.com,.example.org,127.0.0.0/8"
+    }
+}</p>
+<p>Environment="http_proxy=<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>"
+Environment="HTTPS_PROXY=<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>"
+Environment="ALL_PROXY=socks5h://127.0.0.1:1080"</p>
+<p>~/docker/daemon.json</p>
+<p>cat /etc/docker/daemon.json
+vim /etc/docker/daemon.json
+tee /etc/docker/daemon.json &lt;&lt;EOF
+{
+  "proxies" : {
+    "http-proxy" : "<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>",
+    "no-proxy" : "localhost,127.0.0.0/8",
+    "https-proxy" : "<a href="http://127.0.0.1:1081">http://127.0.0.1:1081</a>"
+  }
+}
+EOF</p>
+<p>"mtu": 1300</p>
+<p>{
+    "proxies": {
+        "http-proxy": "<a href="http://192.168.0.10:10809">http://192.168.0.10:10809</a>",
+        "https-proxy": "<a href="http://192.168.0.10:10809">http://192.168.0.10:10809</a>",
+        "no-proxy": "*.test.example.com,.example.org,127.0.0.0/8"
+    }
+}</p>
 <p>修改完后的重启</p>
 <pre><code>sudo systemctl daemon-reload
 sudo systemctl restart docker
+
+docker pull busybox
+
+systemctl daemon-reload; systemctl restart docker; docker pull busybox
+docker pull busybox
+
+systemctl daemon-reload; systemctl restart docker; docker pull busybox
 </code></pre>
 <p>查看环境变量有没有设置成功</p>
 <pre><code>sudo systemctl show --property=Environment docker
 docker info | grep -i proxy
 </code></pre>
+<p>可以启用调试模式。在配置文件中添加以下内容：
+debug 1 # 显示启动信息
+debug 2 # 显示客户端请求信息
+debug 4 # 显示连接详细信息</p>
+<p>cat /var/log/privoxy/logfile</p>
+<p>TLS handshake timeout
+vim /etc/docker/daemon.json
+{
+  ...
+  "mtu": 1300
+  ...
+}</p>
+<p>systemctl status docker</p>
+<p>journalctl -u docker.service</p>
 <h3>构建镜像时的代理</h3>
 <h3>运行容器时的代理</h3>
 <h2>生成用于测试的容器的命令</h2>
@@ -2365,9 +2441,30 @@ Get-ExecutionPolicy -List</p>
 <pre><code>
 https://docs.microsoft.com/zh-cn/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.2
 
-### 判断变量的类型
+套一层 bat 脚本就可以直接执行 powershell 脚本了
 </code></pre>
-<pre><code>$variable.GetType()
+<p>@echo off
+powershell -ExecutionPolicy Bypass -File "1.ps1" arg1 arg2 arg3</p>
+<pre><code>
+### 接收命令行参数
+
+```powershell
+# powershell -ExecutionPolicy Bypass -File "1.ps1" arg1 arg2 arg3
+Write-Host args_Count: $($args.Count) # 输出命令行参数的数量
+Write-Host "$args" # 输出全部命令行参数
+
+# powershell -ExecutionPolicy Bypass -File "2.ps1" -Param1 "Param1" -Param4 123
+param([string]$Param1, [int]$Param2 = 2, $Param3 = 3, $Param4)
+Write-Output "1: $Param1"
+Write-Output "2: $Param2"
+Write-Output "3: $Param3"
+Write-Output "4: $Param4"
+
+# 两种形式只能选择其中一种
+</code></pre>
+<h3>判断变量的类型</h3>
+<pre><code>```
+$variable.GetType()
 ```
 </code></pre>
 <h3>获取变量的属性和方法</h3>
