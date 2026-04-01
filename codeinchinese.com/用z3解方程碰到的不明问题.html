@@ -1,0 +1,106 @@
+<h2><a href="https://github.com/program-in-chinese/team_website/blob/master/_posts/2026-01-23-%E7%94%A8z3%E8%A7%A3%E6%96%B9%E7%A8%8B%E7%A2%B0%E5%88%B0%E7%9A%84%E4%B8%8D%E6%98%8E%E9%97%AE%E9%A2%98.md">仓库源文</a>，<a href="http://codeinchinese.com/2026/01/23/%E7%94%A8z3%E8%A7%A3%E6%96%B9%E7%A8%8B%E7%A2%B0%E5%88%B0%E7%9A%84%E4%B8%8D%E6%98%8E%E9%97%AE%E9%A2%98">站点原文</a></h2>
+<p>继<a href="https://zhuanlan.zhihu.com/p/1932921693527049239">半年前</a> 用z3解逻辑题后，现在用其解一次方程（组）。仍用 z3-solver 库，python 3.12。</p>
+<h2>鸡兔方程</h2>
+<pre><code class="language-python">&gt;&gt;&gt; from z3 import *
+&gt;&gt;&gt; 鸡, 兔 = Reals('鸡 兔')
+&gt;&gt;&gt; solve(鸡+兔 == 2, 2*鸡+4*兔 == 6)
+[兔 = 1, 鸡 = 1]
+&gt;&gt;&gt; solve(鸡+兔 == 10, 2*鸡+4*兔 == 28)
+[兔 = 4, 鸡 = 6]
+</code></pre>
+<h2>不明问题</h2>
+<p>在误用 = 后，即便改用了 ==，也会报错如下：</p>
+<pre><code class="language-python">&gt;&gt;&gt; x= Reals('x')
+&gt;&gt;&gt; solve(x+2=3)
+  File "&lt;stdin&gt;", line 1
+    solve(x+2=3)
+          ^^^^
+SyntaxError: expression cannot contain assignment, perhaps you meant "=="?
+&gt;&gt;&gt; solve(x+2==3)
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: can only concatenate list (not "int") to list
+</code></pre>
+<p>如果用对 == 的话，则仍有效：</p>
+<pre><code>&gt;&gt;&gt; solve(鸡+1 == 2)
+[鸡 = 1]
+</code></pre>
+<p>但这个报错在重新赋值未知量后，仍会出现，不知为何：</p>
+<pre><code class="language-python">&gt;&gt;&gt; x= Reals('x')
+&gt;&gt;&gt; solve(x+1 == 2)
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: can only concatenate list (not "int") to list
+&gt;&gt;&gt; 鸡= Reals('鸡')
+&gt;&gt;&gt; solve(鸡+1 == 2)
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: can only concatenate list (not "int") to list
+&gt;&gt;&gt; 鸡, 兔 = Reals('鸡 兔')
+&gt;&gt;&gt; solve(鸡+1 == 2)
+[鸡 = 1]
+</code></pre>
+<p>注意最后一次设了两个未知量，仍旧用同样的方程，就又有效了。</p>
+<p>重启python环境尝试：</p>
+<pre><code class="language-python">&gt;&gt;&gt; from z3 import *
+&gt;&gt;&gt; x= Reals('x')
+&gt;&gt;&gt; solve(x+1 == 2)
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: can only concatenate list (not "int") to list
+&gt;&gt;&gt; x,y = Reals('x y')
+&gt;&gt;&gt; solve(x+1 == 2)
+[x = 1]
+</code></pre>
+<p>貌似与声明单个和多个未知量有关。</p>
+<p>这个就很摸不着头脑，欢迎指教。</p>
+<p>另外，= 和 == 的混淆还蛮容易发生，尤其对于刚从数学表达式转到编程的时候。</p>
+<hr/>
+<p>草稿：</p>
+<pre><code class="language-python">&gt;&gt;&gt; from z3 import *
+&gt;&gt;&gt; x= Reals('x')
+&gt;&gt;&gt; solve(2*x+4=10)
+  File "&lt;stdin&gt;", line 1
+    solve(2*x+4=10)
+          ^^^^^^
+SyntaxError: expression cannot contain assignment, perhaps you meant "=="?
+&gt;&gt;&gt; solve(2*x+4==10)
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: can only concatenate list (not "int") to list
+&gt;&gt;&gt; solve(2*x==10)
+no solution
+&gt;&gt;&gt; solve(2*x == 10)
+no solution
+&gt;&gt;&gt;
+</code></pre>
+<pre><code>&gt;&gt;&gt; from z3 import *
+&gt;&gt;&gt; x, y = Reals('x y')
+&gt;&gt;&gt; solve(x-y == 3, 3*x-8*y == 4)
+[y = 1, x = 4]
+&gt;&gt;&gt; solve(x-y == 4, 3*x-8*y == 4)
+[y = 8/5, x = 28/5]
+&gt;&gt;&gt; solve(x-2 == 3)
+[x = 5]
+&gt;&gt;&gt; solve(2*x == 10)
+[x = 5]
+&gt;&gt;&gt; solve(2*x == 13)
+[x = 13/2]
+&gt;&gt;&gt; # 为何？
+&gt;&gt;&gt; x= Reals('x')
+&gt;&gt;&gt; solve(2*x+4==10)
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: can only concatenate list (not "int") to list
+&gt;&gt;&gt; solve(2*x==10)
+no solution
+&gt;&gt;&gt; solve(2*x == 10)
+no solution
+&gt;&gt;&gt; solve(x-2 == 3)
+Traceback (most recent call last):
+  File "&lt;stdin&gt;", line 1, in &lt;module&gt;
+TypeError: unsupported operand type(s) for -: 'list' and 'int'
+&gt;&gt;&gt; 鸡, 兔 = Reals('鸡 兔')
+&gt;&gt;&gt; solve(鸡+兔 == 10, 2*鸡+4*兔 == 28)
+[兔 = 4, 鸡 = 6]
+</code></pre>

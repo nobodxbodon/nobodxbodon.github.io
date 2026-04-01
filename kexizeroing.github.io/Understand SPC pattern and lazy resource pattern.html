@@ -1,0 +1,134 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/understand-spc-and-lazy-resource-pattern.md">仓库源文</a>，<a href="https://kexizeroing.github.io/understand-spc-and-lazy-resource-pattern">站点原文</a></h2>
+<h2>Store-Presenter-Component (SPC) Pattern</h2>
+<p>SPC is a frontend architecture — a variant of Model-View-Presenter where:</p>
+<ul>
+<li>Store: Observable data container. <code>@observable.ref</code> fields, <code>@computed</code> getters. No logic, no actions, no side effects.</li>
+<li>Presenter: All business logic. <code>@action</code> methods mutate stores. Handles API calls, analytics, derived state. Dependencies injected via constructor.</li>
+<li>Component: Pure functional React component. Receives data and callbacks as props. No MobX, no store/presenter awareness.</li>
+<li>Factory (<code>create.tsx</code>): Wires store + presenter + component together. Wraps in <code>mobxReactLite.observer</code>.</li>
+</ul>
+<p>Data flow is unidirectional:</p>
+<ol>
+<li>User interacts with Component (clicks, types, etc.)</li>
+<li>Component calls a callback (provided by Factory from Presenter)</li>
+<li>Presenter executes logic</li>
+<li>Presenter mutates Store via <code>@action</code> methods</li>
+<li>MobX notifies the <code>observer</code>-wrapped Component</li>
+<li>Component re-renders with new Store values</li>
+</ol>
+<h3>Stores, Presenters, and Components</h3>
+<p>Stores are pure data containers. They hold <code>@observable</code> state and optional <code>@computed</code> getters. They contain NO business logic, NO side effects, NO actions. Stores don't need their own unit tests — they're purely declarative. Test the Presenter that mutates them instead.</p>
+<p>Presenters contain all business logic. They mutate stores via @action methods, derive data via @computed getters, and perform side effects like API calls and analytics. Presenters receive all dependencies through the constructor.</p>
+<p>Components are "dumb" functional React components. They receive data and callbacks as plain props and have NO knowledge of presenters, stores, or MobX. No direct imports of stores, presenters, or MobX. No API calls or analytics tracking.</p>
+<h3>Factories</h3>
+<p>Factories wire everything together. They instantiate stores and presenters, map store values and presenter methods to component props, and wrap in <code>mobxReactLite.observer</code>. Factories contain ONLY wiring logic. No business logic, no conditional rendering, no data fetching.</p>
+<p>Install Functions vs. Create Functions:</p>
+<ul>
+<li>Install functions have side effects and are called once. They might mutate configuration objects, register event listeners, or set up singletons.</li>
+<li>Create functions are pure factories, callable multiple times. They instantiate objects without side effects.</li>
+</ul>
+<h3>Calling Backend RPCs from Frontend Code</h3>
+<p>Use bootstrap when:</p>
+<ul>
+<li>Data is needed at initial page load</li>
+<li>Data is the same for all users of a page variant</li>
+<li>Data is small and doesn't change during the session</li>
+</ul>
+<p>Use /_ajax when:</p>
+<ul>
+<li>Data is loaded after initial page render</li>
+<li>Data depends on user interaction (search, pagination)</li>
+<li>Data changes during the session (save, update)</li>
+<li>Data is large and should be loaded on demand</li>
+</ul>
+<p>What a frontend service does during page load:</p>
+<ol>
+<li>Receives the route from api-gateway</li>
+<li>Calls multiple backend RPCs in parallel</li>
+<li>Builds a <code>Web2PageOptions</code> protobuf message containing all the aggregated data</li>
+<li>Returns <code>Web2PageOptions</code> to api-gateway for page assembly</li>
+</ol>
+<p>Adding a new /_ajax endpoint:</p>
+<ol>
+<li>Define the API in proto</li>
+<li>Implement the handler in the frontend service</li>
+<li>Run Protogen to generate the TypeScript client</li>
+<li>Use the generated client in your presenter</li>
+</ol>
+<h2>Lazy Resource</h2>
+<p>As frontend applications grow, the bundle size and initial load time can become significant issues. Standard import statements are eager; they pull code into your bundle and execute it immediately, even if the user never visits that specific tab or opens that modal. To solve this, senior engineers often use the Lazy Resource Pattern. It allows you to define how to build your application’s components without actually building them until they are needed.</p>
+<p>Think of a Resource as a "Lazy Box."</p>
+<ol>
+<li>The box starts empty.</li>
+<li>It has a <code>load()</code> button.</li>
+<li>Only when you press the button does the box fetch its contents (code, data, services).</li>
+<li>Once the box is full, it stays full (caching).</li>
+</ol>
+<pre><code class="language-ts">export interface Resource&lt;T&gt; {
+  /** Returns the resource, loading it if it hasn't been loaded yet. */
+  load(): Promise&lt;T&gt;;
+}
+</code></pre>
+<p><code>LazyResource</code> implements the "Lazy Box" logic. It ensures that no matter how many times you call <code>load()</code>, the expensive work only happens once.</p>
+<pre><code class="language-ts">class LazyResource&lt;T&gt; implements Resource&lt;T&gt; {
+  private active: Promise&lt;T&gt; | undefined;
+
+  constructor(private recipe: () =&gt; Promise&lt;T&gt;) {}
+
+  async load(): Promise&lt;T&gt; {
+    if (!this.active) {
+      // Execute the "recipe" and cache the resulting promise
+      this.active = this.recipe().catch((err) =&gt; {
+        this.active = undefined; // Clear cache on error to allow retries
+        throw err;
+      });
+    }
+    return this.active;
+  }
+}
+</code></pre>
+<h3>Using Factory</h3>
+<p>Instead of creating resources manually, we use a <code>ResourceFactory</code>. It acts as the authorized creator that wraps the <code>LazyResource</code> engine with infrastructure metadata.</p>
+<pre><code class="language-ts">interface ResourceFactory {
+  /** Creates a named Resource with built-in tracing */
+  create&lt;T&gt;(args: { 
+    name: string; 
+    load: () =&gt; Promise&lt;T&gt; 
+  }): Resource&lt;T&gt;;
+}
+</code></pre>
+<blockquote>
+<p>The factory returns the interface <code>Resource</code> rather than the concrete class <code>LazyResource</code>. The consumer doesn't need to know how the box works; they only need to know that it has a <code>.load()</code> button.</p>
+</blockquote>
+<p>Think of the <code>LazyResource</code> as the "engine" that handles the state of your "Lazy Box" and the <code>ResourceFactory</code> as the "manager" that builds it. When you call <code>.create()</code>, the factory doesn't just return a raw engine; it returns one that has been pre-configured with tracing tied to your resource name. This delegation means the <code>LazyResource</code> is responsible for ensuring the work only happens once, while the factory is responsible for making sure that work is visible to your monitoring system.</p>
+<h3>The Pattern in Action</h3>
+<p>In a large app, you often have a bootload file. This is the "Composition Root" where you map out your feature's dependencies.
+Instead of passing real objects around, you pass Resources.</p>
+<p>We start by defining resources. Notice the use of dynamic <code>import()</code>, which ensures the code isn't even downloaded until <code>load()</code> is called.</p>
+<pre><code class="language-ts">// The Factory creates the LazyResource and injects the 'api_client' trace
+const apiClientResource = resourceFactory.create({
+  name: 'api_client',
+  load: async () =&gt; {
+    const { ApiClient } = await import('./api/client');
+    return new ApiClient();
+  },
+});
+
+const authServiceResource = resourceFactory.create({
+  name: 'auth_service',
+  load: async () =&gt; {
+    const [{ AuthService }, api] = await Promise.all([
+      import('./auth/service'),
+      apiClientResource.load(), // Depend on another resource
+    ]);
+    return new AuthService(api);
+  },
+});
+</code></pre>
+<p>Each block is now named and traceable. Every resource is guaranteed to follow the same infrastructure rules (caching, logging, tracing) defined by the factory.</p>
+<p>This pattern creates a "pay-as-you-go" architecture where application startup is virtually free. By loading only lightweight <code>Resource</code> definitions, you can define hundreds of features without downloading their code or running their logic until they are actually needed.</p>
+<ul>
+<li>You can define 100 features in your bootload file. If the user only ever uses the "Home" tab, the code for the other 99 features is never downloaded, and their initialization logic is never run.</li>
+<li>If your Sidebar, Header, and Main Content all need the <code>authServiceResource</code>, they all call <code>.load()</code>. The first one starts the engine; the other two simply "wait" on the same promise.</li>
+<li>If a network glitch causes a resource to fail, the catch block resets the cache. The next time the user tries to open that feature, the app will try to download the code again automatically.</li>
+</ul>

@@ -1,0 +1,85 @@
+<h2><a href="https://gitee.com/MulanRevive/bounty/blob/master/%E8%BF%9B%E5%B1%95%E5%B0%8F%E7%BB%93/2026-01-30-%E9%87%8D%E8%B5%B0%E6%9D%A5%E6%97%B6%E8%B7%AF%E2%80%94%E2%80%94%E6%9C%A8%E5%85%B0%E5%AD%90%E9%9B%86%E4%B9%8Bprint.md">仓库源文</a></h2>
+<p>https://zhuanlan.zhihu.com/p/2001572382448558748</p>
+<h2>目标</h2>
+<p>由此<a href="https://www.zhihu.com/question/1987275119991732111/answer/2000122318920377777">设想</a>，从木兰重现项目的<a href="https://gitee.com/MulanRevive/mulan-rework/commits/master?page=56">提交历史</a>找到对应<a href="43fab66ac6b760a71682ddf755ddb86173381801">提交</a>。</p>
+<p>相对于原始设想少了函数定义部分，Python代码从一千一下降到约八百行，其中两百行测试代码、一百三的<a href="https://gitee.com/MulanRevive/mulan-rework/blob/43fab66ac6b760a71682ddf755ddb86173381801/python.py">开发辅助代码</a>，算下来实现部分五百行不到，其中分析器部分约两百多。</p>
+<p>先试了回退到该提交，在py3.7下可运行如下<code>累积.ul</code>：</p>
+<pre><code>limit = 4
+num = 1
+sum = 0
+while num &lt;= limit {
+    sum = sum + num
+    num = num + 1
+}
+
+print(sum)
+</code></pre>
+<p>不过第八行为空行则报错如下，需改进反馈可读性：</p>
+<pre><code>rply.报错.语法分析报错: (None, SourcePosition(idx=87, lineno=8, colno=1))
+</code></pre>
+<p>去掉空行，运行成功：</p>
+<pre><code>% python 中.py 测试/累积.ul
+10
+</code></pre>
+<p>另也打算支持中文标识符，额外工作量应该有限。</p>
+<p>以此为目标，进行重现。在再画一个鸡蛋的过程中，改进反馈信息、提高rply定制版的易用性等。</p>
+<h2>第一步</h2>
+<p>开始考虑先用py3.7之后再支持到3.13，开发流程与前类似，每个小提交包含测试。之前到这个进度约八十个提交，这次希望会略少。</p>
+<p>第一步原本按照<a href="https://zhuanlan.zhihu.com/p/129740212">此进展小结</a>，参照2020年四月十二的<a href="https://gitee.com/MulanRevive/mulan-rework/tree/edb50ab3587ea86c521f039a66f3d35b2435b6df/">提交</a>。但在py3.7.10下运行 <code>python 数.py</code> 报错：<code>AttributeError: 'Num' object has no attribute 'n'</code>。发现<code>ast.Num</code>的属性应为n而非value（估计当年尝试做各种原型时还没注意py版本）。</p>
+<p>另考虑到尽量减少额外工作量也方便有兴趣者复现，选择从此项目伊始就直接用当前木兰重现项目支持的Python最高版本3.13。</p>
+<p>接下来很快复现了单个数字的解析，但用木兰重现的<a href="https://pypi.org/project/ulang/">发布版</a>生成语法树时，发现其无法解析单个数字：</p>
+<pre><code>% 木兰 -树 数.ul
+ 😰 语法错误：文件 "数.ul", 第1行, 第1列, 没认出这个词 "整数"
+✋3
+</code></pre>
+<p>于是改第一步目标为输出必需的<code>print</code>，想来也合理。早先还设想过<a href="https://www.zhihu.com/question/625640683/answer/3246258623">将数学部分作为专用库置于语言之外</a>。</p>
+<p>代码已开源到：</p>
+<p>https://gitee.com/MulanRevive/subset-one</p>
+<p>约六十行Python代码，不过调用了木兰重现项目中的<a href="https://zhuanlan.zhihu.com/p/137651939">语法树格式化功用</a>。</p>
+<hr/>
+<p>草稿</p>
+<h2>过程</h2>
+<p>数.ul
+4</p>
+<pre><code> 😰 语法错误：文件 "数.ul", 第1行, 第1列, 没认出这个词 "整数"
+✋4
+“/Users/xuanwu/opt/anaconda3/envs/py3_13/lib/python3.13/site-packages/木兰/分析器/语法分析器.py”第1333行：raise 语法错误(
+调用层级如下
+“/Users/xuanwu/opt/anaconda3/envs/py3_13/lib/python3.13/site-packages/rply/语法分析器.py”第67行：自身.error_handler(state, 预读)
+“/Users/xuanwu/opt/anaconda3/envs/py3_13/lib/python3.13/site-packages/木兰/分析器/语法分析器.py”第1382行：节点 = self.分析器.分析(各词, state=self)
+“/Users/xuanwu/opt/anaconda3/envs/py3_13/lib/python3.13/site-packages/木兰/中.py”第150行：节点 = 分析器.分析(源码, 源码文件)
+</code></pre>
+<p>修改第一步目标：</p>
+<pre><code>print
+</code></pre>
+<p>修改木兰 0.1.9 代码：</p>
+<p>from 木兰.功用.调试辅助 import 语法树相关</p>
+<pre><code>        print(语法树相关.格式化节点(节点, 1))</code></pre>
+<p>报错：</p>
+<pre><code>Traceback (most recent call last):
+  File "/Users/xuanwu/work/ulang/子集/中.py", line 18, in &lt;module&gt;
+    可执行码 = compile(节点, 源码文件, 'exec')
+               ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: required field "lineno" missing from expr
+</code></pre>
+<p>为何木兰重现的语法树里没有args,keywords, type_ignores 是因为空吗？</p>
+<p>因为默认用 ast.dump，改用 <code>print(语法树相关.格式化节点(节点, 1))</code>
+之后相同</p>
+<p>已中文化标识符，rply的API调用</p>
+<p>改为printr后，运行如期报错（py 3.13）：</p>
+<pre><code>Traceback (most recent call last):
+  File "/Users/xuanwu/work/ulang/子集/中.py", line 20, in &lt;module&gt;
+    exec(可执行码, {})
+    ~~~~^^^^^^^^^^^^^^
+  File "输出.ul", line 1, in &lt;module&gt;
+    printr
+    
+NameError: name 'printr' is not defined. Did you mean: 'print'?
+</code></pre>
+<h2>目的</h2>
+<p>加强：</p>
+<ul>
+<li>可调试</li>
+<li>报错信息中文化</li>
+</ul>
+<p>rply 可用性提高</p>

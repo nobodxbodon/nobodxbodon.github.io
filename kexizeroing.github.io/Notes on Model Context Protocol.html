@@ -2,7 +2,8 @@
 <h3>Historical context: The Path to MCP</h3>
 <p>Early AI assistants were limited to text generation, unable to interact with external tools or real-time data. The introduction of function calling and plugins in 2023 allowed models to execute code, browse the web, and interact with APIs, marking the shift toward AI agents. However, each integration was fragmented, requiring custom implementations for different tools, making scaling difficult.</p>
 <p>MCP, introduced by Anthropic in late 2024, solves this problem by providing a unified protocol for AI-tool interactions. Instead of custom adapters for each tool, MCP allows developers to expose functionality once, making it accessible to any AI supporting MCP. It also eliminates the inefficiencies of tool-specific APIs by offering a structured, self-describing interface. This enables seamless, scalable AI-tool connectivity, much like how USB standardized device connections.</p>
-<blockquote><p>This isn't something that you couldn't do before. You could technically write a bunch of code to provide any model with relevant function call definitions, and then implement those functions to do the things the model asks for. But for one, this was very tedious. You'd have to figure out how to do it from scratch each time. Each implementation might be different. And this would all be in code, your Claude desktop app couldn't access these functions.</p>
+<blockquote>
+<p>This isn't something that you couldn't do before. You could technically write a bunch of code to provide any model with relevant function call definitions, and then implement those functions to do the things the model asks for. But for one, this was very tedious. You'd have to figure out how to do it from scratch each time. Each implementation might be different. And this would all be in code, your Claude desktop app couldn't access these functions.</p>
 <p>MCP adds another layer: your tools are hosted outside your app, on a separate server. MCP servers make sense when you want your context and tools to be shared across many apps, models, or environments.</p>
 </blockquote>
 <h3>MCP is not magic</h3>
@@ -14,10 +15,11 @@
 <p>On this host, you're going to run one or multiple <strong>MCP clients</strong> - each client will maintain a relationship to a single MCP server. The host creates a client instance to communicate with a specific MCP server, and the client handles the low-level details of the protocol.</p>
 <p>The <strong>MCP server</strong> is the most interesting concept for 99% of us. The server is the program that exposes a set of capabilities to the host application. If you want to allow a host to read emails, you can connect it to a Gmail MCP Server. If you want the host to post in Slack, you connect it to a Slack MCP Server. If you have some custom functionality you want an LLM to perform, you can build a new MCP server. The server could be running locally, or it could be running on a remote server.</p>
 <p>The client connects to its server using a <strong>transport</strong>. This transport is responsible for sending messages between the client and the server. There are currently two supported transports. You can communicate via <code>stdio</code> - in other words, via the terminal. Or you can communicate through HTTP via server-sent events. This is useful if you want to run your server on a remote machine.</p>
-<blockquote><p>Transports are how the model talks to your MCP server. Today, StreamableHTTP is the main one. The model uses standard HTTP to hit a URL and create a connection. Optionally, it also allows the use of SSE on the side for real time notifications. The other popular transport is stdio, used in local or CLI environments where the model and tools share the same process.</p>
+<blockquote>
+<p>Transports are how the model talks to your MCP server. Today, StreamableHTTP is the main one. The model uses standard HTTP to hit a URL and create a connection. Optionally, it also allows the use of SSE on the side for real time notifications. The other popular transport is stdio, used in local or CLI environments where the model and tools share the same process.</p>
 </blockquote>
 <p>The <strong>protocol</strong> defines JSON message formats, based on JSON-RPC, for communication between client and server. This simple contract allows for incredible flexibility. Your server doesn’t need to know anything about the LLM, and the LLM doesn’t need to know anything about your server’s internal implementation. They just need to speak the common language of MCP.</p>
-<pre><code class="lang-json">// To list available tools, an MCP client sends a request like this:
+<pre><code class="language-json">// To list available tools, an MCP client sends a request like this:
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -74,7 +76,7 @@
 </code></pre>
 <h3>The simplest MCP server</h3>
 <p>One of the standout features of MCP is its flexibility in server development. Developers can use any programming language that can print to stdout or serve an HTTP endpoint, allowing them to choose their preferred language and technology stack.</p>
-<pre><code class="lang-js">// npm i @modelcontextprotocol/sdk zod
+<pre><code class="language-js">// npm i @modelcontextprotocol/sdk zod
 // server-logic.js
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -99,12 +101,13 @@ server.tool(
         },
       ],
     };
-  }
+  },
 );
 </code></pre>
-<blockquote><p>The <code>register*</code> methods (<code>registerTool</code>, <code>registerPrompt</code>, <code>registerResource</code>) are the recommended approach for new code. The older methods (<code>tool</code>, <code>prompt</code>, <code>resource</code>) remain available for backwards compatibility. The optional <code>title</code> field for better UI presentation. The title is used as a display name, while <code>name</code> remains the unique identifier.</p>
+<blockquote>
+<p>The <code>register*</code> methods (<code>registerTool</code>, <code>registerPrompt</code>, <code>registerResource</code>) are the recommended approach for new code. The older methods (<code>tool</code>, <code>prompt</code>, <code>resource</code>) remain available for backwards compatibility. The optional <code>title</code> field for better UI presentation. The title is used as a display name, while <code>name</code> remains the unique identifier.</p>
 </blockquote>
-<pre><code class="lang-js">// Using registerTool (recommended)
+<pre><code class="language-js">// Using registerTool (recommended)
 server.registerTool(
   "fetch-weather",
   {
@@ -118,11 +121,11 @@ server.registerTool(
     return {
       content: [{ type: "text", text: data }],
     };
-  }
+  },
 );
 </code></pre>
 <p>The stdio transport enables communication through standard input/output streams. This is particularly useful for local integrations and command-line tools.</p>
-<pre><code class="lang-js">// 1. use stdio
+<pre><code class="language-js">// 1. use stdio
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { server } from "./server-logic.js";
 
@@ -130,7 +133,7 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 </code></pre>
 <p>SSE transport enables server-to-client streaming with HTTP POST requests for client-to-server communication.</p>
-<pre><code class="lang-js">// 2. use sse
+<pre><code class="language-js">// 2. use sse
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import express from "express";
 import { server } from "./server-logic.js";
@@ -153,7 +156,7 @@ app.listen(port, () =&gt; {
 });
 </code></pre>
 <p>Claude Desktop is the first MCP-compatible app, and it's the easiest way to test MCP. Open your Claude Desktop App configuration at <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> in a text editor. After updating your configuration file, you need to restart Claude for Desktop. See the <a href="https://modelcontextprotocol.io/quickstart/user">documentation</a> for more details.</p>
-<pre><code class="lang-json">{
+<pre><code class="language-json">{
   "mcpServers": {
     "weather-example": {
       "command": "node",
@@ -167,7 +170,7 @@ app.listen(port, () =&gt; {
 }
 </code></pre>
 <p>For Claude Code (only supports <code>stdio</code> transport), you can run it with a single command: <code>claude mcp add "weather-example" npx tsx "/path-to-the-file.ts"</code>. This tells Claude that in order to run the file, it should call <code>npx tsx /path-to-the-file.ts</code>.</p>
-<pre><code class="lang-sh">claude mcp list
+<pre><code class="language-sh">claude mcp list
 # No MCP servers configured.
 
 claude mcp add "weather-example" npx tsx index.ts
@@ -181,7 +184,7 @@ claude
 </code></pre>
 <h3>AI SDK MCP clients</h3>
 <p>The SDK supports connecting to MCP servers via either stdio (for local tools) or SSE (for remote servers). Once connected, you can use MCP tools directly with the AI SDK. The client exposes a <code>tools</code> method for retrieving tools from a MCP server.</p>
-<pre><code class="lang-js">import { openai } from "@ai-sdk/openai";
+<pre><code class="language-js">import { openai } from "@ai-sdk/openai";
 import { experimental_createMCPClient as createMCPClient } from "ai";
 
 const mcpClient = await createMCPClient({
@@ -200,7 +203,7 @@ const response = await generateText({
   prompt: "Find products under $100",
 });
 </code></pre>
-<pre><code class="lang-js">// Sometimes it's good to hint to the AI that you want it to use tools.
+<pre><code class="language-js">// Sometimes it's good to hint to the AI that you want it to use tools.
 // export default async function getTools() {
 //   const tools = await mcpClient.tools();
 //   return {
@@ -219,7 +222,8 @@ You can get a list of products by using the getInventory tool.
 You can purchase a product by using the purchase tool.
 `;
 </code></pre>
-<blockquote><p>Update from Anthropic on 2025.5.2:
+<blockquote>
+<p>Update from Anthropic on 2025.5.2:
 Until now, support for MCP was limited to Claude Desktop through local servers. Today, we're introducing Integrations, allowing Claude to work seamlessly with remote MCP servers across the web and desktop apps. Developers can build and host servers that enhance Claude’s capabilities, while users can discover and connect any number of these to Claude.</p>
 <p>What this means is that you can bring your own remote MCP server to claude.ai. Users just need a URL to equip the LLM with new tools and capabilities.</p>
 </blockquote>
@@ -231,20 +235,35 @@ Until now, support for MCP was limited to Claude Desktop through local servers. 
 <li>Each conversation starts fresh with no memory of previous conversations. While they can see tool results within the current conversation, they have to figure out the right sequence of tools to use based on what's available. When those tools are low-level API wrappers, the LLM has to orchestrate multiple calls and manage the complexity of chaining them together each time.</li>
 </ol>
 <p>Each tool should do one thing and do it well. The <code>name</code> and <code>description</code> of your tools and their parameters are your primary interface with the LLM. Be clear, concise, and unambiguous. Log every single tool invocation. Record the tool name, the exact parameters it was called with, and the result it returned. This is invaluable for debugging.</p>
+<h3>WebMCP</h3>
+<p>WebMCP is a proposed web standard that lets websites expose structured tools to AI agents. Instead of guessing what a button does, the agent can call a function with explicit parameters and get a predictable result. It bridges the gap between web applications and AI agents by providing a contract for interaction. Websites can explicitly publish their capabilities as tools. The standard defines two APIs:</p>
+<ul>
+<li>Imperative API (JavaScript): Register tools programmatically (<code>window.navigator.modelContext.registerTool</code>) with explicit schemas.</li>
+<li>Declarative API (HTML Annotations): Transform standard HTML forms into tools using attributes.</li>
+</ul>
+<p>WebMCP is currently an early preview feature from Google Chrome. While the standard is being developed, users can interact with WebMCP-enabled websites through a Chrome extension that provides AI agent capabilities.</p>
+<blockquote>
+<p>Currently only available in Chrome 146+ behind a flag:</p>
+<ul>
+<li>Go to chrome://flags and enable the "WebMCP for testing" flag in Chrome 146 or higher.</li>
+<li>Model Context Tool Inspector Chrome extension https://chromewebstore.google.com/detail/gbpdfapgefenggkahomfgkhfehlcenpd</li>
+<li>When to use WebMCP and MCP: https://developer.chrome.com/blog/webmcp-mcp-usage</li>
+</ul>
+</blockquote>
 <h3>References and further reading</h3>
 <ul>
-<li><a href="https://github.com/modelcontextprotocol/typescript-sdk">https://github.com/modelcontextprotocol/typescript-sdk</a></li>
-<li><a href="https://www.aihero.dev/model-context-protocol-tutorial">https://www.aihero.dev/model-context-protocol-tutorial</a></li>
-<li><a href="https://glama.ai/blog/2024-11-25-model-context-protocol-quickstart">https://glama.ai/blog/2024-11-25-model-context-protocol-quickstart</a></li>
-<li><a href="https://github.com/modelcontextprotocol/servers">https://github.com/modelcontextprotocol/servers</a></li>
-<li><a href="https://github.com/punkpeye/awesome-mcp-servers">https://github.com/punkpeye/awesome-mcp-servers</a></li>
-<li><a href="https://glama.ai/mcp/servers">https://glama.ai/mcp/servers</a></li>
-<li><a href="https://www.pulsemcp.com">https://www.pulsemcp.com</a></li>
-<li><a href="https://github.com/github/github-mcp-server">https://github.com/github/github-mcp-server</a></li>
-<li><a href="https://github.com/modelcontextprotocol/inspector">https://github.com/modelcontextprotocol/inspector</a></li>
-<li><a href="https://github.com/vercel-labs/mcp-for-next.js">https://github.com/vercel-labs/mcp-for-next.js</a></li>
-<li><a href="https://github.com/punkpeye/fastmcp">https://github.com/punkpeye/fastmcp</a></li>
-<li><a href="https://developer.chrome.com/blog/chrome-devtools-mcp">https://developer.chrome.com/blog/chrome-devtools-mcp</a></li>
-<li><a href="https://developer.chrome.com/blog/autofix-runtime-devtools-mcp">https://developer.chrome.com/blog/autofix-runtime-devtools-mcp</a></li>
-<li><a href="https://developers.openai.com/apps-sdk/build/mcp-server">https://developers.openai.com/apps-sdk/build/mcp-server</a></li>
+<li>https://github.com/modelcontextprotocol/typescript-sdk</li>
+<li>https://www.aihero.dev/model-context-protocol-tutorial</li>
+<li>https://glama.ai/blog/2024-11-25-model-context-protocol-quickstart</li>
+<li>https://github.com/modelcontextprotocol/servers</li>
+<li>https://github.com/punkpeye/awesome-mcp-servers</li>
+<li>https://glama.ai/mcp/servers</li>
+<li>https://www.pulsemcp.com</li>
+<li>https://github.com/github/github-mcp-server</li>
+<li>https://github.com/modelcontextprotocol/inspector</li>
+<li>https://github.com/vercel-labs/mcp-for-next.js</li>
+<li>https://github.com/punkpeye/fastmcp</li>
+<li>https://developer.chrome.com/blog/chrome-devtools-mcp</li>
+<li>https://developer.chrome.com/blog/autofix-runtime-devtools-mcp</li>
+<li>https://developers.openai.com/apps-sdk/build/mcp-server</li>
 </ul>

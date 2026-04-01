@@ -11,11 +11,11 @@
 <p>因为 TSO 的大部分特性和 SC 相同，我们仅仅讨论差别的两个特性：写读乱序、bypassing。</p>
 <h3>场景一</h3>
 <p>写读乱序我们继续使用<a href="posts/memory-model/sequential-consistency/">本系列第二篇文章</a>中的例子，再次把伪代码列如下：</p>
-<pre><code class="lang-c">// Core C1
+<pre><code class="language-c">// Core C1
 S1: x = NEW;
 L1: r1 = y;
 </code></pre>
-<pre><code class="lang-c">// Core C2
+<pre><code class="language-c">// Core C2
 S2: y = NEW;
 L2: r2 = x;
 </code></pre>
@@ -25,17 +25,18 @@ L2: r2 = x;
 <p>现在我们知道它的出处了，它就是我们上面分析的 write buffer 的场景，虽然不符合 SC，但它是符合 TSO 的。<code>S2: y = NEW;</code>这个写操作虽然是最早发生（更准确地应该称为「提交」），但因为 write buffer 的存在，它的生效发生了延迟。</p>
 <h3>场景二</h3>
 <p>下面我们为 TSO 构造了一个更复杂点的例子来说明 bypassing：</p>
-<pre><code class="lang-c">// Core C1
+<pre><code class="language-c">// Core C1
 S1: x = NEW;
 L1: r1 = x;
 L2: r2 = y;
 </code></pre>
-<pre><code class="lang-c">// Core C2
+<pre><code class="language-c">// Core C2
 S2: y = NEW;
 L3: r3 = y;
 L4: r4 = x;
 </code></pre>
-<blockquote><p>[!WARNING] 问题
+<blockquote>
+<p>[!WARNING] 问题
 程序运行后，有没有可能<code>(r1, r3) == (NEW, NEW)</code>且<code>(r2, r4) == (0, 0)</code>？</p>
 </blockquote>
 <p>答案是<strong>有可能</strong>。
@@ -50,24 +51,26 @@ L4: r4 = x;
 <li>如果 <code>L(a) &lt;p L(b)</code>，则 <code>L(a) &lt;m L(b)</code>（<code>Load -&gt; Load</code>）</li>
 <li>如果 <code>L(a) &lt;p S(b)</code>，则 <code>L(a) &lt;m S(b)</code>（<code>Load -&gt; Store</code>）</li>
 <li>如果 <code>S(a) &lt;p L(b)</code>，则 <code>S(a) &lt;m L(b)</code>（<code>Store -&gt; Store</code>）</li>
-<li><del>如果 <code>S(a) &lt;p L(b)</code>，则 <code>S(a) &lt;m L(b)</code>（<code>Store -&gt; Load</code>）</del></li>
+<li>~~如果 <code>S(a) &lt;p L(b)</code>，则 <code>S(a) &lt;m L(b)</code>（<code>Store -&gt; Load</code>）~~</li>
 </ol>
 </li>
 </ul>
-<blockquote><p>[!CAUTION] 结论
+<blockquote>
+<p>[!CAUTION] 结论
 变更一：Write Buffer 效应，使 <code>Store -&gt; Load</code> 的顺序无法保证</p>
 </blockquote>
 <hr/>
 <ul>
-<li>针对同一内存地址，读（<code>Load</code>）会得到 <code>&lt;m</code> 中最近一次写（<code>Store</code>）的值，或者同一处理器上一个尚位于 Write Buffer 中的值：<pre><code>L(a) = Max&lt;m { S(a) | S(a) &lt;m L(a) } 或 S(a) &lt;p L(a)
-</code></pre>
-</li>
+<li>针对同一内存地址，读（<code>Load</code>）会得到 <code>&lt;m</code> 中最近一次写（<code>Store</code>）的值，或者同一处理器上一个尚位于 Write Buffer 中的值：</li>
 </ul>
+<pre><code>L(a) = Max&lt;m { S(a) | S(a) &lt;m L(a) } 或 S(a) &lt;p L(a)
+</code></pre>
 <p>$$
 {L(a) = MAX_{&lt;m} { S(a)\ |\ S(a) \text{  &lt;m  } L(a)} \text{ or } S(a) \text{  &lt;p  } L(a)}
 $$</p>
 <p><code>S(a) &lt;p L(a)</code>是指针对同一地址的最新一个写指令。</p>
-<blockquote><p>[!CAUTION] 结论
+<blockquote>
+<p>[!CAUTION] 结论
 变更二：对地址<code>a</code>的<code>Load</code>，要么读到<code>&lt;m</code>中的最新值，要么读到<code>&lt;p</code>中的最新值，而且后者优先。</p>
 </blockquote>
 <hr/>
@@ -91,12 +94,12 @@ $$</p>
 | <strong>FENCE 1</strong> |<strong>Yes</strong> | <strong>Yes</strong> |<strong>Yes</strong>| <strong>Yes</strong> |</p>
 <p>粗体的字代表了 TSO 相对 SC 变化的点，其中 <strong>B</strong> 代表了：针对同一内存地址的<code>Store-&gt;Load</code>的需要 bypassing，其他情况则顺序无法保证。</p>
 <p>在第一个场景中，我们看到结果可能出现<code>(r1, r2) == (0, 0)</code>，现在我们来看下，有了<code>FENCE</code>指令后，如何确保这个有违直觉的结果不再出现。</p>
-<pre><code class="lang-c">// Core C1
+<pre><code class="language-c">// Core C1
 S1: x = NEW;
 FENCE;
 L1: r1 = y;
 </code></pre>
-<pre><code class="lang-c">// Core C2
+<pre><code class="language-c">// Core C2
 S2: y = NEW;
 FENCE;
 L2: r2 = x;

@@ -1,0 +1,128 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/getting-to-know-openclaw.md">仓库源文</a>，<a href="https://kexizeroing.github.io/getting-to-know-openclaw">站点原文</a></h2>
+<p>Learn from the <a href="https://www.youtube.com/watch?v=sTjx7IpeBas">OpenClaw complete tutorial</a> by ByteGrad, and I take notes along the way in this post.</p>
+<blockquote>
+<p>Other helpful video tutorials in Chinese:</p>
+<ul>
+<li>https://www.youtube.com/watch?v=2rcJdFuNbZQ</li>
+<li>https://www.bilibili.com/video/BV1ZiNwzPEhP</li>
+</ul>
+</blockquote>
+<h2>Background</h2>
+<p>OpenClaw is a viral open-source personal AI agent. It brings together the technology of agents with the data and apps you use on your machine to serve as an AI assistant. It operates a local gateway that connects AI models with your favorite tools, integrating with familiar chat apps to facilitate interactions. It can execute your desired tasks, implement proactive automation, and maintain long-term memory of user preferences. Learn more at: https://openclaw.ai</p>
+<p>Common use cases:</p>
+<ul>
+<li>Morning brief delivered to Telegram (calendar + weather + news + priorities)</li>
+<li>Quiet monitoring (heartbeat checks: “alert me only if urgent email / meeting soon / site down”)</li>
+<li>Research assistant (search + fetch + summarize + save notes to workspace)</li>
+<li>Browser tasks (download invoices, fill repetitive forms with human-in-loop)</li>
+<li>Personal knowledge base (daily notes + curated long-term memory in Markdown)</li>
+<li>Multi-channel continuity (same assistant across Telegram + web UI)</li>
+</ul>
+<h2>Set up OpenClaw on a VPS</h2>
+<p>Use the one-click cloud deploys (e.g., https://www.hostinger.com/vps/docker/openclaw, https://marketplace.digitalocean.com/apps/openclaw, https://docs.openclaw.ai/vps) that comes with the OpenClaw app preinstalled and ready to use out of the box. Alternatively, you can set up OpenClaw yourself by accessing the VPS through the terminal and installing it manually.</p>
+<pre><code class="language-sh"># Connect to the server, create a new user,
+# and grant the user sudo privileges.
+ssh root@&lt;IP&gt;
+adduser adminclaw
+usermod -aG sudo adminclaw
+su - adminclaw
+
+curl -fsSL https://openclaw.ai/install.sh | bash
+# 1. set model provider and default model
+# 2. set channel (Telegram, WhatsApp, Feishu, etc)
+# 3. set skills (keep default)
+# 4. skip others for now and complete
+
+echo 'export PATH="/home/adminclaw/.npm-global/bin:$PATH"' &gt;&gt; ~/.bashrc
+source ~/.bashrc
+
+openclaw -h
+# check open from your computer
+openclaw gateway
+openclaw dashboard
+
+ls ~/.openclaw/workspace
+
+sudo apt update
+sudo apt install -y tmux
+# background session
+tmux new -s claw
+openclaw gateway
+ctrl+b d
+
+# chat through Telegram
+# add pairing code
+openclaw pairing approve telegram &lt;code&gt;
+</code></pre>
+<p>&lt;img alt="openclaw-telegram-bot" src="https://raw.githubusercontent.com/kexiZeroing/blog-images/main/openclaw-telegram-bot.png" width="600"&gt;</p>
+<h2>Overall structure</h2>
+<pre><code>Telegram, WhatsApp
+Control UI (dashboard, termial)
+  ↑↓
+Gateway
+- Context: System prompt, AGENTS.md, SOUL.md, TOOLS.md
+- Tools: read, edit, exec
+- Skills: code review
+- Folder structure: ~/.openclaw (credentials, config), ~/.openclaw/workspace (context, memory)
+- Session management (keep track conversations)
+- Cron / heartbeat
+  ↑↓
+AI model
+
+input arrives -&gt; session routing -&gt; context assembly -&gt; send to model
+-&gt; tool/skill execution (optional) -&gt; send msg back + write memory
+</code></pre>
+<p><strong>AGENTS.md Template:</strong>
+https://docs.openclaw.ai/reference/templates/AGENTS</p>
+<p><strong>SOUL.md Template:</strong>
+https://docs.openclaw.ai/reference/templates/SOUL</p>
+<p>More about <code>~/.openclaw/workspace</code>:</p>
+<ul>
+<li>It defines the behavior and rules. The files shape the assistant every run. You can change how it behaves without changing code.</li>
+<li>When the agent writes docs, scripts, notes, summaries, it writes them here. It makes OpenClaw feel like a real assistant: outputs become real files you can use.</li>
+</ul>
+<p>&lt;img alt="openclaw-agent-config" src="https://raw.githubusercontent.com/kexiZeroing/blog-images/main/openclaw-agent-config.png" width="600"&gt;</p>
+<p>More about context:</p>
+<p>“Context” is everything OpenClaw sends to the model for a run. It is bounded by the model’s context window. https://docs.openclaw.ai/concepts/context</p>
+<ul>
+<li>System prompt (OpenClaw-built): rules, tools, skills list, time/runtime, and injected workspace files.</li>
+<li>Conversation history: your messages + the assistant’s messages for this session.</li>
+<li>Tool calls/results + attachments: command output, file reads, images/audio, etc.</li>
+</ul>
+<p>Type <code>/new</code> to start a new session to inject all the system files. Type <code>/context</code> and <code>/status</code> to get an overall about current context.</p>
+<h2>Cron and Heartbeats</h2>
+<p>In OpenClaw, an agent turn does not always have to be triggered manually. You can also automate agent actions using Cron Jobs.</p>
+<p>A Cron Job is a scheduled task that automatically sends a prompt to the connected AI model at a specific time. Instead of you manually writing a message, OpenClaw generates the user message based on the configured prompt and sends it to the model. The AI can then respond and potentially invoke tools. <em>(Cron has a different session from the main one becuase you don't need to send the full conversation history to AI for a cron job.)</em></p>
+<p>&lt;img alt="openclaw-cron-job" src="https://raw.githubusercontent.com/kexiZeroing/blog-images/main/openclaw-cron-job.png" width="600"&gt;</p>
+<p>A Heartbeat is similar to a cron job, but it is designed for periodic background checks rather than scheduled tasks that always produce output. https://docs.openclaw.ai/automation/cron-vs-heartbeat</p>
+<p>Heartbeats run in the main session at a regular interval (default: 30 min). They’re designed for the agent to check on things and surface anything important. It's ideal for quiet monitoring tasks, such as: checking for important emails, monitoring upcoming meetings, watching for system events that need attention. If an important message is found, the agent can notify you. Otherwise, it simply does nothing, meaning you are not disturbed when nothing important happens.</p>
+<p>Heartbeat tasks are defined in a heartbeat file inside the agent configuration (<code>~/.openclaw/workspace/HEARTBEAT.md</code>). The default prompt tells the agent to read it. Think of it as your “heartbeat checklist”: small, stable, and safe to include every 30 minutes.</p>
+<pre><code class="language-md"># Heartbeat checklist
+
+- Quick scan: anything urgent in inboxes?
+- If it’s daytime, do a lightweight check-in if nothing else is pending.
+- If a task is blocked, write down _what is missing_ and ask Peter next time.
+</code></pre>
+<h2>Skills</h2>
+<p>OpenClaw uses AgentSkills-compatible skill folders to teach the agent how to use tools. Each skill is a directory containing a <code>SKILL.md</code> with YAML frontmatter and instructions. OpenClaw loads bundled skills plus optional local overrides, and filters them at load time based on environment, config, and binary presence. https://docs.openclaw.ai/tools/skills</p>
+<p>There are already many built-in skills.</p>
+<p>&lt;img alt="openclaw-skills" src="https://raw.githubusercontent.com/kexiZeroing/blog-images/main/openclaw-skills.png" width="600"&gt;</p>
+<p>ClawHub is the public skills registry for OpenClaw. Browse at https://clawhub.ai.</p>
+<h2>Memory</h2>
+<p>OpenClaw memory is plain Markdown in the agent workspace. The files are the source of truth; the model only “remembers” what gets written to disk.</p>
+<p>The default workspace layout uses two memory layers:</p>
+<ul>
+<li><code>memory/YYYY-MM-DD.md</code>: Daily log (append-only). Read today + yesterday at session start.</li>
+<li><code>MEMORY.md</code>: Curated long-term memory. Only load in the main, private session.</li>
+</ul>
+<p>If someone says “remember this,” write it down (do not keep it in RAM). This area is still evolving. It helps to remind the model to store memories; it will know what to do. If you want something to stick, ask the bot to write it into memory.</p>
+<pre><code>MEMORY.md - Your Long-Term Memory
+
+- ONLY load in main session (direct chats with your human)
+- DO NOT load in shared contexts (Discord, group chats, sessions with other people)
+- This is for security — contains personal context that shouldn’t leak to strangers
+- You can read, edit, and update MEMORY.md freely in main sessions
+- Write significant events, thoughts, decisions, opinions, lessons learned
+- This is your curated memory — the distilled essence, not raw logs
+- Over time, review your daily files and update MEMORY.md with what’s worth keeping
+</code></pre>

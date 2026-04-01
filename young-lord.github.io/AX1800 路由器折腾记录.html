@@ -1,0 +1,281 @@
+<h2><a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/_posts/2026-02-25-AX1800%E8%B7%AF%E7%94%B1%E5%99%A8%E6%8A%98%E8%85%BE%E8%AE%B0%E5%BD%95.md">仓库源文</a>，<a href="https://young-lord.github.io/posts/ax1800">站点原文</a></h2>
+<h2>开启并固化ssh</h2>
+<p><a href="https://www.cnblogs.com/ls11736/p/18554493">参考其它教程</a>。</p>
+<h2>自动重启</h2>
+<p>每天 4:30 自动重启。</p>
+<pre><code class="language-console">$ vi /userdisk/auto_reboot.sh
+echo "[$(date)] Doing auto reboot" &gt;&gt; /userdisk/reboot.log
+/sbin/reboot
+$ chmod +x /userdisk/auto_reboot.sh
+$ crontab -e
+30 4 * * * /userdisk/auto_reboot.sh
+</code></pre>
+<h2>端口映射</h2>
+<p>目标：公网访问 29182 -&gt; 22，29188 -&gt; 80，支持 IPv4 / IPv6。</p>
+<p>结果：</p>
+<ul>
+<li>IPv6：教育网内外均可使用<code>2001:dA8:8000::/48</code>与<code>2403:d400::/32</code>下的 IPv6 地址访问。</li>
+<li>IPv4：交大校园网内可使用<code>111.186.0.0/19</code>下的 IPv4 地址访问，非交大校园网不可访问。</li>
+</ul>
+<h3>配置</h3>
+<h4>允许路由器管理员页面接受外部连接</h4>
+<pre><code class="language-console">$ vi /etc/nginx/miwifi-webinitrd.conf
+找到 set $finalvar "$canproxy $isluci";
+在它的上一句插入 set $isluci "1";
+</code></pre>
+<h4>IPv4</h4>
+<p>插入<code>/etc/config/firewall</code>末尾：</p>
+<pre><code class="language-plaintext">config redirect 'MIWEBATWAN'
+        option src 'wan'
+        option src_dport '29188'
+        option target 'DNAT'
+        option dest_port '80'
+        option proto 'tcp'
+
+config redirect 'MISSHATWAN'
+        option src 'wan'
+        option src_dport '29182'
+        option target 'DNAT'
+        option dest_port '22'
+        option proto 'tcp'
+</code></pre>
+<p>重启防火墙：</p>
+<pre><code class="language-shell">/etc/init.d/firewall restart
+</code></pre>
+<h4>IPv6</h4>
+<p>为nginx补充IPv6上的监听：</p>
+<pre><code>$ vi /etc/nginx/nginx.conf
+listen       80;
+listen       [::]:80;
+listen       8098;
+listen       [::]:8098;
+$ /usr/sbin/nginx -s reload
+</code></pre>
+<p>如果希望映射后的端口和本机监听的端口一致，直接将下面两条规则加入<code>/etc/config/firewall</code>即可。</p>
+<pre><code class="language-plaintext">config rule
+    option name 'Allow-IPv6-HTTP'
+    option src 'wan'
+    option dest_port '80'
+    option proto 'tcp'
+    option family 'ipv6'
+    option target 'ACCEPT'
+
+config rule
+    option name 'Allow-IPv6-SSH'
+    option src 'wan'
+    option dest_port '22'
+    option proto 'tcp'
+    option family 'ipv6'
+    option target 'ACCEPT'
+</code></pre>
+<p>否则，不要添加以上两条规则，而是使用ip6tables命令手动实现转发。</p>
+<pre><code class="language-console">$ vi /etc/firewall.user
+
+# 清理
+ip6tables -t mangle -D PREROUTING -p tcp --dport 29188 -j MARK --set-mark 0x80 2&gt;/dev/null
+ip6tables -t nat -D PREROUTING -p tcp --dport 29188 -j REDIRECT --to-ports 80 2&gt;/dev/null
+ip6tables -D input_rule -p tcp --dport 80 -m mark --mark 0x80 -j ACCEPT 2&gt;/dev/null
+
+# 在包进入 NAT 前打上 0x80 的内核标记
+ip6tables -t mangle -I PREROUTING -p tcp --dport 29188 -j MARK --set-mark 0x80
+# 执行端口转发
+ip6tables -t nat -I PREROUTING -p tcp --dport 29188 -j REDIRECT --to-ports 80
+# 在 INPUT 链仅放行带有 0x80 标记的发往 80 端口的包
+ip6tables -I input_rule -p tcp --dport 80 -m mark --mark 0x80 -j ACCEPT
+
+
+ip6tables -t mangle -D PREROUTING -p tcp --dport 29182 -j MARK --set-mark 0x22 2&gt;/dev/null
+ip6tables -t nat -D PREROUTING -p tcp --dport 29182 -j REDIRECT --to-ports 22 2&gt;/dev/null
+ip6tables -D input_rule -p tcp --dport 22 -m mark --mark 0x22 -j ACCEPT 2&gt;/dev/null
+
+ip6tables -t mangle -I PREROUTING -p tcp --dport 29182 -j MARK --set-mark 0x22
+ip6tables -t nat -I PREROUTING -p tcp --dport 29182 -j REDIRECT --to-ports 22
+ip6tables -I input_rule -p tcp --dport 22 -m mark --mark 0x22 -j ACCEPT
+</code></pre>
+<p>两种方案完成后均要<code>/etc/init.d/firewall restart</code>。</p>
+<h2>端口映射（内网设备）</h2>
+<p>目标：通过内网设备分配到的<code>2403:d400::/32</code>下的 IPv6 地址，从教育网内外访问路由器下设备。支持更改转发前后的端口号。</p>
+<pre><code class="language-console">$ vi /etc/firewall.user
+
+## 只允许特定 IP / 协议 / 端口 的入站连接
+# ip6tables -D forwarding_rule -d 2403:d400:1400:1234::123 -p tcp --dport 22 -j ACCEPT
+# ip6tables -I forwarding_rule -d 2403:d400:1400:1234::123 -p tcp --dport 22 -j ACCEPT
+
+## 允许所有 IPv6 的入站连接
+# ip6tables -D forwarding_rule -j ACCEPT 2&gt;/dev/null
+# ip6tables -I forwarding_rule -j ACCEPT 2&gt;/dev/null
+
+## 更改转发前后的端口号
+# ip6tables -t nat -D PREROUTING -d 2403:d400:1400:1234::123 -p tcp --dport 33322 -j DNAT --to-destination [2403:d400:1400:1234::123]:22 2&gt;/dev/null
+# ip6tables -t nat -I PREROUTING -d 2403:d400:1400:1234::123 -p tcp --dport 33322 -j DNAT --to-destination [2403:d400:1400:1234::123]:22
+## 放行流量。由于 NAT 转换发生在路由之前，所以这里要放行的是“转换后”的真实内部端口（22）
+# ip6tables -D forwarding_rule -d 2403:d400:1400:1234::123 -p tcp --dport 22 -j ACCEPT 2&gt;/dev/null
+# ip6tables -I forwarding_rule -d 2403:d400:1400:1234::123 -p tcp --dport 22 -j ACCEPT
+</code></pre>
+<p>随后<code>/etc/init.d/firewall restart</code>。</p>
+<h2>DDNS</h2>
+<p>也就是用 Cloudflare API 定期更新 DNS 记录。由于当前网络环境下 IP 地址基本固定，暂时不设置。</p>
+<h2>自动给iOS应用续签</h2>
+<p>参考资料：<a href="https://lantian.pub/article/modify-computer/sidestore-without-stosvpn-across-lan.lantian/">在内网中免 StosVPN 使用 SideStore</a></p>
+<pre><code class="language-console">$ vi /etc/firewall.user
+IPAD_IP=192.168.31.111
+SIDESTORE_FAKE_IP=10.7.0.1
+LANIF=br-lan
+
+# 1) 把 iPad -&gt; 10.7.0.1 的包，目的改成 iPad 自己（掉头回 LAN）
+iptables -t nat -I PREROUTING 1 -i "$LANIF" -s "$IPAD_IP" -d "$SIDESTORE_FAKE_IP" -j DNAT --to-destination "$IPAD_IP"
+# 2) 让回注给 iPad 的包“看起来来自 10.7.0.1”
+iptables -t nat -I POSTROUTING 1 -o "$LANIF" -s "$IPAD_IP" -d "$IPAD_IP" -j SNAT --to-source "$SIDESTORE_FAKE_IP"
+# 并不需要：允许路由器把包从 LAN 转发回 LAN
+# iptables -I FORWARD 1 -i "$LANIF" -o "$LANIF" -s "$IPAD_IP" -d "$IPAD_IP" -j ACCEPT
+
+
+$ vi /userdisk/tcpdump_start.sh
+#!/bin/sh
+
+IFACE="br-lan"
+FILTER="host 19.260.8.17"
+PIDFILE="/tmp/tcpdump_br-lan_19.260.8.17.pid"
+
+# 如果已经在跑，先退出（避免重复启动）
+if [ -f "$PIDFILE" ] &amp;&amp; kill -0 "$(cat "$PIDFILE" 2&gt;/dev/null)" 2&gt;/dev/null; then
+  exit 0
+fi
+
+# 启动 tcpdump（不落盘）
+tcpdump -ni "$IFACE" -s 0 -w /dev/null "$FILTER" &gt;/dev/null 2&gt;/dev/null &amp;
+
+echo $! &gt; "$PIDFILE"
+exit 0
+
+
+$ vi /userdisk/tcpdump_stop.sh
+#!/bin/sh
+
+PIDFILE="/tmp/tcpdump_br-lan_19.260.8.17.pid"
+
+if [ -f "$PIDFILE" ]; then
+  PID="$(cat "$PIDFILE" 2&gt;/dev/null)"
+  if [ -n "$PID" ] &amp;&amp; kill -0 "$PID" 2&gt;/dev/null; then
+    kill "$PID" 2&gt;/dev/null
+    sleep 1
+    kill -9 "$PID" 2&gt;/dev/null
+  fi
+  rm -f "$PIDFILE"
+fi
+exit 0
+
+
+$ chmod +x /userdisk/tcpdump_start.sh
+$ chmod +x /userdisk/tcpdump_stop.sh
+
+$ /etc/init.d/firewall restart
+</code></pre>
+<p>观察者效应，很神奇吧——神奇***。</p>
+<p>至于开关tcpdump的方案，考虑过两种：</p>
+<h3>方案一：定时执行（不推荐）</h3>
+<pre><code class="language-console">$ crontab -e
+55 2 * * * /userdisk/tcpdump_start.sh
+15 3 * * * /userdisk/tcpdump_stop.sh
+$ /etc/init.d/cron restart
+</code></pre>
+<p>再在移动设备上用快捷指令，每天 3:00 Refresh All Apps 就可以了。</p>
+<h3>方案二：通过HTTP开关</h3>
+<p>优点是更灵活（可以随时开关），缺点是显著增大攻击面。</p>
+<pre><code class="language-console">$ vi /userdisk/cgi_cmdexec.sh
+#!/bin/ash
+
+# curl "http://192.168.31.1/pathasd?token=password&amp;cmd=uptime"
+
+# --- 配置区 ---
+STATIC_TOKEN="password"
+
+# 1. 白名单定义：利用 ash 原生的 case 语法进行完全匹配
+# 支持带空格的命令、管道符，甚至多条命令（只要在这里完整定义即可）
+check_whitelist() {
+    case "$1" in
+        "/userdisk/tcpdump_start.sh" | \
+        "/userdisk/tcpdump_stop.sh" \
+         )
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# --- 解析与解码逻辑 ---
+# 2. 稳健提取参数：利用 awk 按 '&amp;' 分割键值对，避免 sed 匹配错乱
+TOKEN_REQ=$(echo "$QUERY_STRING" | awk -v RS='&amp;' -F'=' '$1=="token" {print $2; exit}')
+CMD_REQ_ENC=$(echo "$QUERY_STRING" | awk -v RS='&amp;' -F'=' '$1=="cmd" {print $2; exit}')
+
+# 3. URL 解码：将 '+' 替换为空格，'%' 替换为 '\x'，然后交由 printf 解析为字符
+# 这样可以完美还原像 "df%20-h" 这样的带空格命令
+if [ -n "$CMD_REQ_ENC" ]; then
+    CMD_REQ=$(printf '%b' "$(echo "$CMD_REQ_ENC" | sed 's/+/ /g; s/%/\\x/g')")
+else
+    CMD_REQ=""
+fi
+
+# --- 执行逻辑 ---
+# 4. 验证鉴权
+if [ "$TOKEN_REQ" != "$STATIC_TOKEN" ]; then
+    echo "Status: 401 Unauthorized"
+    echo "Content-Type: text/plain"
+    echo
+    echo "Unauthorized"
+    exit 0
+fi
+
+echo "Status: 200 OK"
+echo "Content-Type: text/plain"
+echo
+
+# 5. 验证白名单并执行
+if check_whitelist "$CMD_REQ"; then
+    # 因为前面已经进行了极其严格的、全字符串的 case 匹配，
+    # 这里的 eval 是绝对安全的，并且 eval 能原生支持你在白名单里定义的管道(|)或重定向(&gt;)
+    eval "$CMD_REQ 2&gt;&amp;1"
+else
+    echo "Error: Forbidden command or no command specified."
+    echo "Current requested command: [$CMD_REQ]"
+fi
+
+
+$ cat /etc/nginx/nginx.conf
+# ...
+location ~* /cgi-bin/luci.* {
+    root /www;
+    fastcgi_pass  127.0.0.1:8920;
+    fastcgi_index /cgi-bin/luci;
+
+    fastcgi_split_path_info  (/cgi-bin/luci)(.*)$;
+    fastcgi_param PATH_INFO $fastcgi_path_info;
+    fastcgi_param SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+    include fastcgi_params;
+}
+
+# 在此后添加：
+location = /pathasd {
+    include fastcgi_params;
+
+    fastcgi_param SCRIPT_FILENAME /userdisk/cgi_cmdexec.sh;
+    fastcgi_param QUERY_STRING $query_string;
+    fastcgi_param REQUEST_METHOD $request_method;
+
+    fastcgi_pass 127.0.0.1:8920;
+}
+
+
+$ chmod 755 /userdisk/cgi_cmdexec.sh
+$ /etc/init.d/nginx restart
+</code></pre>
+<p>再在移动设备上用快捷指令，每天 3:00 Refresh All Apps，执行前后分别<code>Get contents of http://192.168.31.1/pathasd?token=password&amp;cmd=/userdisk/tcpdump_&lt;start|stop&gt;.sh</code>就可以了。</p>
+<div class="license">
+  <p>本文遵守 <a itemprop="license" rel="license" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA-4.0</a> 许可协议。<a href="https://github.com/Young-Lord/Young-Lord.github.io/blob/master/README.md#%E5%A3%B0%E6%98%8E">（不允许转载至简书或 CSDN）</a>
+    <a rel="license" aria-label="详细了解协议内容" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+<!--        <img alt="CC BY-NC-SA-4.0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" />-->
+    </a>
+  </p>
+</div>

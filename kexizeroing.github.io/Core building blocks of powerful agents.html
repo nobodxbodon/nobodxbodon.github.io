@@ -1,0 +1,682 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/core-building-blocks-of-powerful-agents.md">仓库源文</a>，<a href="https://kexizeroing.github.io/core-building-blocks-of-powerful-agents">站点原文</a></h2>
+<p>Learn from the links below (all from Nader Dabit) if you’re curious about what’s happening underneath these powerful agents.</p>
+<ul>
+<li>You Could've Invented OpenClaw: https://gist.github.com/dabit3/bc60d3bea0b02927995cd9bf53c3db32</li>
+<li>You Could've Invented Claude Code: https://gist.github.com/dabit3/f390e6b06d9a682bf1b05c2405d15edb</li>
+<li>Building AI agents with the Claude Agent SDK: https://gist.github.com/dabit3/93a5afe8171753d0dbfd41c80033171d</li>
+</ul>
+<blockquote>
+<p>You might find it helpful to read this in parallel with my previous post <a href="https://kexizeroing.github.io/post/notes-on-ai-sdk/">"Notes on AI SDK (building agents)"</a></p>
+</blockquote>
+<h2>Session Management</h2>
+<pre><code class="language-ts">const SESSIONS_DIR = path.join(WORKSPACE, "sessions");
+
+function getSessionPath(sessionKey: string): string {
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+  return path.join(SESSIONS_DIR, `${sessionKey}.jsonl`);
+}
+
+function loadSession(sessionKey: string): Message[] {
+  const filePath = getSessionPath(sessionKey);
+  const messages: Message[] = [];
+  if (fs.existsSync(filePath)) {
+    const lines = fs.readFileSync(filePath, "utf-8").split("\n");
+    for (const line of lines) {
+      if (line.trim()) {
+        try {
+          messages.push(JSON.parse(line));
+        } catch {
+          // skip malformed lines
+        }
+      }
+    }
+  }
+  return messages;
+}
+
+function appendMessage(sessionKey: string, message: Message): void {
+  fs.appendFileSync(getSessionPath(sessionKey), JSON.stringify(message) + "\n");
+}
+
+function saveSession(sessionKey: string, messages: Message[]): void {
+  fs.writeFileSync(
+    getSessionPath(sessionKey),
+    messages.map((m) =&gt; JSON.stringify(m)).join("\n") + "\n",
+  );
+}
+</code></pre>
+<blockquote>
+<p>JSONL (JSON Lines) is a text-based data format where each line represents a valid JSON object, making it ideal for storing structured data records.</p>
+<pre><code class="language-json">{"name": "John Doe", "age": 30, "city": "New York"}
+{"name": "Jane Smith", "age": 25, "city": "San Francisco"}
+{"name": "Bob Johnson", "age": 35, "city": "Chicago"}
+</code></pre>
+</blockquote>
+<h2>Permission Controls</h2>
+<pre><code class="language-ts">const SAFE_COMMANDS = new Set([
+  "ls",
+  "cat",
+  "head",
+  "tail",
+  "echo",
+  "pwd",
+  "git",
+  "node",
+  "npm",
+]);
+const APPROVALS_FILE = path.join(WORKSPACE, "exec-approvals.json");
+
+function loadApprovals(): Approvals {
+  if (fs.existsSync(APPROVALS_FILE)) {
+    return JSON.parse(fs.readFileSync(APPROVALS_FILE, "utf-8"));
+  }
+  return { allowed: [], denied: [] };
+}
+
+function saveApproval(command: string, approved: boolean): void {
+  const approvals = loadApprovals();
+  const key = approved ? "allowed" : "denied";
+
+  if (!approvals[key].includes(command)) {
+    approvals[key].push(command);
+  }
+  fs.writeFileSync(APPROVALS_FILE, JSON.stringify(approvals, null, 2));
+}
+
+function checkCommandSafety(
+  command: string,
+): "safe" | "approved" | "needs_approval" {
+  const baseCmd = command.trim().split(/\s+/)[0] || "";
+
+  if (SAFE_COMMANDS.has(baseCmd)) return "safe";
+
+  const approvals = loadApprovals();
+  if (approvals.allowed.includes(command)) return "approved";
+
+  return "needs_approval";
+}
+</code></pre>
+<h2>Tool Execution</h2>
+<pre><code class="language-ts">const TOOLS = [
+  {
+    name: "run_command",
+    description: "Run a shell command",
+    input_schema: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "The command to run" },
+      },
+      required: ["command"],
+    },
+  },
+  {
+    name: "read_file",
+    description: "Read a file from the filesystem",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path to the file" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "write_file",
+    description: "Write content to a file (creates directories if needed)",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path to the file" },
+        content: { type: "string", description: "Content to write" },
+      },
+      required: ["path", "content"],
+    },
+  },
+  {
+    name: "save_memory",
+    description: "Save important information to long-term memory",
+    input_schema: {
+      type: "object",
+      properties: {
+        key: {
+          type: "string",
+          description: "Short label (e.g. 'user-preferences')",
+        },
+        content: {
+          type: "string",
+          description: "The information to remember",
+        },
+      },
+      required: ["key", "content"],
+    },
+  },
+  {
+    name: "memory_search",
+    description: "Search long-term memory for relevant information",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What to search for" },
+      },
+      required: ["query"],
+    },
+  },
+];
+
+async function executeTool(
+  name: string,
+  toolInput: Record&lt;string, string&gt;,
+): Promise&lt;string&gt; {
+  if (name === "run_command") {
+    const cmd = toolInput.command;
+    const safety = checkCommandSafety(cmd);
+
+    if (safety === "needs_approval") {
+      process.stdout.write(`\n Warning: Command requires approval: ${cmd}\n`);
+      const answer = await prompt("  Allow? (y/n): ");
+      if (answer.trim().toLowerCase() !== "y") {
+        saveApproval(cmd, false);
+        return "Permission denied by user.";
+      }
+      saveApproval(cmd, true);
+    }
+
+    try {
+      const { stdout, stderr } = await execAsync(cmd, { timeout: 30000 });
+      const output = stdout + stderr;
+      return output || "(no output)";
+    } catch (e: unknown) {
+      if (e instanceof Error &amp;&amp; e.message.includes("timed out")) {
+        return "Command timed out after 30 seconds";
+      }
+      return `Error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  if (name === "read_file") {
+    try {
+      return fs.readFileSync(toolInput.path, "utf-8");
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  if (name === "write_file") {
+    try {
+      // First ensure dirs exist, then write file
+      fs.mkdirSync(path.dirname(toolInput.path), { recursive: true });
+      fs.writeFileSync(toolInput.path, toolInput.content, "utf-8");
+      return `Wrote to ${toolInput.path}`;
+    } catch (e) {
+      return `Error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  // long-term memory tools
+  if (name === "save_memory") {
+    fs.mkdirSync(MEMORY_DIR, { recursive: true });
+    const filepath = path.join(MEMORY_DIR, `${toolInput.key}.md`);
+    fs.writeFileSync(filepath, toolInput.content, "utf-8");
+    return `Saved to memory: ${toolInput.key}`;
+  }
+
+  if (name === "memory_search") {
+    const query = toolInput.query.toLowerCase();
+    const results: string[] = [];
+    if (fs.existsSync(MEMORY_DIR)) {
+      for (const fname of fs.readdirSync(MEMORY_DIR)) {
+        if (fname.endsWith(".md")) {
+          const content = fs.readFileSync(
+            path.join(MEMORY_DIR, fname),
+            "utf-8",
+          );
+          const words = query.split(/\s+/);
+          if (words.some((w) =&gt; content.toLowerCase().includes(w))) {
+            results.push(`--- ${fname} ---\n${content}`);
+          }
+        }
+      }
+    }
+    return results.length
+      ? results.join("\n\n")
+      : "No matching memories found.";
+  }
+
+  return `Unknown tool: ${name}`;
+}
+</code></pre>
+<blockquote>
+<p>Using <code>{ recursive: true }</code>: Without it, <code>mkdirSync</code> throws an error if the directory already exists (<code>EEXIST</code>), or any parent directory in the path doesn't exist yet (<code>ENOENT</code>). So it silently succeeds in both cases — same behavior as <code>mkdir -p</code> in bash.</p>
+</blockquote>
+<h2>Compaction</h2>
+<pre><code class="language-ts">function estimateTokens(messages: Message[]): number {
+  // Rough token estimate: ~4 chars per token
+  return messages.reduce((sum, m) =&gt; sum + JSON.stringify(m).length, 0) / 4;
+}
+
+async function compactSession(
+  sessionKey: string,
+  messages: Message[],
+): Promise&lt;Message[]&gt; {
+  // ~80% of a 128k window
+  if (estimateTokens(messages) &lt; 100_000) return messages;
+
+  const split = Math.floor(messages.length / 2);
+  const old = messages.slice(0, split);
+  const recent = messages.slice(split);
+
+  process.stdout.write("\nCompacting session history...\n");
+
+  const summary = await client.messages.create({
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 2000,
+    messages: [
+      {
+        role: "user",
+        content:
+          "Summarize this conversation concisely. Preserve key facts, " +
+          "decisions, and open tasks:\n\n" +
+          JSON.stringify(old, null, 2),
+      },
+    ],
+  });
+
+  const summaryText =
+    summary.content[0].type === "text" ? summary.content[0].text : "";
+
+  const compacted: Message[] = [
+    {
+      role: "user",
+      content: `[Conversation summary]\n${summaryText}`,
+    },
+    ...recent,
+  ];
+
+  saveSession(sessionKey, compacted);
+  return compacted;
+}
+</code></pre>
+<h2>Adding a Personality (SOUL.md)</h2>
+<pre><code class="language-ts">// A markdown file that defines the agent's identity, behavior, and boundaries.
+const SOUL = `
+# Who You Are
+
+**Name:** Jarvis
+**Role:** Personal AI assistant
+
+## Personality
+- Be genuinely helpful, not performatively helpful
+- Skip the "Great question!" - just help
+- Have opinions. You're allowed to disagree
+- Be concise when needed, thorough when it matters
+
+## Boundaries
+- Private things stay private
+- When in doubt, ask before acting externally
+- You're not the user's voice - be careful about sending messages on their behalf
+
+## Memory
+Remember important details from conversations.
+Write them down if they matter.
+`;
+</code></pre>
+<h2>Multi-Agent Routing</h2>
+<pre><code class="language-ts">function resolveAgent(messageText: string): [string, string] {
+  // Route messages to the right agent based on prefix commands
+  if (messageText.startsWith("/research ")) {
+    return ["researcher", messageText.slice("/research ".length)];
+  }
+  return ["main", messageText];
+}
+
+const AGENTS: Record&lt;string, AgentConfig&gt; = {
+  main: {
+    name: "Jarvis",
+    model: "claude-sonnet-4-5-20250929",
+    // Adding a Personality (SOUL.md)
+    soul: ["You are Jarvis, a personal AI assistant.", "..."].join("\n"),
+    session_prefix: "agent:main",
+  },
+  researcher: {
+    name: "Scout",
+    model: "claude-sonnet-4-5-20250929",
+    soul: [
+      "You are Scout, a research specialist.",
+      "Your job: find information and cite sources. Every claim needs evidence.",
+      "Use tools to gather data. Be thorough but concise.",
+      "Save important findings with save_memory for other agents to reference.",
+    ].join("\n"),
+    session_prefix: "agent:researcher",
+  },
+};
+</code></pre>
+<h2>Agent Loop</h2>
+<pre><code class="language-ts">async function runAgentTurn(
+  sessionKey: string,
+  userText: string,
+  agentConfig: AgentConfig,
+): Promise&lt;string&gt; {
+  let messages = loadSession(sessionKey);
+  messages = await compactSession(sessionKey, messages);
+
+  const userMsg: Message = { role: "user", content: userText };
+  messages.push(userMsg);
+  appendMessage(sessionKey, userMsg);
+
+  for (let i = 0; i &lt; 20; i++) {
+    // Call the AI with full history
+    const response = await client.messages.create({
+      model: agentConfig.model,
+      max_tokens: 4096,
+      system: agentConfig.soul,
+      tools: TOOLS,
+      messages,
+    });
+
+    const content = serializeContent(response.content);
+    const assistantMsg: Message = { role: "assistant", content };
+    messages.push(assistantMsg);
+    appendMessage(sessionKey, assistantMsg);
+
+    if (response.stop_reason === "end_turn") {
+      return response.content
+        .filter((b): b is Anthropic.TextBlock =&gt; b.type === "text")
+        .map((b) =&gt; b.text)
+        .join("");
+    }
+
+    if (response.stop_reason === "tool_use") {
+      const toolResults: ToolResultBlock[] = [];
+
+      for (const block of response.content) {
+        if (block.type === "tool_use") {
+          const inputStr = JSON.stringify(block.input).slice(0, 100);
+          process.stdout.write(`Tool ${block.name}: ${inputStr}\n`);
+          const result = await executeTool(
+            block.name,
+            block.input as Record&lt;string, string&gt;,
+          );
+
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: String(result),
+          });
+        }
+      }
+
+      const resultsMsg: Message = { role: "user", content: toolResults };
+      messages.push(resultsMsg);
+      appendMessage(sessionKey, resultsMsg);
+    }
+  }
+
+  return "(max turns reached)";
+}
+</code></pre>
+<h2>Cron / Heartbeats</h2>
+<pre><code class="language-ts">import * as schedule from "node-schedule";
+
+function setupHeartbeats(): void {
+  // Every day at 07:30
+  schedule.scheduleJob("30 7 * * *", async () =&gt; {
+    process.stdout.write("\nHeartbeat: morning check\n");
+    try {
+      const result = await runAgentTurn(
+        "cron:morning-check",
+        "Good morning! Check today's date and give me a motivational quote.",
+        AGENTS.main,
+      );
+      process.stdout.write(`${result}\n\n`);
+    } catch (e) {
+      console.error("Heartbeat error:", e);
+    }
+  });
+}
+</code></pre>
+<h2>Skills</h2>
+<pre><code class="language-ts">/**
+ * Two-layer skill injection:
+ *   Layer 1 (cheap)     — skill names/descriptions baked into the system prompt
+ *   Layer 2 (on demand) — full SKILL.md body returned as a tool_result when the
+ *                         model calls load_skill("name")
+ */
+
+interface SkillMeta {
+  name?: string;
+  description?: string;
+  tags?: string;
+}
+
+interface Skill {
+  meta: SkillMeta;
+  body: string;
+  filePath: string;
+}
+
+class SkillLoader {
+  private skills: Map&lt;string, Skill&gt; = new Map();
+
+  constructor(private skillsDir: string) {
+    this.loadAll();
+  }
+
+  /** Recursively find every SKILL.md and parse it. */
+  private loadAll(): void {
+    if (!fs.existsSync(this.skillsDir)) return;
+
+    const findSkillFiles = (dir: string): string[] =&gt; {
+      const results: string[] = [];
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          results.push(...findSkillFiles(full));
+        } else if (entry.name === "SKILL.md") {
+          results.push(full);
+        }
+      }
+      return results;
+    };
+
+    for (const filePath of findSkillFiles(this.skillsDir).sort()) {
+      const text = fs.readFileSync(filePath, "utf-8");
+      const { meta, body } = this.parseFrontmatter(text);
+      const name = meta.name ?? path.basename(path.dirname(filePath));
+      this.skills.set(name, { meta, body, filePath });
+    }
+  }
+
+  /** Layer 1 — short descriptions for the system prompt.
+   *
+   * Example output:
+   *   - pdf: Process PDF files [files]
+   *   - code-review: Review code quality
+   */
+  getDescriptions(): string {
+    if (this.skills.size === 0) return "(no skills available)";
+    return [...this.skills.entries()]
+      .map(([name, skill]) =&gt; {
+        const desc = skill.meta.description ?? "No description";
+        const tags = skill.meta.tags ? ` [${skill.meta.tags}]` : "";
+        return `  - ${name}: ${desc}${tags}`;
+      })
+      .join("\n");
+  }
+
+  /** Layer 2 — full body returned inside a tool_result. */
+  getContent(name: string): string {
+    const skill = this.skills.get(name);
+    if (!skill) {
+      const available = [...this.skills.keys()].join(", ");
+      return `Error: Unknown skill '${name}'. Available: ${available}`;
+    }
+    return `&lt;skill name="${name}"&gt;\n${skill.body}\n&lt;/skill&gt;`;
+  }
+}
+
+const skillLoader = new SkillLoader(path.join(WORKDIR, "skills"));
+
+const systemPrompt = `You are a coding agent at ${WORKDIR}.
+Use load_skill to access specialized knowledge before tackling unfamiliar topics.
+
+Skills available:
+${skillLoader.getDescriptions()}`;
+
+const TOOLS = [
+  // ... other tools
+  {
+    name: "load_skill",
+    description: "Load full instructions for a named skill before using it.",
+    input_schema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+];
+
+const TOOL_HANDLERS = {
+  // ... other handlers
+  load_skill: ({ name }) =&gt; skillLoader.getContent(name),
+};
+</code></pre>
+<h2>Claude Agent SDK</h2>
+<p>If you've built agents with the raw API, you know the pattern: call the model, check if it wants to use a tool, execute the tool, feed the result back, repeat until done. This can get tedious when building anything non-trivial. The SDK handles that loop:</p>
+<pre><code class="language-ts">// Without the SDK: You manage the loop
+let response = await client.messages.create({...});
+while (response.stop_reason === "tool_use") {
+  const result = yourToolExecutor(response.tool_use);
+  response = await client.messages.create({ tool_result: result, ... });
+}
+
+// With the SDK: Claude manages it
+// https://platform.claude.com/docs/en/agent-sdk/typescript
+for await (const message of query({
+  prompt: "...",
+  options: {
+    model: "claude-opus-4-5-20251101",
+    // Build-in tools: Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch
+    allowedTools: ["Read", "Glob", "Grep"],
+    // No prompts (use with caution)
+    permissionMode: "bypassPermissions",
+    // Maximum number of back-and-forth turns before stopping
+    maxTurns: 250,
+    // Structured output
+    // outputFormat: {
+    //   type: "json_schema",
+    //   schema: {
+    //     type: "object",
+    //     properties: {
+    //       action: { type: "string" },
+    //       details: { type: "object" }
+    //     },
+    //     required: ["action"]
+    //   }
+    // },
+    // Subagents
+    // agents: {
+    //   "security-reviewer": {
+    //     description: "...",
+    //     prompt: "...",
+    //       tools: ["Read", "Grep", "Glob"],
+    //       model: "sonnet"
+    //   } as AgentDefinition,
+    //   "test-analyzer": {
+    //     description: "...",
+    //     prompt: "...",
+    //       tools: ["Read", "Grep", "Glob"],
+    //       model: "haiku"
+    //   } as AgentDefinition
+    // }
+  },
+})) {
+  switch (message.type) {
+    case "system":
+      if (message.subtype === "init") {
+        console.log("Session ID:", message.session_id);
+        console.log("Available tools:", message.tools);
+      }
+      break;
+
+    case "assistant":
+      for (const block of message.message.content) {
+        if ("text" in block) {
+          console.log(block.text);
+        } else if ("name" in block) {
+          console.log(`Using tool: ${block.name}`);
+        }
+      }
+      break;
+
+    case "result":
+      console.log("Status:", message.subtype);
+      console.log("Total cost:", message.total_cost_usd);
+      console.log("Token usage:", message.usage);
+      break;
+  }
+}
+</code></pre>
+<h2>Adding custom tools with MCP</h2>
+<pre><code class="language-ts">import {
+  query,
+  tool,
+  createSdkMcpServer,
+} from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+
+const customServer = createSdkMcpServer({
+  name: "code-metrics",
+  version: "1.0.0",
+  tools: [
+    // Define a custom tool
+    // Arguments: name, description, input schema, handler function
+    tool(
+      "analyze_complexity",
+      "Calculate cyclomatic complexity for a file",
+      {
+        filePath: z.string().describe("Path to the file to analyze"),
+      },
+      async (args) =&gt; {
+        const complexity = Math.floor(Math.random() * 20);
+        // Return format required by MCP - array of content blocks
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Cyclomatic complexity for ${args.filePath}: ${complexity}`,
+            },
+          ],
+        };
+      },
+    ),
+  ],
+});
+
+async function analyzeCode(filePath: string) {
+  for await (const message of query({
+    prompt: `Analyze the complexity of ${filePath}`,
+    options: {
+      model: "opus",
+      // Register the custom MCP server
+      mcpServers: {
+        "code-metrics": customServer,
+      },
+      // MCP tools follow the pattern: mcp__&lt;server-name&gt;__&lt;tool-name&gt;
+      allowedTools: ["Read", "mcp__code-metrics__analyze_complexity"],
+      maxTurns: 50,
+    },
+  })) {
+    if (message.type === "assistant") {
+      for (const block of message.message.content) {
+        if ("text" in block) {
+          console.log(block.text);
+        }
+      }
+    }
+
+    if (message.type === "result") {
+      console.log("Done:", message.subtype);
+    }
+  }
+}
+</code></pre>

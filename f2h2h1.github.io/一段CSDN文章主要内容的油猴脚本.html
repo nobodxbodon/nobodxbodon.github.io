@@ -1,10 +1,10 @@
-<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/一段CSDN文章主要内容的油猴脚本.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/一段CSDN文章主要内容的油猴脚本">站点原文</a></h2>
+<h2><a href="https://github.com/f2h2h1/f2h2h1.github.io/blob/master/article/%E4%B8%80%E6%AE%B5CSDN%E6%96%87%E7%AB%A0%E4%B8%BB%E8%A6%81%E5%86%85%E5%AE%B9%E7%9A%84%E6%B2%B9%E7%8C%B4%E8%84%9A%E6%9C%AC.md">仓库源文</a>，<a href="https://f2h2h1.github.io/article/%E4%B8%80%E6%AE%B5CSDN%E6%96%87%E7%AB%A0%E4%B8%BB%E8%A6%81%E5%86%85%E5%AE%B9%E7%9A%84%E6%B2%B9%E7%8C%B4%E8%84%9A%E6%9C%AC">站点原文</a></h2>
 <h1>一段获取CSDN文章主要内容的油猴脚本</h1>
 <p>只保留了，标题，作者，正文，其它内容全都删除；
 允许复制；
 可以直接复制到控制台里使用；
 但不能应对需要登录才可以查看的情况</p>
-<pre><code class="lang-javascript">
+<pre><code class="language-javascript">
 // ==UserScript==
 // @name         csdn 只保留文章内容
 // @namespace    http://tampermonkey.net/
@@ -17,7 +17,7 @@
 
 (function() {
     'use strict';
-    // 2025-12-05
+    // 2026-01-05
 
     // 按 xpath 删除节点
     function delByXpath(xpath) {
@@ -35,16 +35,13 @@
     }
 
     // 删除页面内 meta 和 script 标签
-    delByXpath('//meta | //script | //iframe | //link[@rel != "stylesheet"]');
+    // delByXpath('//meta | //script | //iframe | //link[@rel != "stylesheet"]');
     // 一般还需要删除一些无用的图片，csdn的文章很喜欢在开头或结尾加一些没有用的图片
 
-    // delByXpath('//meta | //script | //iframe | //link | //style');
-    /*
-        把所有样式都删除，以后有空再研究吧
-        图片 max-width:90%
-        code padding:10px
-        blockquote 行内code 表格 也需要修改样式
-    */
+    delByXpath('//meta | //script | //iframe | //link | //style');
+    delByXpath('//descendant::div[contains(@class,"article-header")]/descendant::div[contains(@class,"up-time")]');
+    // 正文中还有一些奇怪的 a 标签需要移除
+    // 还有要处理 katex 的公式
 
     // 获取作者信息
     let uid = document.getElementById('uid');
@@ -122,7 +119,7 @@
     for (let d = codeDOM.iterateNext(); d != null; d = codeDOM.iterateNext()) {
         codeArr.push(d);
     }
-
+    
     for (let i in codeArr) {
         let codeItem = document.evaluate('.//code', codeArr[i]).iterateNext();
         console.log(codeItem);
@@ -137,10 +134,11 @@
     }
 
     let srcdoc = document.documentElement.innerHTML;
-    document.documentElement.innerHTML = ''; // 删除整个页面的内容
     document.body.style.height = '100%';
     document.body.style.margin = '0px';
-    var iframe = document.createElement("iframe"); // 使用 iframe 是为了使所有的 js 事件失效
+    var iframe = document.createElement("iframe");
+    // 使用 iframe 是为了使所有的 js 事件失效
+    // 但使用 ifame 会使 印象笔记的剪藏插件无法选中，只能保存整个页面
     Object.assign(iframe.style, {
         position: 'fixed',
         top: '0',
@@ -149,8 +147,47 @@
         height: '100vh',
         border: 'none'
     });
+    iframe.title = document.title;
+    document.documentElement.innerHTML = ''; // 删除整个页面的内容
     document.body.appendChild(iframe);
     iframe.contentWindow.document.write(srcdoc);
+    document.title = iframe.contentWindow.document.title;
+    // 创建 style 元素
+    const styleElement = document.createElement('style');
+    // 设置 style 元素的内容（即 CSS 样式）
+    styleElement.textContent = `
+            img {
+                max-width:90%;
+                height: auto;
+            }
+            pre[name=code] { padding:20px; }
+            blockquote {
+                background: #eef0f4;
+                border-left: 8px solid #dddfe4;
+                display: block;
+                margin: 0 0 12px;
+                overflow: auto;
+                padding: 2px 2px 2px 16px;
+                word-break: break-word !important;
+            }
+            table {
+                border-top: 1px solid #999;
+                border-left: 1px solid #999;
+                border-spacing: 0;
+            }
+            td, th {
+                padding: 5px;
+                border-bottom: 1px solid #999;
+                border-right: 1px solid #999;
+            }
+            code {
+                background-color: #f9f2f4;
+                border-radius: 2px;
+                color: #c7254e;
+            }
+    `;
+    // 将 style 元素添加到 head 标签中
+    iframe.contentDocument.head.appendChild(styleElement);
     iframe.contentWindow.focus();
 
     if (jQuery) {
@@ -179,7 +216,7 @@
 </code></pre>
 <p>这两段 油猴脚本 是用于检测，在 gitlab 提交合并请求时，阻止目标为 master 的的合并请求。
 因为 master 是默认的分支，我总是一时手快就点 提交了 。</p>
-<pre><code class="lang-javascript">// ==UserScript==
+<pre><code class="language-javascript">// ==UserScript==
 // @name         GitLab Master Branch Alert before
 // @namespace    http://tampermonkey.net/
 // @version      0.1
@@ -296,7 +333,7 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
     });
 })();
 </code></pre>
-<pre><code class="lang-javascript">// ==UserScript==
+<pre><code class="language-javascript">// ==UserScript==
 // @name         GitLab Master Branch Alert before
 // @namespace    http://tampermonkey.net/
 // @version      0.1
@@ -413,7 +450,7 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
     });
 })();
 </code></pre>
-<pre><code class="lang-html">
+<pre><code class="language-html">
 &lt;!DOCTYPE html&gt;
 &lt;html lang="zh-CN"&gt;
 &lt;head&gt;
@@ -622,7 +659,7 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
 &lt;body&gt;
     &lt;h1&gt;页面内容&lt;/h1&gt;
     &lt;p&gt;这是一个很长的页面，你可以滚动查看效果。点击右下角的按钮可以显示悬浮表单。&lt;/p&gt;
-
+    
     &lt;!-- 触发表单的按钮 --&gt;
     &lt;button class="trigger-btn" id="triggerBtn"&gt;📝&lt;/button&gt;
 
@@ -668,7 +705,7 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
                 this.triggerBtn = document.getElementById('triggerBtn');
                 this.contactForm = document.getElementById('contactForm');
                 this.formContent = document.querySelector('.form-content');
-
+                
                 this.isDragging = false;
                 this.isMinimized = false;
                 this.currentX = 0;
@@ -677,18 +714,18 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
                 this.initialY = 0;
                 this.xOffset = 0;
                 this.yOffset = 0;
-
+                
                 // 保存展开状态时的尺寸
                 this.originalWidth = '300px';
                 this.originalHeight = 'auto';
-
+                
                 this.init();
             }
 
             init() {
                 // 绑定事件
                 this.bindEvents();
-
+                
                 // 确保表单始终在最顶层
                 this.keepOnTop();
             }
@@ -741,7 +778,7 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
             drag(e) {
                 if (this.isDragging) {
                     e.preventDefault();
-
+                    
                     this.currentX = e.clientX - this.initialX;
                     this.currentY = e.clientY - this.initialY;
 
@@ -797,7 +834,7 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
 
             handleSubmit(e) {
                 e.preventDefault();
-
+                
                 // 获取表单数据
                 const formData = new FormData(this.contactForm);
                 const data = {};
@@ -807,10 +844,10 @@ console.log('油猴脚本，在 gitlab 阻止分支合共到 master ');
 
                 // 这里可以添加实际的提交逻辑
                 console.log('表单数据:', data);
-
+                
                 // 显示提交成功提示
                 alert('表单提交成功！');
-
+                
                 // 重置表单
                 this.contactForm.reset();
             }
@@ -898,10 +935,10 @@ python tk + api 版
         function extractEmails(str) {
         // 定义匹配邮箱的正则表达式
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-
+        
         // 使用 match 方法提取所有匹配的邮箱地址
         const matches = str.match(emailRegex);
-
+        
         // 如果没有匹配到邮箱，返回空数组，否则返回匹配结果
         return matches ? matches : [];
         }
@@ -926,10 +963,10 @@ python tk + api 版
         function extractEmails(str) {
         // 定义匹配邮箱的正则表达式
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-
+        
         // 使用 match 方法提取所有匹配的邮箱地址
         const matches = str.match(emailRegex);
-
+        
         // 如果没有匹配到邮箱，返回空数组，否则返回匹配结果
         return matches ? matches : [];
         }
@@ -940,8 +977,9 @@ python tk + api 版
     &lt;/script&gt;
 &lt;/body&gt;
 &lt;/html&gt;
+
 </code></pre>
-<pre><code class="lang-html">&lt;!DOCTYPE html&gt;
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
 &lt;html&gt;
 
 &lt;head&gt;
