@@ -1,0 +1,232 @@
+<h2><a href="https://github.com/shiina18/shiina18.github.io/blob/master/_posts/2026-04-03-cc-memory.md">仓库源文</a>，<a href="https://shiina18.github.io/llm/2026/04/03/cc-memory">站点原文</a></h2>
+<p>分为 <code>Session Memory</code>和 <code>Auto Memory</code> (跨 session).</p>
+<p>&lt;!-- more --&gt;</p>
+<h2>Session Memory</h2>
+<p>每个 session 维护一个 summary.md 文件, 后台用 forked subagent (并且限制权限只能编辑这个 summary.md 文件) 达到条件 (距离上次更新后新增 token 数以及 tool calls 数等) 后更新.</p>
+<pre><code class="language-ts">/**
+ * Session Memory automatically maintains a markdown file with notes about the current conversation.
+ * It runs periodically in the background using a forked subagent to extract key information
+ * without interrupting the main conversation flow.
+ */
+</code></pre>
+<pre><code class="language-ts">/**
+ * Configuration for session memory extraction thresholds
+ */
+export type SessionMemoryConfig = {
+  /** Minimum context window tokens before initializing session memory.
+   * Uses the same token counting as autocompact (input + output + cache tokens)
+   * to ensure consistent behavior between the two features. */
+  minimumMessageTokensToInit: number
+  /** Minimum context window growth (in tokens) between session memory updates.
+   * Uses the same token counting as autocompact (tokenCountWithEstimation)
+   * to measure actual context growth, not cumulative API usage. */
+  minimumTokensBetweenUpdate: number
+  /** Number of tool calls between session memory updates */
+  toolCallsBetweenUpdates: number
+}
+</code></pre>
+<pre><code class="language-ts">export const DEFAULT_SESSION_MEMORY_CONFIG: SessionMemoryConfig = {
+  minimumMessageTokensToInit: 10000,
+  minimumTokensBetweenUpdate: 5000,
+  toolCallsBetweenUpdates: 3,
+}
+</code></pre>
+<pre><code class="language-ts">  // Trigger extraction when:
+  // 1. Both thresholds are met (tokens AND tool calls), OR
+  // 2. No tool calls in last turn AND token threshold is met
+  //    (to ensure we extract at natural conversation breaks)
+  //
+  // IMPORTANT: The token threshold (minimumTokensBetweenUpdate) is ALWAYS required.
+  // Even if the tool call threshold is met, extraction won't happen until the
+  // token threshold is also satisfied. This prevents excessive extractions.
+</code></pre>
+<pre><code class="language-ts">/**
+ * Returns the session memory directory path for the current session with trailing separator.
+ * Path format: {projectDir}/{sessionId}/session-memory/
+ */
+export function getSessionMemoryDir(): string {
+  return join(getProjectDir(getCwd()), getSessionId(), 'session-memory') + sep
+}
+
+/**
+ * Returns the session memory file path for the current session.
+ * Path format: {projectDir}/{sessionId}/session-memory/summary.md
+ */
+export function getSessionMemoryPath(): string {
+  return join(getSessionMemoryDir(), 'summary.md')
+}
+</code></pre>
+<p>Prompt 模板：</p>
+<pre><code class="language-md"># Session Title
+_A short and distinctive 5-10 word descriptive title for the session. Super info dense, no filler_
+
+# Current State
+_What is actively being worked on right now? Pending tasks not yet completed. Immediate next steps._
+
+# Task specification
+_What did the user ask to build? Any design decisions or other explanatory context_
+</code></pre>
+<p>后面还有：</p>
+<ul>
+<li><code>Files and Functions</code></li>
+<li><code>Workflow</code></li>
+<li><code>Errors &amp; Corrections</code></li>
+<li><code>Codebase and System Documentation</code></li>
+<li><code>Learnings</code></li>
+<li><code>Key results</code></li>
+<li><code>Worklog</code></li>
+</ul>
+<pre><code class="language-ts">- The file must maintain its exact structure with all sections, headers, and italic descriptions intact
+-- NEVER modify, delete, or add section headers
+-- NEVER modify or delete the italic _section description_ lines
+-- ONLY update the actual content that appears BELOW the italic _section descriptions_
+</code></pre>
+<p>更新动作由一个 forked subagent 执行.</p>
+<pre><code class="language-ts">  // Run session memory extraction using runForkedAgent for prompt caching
+  // runForkedAgent creates an isolated context to prevent mutation of parent state
+  // Pass setupContext.readFileState so the forked agent can edit the memory file
+</code></pre>
+<pre><code class="language-ts">/**
+ * Creates a canUseTool function that only allows Edit for the exact memory file.
+ */
+</code></pre>
+<pre><code class="language-ts">if (
+  tool.name === FILE_EDIT_TOOL_NAME &amp;&amp;
+  typeof input === 'object' &amp;&amp;
+  input !== null &amp;&amp;
+  'file_path' in input
+) {
+  const filePath = input.file_path
+  if (typeof filePath === 'string' &amp;&amp; filePath === memoryPath) {
+    return { behavior: 'allow' as const, updatedInput: input }
+  }
+}
+</code></pre>
+<h3>用途: 给 autocompact 提前备料</h3>
+<p>一旦满足 autocompact 条件, 先试 <code>session memory compaction</code>.</p>
+<pre><code class="language-ts">  // EXPERIMENT: Try session memory compaction first
+  const sessionMemoryResult = await trySessionMemoryCompaction(
+    messages,
+    toolUseContext.agentId,
+    recompactionInfo.autoCompactThreshold,
+  )
+</code></pre>
+<pre><code class="language-ts">/**
+ * Try to use session memory for compaction instead of traditional compaction.
+ * Returns null if session memory compaction cannot be used.
+ *
+ * Handles two scenarios:
+ * 1. Normal case: lastSummarizedMessageId is set, keep only messages after that ID
+ * 2. Resumed session: lastSummarizedMessageId is not set but session memory has content,
+ *    keep all messages but use session memory as the summary
+ */
+</code></pre>
+<p>保留最近一段原始消息</p>
+<pre><code class="language-ts">/**
+ * Calculate the starting index for messages to keep after compaction.
+ * Starts from lastSummarizedMessageId, then expands backwards to meet minimums:
+ * - At least config.minTokens tokens
+ * - At least config.minTextBlockMessages messages with text blocks
+ * Stops expanding if config.maxTokens is reached.
+ * Also ensures tool_use/tool_result pairs are not split.
+ */
+</code></pre>
+<pre><code class="language-ts">export const DEFAULT_SM_COMPACT_CONFIG: SessionMemoryCompactConfig = {
+  minTokens: 10_000,
+  minTextBlockMessages: 5,
+  maxTokens: 40_000,
+}
+</code></pre>
+<p>避免切断 tool use 和 tool result 配对.</p>
+<pre><code class="language-ts"> * Adjust the start index to ensure we don't split tool_use/tool_result pairs
+ * or thinking blocks that share the same message.id with kept assistant messages.
+ *
+ * If ANY message we're keeping contains tool_result blocks, we need to
+ * include the preceding assistant message(s) that contain the matching tool_use blocks.
+</code></pre>
+<pre><code class="language-ts"> * API error: orphan tool_result references non-existent tool_use
+</code></pre>
+<p>预算控制, 避免 summary.md 本身太大.</p>
+<pre><code class="language-ts">const MAX_SECTION_LENGTH = 2000
+const MAX_TOTAL_SESSION_MEMORY_TOKENS = 12000
+</code></pre>
+<p>更新 prompt 里明确提醒</p>
+<pre><code class="language-ts">- Keep each section under ~${MAX_SECTION_LENGTH} tokens/words
+- IMPORTANT: Always update "Current State" to reflect the most recent work
+</code></pre>
+<p>如果总量已经超了, 追加压缩提醒</p>
+<pre><code class="language-ts">CRITICAL: The session memory file is currently ~${totalTokens} tokens, which exceeds the maximum of ${MAX_TOTAL_SESSION_MEMORY_TOKENS} tokens. You MUST condense the file to fit within this budget.
+</code></pre>
+<p>进入 compact 流程时, 也会再做一次截断保护</p>
+<pre><code class="language-ts">/**
+ * Truncate session memory sections that exceed the per-section token limit.
+ * Used when inserting session memory into compact messages to prevent
+ * oversized session memory from consuming the entire post-compact token budget.
+ */
+</code></pre>
+<h3>另一个用途: 给 <code>skillify</code> 提供会话背景</h3>
+<p>把当前 session 炼成 skill.</p>
+<pre><code class="language-ts">## Your Session Context
+
+Here is the session memory summary:
+&lt;session_memory&gt;
+{{sessionMemory}}
+&lt;/session_memory&gt;
+</code></pre>
+<pre><code class="language-ts">const sessionMemory =
+  (await getSessionMemoryContent()) ?? 'No session memory available.'
+</code></pre>
+<p>然后它再把本次 session 的 user messages 补进去</p>
+<pre><code class="language-ts">const userMessages = extractUserMessages(
+  getMessagesAfterCompactBoundary(context.messages),
+)
+</code></pre>
+<h2>Auto Memory</h2>
+<p>需要打开 feature, 见 <a href="https://code.claude.com/docs/en/memory#auto-memory">文档</a>. 跨 session, 支持召回.</p>
+<pre><code class="language-ts">/**
+ * Whether auto-memory features are enabled (memdir, agent memory, past session search).
+ */
+</code></pre>
+<p><code>MEMORY.md</code> 是入口索引</p>
+<pre><code class="language-ts">const AUTO_MEM_DIRNAME = 'memory'
+const AUTO_MEM_ENTRYPOINT_NAME = 'MEMORY.md'
+</code></pre>
+<p>默认目录解析</p>
+<pre><code class="language-ts">/**
+ * Returns the auto-memory directory path.
+ *
+ * Resolution order:
+ *   1. CLAUDE_COWORK_MEMORY_PATH_OVERRIDE env var
+ *   2. autoMemoryDirectory in settings.json
+ *   3. &lt;memoryBase&gt;/projects/&lt;sanitized-git-root&gt;/memory/
+ */
+</code></pre>
+<p>这里的 <code>MEMORY.md</code> 负责做入口索引, durable memory 写进各自的 topic file.</p>
+<pre><code class="language-ts">`MEMORY.md` is an index, not a memory
+</code></pre>
+<pre><code class="language-ts">each entry should be one line, under ~150 characters
+</code></pre>
+<pre><code class="language-ts">Saving a memory is a two-step process:
+
+**Step 1** — write the memory to its own file
+**Step 2** — add a pointer to that file in `MEMORY.md`
+</code></pre>
+<pre><code class="language-ts">/**
+ * Extracts durable memories from the current session transcript
+ * and writes them to the auto-memory directory (~/.claude/projects/&lt;path&gt;/memory/).
+ *
+ * It runs once at the end of each complete query loop
+ */
+</code></pre>
+<p><code>MEMORY.md</code> 会被自动注入上下文</p>
+<pre><code class="language-ts">" (user's auto-memory, persists across conversations)"
+</code></pre>
+<p>支持按 query 检索 (通过读 topic files 的 frontmatter) 相关 memories</p>
+<pre><code class="language-ts">/**
+ * Find memory files relevant to a query by scanning memory file headers
+ * and asking Sonnet to select the most relevant ones.
+ *
+ * Returns absolute file paths + mtime of the most relevant memories
+ * (up to 5). Excludes MEMORY.md (already loaded in system prompt).
+ */
+</code></pre>

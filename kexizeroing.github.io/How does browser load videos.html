@@ -34,7 +34,7 @@ Chrome                                         Server
 <p><strong>Note that the data being sent from the server is only a small chunk, even though the <code>Range</code> header has value “bytes=0-”.</strong> Chrome and FireFox ask for ranges like <code>bytes=300-</code>, can server side return a smaller-range part, other than part from offset 300 to end of file? The answer is yes. When you play the video, browser will send range request for remaining bytes. Both Chrome and FireFox send range request using byte range (i.e <code>bytes=1867776-</code>) with last-byte-pos value absent.</p>
 <p>If you skip ahead in the video, the browser will cancel the currently on-going response for the video content. It will then use the the video file’s metadata to map your desired new position to a byte offset and use it for a new range request (<code>byte=offset-</code>).</p>
 <p>Browsers will automatically pause playback if decoding fails. If <code>video.error.code === 3</code>, it typically means a media decode failure, often related to corrupted video or unsupported codecs.</p>
-<pre><code class="lang-js">const video = document.querySelector("video");
+<pre><code class="language-js">const video = document.querySelector("video");
 video.addEventListener("error", () =&gt; {
   console.error("Playback error:", video.error);
 });
@@ -62,7 +62,7 @@ video.addEventListener("error", () =&gt; {
 <li>Safari natively supports native HLS, but Chrome and Firefox do not. By native in this context, it means you can set <code>&lt;video src="something.m3u8"&gt;</code> and the browser handles everything internally, no extra JavaScript or MSE is needed.</li>
 <li>To allow you play m3u8 files in browsers without native HLS support, here <a href="https://github.com/video-dev/hls.js">hls.js</a> steps in. It uses MSE to feed these media chunks into the video element.</li>
 </ol>
-<pre><code class="lang-html">&lt;script src="https://cdn.jsdelivr.net/npm/hls.js@latest"&gt;&lt;/script&gt;
+<pre><code class="language-html">&lt;script src="https://cdn.jsdelivr.net/npm/hls.js@latest"&gt;&lt;/script&gt;
 &lt;video id="video" controls&gt;&lt;/video&gt;
 &lt;script&gt;
   // return false on Safari (MSE may not be used)
@@ -90,9 +90,10 @@ video.addEventListener("error", () =&gt; {
 <p>&lt;img alt="blob-url-video" src="https://raw.githubusercontent.com/kexiZeroing/blog-images/main/12643918-81ad-47c1-8ea2-45205d1f23a9.png" width="500"&gt;</p>
 <p>All those websites actually still use the video tag. But instead of simply setting a video file in the <code>src</code> attribute, they make use of much more powerful web APIs, the Media Source Extensions (more often shortened to just “MSE”). Complex web-compatible video players are all based on MediaSource and <a href="https://developer.mozilla.org/en-US/docs/Web/API/SourceBuffer">SourceBuffer</a>.</p>
 <p>Those “extensions” add the MediaSource object to JavaScript. As its name suggests, this will be the source of the video, or put more simply, this is the object representing our video’s data. The <code>URL.createObjectURL</code> API allows creating an URL, which will actually refer not to a resource available online, but directly to a JavaScript object created on the client.</p>
-<blockquote><p>MSE lets JavaScript feed video/audio data to the browser’s <code>&lt;video&gt;</code> element. It gives developers low-level control to dynamically construct streams in JavaScript, append media chunks using, and switch quality levels manually if needed.</p>
+<blockquote>
+<p>MSE lets JavaScript feed video/audio data to the browser’s <code>&lt;video&gt;</code> element. It gives developers low-level control to dynamically construct streams in JavaScript, append media chunks using, and switch quality levels manually if needed.</p>
 </blockquote>
-<pre><code class="lang-js">// Create a MediaSource and attach it to the video
+<pre><code class="language-js">// Create a MediaSource and attach it to the video
 const videoTag = document.getElementById("my-video");
 const myMediaSource = new MediaSource();
 const url = URL.createObjectURL(myMediaSource);
@@ -100,10 +101,10 @@ videoTag.src = url;
 
 // 1. add source buffers
 const audioSourceBuffer = myMediaSource.addSourceBuffer(
-  'audio/mp4; codecs="mp4a.40.2"'
+  'audio/mp4; codecs="mp4a.40.2"',
 );
 const videoSourceBuffer = myMediaSource.addSourceBuffer(
-  'video/mp4; codecs="avc1.64001e"'
+  'video/mp4; codecs="avc1.64001e"',
 );
 
 // 2. download and add our audio/video to the SourceBuffers
@@ -126,7 +127,7 @@ fetch("http://server.com/video.mp4")
   });
 </code></pre>
 <p>What actually happens in the more advanced video players, is that video and audio data are split into multiple “segments”. These segments can come in various sizes, but they often represent between 2 to 10 seconds of content. Instead of pushing the whole content at once, we can just push progressively multiple segments. Now we do not have to wait for the whole audio or video content to be downloaded to begin playback.</p>
-<pre><code class="lang-js">// fetch a video or an audio segment, and returns it as an ArrayBuffer
+<pre><code class="language-js">// fetch a video or an audio segment, and returns it as an ArrayBuffer
 function fetchSegment(url) {
   return fetch(url).then(function (response) {
     return response.arrayBuffer();
@@ -152,11 +153,11 @@ fetchSegment("http://server.com/audio/segment0.mp4")
   });
 
 // same thing for video segments
-fetchSegment("http://server.com/video/segment0.mp4").then(function (
-  videoSegment0
-) {
-  videoSourceBuffer.appendBuffer(videoSegment0);
-});
+fetchSegment("http://server.com/video/segment0.mp4").then(
+  function (videoSegment0) {
+    videoSourceBuffer.appendBuffer(videoSegment0);
+  },
+);
 </code></pre>
 <p>Many video players have an “auto quality” feature, where the quality is automatically chosen depending on the user’s network and processing capabilities. This behavior is also enabled thanks to the concept of media segments. On the server-side, the segments are actually encoded in multiple qualities, and a web player will then automatically choose the right segments to download as the network or CPU conditions change.</p>
 <p>The most common transport protocols used in a web context:</p>
@@ -217,12 +218,34 @@ GET /video/720p/segment0.mp4
 GET /video/720p/segment1.mp4
 GET /video/720p/segment2.mp4
 </code></pre>
-<blockquote><p>A regular MP4 video usually has a single <em>moov</em> chunk describing the video and a single <em>mdat</em> chunk containing the video. You wouldn’t be able to play a part of the video without having access to the whole video. Fragmented MP4 solves this issue, allowing us to split an MP4 video into segments. The first initialization segment contains the chunk describing the video. What follows are the media segments, each having a separate chunks containing a portion of the video which can be played on its own.</p>
+<blockquote>
+<p>A regular MP4 video usually has a single <em>moov</em> chunk describing the video and a single <em>mdat</em> chunk containing the video. You wouldn’t be able to play a part of the video without having access to the whole video. Fragmented MP4 solves this issue, allowing us to split an MP4 video into segments. The first initialization segment contains the chunk describing the video. What follows are the media segments, each having a separate chunks containing a portion of the video which can be played on its own.</p>
+</blockquote>
+<h2>Hotlink Protection</h2>
+<p>Hotlinking happens when someone embeds your hosted files (images, videos, PDFs, etc.) on their site by linking directly to your URL.</p>
+<ul>
+<li>Bandwidth cost — You’re paying for traffic from someone else’s site.</li>
+<li>Performance impact — Your server handles more requests than it should.</li>
+<li>Security concerns — In some cases, files could be linked for malicious purposes.</li>
+</ul>
+<p>Hotlink protection typically checks the <code>Referer</code> HTTP header to see which page requested the file. Most CDNs have a “Hotlink Protection” toggle that works by automatically checking the referrer before serving assets.</p>
+<p>You have a video on a server. You want users to watch it. But you do not want them to download it or share direct links.</p>
+<p>Signed URLs:<br/>
+Instead of letting users access videos directly by a fixed URL, you generate a temporary, signed URL that includes an expiry timestamp, and signed with a secret key. (<code>https://cdn.yourdomain.com/video.mp4?expires=1723119800&amp;signature=4d2f0d1a...</code>) When someone requests this URL the CDN checks: is the expiry time still in the future? Does the signature match? If anything is wrong or expired it rejects the request.</p>
+<p>For adaptive streaming:<br/>
+The <code>.m3u8</code> playlist URL is signed and expires quickly. Each media chunk request is also signed, and the chunk URLs will expire quickly.</p>
+<ul>
+<li>Playlist URL is signed. Expires in minutes.</li>
+<li>Each chunk URL inside the playlist is signed. Expires in seconds.</li>
+<li>Each user gets a different set of URLs. Generated fresh for their session.</li>
+</ul>
+<blockquote>
+<p>Can someone still download the video? Yes. Tools like <a href="https://github.com/yt-dlp/yt-dlp">yt-dlp</a> can automate the process. They fetch the playlist and all chunks fast enough before they expire. Then stitch the chunks back together.</p>
 </blockquote>
 <h2>Video Glossary</h2>
 <p><strong><a href="https://ffmpeg.org">FFMPEG</a></strong> stands for Fast Forward Moving Picture Experts Group. It is a free and open source software project that offers many tools for video and audio processing. It's designed to run on a command line interface, and has many different libraries and programs to manipulate and handle video files. Most video programs include FFMPEG as a part of the video processing pipeline. <em>(FFmpeg powers all online video - Youtube, Facebook, Instagram, Disney+, Netflix etc, all run FFmpeg underneath.)</em></p>
 <p>WebAssembly enables developers to bring new performant functionality to the web from other languages. <a href="https://ffmpegwasm.netlify.app">FFmpeg.wasm</a> (WebAssembly / JavaScript port of FFmpeg) is one of a showcasing of the <a href="https://web.dev/wasm-libraries/">new functionality</a> being made available thanks to WebAssembly. It enables video/audio record, convert and stream right inside browsers. There are two components inside <code>ffmpeg.wasm</code>: <code>@ffmpeg/ffmpeg</code> and <code>@ffmpeg/core</code>. <code>@ffmpeg/ffmpeg</code> contains kind of a wrapper to handle the complexity of loading core and calling low-level APIs. <code>@ffmpeg/core</code> contains WebAssembly code which is transpiled from original FFmpeg C code with minor modifications.</p>
-<pre><code class="lang-js">// AVI to MP4 Demo
+<pre><code class="language-js">// AVI to MP4 Demo
 import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
 import { writeFile } from "fs/promises";
 
@@ -238,8 +261,9 @@ const ffmpeg = createFFmpeg({ log: true });
 </code></pre>
 <p>A <strong><a href="https://api.video/what-is/codec">codec</a></strong> is a hardware or software tool that is used to compress (and decompress) video files. Codec is a blend of coder/decoder. Common video codecs include h.264, h.265, VP8, VP9 and AV1. An efficient codec can deliver high-quality video at lower bitrates.</p>
 <p>The <strong>bitrate</strong> of a file is measured by the number of bits being transmitted over a period of time. For video it is typically measured in kilobytes per second (kbps) or megabytes per second (mbps). Video bitrate is often confused with video resolution terms like 720p, 1080p, 4K, etc. Video resolution is the number of pixels that make up an image on your screen; video bitrate is the amount of information per second in video. A higher bitrate results in better quality but also larger file sizes.</p>
-<blockquote><p>You can estimate file size from bitrate:
-File Size (MB) = (Bitrate in Mbps × Duration in seconds) ÷ 8\
+<blockquote>
+<p>You can estimate file size from bitrate:
+File Size (MB) = (Bitrate in Mbps × Duration in seconds) ÷ 8<br/>
 For example, a 10-minute 1080p video at 5 Mbps → 5 × 10 × 7.5 = 375 MB</p>
 </blockquote>
 <p><strong>VOD(Video on Demand)</strong> refers to prerecorded videos that viewers can watch anytime they choose, unlike live streams which must be watched in real time. Platforms like YouTube, Netflix, and Amazon Prime Video all offer VOD services, allowing users to play, pause, rewind, and rewatch content freely. VOD can be accessed in two main ways: by streaming the video over the internet (usually using formats like M3U8) or by downloading the full video file to a device (commonly as MP4). Since most VOD content is delivered online, a stable internet connection with good bandwidth is important for smooth playback.</p>

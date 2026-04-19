@@ -1,4 +1,4 @@
-<h2><a href="https://github.com/shiina18/shiina18.github.io/blob/master/_posts/2025-01-21-lightrag.md">仓库源文</a>，<a href="https://shiina18.github.io/machine%20learning/2025/01/21/lightrag">站点原文</a></h2>
+<h2><a href="https://github.com/shiina18/shiina18.github.io/blob/master/_posts/2025-01-21-lightrag.md">仓库源文</a>，<a href="https://shiina18.github.io/llm/2025/01/21/lightrag">站点原文</a></h2>
 <p><img alt="" src="https://shiina18.github.io/assets/posts/images/459972118268588.png"/></p>
 <p>Guo, Z., Xia, L., Yu, Y., Ao, T., &amp; Huang, C. (2024). <a href="https://arxiv.org/abs/2410.05779">Lightrag: Simple and fast retrieval-augmented generation</a>.</p>
 <p>大体流程:</p>
@@ -6,11 +6,10 @@
 <li>用 LLM 提取 chunks 中的实体和关系, 并存成一个图</li>
 <li>用 LLM 从 query 中提取关键词, 根据关键词召回实体或关系, 再找到最相关的 chunks, 最后把所有东西都拼起来给 LLM 输出答案</li>
 </ul>
-&lt;!-- more --&gt;
-
+<p>&lt;!-- more --&gt;</p>
 <h2>提取实体和关系并存为图</h2>
 <p>提示词位于 <code>lightrag/prompt.py</code>. 文档分片后, 让 LLM 按照特定格式提取实体和关系 (以及关键词), 再把 output 解析出来存储. 看代码下面的 step 3 <code>content_keywords</code> 好像全程都没用到.</p>
-<pre><code class="lang-md">1. Identify all entities. 
+<pre><code class="language-md">1. Identify all entities. 
 ...
 Format each entity as ("entity"{tuple_delimiter}&lt;entity_name&gt;{tuple_delimiter}&lt;entity_type&gt;{tuple_delimiter}&lt;entity_description&gt;)
 
@@ -27,7 +26,7 @@ Format the content-level key words as ("content_keywords"{tuple_delimiter}&lt;hi
 
 5. When finished, output {completion_delimiter}
 </code></pre>
-<pre><code class="lang-md">Example 1:
+<pre><code class="language-md">Example 1:
 
 Entity_types: [person, technology, mission, organization, location]
 Text:
@@ -42,7 +41,7 @@ Output:
 ("content_keywords"{tuple_delimiter}"power dynamics, ideological conflict, discovery, rebellion"){completion_delimiter}
 </code></pre>
 <p>实体存储如下, 后面会把同名的实体合并 (description 也合并, 过长就 LLM 摘要), <code>source_id</code> 是所有来源的 chunk id. 根据 <code>dp["entity_name"] + dp["description"]</code> 做 embedding.</p>
-<pre><code class="lang-py">dict(
+<pre><code class="language-py">dict(
     entity_name=entity_name,
     entity_type=entity_type,
     description=entity_description,
@@ -50,7 +49,7 @@ Output:
 )
 </code></pre>
 <p>关系存储如下, 其中 <code>edge_keywords</code> 和 weight 分别为之前 LLM 生成的 <code>relationship_keywords</code> 和 <code>relationship_strength</code>. 之后合并时 weight 会相加. 根据 <code>dp["keywords"] + dp["src_id"] + dp["tgt_id"] + dp["description"]</code> 做 embedding.</p>
-<pre><code class="lang-py">dict(
+<pre><code class="language-py">dict(
     src_id=source,
     tgt_id=target,
     weight=weight,
@@ -63,9 +62,9 @@ Output:
 <p>把实体和关系分别作为节点和边, 存为图.</p>
 <h2>召回</h2>
 <p>用 LLM 从用户 query 中提取 high-level 与 low-level 关键词.</p>
-<pre><code class="lang-md">Given the query, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
+<pre><code class="language-md">Given the query, list both high-level and low-level keywords. High-level keywords focus on overarching concepts or themes, while low-level keywords focus on specific entities, details, or concrete terms.
 </code></pre>
-<pre><code class="lang-md">Example 1:
+<pre><code class="language-md">Example 1:
 
 Query: "How does international trade influence global economic stability?"
 ################
@@ -75,7 +74,7 @@ Output:
   "low_level_keywords": ["Trade agreements", "Tariffs", "Currency exchange", "Imports", "Exports"]
 }
 </code></pre>
-<pre><code class="lang-py">if query_param.mode == "local":
+<pre><code class="language-py">if query_param.mode == "local":
     entities_context, relations_context, text_units_context = await _get_node_data(
         ll_keywords,
         knowledge_graph_inst,

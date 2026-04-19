@@ -1,0 +1,178 @@
+<h2><a href="https://github.com/kexizeroing/kexizeroing.github.io/blob/master/src/blog/building-shimmer-skeleton.md">仓库源文</a>，<a href="https://kexizeroing.github.io/building-shimmer-skeleton">站点原文</a></h2>
+<p>Most shimmer skeletons are hand-crafted rectangles that vaguely approximate what your UI might look like — a wide bar for a title, a few narrow bars for text, a circle for an avatar. Every time your component changes, you update the skeleton separately. They drift apart.</p>
+<p>There's a better approach: measure the real component, then shimmer exactly what's there. The core idea is that you render your component with hidden text, measure where every element actually is using the browser's layout engine, and overlay shimmer blocks at those exact positions. The skeleton is always accurate because it's derived from the real layout.</p>
+<h2>Step 1: The Naive Overlay</h2>
+<p>Start simple. Render the component, make its text invisible with <code>color: transparent</code>, and put a shimmer layer over the whole thing.</p>
+<pre><code class="language-html">&lt;div style="position: relative;"&gt;
+  &lt;div class="card" style="color: transparent;"&gt;
+    &lt;img src="placeholder.jpg" class="avatar" /&gt;
+    &lt;h2&gt;John Doe&lt;/h2&gt;
+    &lt;p&gt;Software Engineer&lt;/p&gt;
+  &lt;/div&gt;
+  &lt;div class="shimmer-overlay"&gt;&lt;/div&gt;
+&lt;/div&gt;
+</code></pre>
+<p><code>color: transparent</code> hides text but preserves layout. Images are still visible, but the shimmer overlay covers them. Also add <code>pointer-events: none</code> on the hidden content, otherwise users can accidentally click invisible buttons or select invisible text while loading. This works but it's coarse. The shimmer covers the whole card as one rectangle.</p>
+<h2>Step 2: Measuring the Real Layout</h2>
+<p>The browser already knows exactly where every element lives. <code>getBoundingClientRect()</code> returns the pixel position and dimensions of any DOM node, derived from the actual rendered layout, always correct.</p>
+<pre><code class="language-js">function measureLeafElements(container) {
+  const elements = container.querySelectorAll(
+    "img, h1, h2, h3, h4, h5, h6, p, span, button, a",
+  );
+  const containerRect = container.getBoundingClientRect();
+
+  return Array.from(elements)
+    .map((el) =&gt; {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
+
+      return {
+        top: rect.top - containerRect.top,
+        left: rect.left - containerRect.left,
+        width: rect.width,
+        height: rect.height,
+      };
+    })
+    .filter(Boolean);
+}
+</code></pre>
+<p>We query for leaf elements that actually contain visible content. We skip wrappers and layout containers. Positions are relative to the container by subtracting <code>containerRect</code> offsets, so we can use them with <code>position: absolute</code> inside the parent. Elements with zero dimensions are skipped.</p>
+<p>Now render individual blocks instead of one overlay, and each block sits exactly over its corresponding element.</p>
+<pre><code class="language-jsx">function ShimmerBlocks({ measurements }) {
+  return measurements.map((rect, i) =&gt; (
+    &lt;div
+      key={i}
+      className="shimmer-block"
+      style={{
+        position: "absolute",
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      }}
+    /&gt;
+  ));
+}
+</code></pre>
+<h2>Step 3: Getting Border Radius Right</h2>
+<p>The blocks are all sharp rectangles, but your real UI probably isn't. Read the computed styles from each element:</p>
+<pre><code class="language-js">const computed = getComputedStyle(el);
+// borderTopLeftRadius is more reliable than the borderRadius shorthand,
+// which can return an empty string when corners have mixed values.
+const borderRadius = parseFloat(computed.borderTopLeftRadius) || 0;
+</code></pre>
+<p>For text elements without an explicit border-radius, apply a small default — 4px looks natural:</p>
+<pre><code class="language-js">const isTextElement = [
+  "P",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "SPAN",
+].includes(el.tagName);
+
+const borderRadius =
+  parseFloat(computed.borderTopLeftRadius) || (isTextElement ? 4 : 0);
+</code></pre>
+<h2>Step 4: The Shimmer Animation</h2>
+<p>A gradient that sweeps left to right, giving the impression of light traveling across a surface:</p>
+<pre><code class="language-css">@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-block {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.08) 25%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite ease-in-out;
+}
+</code></pre>
+<p>Semi-transparent white adapts to any background color. The shimmer is additive on top of whatever the container's color happens to be, so you don't need separate variants.</p>
+<h2>Step 5: The React Wrapper</h2>
+<p>In a real app, data comes from an API. During loading it doesn't exist, so your component can't render — and if it can't render, there's nothing to measure. Two things to solve:</p>
+<ul>
+<li>Give the component fake data so it renders its full structure during loading.</li>
+<li>Measure before the browser paints, so the user never sees the invisible-text state.</li>
+</ul>
+<pre><code class="language-jsx">function Shimmer({ loading, children, templateProps }) {
+  const containerRef = useRef(null);
+  const [measurements, setMeasurements] = useState([]);
+
+  useLayoutEffect(() =&gt; {
+    if (loading &amp;&amp; containerRef.current) {
+      const rects = measureLeafElements(containerRef.current);
+      setMeasurements(rects);
+    }
+  }, [loading]);
+
+  if (!loading) return children;
+
+  const child = React.Children.only(children);
+  const clone = templateProps
+    ? React.cloneElement(child, templateProps)
+    : child;
+
+  return (
+    &lt;div ref={containerRef} style={{ position: "relative" }}&gt;
+      &lt;div style={{ color: "transparent", pointerEvents: "none" }}&gt;{clone}&lt;/div&gt;
+      {measurements.map((rect, i) =&gt; (
+        &lt;div
+          key={i}
+          className="shimmer-block"
+          style={{
+            position: "absolute",
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height,
+            borderRadius: rect.borderRadius,
+          }}
+        /&gt;
+      ))}
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<p>Usage:</p>
+<pre><code class="language-jsx">&lt;Shimmer
+  loading={isLoading}
+  templateProps={{
+    name: "John Doe",
+    role: "Software Engineer",
+    avatar: "/placeholder.jpg",
+  }}
+&gt;
+  &lt;UserCard name={user?.name} role={user?.role} avatar={user?.avatar} /&gt;
+&lt;/Shimmer&gt;
+</code></pre>
+<p>The <code>templateProps</code> values are invisible — they just need to produce roughly the right layout dimensions. "John Doe" as a name, "Software Engineer" as a role. The text is never seen; it just needs to occupy realistic space. The reason we need it: during loading, your real data doesn't exist yet, so <code>&lt;UserCard name={undefined} /&gt;</code> might render nothing or crash. By cloning the child with <code>templateProps</code>, we give it enough data to render its full structure.</p>
+<p><code>React.cloneElement(element, props)</code> takes an existing React element and returns a new one with additional props merged in — think of it as <code>{ ...element.props, ...templateProps }</code> but for React elements. It expects a single element, so we use <code>React.Children.only(children)</code> to both extract that element and enforce the constraint. If someone accidentally passes two children, it throws immediately.</p>
+<pre><code class="language-jsx">// children is &lt;UserCard name={undefined} role={undefined} /&gt;
+const child = React.Children.only(children);
+
+// clone is &lt;UserCard name="John Doe" role="Software Engineer" /&gt;
+const clone = React.cloneElement(child, templateProps);
+</code></pre>
+<p><code>useLayoutEffect</code> fires synchronously after the DOM is updated but before the browser paints. (<code>useEffect</code> fires after the browser paints.) Measurement and shimmer placement happen in the same frame as the render. The user never sees the intermediate state.</p>
+<h2>The library</h2>
+<p>The library that implements this fully is <a href="https://github.com/darula-hpp/shimmer-from-structure">shimmer-from-structure</a>. It handles the edge cases, plus configurable shimmer colors, animation duration, and a provider API for app-wide defaults. Built for React, Vue, Angular, Svelte and SolidJS.</p>
+<p><a href="https://github.com/0xGF/boneyard">Boneyard</a> is another package that snapshots your real UI and captures a flat list of skeleton “bones” that mirror the page exactly. No guessing. No measuring. It generates skeletons at build time — not at runtime. Here's the three-step flow:</p>
+<ol>
+<li><p>Wrap your component with <code>&lt;Skeleton name="blog-card" loading={isLoading}&gt;</code>. When <code>loading</code> is false, your children render normally.</p>
+</li>
+<li><p>Run <code>npx boneyard-js build</code>. This launches a headless browser via Playwright, visits your running app at multiple breakpoints, and calls <code>getBoundingClientRect()</code> on every visible element inside each named <code>&lt;Skeleton&gt;</code>. The exact pixel positions, sizes, and border radii are written to <code>.bones.json</code> files and a <code>registry.js</code> that maps each skeleton name to its bones. Subsequent builds are incremental — only changed components are recaptured. Customize breakpoints and defaults with <code>boneyard.config.json</code>.</p>
+</li>
+<li><p>Import the generated registry once in your app entry. When <code>loading</code> is true, boneyard looks up the pre-generated bones by name and renders them as gray rectangles — each one an absolutely positioned div matching the exact position from the real layout. When loading becomes false, your children replace the skeleton with zero layout shift.</p>
+</li>
+</ol>
